@@ -28,14 +28,14 @@
   html, body { height: 100%; overflow: hidden; }
   body { background: var(--bg); color: var(--text); font-family: var(--ff); font-size: 14px; }
 
-  /* ══ MAIN ocupa tutto ══ */
+  /* ══ MAIN occupa tutto ══ */
   .main {
     position: fixed;
     inset: 0;
     z-index: 1;
   }
 
-  /* ══ HAMBURGER BUTTON (sempre visibile, top-left) ══ */
+  /* ══ HAMBURGER ══ */
   .menu-btn {
     position: fixed;
     top: 12px;
@@ -63,13 +63,9 @@
     border-radius: 2px;
     transition: transform 0.22s, opacity 0.22s, width 0.22s;
   }
-  /* X when open */
-  .menu-btn.open .bar:nth-child(1) { transform: translateY(7px) rotate(45deg); }
-  .menu-btn.open .bar:nth-child(2) { opacity: 0; width: 0; }
-  .menu-btn.open .bar:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
   .menu-btn.open { opacity: 0; pointer-events: none; }
 
-  /* ══ OVERLAY backdrop ══ */
+  /* ══ OVERLAY ══ */
   .overlay {
     position: fixed;
     inset: 0;
@@ -100,7 +96,6 @@
   }
   .drawer.open { transform: translateX(0); }
 
-  /* Drawer header */
   .dr-header {
     padding: 18px 20px 16px;
     border-bottom: 1px solid var(--border);
@@ -110,8 +105,8 @@
     flex-shrink: 0;
   }
   .dr-logo-img {
-    width: 36px;
-    height: 36px;
+    width: 170px;
+    height: 170px;
     object-fit: contain;
     filter: drop-shadow(0 0 6px rgba(59,130,246,.25));
   }
@@ -120,7 +115,6 @@
   .dr-logo-text .c2 { color: var(--teal); }
   .dr-logo-text .c3 { color: var(--subtle); font-weight: 500; }
 
-  /* Drawer nav */
   .dr-nav {
     flex: 1;
     padding: 10px 10px;
@@ -162,7 +156,6 @@
   .dr-item-name { font-family: var(--ffc); font-size: 14px; font-weight: 700; letter-spacing: .4px; }
   .dr-item-desc { font-size: 10px; color: var(--muted); }
 
-  /* Drawer footer */
   .dr-footer {
     padding: 12px 16px;
     border-top: 1px solid var(--border);
@@ -192,8 +185,8 @@
 
   .welcome-header { display: flex; flex-direction: column; align-items: center; gap: 12px; }
   .welcome-logo-img {
-    width: 150px;
-    height: 150px;
+    width: 72px;
+    height: 72px;
     object-fit: contain;
     filter: drop-shadow(0 0 20px rgba(59,130,246,.3));
     animation: float 3s ease-in-out infinite;
@@ -316,7 +309,7 @@
   <div class="dr-nav">
     <div class="dr-sect">Navigazione</div>
 
-    <div class="dr-item app-home active" id="nav-home" onclick="showHome()">
+    <div class="dr-item app-home" id="nav-home" onclick="showHome()">
       <span class="dr-item-icon">🏠</span>
       <div class="dr-item-info">
         <span class="dr-item-name">Home</span>
@@ -346,7 +339,7 @@
   <div class="dr-footer">WMS Hub · ATS v1.0</div>
 </div>
 
-<!-- ══ MAIN (schermo intero) ══ -->
+<!-- ══ MAIN ══ -->
 <main class="main">
 
   <div class="welcome" id="welcome">
@@ -421,6 +414,7 @@
     document.getElementById('welcome').classList.remove('hidden');
     setActiveNav('home');
     currentApp = null;
+    localStorage.removeItem('wms_lastApp');
   }
 
   function openApp(app) {
@@ -429,6 +423,7 @@
     if (!frame) return;
     setActiveNav(app);
     document.getElementById('welcome').classList.add('hidden');
+
     if (currentApp === app) return;
     Object.values(frames).forEach(f => f.classList.remove('active'));
 
@@ -444,7 +439,17 @@
     } else {
       frame.classList.add('active');
     }
+
     currentApp = app;
+    localStorage.setItem('wms_lastApp', app);
+  }
+
+  // Al caricamento ripristina l'ultima app aperta
+  const lastApp = localStorage.getItem('wms_lastApp');
+  if (lastApp && frames[lastApp]) {
+    openApp(lastApp);
+  } else {
+    setActiveNav('home');
   }
 
   // Chiudi con ESC
