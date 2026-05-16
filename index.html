@@ -20,202 +20,158 @@
     --text: #e2e8f0;
     --muted: #64748b;
     --subtle: #94a3b8;
-    --sb-w: 58px;
-    --sb-w-open: 210px;
     --ff: 'IBM Plex Sans', sans-serif;
     --ffm: 'IBM Plex Mono', monospace;
     --ffc: 'Barlow Condensed', sans-serif;
   }
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; overflow: hidden; }
-  body { background: var(--bg); color: var(--text); font-family: var(--ff); font-size: 14px; display: flex; }
+  body { background: var(--bg); color: var(--text); font-family: var(--ff); font-size: 14px; }
 
-  /* ── SIDEBAR ── */
-  .sidebar {
-    width: var(--sb-w);
-    height: 100vh;
+  /* ══ MAIN ocupa tutto ══ */
+  .main {
+    position: fixed;
+    inset: 0;
+    z-index: 1;
+  }
+
+  /* ══ HAMBURGER BUTTON (sempre visibile, top-left) ══ */
+  .menu-btn {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 300;
+    width: 36px;
+    height: 36px;
     background: var(--surface);
-    border-right: 1px solid var(--border);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    cursor: pointer;
     display: flex;
     flex-direction: column;
-    flex-shrink: 0;
-    transition: width 0.22s cubic-bezier(.4,0,.2,1);
-    overflow: hidden;
-    position: relative;
-    z-index: 100;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    transition: background 0.18s, border-color 0.18s, opacity 0.2s;
+    box-shadow: 0 2px 12px rgba(0,0,0,.4);
   }
-  .sidebar.open { width: var(--sb-w-open); }
+  .menu-btn:hover { background: var(--card); border-color: var(--subtle); }
+  .menu-btn .bar {
+    width: 16px;
+    height: 2px;
+    background: var(--subtle);
+    border-radius: 2px;
+    transition: transform 0.22s, opacity 0.22s, width 0.22s;
+  }
+  /* X when open */
+  .menu-btn.open .bar:nth-child(1) { transform: translateY(7px) rotate(45deg); }
+  .menu-btn.open .bar:nth-child(2) { opacity: 0; width: 0; }
+  .menu-btn.open .bar:nth-child(3) { transform: translateY(-7px) rotate(-45deg); }
 
-  .sb-logo {
-    padding: 11px 12px;
+  /* ══ OVERLAY backdrop ══ */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    backdrop-filter: blur(2px);
+    z-index: 200;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+  }
+  .overlay.show { opacity: 1; pointer-events: all; }
+
+  /* ══ DRAWER ══ */
+  .drawer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 240px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    z-index: 250;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(.4,0,.2,1);
+    box-shadow: 4px 0 32px rgba(0,0,0,.5);
+  }
+  .drawer.open { transform: translateX(0); }
+
+  /* Drawer header */
+  .dr-header {
+    padding: 18px 20px 16px;
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
-    gap: 10px;
-    min-height: 58px;
+    gap: 12px;
     flex-shrink: 0;
-    cursor: pointer;
-    transition: background 0.18s;
   }
-  .sb-logo:hover { background: var(--card); }
-  .sb-logo-img {
-    width: 34px;
-    height: 34px;
+  .dr-logo-img {
+    width: 36px;
+    height: 36px;
     object-fit: contain;
-    flex-shrink: 0;
-    filter: drop-shadow(0 0 6px rgba(59,130,246,.2));
+    filter: drop-shadow(0 0 6px rgba(59,130,246,.25));
   }
-  .sb-logo-text {
-    font-family: var(--ffc);
-    font-size: 17px;
-    font-weight: 800;
-    letter-spacing: 1.5px;
-    white-space: nowrap;
-    overflow: hidden;
-    opacity: 0;
-    max-width: 0;
-    transition: opacity 0.18s, max-width 0.22s;
-  }
-  .sidebar.open .sb-logo-text { opacity: 1; max-width: 140px; }
-  .sb-logo-text .c1 { color: var(--blue); }
-  .sb-logo-text .c2 { color: var(--teal); }
-  .sb-logo-text .c3 { color: var(--subtle); font-weight: 500; }
+  .dr-logo-text { font-family: var(--ffc); font-size: 18px; font-weight: 800; letter-spacing: 1.5px; }
+  .dr-logo-text .c1 { color: var(--blue); }
+  .dr-logo-text .c2 { color: var(--teal); }
+  .dr-logo-text .c3 { color: var(--subtle); font-weight: 500; }
 
-  .sb-nav {
+  /* Drawer nav */
+  .dr-nav {
     flex: 1;
-    padding: 8px 8px;
+    padding: 10px 10px;
     display: flex;
     flex-direction: column;
     gap: 2px;
     overflow-y: auto;
-    overflow-x: hidden;
   }
-
-  .sb-sect-label {
+  .dr-sect {
     font-size: 9px;
     font-weight: 700;
     letter-spacing: 1.8px;
     text-transform: uppercase;
     color: var(--muted);
-    padding: 10px 4px 4px;
-    white-space: nowrap;
-    overflow: hidden;
-    opacity: 0;
-    max-height: 0;
-    transition: opacity 0.18s, max-height 0.22s;
+    padding: 12px 8px 5px;
   }
-  .sidebar.open .sb-sect-label { opacity: 1; max-height: 30px; }
-
-  .sb-item {
+  .dr-item {
     display: flex;
     align-items: center;
-    padding: 10px 0;
-    justify-content: center;
-    border-radius: 9px;
+    gap: 12px;
+    padding: 11px 12px;
+    border-radius: 10px;
     cursor: pointer;
-    transition: background 0.15s, border-color 0.15s, padding 0.22s, gap 0.22s;
+    transition: background 0.15s, border-color 0.15s;
     color: var(--muted);
     border: 1px solid transparent;
-    position: relative;
-    overflow: visible;
   }
-  .sidebar.open .sb-item { padding: 10px 10px; justify-content: flex-start; gap: 11px; }
-  .sb-item:hover { background: var(--card); color: var(--subtle); }
-  .sb-item.active { background: var(--card); border-color: var(--border); color: var(--text); }
-  .sb-item.app-presenze.active { border-color: rgba(59,130,246,.3); }
-  .sb-item.app-presenze.active .sb-item-name { color: var(--blue); }
-  .sb-item.app-spedizioni.active { border-color: rgba(245,158,11,.3); }
-  .sb-item.app-spedizioni.active .sb-item-name { color: var(--amber); }
-  .sb-item.app-home.active { border-color: rgba(20,184,166,.3); }
-  .sb-item.app-home.active .sb-item-name { color: var(--teal); }
+  .dr-item:hover { background: var(--card); color: var(--subtle); }
+  .dr-item.active { background: var(--card); border-color: var(--border); color: var(--text); }
+  .dr-item.app-home.active   { border-color: rgba(20,184,166,.3); }
+  .dr-item.app-home.active .dr-item-name { color: var(--teal); }
+  .dr-item.app-presenze.active { border-color: rgba(59,130,246,.3); }
+  .dr-item.app-presenze.active .dr-item-name { color: var(--blue); }
+  .dr-item.app-spedizioni.active { border-color: rgba(245,158,11,.3); }
+  .dr-item.app-spedizioni.active .dr-item-name { color: var(--amber); }
 
-  .sb-item-icon {
-    font-size: 17px;
-    flex-shrink: 0;
-    width: 22px;
-    text-align: center;
-    line-height: 1;
-  }
-  .sb-item-info {
-    display: flex;
-    flex-direction: column;
-    gap: 1px;
-    overflow: hidden;
-    opacity: 0;
-    max-width: 0;
-    white-space: nowrap;
-    transition: opacity 0.18s, max-width 0.22s;
-  }
-  .sidebar.open .sb-item-info { opacity: 1; max-width: 150px; }
-  .sb-item-name { font-family: var(--ffc); font-size: 13px; font-weight: 700; letter-spacing: .5px; }
-  .sb-item-desc { font-size: 10px; color: var(--muted); }
+  .dr-item-icon { font-size: 17px; flex-shrink: 0; width: 22px; text-align: center; }
+  .dr-item-info { display: flex; flex-direction: column; gap: 1px; }
+  .dr-item-name { font-family: var(--ffc); font-size: 14px; font-weight: 700; letter-spacing: .4px; }
+  .dr-item-desc { font-size: 10px; color: var(--muted); }
 
-  /* Tooltip (visible only when sidebar is collapsed) */
-  .sb-tip {
-    position: fixed;
-    left: calc(var(--sb-w) + 8px);
-    background: var(--card);
-    border: 1px solid var(--border);
-    border-radius: 7px;
-    padding: 6px 12px;
-    font-family: var(--ffc);
-    font-size: 12px;
-    font-weight: 700;
-    color: var(--text);
-    letter-spacing: .5px;
-    white-space: nowrap;
-    pointer-events: none;
-    opacity: 0;
-    transform: translateX(-4px);
-    transition: opacity 0.12s, transform 0.12s;
-    z-index: 500;
-    box-shadow: 0 4px 16px rgba(0,0,0,.5);
-  }
-  .sidebar:not(.open) .sb-item:hover .sb-tip {
-    opacity: 1;
-    transform: translateX(0);
-  }
-
-  /* Footer toggle */
-  .sb-footer {
-    padding: 8px 8px;
+  /* Drawer footer */
+  .dr-footer {
+    padding: 12px 16px;
     border-top: 1px solid var(--border);
-    flex-shrink: 0;
-  }
-  .sb-toggle-btn {
-    width: 100%;
-    background: none;
-    border: 1px solid var(--border);
-    border-radius: 7px;
-    padding: 8px;
+    font-size: 10px;
     color: var(--muted);
-    cursor: pointer;
-    font-family: var(--ffc);
-    font-size: 11px;
-    font-weight: 700;
-    letter-spacing: .5px;
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    gap: 8px;
-    transition: border-color 0.18s, color 0.18s;
-    overflow: hidden;
+    font-family: var(--ffm);
+    letter-spacing: .3px;
   }
-  .sb-toggle-btn:hover { border-color: var(--subtle); color: var(--text); }
-  .sb-toggle-icon { font-size: 11px; flex-shrink: 0; transition: transform 0.22s; display: inline-block; }
-  .sidebar.open .sb-toggle-icon { transform: scaleX(-1); }
-  .sb-toggle-label {
-    white-space: nowrap;
-    overflow: hidden;
-    opacity: 0;
-    max-width: 0;
-    transition: opacity 0.18s, max-width 0.22s;
-  }
-  .sidebar.open .sb-toggle-label { opacity: 1; max-width: 80px; }
 
-  /* ── MAIN ── */
-  .main { flex: 1; height: 100vh; position: relative; overflow: hidden; }
-
+  /* ══ WELCOME ══ */
   .welcome {
     position: absolute;
     inset: 0;
@@ -235,15 +191,15 @@
 
   .welcome-header { display: flex; flex-direction: column; align-items: center; gap: 12px; }
   .welcome-logo-img {
-    width: 70px;
-    height: 70px;
+    width: 72px;
+    height: 72px;
     object-fit: contain;
-    filter: drop-shadow(0 0 18px rgba(59,130,246,.3));
+    filter: drop-shadow(0 0 20px rgba(59,130,246,.3));
     animation: float 3s ease-in-out infinite;
   }
-  @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+  @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
 
-  .welcome-title { font-family: var(--ffc); font-size: 38px; font-weight: 800; letter-spacing: 2px; }
+  .welcome-title { font-family: var(--ffc); font-size: 40px; font-weight: 800; letter-spacing: 2px; }
   .welcome-title .c1 { color: var(--blue); }
   .welcome-title .c2 { color: var(--teal); }
   .welcome-title .c3 { color: var(--subtle); font-weight: 500; }
@@ -253,8 +209,8 @@
     display: grid;
     grid-template-columns: 1fr 1fr;
     gap: 14px;
-    max-width: 540px;
-    width: 90%;
+    max-width: 520px;
+    width: 88%;
   }
   .app-card {
     background: var(--surface);
@@ -279,8 +235,8 @@
   }
   .app-card:hover { transform: translateY(-3px); box-shadow: 0 14px 40px rgba(0,0,0,.45); }
   .app-card:hover::before { opacity: 1; }
-  .card-presenze::before { background: radial-gradient(ellipse at top left, rgba(59,130,246,.09), transparent 70%); }
-  .card-spedizioni::before { background: radial-gradient(ellipse at top left, rgba(245,158,11,.09), transparent 70%); }
+  .card-presenze::before { background: radial-gradient(ellipse at top left, rgba(59,130,246,.1), transparent 70%); }
+  .card-spedizioni::before { background: radial-gradient(ellipse at top left, rgba(245,158,11,.1), transparent 70%); }
   .card-presenze:hover { border-color: rgba(59,130,246,.35); }
   .card-spedizioni:hover { border-color: rgba(245,158,11,.35); }
   .card-icon { font-size: 30px; }
@@ -293,6 +249,7 @@
   .card-presenze:hover .card-arrow { color: var(--blue); }
   .card-spedizioni:hover .card-arrow { color: var(--amber); }
 
+  /* ══ IFRAMES ══ */
   .app-frame {
     position: absolute;
     inset: 0;
@@ -306,6 +263,7 @@
   }
   .app-frame.active { opacity: 1; pointer-events: all; }
 
+  /* ══ LOADER ══ */
   .frame-loader {
     position: absolute;
     inset: 0;
@@ -335,58 +293,59 @@
 </head>
 <body>
 
-<!-- ══ SIDEBAR ══ -->
-<nav class="sidebar" id="sidebar">
+<!-- ══ HAMBURGER ══ -->
+<button class="menu-btn" id="menuBtn" onclick="toggleDrawer()" title="Menu">
+  <span class="bar"></span>
+  <span class="bar"></span>
+  <span class="bar"></span>
+</button>
 
-  <div class="sb-logo" onclick="toggleSidebar()" title="Espandi / Riduci">
-    <img class="sb-logo-img" src="https://ats-spa.github.io/Hub-WMS/ATS-Logo.png" alt="ATS">
-    <span class="sb-logo-text">
+<!-- ══ OVERLAY ══ -->
+<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+
+<!-- ══ DRAWER ══ -->
+<div class="drawer" id="drawer">
+  <div class="dr-header">
+    <img class="dr-logo-img" src="https://ats-spa.github.io/Hub-WMS/ATS-Logo.png" alt="ATS">
+    <span class="dr-logo-text">
       <span class="c1">WM</span><span class="c2">S</span><span class="c3"> Hub</span>
     </span>
   </div>
 
-  <div class="sb-nav">
-    <div class="sb-sect-label">Navigazione</div>
+  <div class="dr-nav">
+    <div class="dr-sect">Navigazione</div>
 
-    <div class="sb-item app-home active" id="nav-home" onclick="showHome()">
-      <span class="sb-item-icon">🏠</span>
-      <div class="sb-item-info">
-        <span class="sb-item-name">Home</span>
-        <span class="sb-item-desc">Pannello principale</span>
+    <div class="dr-item app-home active" id="nav-home" onclick="showHome()">
+      <span class="dr-item-icon">🏠</span>
+      <div class="dr-item-info">
+        <span class="dr-item-name">Home</span>
+        <span class="dr-item-desc">Pannello principale</span>
       </div>
-      <span class="sb-tip">Home</span>
     </div>
 
-    <div class="sb-sect-label">Moduli</div>
+    <div class="dr-sect">Moduli</div>
 
-    <div class="sb-item app-presenze" id="nav-presenze" onclick="openApp('presenze')">
-      <span class="sb-item-icon">📋</span>
-      <div class="sb-item-info">
-        <span class="sb-item-name">Presenze</span>
-        <span class="sb-item-desc">Turni e assenze</span>
+    <div class="dr-item app-presenze" id="nav-presenze" onclick="openApp('presenze')">
+      <span class="dr-item-icon">📋</span>
+      <div class="dr-item-info">
+        <span class="dr-item-name">Presenze</span>
+        <span class="dr-item-desc">Turni e assenze</span>
       </div>
-      <span class="sb-tip">Presenze</span>
     </div>
 
-    <div class="sb-item app-spedizioni" id="nav-spedizioni" onclick="openApp('spedizioni')">
-      <span class="sb-item-icon">📦</span>
-      <div class="sb-item-info">
-        <span class="sb-item-name">Spedizioni AWB</span>
-        <span class="sb-item-desc">Tracking AWB</span>
+    <div class="dr-item app-spedizioni" id="nav-spedizioni" onclick="openApp('spedizioni')">
+      <span class="dr-item-icon">📦</span>
+      <div class="dr-item-info">
+        <span class="dr-item-name">Spedizioni AWB</span>
+        <span class="dr-item-desc">Tracking AWB</span>
       </div>
-      <span class="sb-tip">Spedizioni AWB</span>
     </div>
   </div>
 
-  <div class="sb-footer">
-    <button class="sb-toggle-btn" onclick="toggleSidebar()">
-      <span class="sb-toggle-icon">▶</span>
-      <span class="sb-toggle-label">Riduci</span>
-    </button>
-  </div>
-</nav>
+  <div class="dr-footer">WMS Hub · ATS v1.0</div>
+</div>
 
-<!-- ══ MAIN ══ -->
+<!-- ══ MAIN (schermo intero) ══ -->
 <main class="main">
 
   <div class="welcome" id="welcome">
@@ -432,6 +391,23 @@
     spedizioni: document.getElementById('nav-spedizioni'),
   };
   let currentApp = null;
+  let drawerOpen = false;
+
+  function toggleDrawer() {
+    drawerOpen ? closeDrawer() : openDrawer();
+  }
+  function openDrawer() {
+    drawerOpen = true;
+    document.getElementById('drawer').classList.add('open');
+    document.getElementById('overlay').classList.add('show');
+    document.getElementById('menuBtn').classList.add('open');
+  }
+  function closeDrawer() {
+    drawerOpen = false;
+    document.getElementById('drawer').classList.remove('open');
+    document.getElementById('overlay').classList.remove('show');
+    document.getElementById('menuBtn').classList.remove('open');
+  }
 
   function setActiveNav(key) {
     Object.values(navItems).forEach(el => el.classList.remove('active'));
@@ -439,6 +415,7 @@
   }
 
   function showHome() {
+    closeDrawer();
     Object.values(frames).forEach(f => f.classList.remove('active'));
     document.getElementById('welcome').classList.remove('hidden');
     setActiveNav('home');
@@ -446,6 +423,7 @@
   }
 
   function openApp(app) {
+    closeDrawer();
     const frame = frames[app];
     if (!frame) return;
     setActiveNav(app);
@@ -463,18 +441,14 @@
       frame.onload = () => { loader.classList.remove('show'); frame.classList.add('active'); };
       frame.onerror = () => { loader.classList.remove('show'); frame.classList.add('active'); };
     } else {
-      loader.classList.remove('show');
       frame.classList.add('active');
     }
     currentApp = app;
   }
 
-  function toggleSidebar() {
-    document.getElementById('sidebar').classList.toggle('open');
-  }
-
-  // Alt+1 Presenze / Alt+2 Spedizioni / Alt+0 Home
+  // Chiudi con ESC
   document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeDrawer();
     if (e.altKey && e.key === '1') openApp('presenze');
     if (e.altKey && e.key === '2') openApp('spedizioni');
     if (e.altKey && e.key === '0') showHome();
