@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WMS · Hub</title>
-<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🏭</text></svg>">
+<link rel="icon" href="https://ats-spa.github.io/Hub-WMS/ATS-Logo.png">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -16,176 +16,206 @@
     --blue: #3b82f6;
     --teal: #14b8a6;
     --amber: #f59e0b;
-    --green: #10b981;
     --red: #ef4444;
     --text: #e2e8f0;
     --muted: #64748b;
     --subtle: #94a3b8;
-    --sidebar-w: 220px;
-    --sidebar-w-collapsed: 64px;
+    --sb-w: 58px;
+    --sb-w-open: 210px;
     --ff: 'IBM Plex Sans', sans-serif;
     --ffm: 'IBM Plex Mono', monospace;
     --ffc: 'Barlow Condensed', sans-serif;
   }
-
   *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
   html, body { height: 100%; overflow: hidden; }
   body { background: var(--bg); color: var(--text); font-family: var(--ff); font-size: 14px; display: flex; }
 
   /* ── SIDEBAR ── */
   .sidebar {
-    width: var(--sidebar-w);
+    width: var(--sb-w);
     height: 100vh;
     background: var(--surface);
     border-right: 1px solid var(--border);
     display: flex;
     flex-direction: column;
     flex-shrink: 0;
-    transition: width 0.25s ease;
+    transition: width 0.22s cubic-bezier(.4,0,.2,1);
     overflow: hidden;
     position: relative;
     z-index: 100;
   }
-  .sidebar.collapsed { width: var(--sidebar-w-collapsed); }
+  .sidebar.open { width: var(--sb-w-open); }
 
-  /* Logo area */
   .sb-logo {
-    padding: 20px 18px 16px;
+    padding: 11px 12px;
     border-bottom: 1px solid var(--border);
     display: flex;
     align-items: center;
     gap: 10px;
-    min-height: 70px;
+    min-height: 58px;
     flex-shrink: 0;
+    cursor: pointer;
+    transition: background 0.18s;
   }
-  .sb-logo-icon {
+  .sb-logo:hover { background: var(--card); }
+  .sb-logo-img {
     width: 34px;
     height: 34px;
-    border-radius: 8px;
-    background: linear-gradient(135deg, var(--blue), var(--teal));
-    display: flex;
-    align-items: center;
-    justify-content: center;
-    font-size: 16px;
+    object-fit: contain;
     flex-shrink: 0;
+    filter: drop-shadow(0 0 6px rgba(59,130,246,.2));
   }
   .sb-logo-text {
     font-family: var(--ffc);
-    font-size: 20px;
+    font-size: 17px;
     font-weight: 800;
     letter-spacing: 1.5px;
     white-space: nowrap;
     overflow: hidden;
+    opacity: 0;
+    max-width: 0;
+    transition: opacity 0.18s, max-width 0.22s;
   }
+  .sidebar.open .sb-logo-text { opacity: 1; max-width: 140px; }
   .sb-logo-text .c1 { color: var(--blue); }
   .sb-logo-text .c2 { color: var(--teal); }
   .sb-logo-text .c3 { color: var(--subtle); font-weight: 500; }
 
-  /* Nav label */
-  .sb-label {
-    padding: 18px 18px 6px;
+  .sb-nav {
+    flex: 1;
+    padding: 8px 8px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+    overflow-x: hidden;
+  }
+
+  .sb-sect-label {
     font-size: 9px;
     font-weight: 700;
     letter-spacing: 1.8px;
     text-transform: uppercase;
     color: var(--muted);
+    padding: 10px 4px 4px;
     white-space: nowrap;
     overflow: hidden;
+    opacity: 0;
+    max-height: 0;
+    transition: opacity 0.18s, max-height 0.22s;
   }
-  .sidebar.collapsed .sb-label { opacity: 0; }
-
-  /* Nav items */
-  .sb-nav { flex: 1; padding: 4px 10px; display: flex; flex-direction: column; gap: 3px; overflow-y: auto; }
+  .sidebar.open .sb-sect-label { opacity: 1; max-height: 30px; }
 
   .sb-item {
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 11px 10px;
-    border-radius: 10px;
+    padding: 10px 0;
+    justify-content: center;
+    border-radius: 9px;
     cursor: pointer;
-    transition: all 0.18s;
-    text-decoration: none;
+    transition: background 0.15s, border-color 0.15s, padding 0.22s, gap 0.22s;
     color: var(--muted);
     border: 1px solid transparent;
     position: relative;
-    white-space: nowrap;
-    overflow: hidden;
+    overflow: visible;
   }
+  .sidebar.open .sb-item { padding: 10px 10px; justify-content: flex-start; gap: 11px; }
   .sb-item:hover { background: var(--card); color: var(--subtle); }
   .sb-item.active { background: var(--card); border-color: var(--border); color: var(--text); }
+  .sb-item.app-presenze.active { border-color: rgba(59,130,246,.3); }
+  .sb-item.app-presenze.active .sb-item-name { color: var(--blue); }
+  .sb-item.app-spedizioni.active { border-color: rgba(245,158,11,.3); }
+  .sb-item.app-spedizioni.active .sb-item-name { color: var(--amber); }
+  .sb-item.app-home.active { border-color: rgba(20,184,166,.3); }
+  .sb-item.app-home.active .sb-item-name { color: var(--teal); }
 
   .sb-item-icon {
-    font-size: 18px;
+    font-size: 17px;
     flex-shrink: 0;
     width: 22px;
     text-align: center;
     line-height: 1;
   }
-  .sb-item-info { display: flex; flex-direction: column; gap: 1px; overflow: hidden; }
-  .sb-item-name { font-family: var(--ffc); font-size: 14px; font-weight: 700; letter-spacing: .5px; }
-  .sb-item-desc { font-size: 10px; color: var(--muted); letter-spacing: .2px; }
-
-  /* Accent dots per app */
-  .sb-item.app-presenze.active { border-color: rgba(59,130,246,.3); }
-  .sb-item.app-presenze.active .sb-item-name { color: var(--blue); }
-  .sb-item.app-spedizioni.active { border-color: rgba(245,158,11,.3); }
-  .sb-item.app-spedizioni.active .sb-item-name { color: var(--amber); }
-
-  .sb-item-dot {
-    width: 6px;
-    height: 6px;
-    border-radius: 50%;
-    flex-shrink: 0;
-    margin-left: auto;
+  .sb-item-info {
+    display: flex;
+    flex-direction: column;
+    gap: 1px;
+    overflow: hidden;
     opacity: 0;
-    transition: opacity 0.2s;
+    max-width: 0;
+    white-space: nowrap;
+    transition: opacity 0.18s, max-width 0.22s;
   }
-  .sb-item.active .sb-item-dot { opacity: 1; }
-  .app-presenze .sb-item-dot { background: var(--blue); }
-  .app-spedizioni .sb-item-dot { background: var(--amber); }
+  .sidebar.open .sb-item-info { opacity: 1; max-width: 150px; }
+  .sb-item-name { font-family: var(--ffc); font-size: 13px; font-weight: 700; letter-spacing: .5px; }
+  .sb-item-desc { font-size: 10px; color: var(--muted); }
 
-  /* Collapse button */
+  /* Tooltip (visible only when sidebar is collapsed) */
+  .sb-tip {
+    position: fixed;
+    left: calc(var(--sb-w) + 8px);
+    background: var(--card);
+    border: 1px solid var(--border);
+    border-radius: 7px;
+    padding: 6px 12px;
+    font-family: var(--ffc);
+    font-size: 12px;
+    font-weight: 700;
+    color: var(--text);
+    letter-spacing: .5px;
+    white-space: nowrap;
+    pointer-events: none;
+    opacity: 0;
+    transform: translateX(-4px);
+    transition: opacity 0.12s, transform 0.12s;
+    z-index: 500;
+    box-shadow: 0 4px 16px rgba(0,0,0,.5);
+  }
+  .sidebar:not(.open) .sb-item:hover .sb-tip {
+    opacity: 1;
+    transform: translateX(0);
+  }
+
+  /* Footer toggle */
   .sb-footer {
-    padding: 12px 10px;
+    padding: 8px 8px;
     border-top: 1px solid var(--border);
     flex-shrink: 0;
   }
-  .sb-collapse-btn {
+  .sb-toggle-btn {
     width: 100%;
     background: none;
     border: 1px solid var(--border);
-    border-radius: 8px;
+    border-radius: 7px;
     padding: 8px;
     color: var(--muted);
     cursor: pointer;
     font-family: var(--ffc);
-    font-size: 12px;
+    font-size: 11px;
     font-weight: 700;
     letter-spacing: .5px;
     display: flex;
     align-items: center;
     justify-content: center;
     gap: 8px;
-    transition: all 0.2s;
+    transition: border-color 0.18s, color 0.18s;
+    overflow: hidden;
+  }
+  .sb-toggle-btn:hover { border-color: var(--subtle); color: var(--text); }
+  .sb-toggle-icon { font-size: 11px; flex-shrink: 0; transition: transform 0.22s; display: inline-block; }
+  .sidebar.open .sb-toggle-icon { transform: scaleX(-1); }
+  .sb-toggle-label {
     white-space: nowrap;
     overflow: hidden;
+    opacity: 0;
+    max-width: 0;
+    transition: opacity 0.18s, max-width 0.22s;
   }
-  .sb-collapse-btn:hover { border-color: var(--subtle); color: var(--text); }
-  .sb-collapse-icon { font-size: 14px; flex-shrink: 0; transition: transform 0.25s; }
-  .sidebar.collapsed .sb-collapse-icon { transform: scaleX(-1); }
-  .sb-collapse-label { transition: opacity 0.2s; }
-  .sidebar.collapsed .sb-collapse-label { opacity: 0; width: 0; }
+  .sidebar.open .sb-toggle-label { opacity: 1; max-width: 80px; }
 
-  /* ── MAIN AREA ── */
-  .main {
-    flex: 1;
-    height: 100vh;
-    position: relative;
-    overflow: hidden;
-  }
+  /* ── MAIN ── */
+  .main { flex: 1; height: 100vh; position: relative; overflow: hidden; }
 
-  /* Welcome screen */
   .welcome {
     position: absolute;
     inset: 0;
@@ -193,50 +223,49 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 24px;
-    background: radial-gradient(ellipse at 30% 40%, rgba(59,130,246,.06), transparent 55%),
-                radial-gradient(ellipse at 80% 70%, rgba(20,184,166,.05), transparent 55%), var(--bg);
-    opacity: 1;
-    transition: opacity 0.3s;
+    gap: 28px;
+    background:
+      radial-gradient(ellipse at 30% 40%, rgba(59,130,246,.06), transparent 55%),
+      radial-gradient(ellipse at 80% 70%, rgba(20,184,166,.05), transparent 55%),
+      var(--bg);
     z-index: 10;
+    transition: opacity 0.25s;
   }
   .welcome.hidden { opacity: 0; pointer-events: none; }
+
+  .welcome-header { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .welcome-logo-img {
+    width: 70px;
+    height: 70px;
+    object-fit: contain;
+    filter: drop-shadow(0 0 18px rgba(59,130,246,.3));
+    animation: float 3s ease-in-out infinite;
+  }
+  @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-6px)} }
+
+  .welcome-title { font-family: var(--ffc); font-size: 38px; font-weight: 800; letter-spacing: 2px; }
+  .welcome-title .c1 { color: var(--blue); }
+  .welcome-title .c2 { color: var(--teal); }
+  .welcome-title .c3 { color: var(--subtle); font-weight: 500; }
+  .welcome-sub { font-size: 11px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
 
   .welcome-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
-    gap: 16px;
-    max-width: 600px;
+    gap: 14px;
+    max-width: 540px;
     width: 90%;
   }
-  .welcome-logo {
-    font-family: var(--ffc);
-    font-size: 42px;
-    font-weight: 800;
-    letter-spacing: 2px;
-    text-align: center;
-  }
-  .welcome-logo .c1 { color: var(--blue); }
-  .welcome-logo .c2 { color: var(--teal); }
-  .welcome-logo .c3 { color: var(--subtle); font-weight: 500; }
-  .welcome-sub {
-    font-size: 12px;
-    color: var(--muted);
-    letter-spacing: 2px;
-    text-transform: uppercase;
-    text-align: center;
-  }
-
   .app-card {
     background: var(--surface);
     border: 1px solid var(--border);
     border-radius: 16px;
-    padding: 28px 24px;
+    padding: 24px 20px;
     cursor: pointer;
-    transition: all 0.22s;
+    transition: all 0.2s;
     display: flex;
     flex-direction: column;
-    gap: 12px;
+    gap: 10px;
     position: relative;
     overflow: hidden;
   }
@@ -245,38 +274,25 @@
     position: absolute;
     inset: 0;
     opacity: 0;
-    transition: opacity 0.22s;
+    transition: opacity 0.2s;
     border-radius: 16px;
   }
-  .app-card:hover { transform: translateY(-3px); }
+  .app-card:hover { transform: translateY(-3px); box-shadow: 0 14px 40px rgba(0,0,0,.45); }
   .app-card:hover::before { opacity: 1; }
-  .app-card.card-presenze::before { background: radial-gradient(ellipse at top left, rgba(59,130,246,.08), transparent 70%); }
-  .app-card.card-spedizioni::before { background: radial-gradient(ellipse at top left, rgba(245,158,11,.08), transparent 70%); }
-  .app-card:hover { border-color: var(--border); box-shadow: 0 12px 40px rgba(0,0,0,.4); }
-  .app-card.card-presenze:hover { border-color: rgba(59,130,246,.3); }
-  .app-card.card-spedizioni:hover { border-color: rgba(245,158,11,.3); }
-
-  .card-icon { font-size: 36px; }
-  .card-title {
-    font-family: var(--ffc);
-    font-size: 20px;
-    font-weight: 800;
-    letter-spacing: .5px;
-  }
+  .card-presenze::before { background: radial-gradient(ellipse at top left, rgba(59,130,246,.09), transparent 70%); }
+  .card-spedizioni::before { background: radial-gradient(ellipse at top left, rgba(245,158,11,.09), transparent 70%); }
+  .card-presenze:hover { border-color: rgba(59,130,246,.35); }
+  .card-spedizioni:hover { border-color: rgba(245,158,11,.35); }
+  .card-icon { font-size: 30px; }
+  .card-title { font-family: var(--ffc); font-size: 18px; font-weight: 800; letter-spacing: .5px; }
   .card-presenze .card-title { color: var(--blue); }
   .card-spedizioni .card-title { color: var(--amber); }
-  .card-desc { font-size: 12px; color: var(--muted); line-height: 1.6; }
-  .card-arrow {
-    font-size: 18px;
-    color: var(--muted);
-    margin-top: 4px;
-    transition: transform 0.2s, color 0.2s;
-  }
-  .app-card:hover .card-arrow { transform: translateX(4px); }
+  .card-desc { font-size: 11px; color: var(--muted); line-height: 1.6; }
+  .card-arrow { font-size: 15px; color: var(--muted); margin-top: 4px; transition: transform 0.18s, color 0.18s; }
+  .app-card:hover .card-arrow { transform: translateX(5px); }
   .card-presenze:hover .card-arrow { color: var(--blue); }
   .card-spedizioni:hover .card-arrow { color: var(--amber); }
 
-  /* ── IFRAMES ── */
   .app-frame {
     position: absolute;
     inset: 0;
@@ -285,15 +301,11 @@
     border: none;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.25s;
+    transition: opacity 0.22s;
     z-index: 5;
   }
-  .app-frame.active {
-    opacity: 1;
-    pointer-events: all;
-  }
+  .app-frame.active { opacity: 1; pointer-events: all; }
 
-  /* Loading overlay */
   .frame-loader {
     position: absolute;
     inset: 0;
@@ -302,149 +314,110 @@
     flex-direction: column;
     align-items: center;
     justify-content: center;
-    gap: 16px;
+    gap: 14px;
     z-index: 20;
     opacity: 0;
     pointer-events: none;
-    transition: opacity 0.2s;
+    transition: opacity 0.18s;
   }
   .frame-loader.show { opacity: 1; pointer-events: all; }
   .loader-spinner {
-    width: 36px;
-    height: 36px;
+    width: 32px;
+    height: 32px;
     border: 3px solid var(--border);
     border-top-color: var(--teal);
     border-radius: 50%;
     animation: spin 0.8s linear infinite;
   }
-  .loader-text { font-family: var(--ffc); font-size: 13px; color: var(--muted); letter-spacing: 1px; }
-
+  .loader-text { font-family: var(--ffc); font-size: 12px; color: var(--muted); letter-spacing: 1px; }
   @keyframes spin { to { transform: rotate(360deg); } }
-  @keyframes pulse { 0%,100%{opacity:1} 50%{opacity:.4} }
-
-  /* Tooltip for collapsed sidebar */
-  .sidebar.collapsed .sb-item { justify-content: center; }
-  .sidebar.collapsed .sb-item-info { display: none; }
-  .sidebar.collapsed .sb-item-dot { display: none; }
-  .sidebar.collapsed .sb-logo-text { display: none; }
-  .sidebar.collapsed .sb-label { display: none; }
-
-  /* Version tag */
-  .sb-version {
-    font-size: 10px;
-    color: var(--muted);
-    font-family: var(--ffm);
-    text-align: center;
-    padding: 0 10px 12px;
-    white-space: nowrap;
-    overflow: hidden;
-    opacity: 1;
-    transition: opacity 0.2s;
-  }
-  .sidebar.collapsed .sb-version { opacity: 0; }
 </style>
 </head>
 <body>
 
-<!-- ══════════════════════ SIDEBAR ══════════════════════ -->
+<!-- ══ SIDEBAR ══ -->
 <nav class="sidebar" id="sidebar">
-  <div class="sb-logo">
-    <div class="sb-logo-icon">🏭</div>
-    <div class="sb-logo-text">
+
+  <div class="sb-logo" onclick="toggleSidebar()" title="Espandi / Riduci">
+    <img class="sb-logo-img" src="https://ats-spa.github.io/Hub-WMS/ATS-Logo.png" alt="ATS">
+    <span class="sb-logo-text">
       <span class="c1">WM</span><span class="c2">S</span><span class="c3"> Hub</span>
-    </div>
+    </span>
   </div>
 
-  <div class="sb-label">Applicazioni</div>
-
   <div class="sb-nav">
-    <div class="sb-item app-presenze active" id="nav-home" onclick="showHome()">
+    <div class="sb-sect-label">Navigazione</div>
+
+    <div class="sb-item app-home active" id="nav-home" onclick="showHome()">
       <span class="sb-item-icon">🏠</span>
       <div class="sb-item-info">
         <span class="sb-item-name">Home</span>
         <span class="sb-item-desc">Pannello principale</span>
       </div>
-      <span class="sb-item-dot"></span>
+      <span class="sb-tip">Home</span>
     </div>
+
+    <div class="sb-sect-label">Moduli</div>
 
     <div class="sb-item app-presenze" id="nav-presenze" onclick="openApp('presenze')">
       <span class="sb-item-icon">📋</span>
       <div class="sb-item-info">
         <span class="sb-item-name">Presenze</span>
-        <span class="sb-item-desc">Gestione turni e assenze</span>
+        <span class="sb-item-desc">Turni e assenze</span>
       </div>
-      <span class="sb-item-dot"></span>
+      <span class="sb-tip">Presenze</span>
     </div>
 
     <div class="sb-item app-spedizioni" id="nav-spedizioni" onclick="openApp('spedizioni')">
       <span class="sb-item-icon">📦</span>
       <div class="sb-item-info">
-        <span class="sb-item-name">Spedizioni</span>
+        <span class="sb-item-name">Spedizioni AWB</span>
         <span class="sb-item-desc">Tracking AWB</span>
       </div>
-      <span class="sb-item-dot"></span>
+      <span class="sb-tip">Spedizioni AWB</span>
     </div>
   </div>
 
-  <div class="sb-version" id="sb-version">WMS Hub v1.0</div>
-
   <div class="sb-footer">
-    <button class="sb-collapse-btn" onclick="toggleSidebar()">
-      <span class="sb-collapse-icon">◀</span>
-      <span class="sb-collapse-label">Riduci</span>
+    <button class="sb-toggle-btn" onclick="toggleSidebar()">
+      <span class="sb-toggle-icon">▶</span>
+      <span class="sb-toggle-label">Riduci</span>
     </button>
   </div>
 </nav>
 
-<!-- ══════════════════════ MAIN ══════════════════════ -->
+<!-- ══ MAIN ══ -->
 <main class="main">
 
-  <!-- Welcome / Home screen -->
   <div class="welcome" id="welcome">
-    <div class="welcome-logo">
-      <span class="c1">WM</span><span class="c2">S</span><span class="c3"> Hub</span>
+    <div class="welcome-header">
+      <img class="welcome-logo-img" src="https://ats-spa.github.io/Hub-WMS/ATS-Logo.png" alt="ATS">
+      <div class="welcome-title"><span class="c1">WM</span><span class="c2">S</span><span class="c3"> Hub</span></div>
+      <div class="welcome-sub">Seleziona un modulo per iniziare</div>
     </div>
-    <div class="welcome-sub">Seleziona un modulo per iniziare</div>
-
     <div class="welcome-grid">
       <div class="app-card card-presenze" onclick="openApp('presenze')">
         <div class="card-icon">📋</div>
         <div class="card-title">Presenze</div>
-        <div class="card-desc">Gestione turni, assenze, straordinari per cooperativa e ATS.</div>
+        <div class="card-desc">Gestione turni, assenze e straordinari per cooperativa e ATS.</div>
         <div class="card-arrow">→</div>
       </div>
-
       <div class="app-card card-spedizioni" onclick="openApp('spedizioni')">
         <div class="card-icon">📦</div>
         <div class="card-title">Spedizioni AWB</div>
-        <div class="card-desc">Tracking e gestione delle spedizioni con codici AWB.</div>
+        <div class="card-desc">Tracking e gestione spedizioni con codici AWB.</div>
         <div class="card-arrow">→</div>
       </div>
     </div>
   </div>
 
-  <!-- Loading overlay -->
   <div class="frame-loader" id="loader">
     <div class="loader-spinner"></div>
     <div class="loader-text" id="loader-text">Caricamento...</div>
   </div>
 
-  <!-- Iframes — puntano ai tuoi file su GitHub Pages -->
-  <iframe
-    class="app-frame"
-    id="frame-presenze"
-    src=""
-    data-src="index_Presenze.html"
-    title="Presenze"
-  ></iframe>
-
-  <iframe
-    class="app-frame"
-    id="frame-spedizioni"
-    src=""
-    data-src="index_Spedizioni-awb.html"
-    title="Spedizioni AWB"
-  ></iframe>
+  <iframe class="app-frame" id="frame-presenze" src="" data-src="index_Presenze.html" title="Presenze"></iframe>
+  <iframe class="app-frame" id="frame-spedizioni" src="" data-src="index_Spedizioni-awb.html" title="Spedizioni AWB"></iframe>
 
 </main>
 
@@ -453,13 +426,11 @@
     presenze: document.getElementById('frame-presenze'),
     spedizioni: document.getElementById('frame-spedizioni'),
   };
-
   const navItems = {
     home: document.getElementById('nav-home'),
     presenze: document.getElementById('nav-presenze'),
     spedizioni: document.getElementById('nav-spedizioni'),
   };
-
   let currentApp = null;
 
   function setActiveNav(key) {
@@ -468,7 +439,6 @@
   }
 
   function showHome() {
-    // Hide all frames
     Object.values(frames).forEach(f => f.classList.remove('active'));
     document.getElementById('welcome').classList.remove('hidden');
     setActiveNav('home');
@@ -478,52 +448,33 @@
   function openApp(app) {
     const frame = frames[app];
     if (!frame) return;
-
-    // Update nav
     setActiveNav(app);
-
-    // Hide welcome
     document.getElementById('welcome').classList.add('hidden');
-
-    // If this app is already active, do nothing
     if (currentApp === app) return;
-
-    // Hide all frames
     Object.values(frames).forEach(f => f.classList.remove('active'));
 
-    // Show loader
     const loader = document.getElementById('loader');
-    const loaderText = document.getElementById('loader-text');
     const labels = { presenze: 'Caricamento Presenze...', spedizioni: 'Caricamento Spedizioni AWB...' };
-    loaderText.textContent = labels[app] || 'Caricamento...';
+    document.getElementById('loader-text').textContent = labels[app] || 'Caricamento...';
 
-    // Load iframe src on first open (lazy loading)
     if (!frame.src || frame.src === window.location.href) {
       loader.classList.add('show');
       frame.src = frame.dataset.src;
-      frame.onload = () => {
-        loader.classList.remove('show');
-        frame.classList.add('active');
-      };
-      frame.onerror = () => {
-        loader.classList.remove('show');
-        frame.classList.add('active');
-      };
+      frame.onload = () => { loader.classList.remove('show'); frame.classList.add('active'); };
+      frame.onerror = () => { loader.classList.remove('show'); frame.classList.add('active'); };
     } else {
-      // Already loaded — just show it
       loader.classList.remove('show');
       frame.classList.add('active');
     }
-
     currentApp = app;
   }
 
   function toggleSidebar() {
-    document.getElementById('sidebar').classList.toggle('collapsed');
+    document.getElementById('sidebar').classList.toggle('open');
   }
 
-  // Keyboard shortcut: Alt+1 / Alt+2 per cambiare app velocemente
-  document.addEventListener('keydown', (e) => {
+  // Alt+1 Presenze / Alt+2 Spedizioni / Alt+0 Home
+  document.addEventListener('keydown', e => {
     if (e.altKey && e.key === '1') openApp('presenze');
     if (e.altKey && e.key === '2') openApp('spedizioni');
     if (e.altKey && e.key === '0') showHome();
