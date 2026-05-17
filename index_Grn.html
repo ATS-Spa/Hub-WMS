@@ -1520,68 +1520,6 @@ function renderPermPanel(){
   document.getElementById('permPanelBody').innerHTML=h;
 }
 
-  var h='';
-
-  // Super Users
-  h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">';
-  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">';
-  h+='<div style="font-family:var(--ff-cond);font-size:14px;font-weight:700;color:var(--amber)">⭐ Super Utenti</div>';
-  h+='<button onclick="addSuperUser()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;color:var(--muted);cursor:pointer;font-size:11px">＋ Aggiungi</button>';
-  h+='</div>';
-  var sus=permConfig.super_users||[];
-  if(!sus.length) h+='<div style="font-size:12px;color:var(--muted)">Nessuno</div>';
-  sus.forEach(function(email,i){
-    h+='<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">';
-    h+='<div style="width:28px;height:28px;border-radius:50%;background:rgba(245,158,11,.15);color:var(--amber);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">'+email.charAt(0).toUpperCase()+'</div>';
-    h+='<div style="flex:1;font-size:13px;color:var(--text)">'+esc(email)+'</div>';
-    h+='<button onclick="delSuperUser('+i+')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 6px" title="Rimuovi">🗑</button>';
-    h+='</div>';
-  });
-  h+='</div>';
-
-  // Utenti
-  h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">';
-  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">';
-  h+='<div style="font-family:var(--ff-cond);font-size:14px;font-weight:700;color:var(--blue)">👤 Utenti</div>';
-  h+='<button onclick="openPuModal(null)" style="background:var(--blue);border:none;border-radius:6px;padding:4px 12px;color:#fff;cursor:pointer;font-size:11px;font-weight:600">＋ Nuovo</button>';
-  h+='</div>';
-  var users=permConfig.users||{};
-  var ukeys=Object.keys(users);
-  if(!ukeys.length) h+='<div style="font-size:12px;color:var(--muted)">Nessun utente. Chi non è in lista segue le regole Default.</div>';
-  ukeys.forEach(function(email){
-    var u=users[email]; var comms=u.commesse||[];
-    h+='<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">';
-    h+='<div style="width:28px;height:28px;border-radius:50%;background:rgba(59,130,246,.15);color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;margin-top:2px">'+email.charAt(0).toUpperCase()+'</div>';
-    h+='<div style="flex:1"><div style="font-size:13px;color:var(--text);margin-bottom:4px">'+esc(email)+'</div>';
-    h+='<div style="display:flex;flex-wrap:wrap;gap:4px">';
-    if(!comms.length) h+='<span style="font-size:10px;color:var(--red);background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:4px;padding:2px 7px">Nessuna commessa</span>';
-    comms.forEach(function(c){ h+='<span style="font-size:10px;color:var(--teal);background:rgba(20,184,166,.1);border:1px solid rgba(20,184,166,.3);border-radius:4px;padding:2px 7px">'+esc(c)+'</span>'; });
-    h+='</div></div>';
-    h+='<div style="display:flex;gap:4px;flex-shrink:0">';
-    h+='<button onclick="openPuModal(\''+esc(email)+'\')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--muted);cursor:pointer;font-size:12px" title="Modifica">✏️</button>';
-    h+='<button onclick="delPermUser(\''+esc(email)+'\')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:4px 6px" title="Rimuovi">🗑</button>';
-    h+='</div></div>';
-  });
-  h+='</div>';
-
-  // Default
-  h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">';
-  h+='<div style="font-family:var(--ff-cond);font-size:14px;font-weight:700;color:var(--subtle);margin-bottom:10px">🌐 Default (utenti non in lista)</div>';
-  var def=permConfig.default||{}; var dcomms=def.commesse||[];
-  h+='<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Commesse visibili per chi non è in lista: '+(dcomms.length?dcomms.map(function(c){return '<strong style="color:var(--teal)">'+esc(c)+'</strong>';}).join(', '):'<strong style="color:var(--red)">Nessuna (accesso negato)</strong>')+'</div>';
-  h+='<div style="display:flex;flex-wrap:wrap;gap:8px">';
-  commList.forEach(function(c){
-    var checked=dcomms.indexOf(c)!==-1;
-    h+='<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--subtle);cursor:pointer">';
-    h+='<input type="checkbox" data-defcomm="'+esc(c)+'"'+(checked?' checked':'')+' onchange="updateDefault()">';
-    h+=esc(c)+'</label>';
-  });
-  if(!commList.length) h+='<div style="font-size:12px;color:var(--muted)">Carica i dati prima per vedere le commesse disponibili.</div>';
-  h+='</div></div>';
-
-  document.getElementById('permPanelBody').innerHTML=h;
-}
-
 function updateDefault(){
   var checks=document.querySelectorAll('[data-defcomm]');
   var comms=[];
