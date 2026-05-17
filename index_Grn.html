@@ -1,0 +1,1307 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>GRN Manager</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b0f18;--surface:#131929;--card:#1a2236;--border:#243048;
+  --blue:#3b82f6;--green:#10b981;--red:#ef4444;--amber:#f59e0b;
+  --amber-dim:#78350f;--amber-glow:rgba(245,158,11,.12);
+  --text:#e2e8f0;--muted:#64748b;--subtle:#94a3b8;
+  --ff-sans:'IBM Plex Sans',sans-serif;--ff-mono:'IBM Plex Mono',monospace;--ff-cond:'Barlow Condensed',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--ff-sans);font-size:14px}
+
+/* ── LOGIN ── */
+#loginScreen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at 30% 40%,rgba(59,130,246,.06) 0%,transparent 60%),var(--bg);z-index:200}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:52px 56px;text-align:center;max-width:420px;width:90%;box-shadow:0 32px 80px rgba(0,0,0,.5)}
+.login-logo{font-family:var(--ff-cond);font-size:34px;font-weight:800;letter-spacing:2px;color:var(--blue);margin-bottom:6px}
+.login-logo span{color:var(--subtle);font-weight:600}
+.login-sub{font-size:11px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin-bottom:40px}
+.login-desc{font-size:13px;color:var(--subtle);line-height:1.8;margin-bottom:36px}
+.btn-google{display:inline-flex;align-items:center;gap:12px;background:#fff;color:#1f2937;border:none;border-radius:8px;padding:13px 28px;font-family:var(--ff-sans);font-size:14px;font-weight:600;cursor:pointer;transition:all .2s;box-shadow:0 2px 8px rgba(0,0,0,.3)}
+.btn-google:hover{transform:translateY(-2px);box-shadow:0 8px 24px rgba(0,0,0,.4)}
+.btn-google svg{width:20px;height:20px;flex-shrink:0}
+.login-note{font-size:11px;color:var(--muted);margin-top:22px;line-height:1.6}
+
+/* ── SHELL ── */
+#appShell{display:none;flex-direction:column;height:100vh;overflow:hidden}
+
+/* ── TOPBAR ── */
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;height:52px;display:flex;align-items:center;gap:14px;flex-shrink:0;z-index:100}
+.topbar-logo{font-family:var(--ff-cond);font-size:22px;font-weight:800;letter-spacing:1.5px;color:var(--blue);text-transform:uppercase;white-space:nowrap}
+.topbar-logo span{color:var(--subtle);font-weight:600}
+.topbar-div{width:1px;height:24px;background:var(--border);flex-shrink:0}
+.topbar-sub{font-size:11px;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;white-space:nowrap}
+.save-indicator{display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);font-family:var(--ff-mono);white-space:nowrap}
+.save-dot{width:7px;height:7px;border-radius:50%;background:var(--amber);flex-shrink:0;display:none}
+.save-dot.show{display:block;animation:pulse 1.5s infinite}
+.save-dot.saved{background:var(--green);display:block;animation:none}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px;flex-shrink:0}
+.user-badge{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:4px 12px 4px 6px;font-size:12px;color:var(--subtle);white-space:nowrap}
+.user-avatar{width:24px;height:24px;border-radius:50%;flex-shrink:0;object-fit:cover}
+.user-avatar-fallback{width:24px;height:24px;border-radius:50%;background:#1e3a5f;display:flex;align-items:center;justify-content:center;font-family:var(--ff-cond);font-size:11px;font-weight:700;color:var(--blue)}
+.btn-logout{background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--muted);cursor:pointer;font-family:var(--ff-sans);transition:all .2s;white-space:nowrap}
+.btn-logout:hover{color:var(--red);border-color:var(--red)}
+
+/* ── FILTERS ── */
+.filters{background:var(--surface);border-bottom:1px solid var(--border);padding:10px 24px;display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;flex-shrink:0;z-index:50}
+.fg{display:flex;flex-direction:column;gap:4px}
+.fl{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+.fc{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-family:var(--ff-sans);font-size:12px;outline:none;cursor:pointer;transition:border-color .2s}
+.fc:focus{border-color:var(--blue)}
+select.fc option{background:var(--card)}
+input.fc{font-family:var(--ff-mono)}
+input.fc::placeholder{color:var(--muted);font-family:var(--ff-sans);font-size:11px}
+/* date range */
+.date-wrap{display:flex;align-items:center;gap:0}
+.date-wrap .fc{border-radius:6px 0 0 6px;border-right:none;width:118px}
+.date-sep{background:var(--card);border-top:1px solid var(--border);border-bottom:1px solid var(--border);padding:6px 6px;font-size:11px;color:var(--muted);line-height:1.8}
+.date-wrap .fc:last-child{border-radius:0 6px 6px 0;border-left:none;width:118px}
+.btn-load{background:var(--blue);color:#fff;border:none;border-radius:6px;padding:7px 18px;font-family:var(--ff-cond);font-size:13px;font-weight:700;letter-spacing:1px;text-transform:uppercase;cursor:pointer;transition:background .2s;align-self:flex-end;white-space:nowrap}
+.btn-load:hover{background:#2563eb}
+.btn-load:disabled{background:var(--border);color:var(--muted);cursor:not-allowed}
+.btn-secondary{background:none;border:1px solid var(--border);border-radius:6px;padding:7px 14px;font-family:var(--ff-cond);font-size:12px;font-weight:700;letter-spacing:1px;color:var(--subtle);cursor:pointer;transition:all .2s;align-self:flex-end;white-space:nowrap;display:flex;align-items:center;gap:5px}
+.btn-secondary:hover{border-color:var(--green);color:var(--green)}
+.btn-secondary.amber:hover{border-color:var(--amber);color:var(--amber)}
+.btn-secondary.purple:hover{border-color:#a855f7;color:#a855f7}
+.btn-secondary:disabled{opacity:.3;cursor:not-allowed}
+.spin{animation:spin .7s linear infinite}
+.filter-info{margin-left:auto;font-size:11px;color:var(--muted);align-self:flex-end;font-family:var(--ff-mono);white-space:nowrap}
+
+/* ── STATS ── */
+.stats-bar{display:flex;gap:10px;flex-wrap:wrap;padding:12px 24px 0;flex-shrink:0}
+.stat{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 14px;min-width:100px}
+.sl{font-size:9px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
+.sv{font-family:var(--ff-mono);font-size:20px;font-weight:500;color:var(--text)}
+.sv.blue{color:var(--blue)}.sv.green{color:var(--green)}.sv.amber{color:var(--amber)}
+
+/* ── TABLE CONTAINER ── */
+.tbl-container{flex:1;overflow:auto;padding:10px 24px 20px;min-height:0}
+.tbl-outer{border-radius:8px;border:1px solid var(--border);overflow:auto;background:var(--surface)}
+
+/* ── TABLE ── */
+table{border-collapse:collapse;white-space:nowrap;font-size:12.5px;width:max-content;min-width:100%}
+thead{position:sticky;top:0;z-index:20}
+thead th{background:var(--card);border-bottom:2px solid var(--border);padding:7px 10px;font-family:var(--ff-cond);font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--subtle);border-right:1px solid var(--border);white-space:nowrap;user-select:none;box-shadow:0 2px 0 var(--border)}
+thead th:last-child{border-right:none}
+thead th.col-hidden{display:none}
+tbody tr{border-bottom:1px solid rgba(36,48,72,.7);transition:background .1s}
+tbody tr:hover{background:rgba(255,255,255,.02)}
+tbody tr:last-child{border-bottom:none}
+td{padding:6px 10px;border-right:1px solid rgba(36,48,72,.5);max-width:200px;overflow:hidden;text-overflow:ellipsis;font-size:12.5px;vertical-align:middle}
+td:last-child{border-right:none}
+td.col-hidden{display:none}
+td.mono{font-family:var(--ff-mono);font-size:11px;color:var(--subtle)}
+td.editable{cursor:cell}
+td.editable:hover{background:rgba(59,130,246,.08);outline:1px solid rgba(59,130,246,.4)}
+td.editing{padding:0!important;overflow:visible}
+td.editing input,td.editing select{width:100%;height:100%;min-height:30px;background:#0d1629;border:2px solid var(--blue);border-radius:0;padding:4px 8px;font-family:var(--ff-mono);font-size:12px;color:var(--text);outline:none;box-sizing:border-box}
+.stato-aperto{color:var(--amber);font-weight:700;font-family:var(--ff-cond);letter-spacing:.5px;font-size:11px}
+.stato-chiuso{color:var(--green);font-weight:700;font-family:var(--ff-cond);letter-spacing:.5px;font-size:11px}
+.td-file{font-size:11px;color:var(--blue);font-family:var(--ff-mono)}
+.td-comm{font-size:11px;color:#a855f7;font-family:var(--ff-cond);font-weight:700;letter-spacing:.5px}
+.td-ddt{font-size:11px;color:var(--subtle);font-family:var(--ff-mono)}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:6px;height:6px}
+::-webkit-scrollbar-track{background:var(--bg)}
+::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--muted)}
+
+/* ── STATE ── */
+.state{padding:60px 24px;text-align:center;color:var(--muted);font-size:13px;display:flex;flex-direction:column;align-items:center;gap:12px}
+.state-ico{font-size:42px;opacity:.4}
+.state-title{font-weight:600;color:var(--subtle);font-size:15px}
+.spinner{width:28px;height:28px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:spin .7s linear infinite}
+.prog-wrap{width:200px;height:3px;background:var(--border);border-radius:2px;overflow:hidden}
+.prog-bar{height:100%;background:var(--blue);border-radius:2px;transition:width .4s}
+
+/* ── COL MANAGER ── */
+.col-mgr-overlay{position:fixed;inset:0;background:rgba(0,0,0,.65);z-index:500;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(3px)}
+.col-mgr-overlay.hide{display:none}
+.col-mgr-panel{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:22px;width:380px;max-width:94vw;max-height:80vh;display:flex;flex-direction:column;gap:12px}
+.col-mgr-title{font-family:var(--ff-cond);font-size:16px;font-weight:700;color:var(--text)}
+.col-mgr-list{overflow-y:auto;display:flex;flex-direction:column;gap:3px;flex:1}
+.col-mgr-item{display:flex;align-items:center;gap:8px;padding:5px 8px;border-radius:5px;cursor:pointer;user-select:none}
+.col-mgr-item:hover{background:rgba(255,255,255,.04)}
+.col-mgr-item input[type=checkbox]{accent-color:var(--blue);width:13px;height:13px;cursor:pointer;flex-shrink:0}
+.col-mgr-item label{font-family:var(--ff-mono);font-size:11px;color:var(--subtle);cursor:pointer;flex:1}
+.col-mgr-item input:checked+label{color:var(--text)}
+.col-mgr-footer{display:flex;gap:8px;justify-content:flex-end;border-top:1px solid var(--border);padding-top:10px}
+.col-mgr-btn-close{background:var(--blue);border:none;border-radius:5px;padding:6px 16px;font-family:var(--ff-cond);font-size:12px;font-weight:700;color:#fff;cursor:pointer}
+.col-mgr-btn-reset{background:none;border:1px solid var(--border);border-radius:5px;padding:6px 14px;font-family:var(--ff-cond);font-size:12px;font-weight:700;color:var(--muted);cursor:pointer}
+.col-mgr-btn-reset:hover{border-color:var(--red);color:var(--red)}
+
+/* ── TOAST ── */
+#toast{position:fixed;bottom:24px;right:24px;background:var(--surface);border:1px solid var(--border);color:var(--text);font-family:var(--ff-mono);font-size:12px;font-weight:500;padding:10px 16px;border-radius:6px;opacity:0;transform:translateY(8px);transition:opacity .18s,transform .18s;pointer-events:none;z-index:9999;max-width:340px}
+#toast.show{opacity:1;transform:translateY(0)}
+#toast.ok{border-color:var(--green);color:var(--green)}
+#toast.err{border-color:var(--red);color:var(--red)}
+
+@keyframes spin{to{transform:rotate(360deg)}}
+@keyframes pulse{0%,100%{opacity:1}50%{opacity:.3}}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">GRN <span>Manager</span></div>
+    <div class="login-sub">Gestione Bolle di Consegna</div>
+    <p class="login-desc">Visualizza, modifica e aggiorna i file DDT dalla cartella Drive condivisa.</p>
+    <button class="btn-google" onclick="signIn()">
+      <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      Accedi con Google
+    </button>
+    <p class="login-note">Richiede accesso a Google Drive per leggere e modificare i file nella cartella GRN.</p>
+    <div id="iframeWarning" style="display:none;margin-top:18px;background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.4);border-radius:8px;padding:14px 16px;font-size:12px;color:#fca5a5;line-height:1.7">
+      ⚠️ <strong>Stai aprendo il tool in Locale</strong> — Google OAuth non funziona negli iframe.<br>
+      Scarica il file HTML e aprilo direttamente nel browser (doppio click sul file).
+    </div>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appShell">
+
+  <!-- TOPBAR -->
+  <header class="topbar">
+    <div class="topbar-logo">GRN <span>Manager</span></div>
+    <div class="topbar-div"></div>
+    <div class="topbar-sub">Bolle di Consegna</div>
+    <div id="cfgIndicator" style="font-size:10px;color:var(--muted);font-family:var(--ff-mono);white-space:nowrap" title="Config personale caricata da Drive">⚙ cfg…</div>
+    <div class="save-indicator" id="saveIndicator" style="display:none">
+      <div class="save-dot" id="saveDot"></div>
+      <span id="saveMsg"></span>
+    </div>
+    <div class="topbar-right">
+      <div class="user-badge">
+        <div id="userAvatarWrap"></div>
+        <span id="userName">—</span>
+      </div>
+      <button class="btn-secondary" onclick="loadVltSheet()" title="Ricarica dati dal foglio VLT" style="padding:4px 10px;font-size:11px;align-self:auto">↻ VLT</button>
+      <button id="btnSendFlm" class="btn-secondary" onclick="sendFlmData()" title="Invia dati FLM aperti allo script Tampermonkey" style="padding:4px 10px;font-size:11px;align-self:auto;border-color:#f59e0b;color:#f59e0b">📡 FLM</button>
+      <button class="btn-logout" onclick="signOut()">Esci</button>
+    </div>
+  </header>
+
+  <!-- FILTERS -->
+  <div class="filters">
+    <!-- Data da -->
+    <div class="fg">
+      <div class="fl">Data</div>
+      <div class="date-wrap">
+        <select id="fDateFrom" class="fc" style="width:140px" onchange="onFilterChange()">
+          <option value="">— Da —</option>
+        </select>
+        <div class="date-sep">→</div>
+        <select id="fDateTo" class="fc" style="width:140px" onchange="onFilterChange()">
+          <option value="">Stessa data</option>
+        </select>
+      </div>
+    </div>
+    <!-- Commessa -->
+    <div class="fg">
+      <div class="fl">Commessa</div>
+      <select id="fCommessa" class="fc" style="min-width:110px" onchange="onFilterChange()">
+        <option value="">— Tutte —</option>
+      </select>
+    </div>
+    <!-- Numero DDT -->
+    <div class="fg">
+      <div class="fl">N° DDT</div>
+      <div style="position:relative">
+        <input id="fDdt" class="fc" type="text" list="listDdt" placeholder="es. 678" style="width:130px;padding-right:24px" oninput="scheduleFilter()" onchange="onFilterChange()">
+        <datalist id="listDdt"></datalist>
+        <button onclick="clearFld('fDdt')" tabindex="-1" style="position:absolute;right:5px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:0;line-height:1">✕</button>
+      </div>
+    </div>
+    <!-- Rif. Ordine -->
+    <div class="fg">
+      <div class="fl">Rif. Ordine</div>
+      <div style="position:relative">
+        <input id="fOrdine" class="fc" type="text" list="listOrdine" placeholder="es. ODR10001" style="width:130px;padding-right:24px" oninput="scheduleFilter()" onchange="onFilterChange()">
+        <datalist id="listOrdine"></datalist>
+        <button onclick="clearFld('fOrdine')" tabindex="-1" style="position:absolute;right:5px;top:50%;transform:translateY(-50%);background:none;border:none;color:var(--muted);cursor:pointer;font-size:12px;padding:0;line-height:1">✕</button>
+      </div>
+    </div>
+    <!-- Stato Logico -->
+    <div class="fg">
+      <div class="fl">Stato Logico</div>
+      <select id="fStatoLogico" class="fc" style="min-width:110px" onchange="onFilterChange()">
+        <option value="">— Tutti —</option>
+      </select>
+    </div>
+    <!-- Stato File -->
+    <div class="fg">
+      <div class="fl">Stato File</div>
+      <select id="fStato" class="fc" style="min-width:110px" onchange="onFilterChange()">
+        <option value="">— Tutti —</option>
+        <option value="Aperto">Aperto</option>
+        <option value="Chiuso">Chiuso</option>
+      </select>
+    </div>
+
+    <button class="btn-load" id="btnLoad" onclick="loadData()" disabled>Carica Dati</button>
+    <button class="btn-secondary" id="btnRefresh" onclick="refreshData()" disabled>
+      <svg id="refreshIcon" width="12" height="12" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><path d="M21 12a9 9 0 11-9-9c2.52 0 4.93 1 6.74 2.74L21 8"/><path d="M21 3v5h-5"/></svg>
+      Aggiorna
+    </button>
+    <button class="btn-secondary amber" id="btnDownload" onclick="saveAll()" disabled>⬇ Salva CSV</button>
+    <button class="btn-secondary purple" id="btnCols" onclick="openColMgr()" disabled>⚙ Colonne</button>
+    <div class="filter-info" id="fInfo">Seleziona data → Carica</div>
+  </div>
+
+  <!-- STATS -->
+  <div class="stats-bar" id="statsBar" style="display:none">
+    <div class="stat"><div class="sl">File caricati</div><div class="sv blue" id="sFile">—</div></div>
+    <div class="stat"><div class="sl">Duplicati saltati</div><div class="sv" id="sDup" style="color:var(--muted)">—</div></div>
+    <div class="stat"><div class="sl">Righe totali</div><div class="sv" id="sRighe">—</div></div>
+    <div class="stat"><div class="sl">Filtrate</div><div class="sv blue" id="sFiltrate">—</div></div>
+    <div class="stat"><div class="sl">Commesse</div><div class="sv" id="sCommesse">—</div></div>
+    <div class="stat"><div class="sl">Aperti</div><div class="sv amber" id="sAperti">—</div></div>
+    <div class="stat"><div class="sl">Chiusi</div><div class="sv green" id="sChiusi">—</div></div>
+  </div>
+
+  <!-- TABLE -->
+  <div class="tbl-container">
+    <div id="content">
+      <div class="state"><div class="state-ico">📋</div><div class="state-title">Nessun dato caricato</div><div>Seleziona una data e premi <strong>Carica Dati</strong></div></div>
+    </div>
+  </div>
+
+</div>
+
+<!-- COL MANAGER -->
+<div id="colMgrOverlay" class="col-mgr-overlay hide">
+  <div class="col-mgr-panel">
+    <div class="col-mgr-title">⚙ Gestisci Colonne</div>
+    <div class="col-mgr-list" id="colMgrList"></div>
+    <div class="col-mgr-footer">
+      <button class="col-mgr-btn-reset" onclick="resetCols()">↺ Mostra tutte</button>
+      <button class="col-mgr-btn-close" onclick="closeColMgr()">Chiudi</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<script>
+var CLIENT_ID    = '256693770433-b1pjdpaglrh7827o6ln2s24802rcnshd.apps.googleusercontent.com';
+var FOLDER_TODAY = '1oXhZ0VR0tPjxa_bbIw2kOQ7FVKa1I1xM';
+var FOLDER_HIST  = '1v2hlsXWFPjTrpye1I38FXRbOq_KquTEw';
+var STATO_COL    = 'Stato_File';
+var COL_HIDE_KEY = 'grn_hidden_cols';
+
+var TOKEN = null;
+var allRows = [];       // tutte le righe (raw)
+var filteredRows = [];  // dopo filtro
+var fileRegistry = {};  // fileId -> { name, commessa, sep, sepLine, header, rows[] }
+var dateCache = {};
+var filterTimer = null;
+var toastTimer  = null;
+var hiddenCols  = loadHiddenCols();
+
+// Cartella config su Drive
+var CONFIG_FOLDER_ID = '1LGoR9SKDthz1tUDLxbZhClqA-xhkjoNY';
+var configFileId  = null;
+var configEmail   = '';
+
+// VLT SHEET
+var VLT_CSV_URL = 'https://docs.google.com/spreadsheets/d/1KxP-nGn6AbenWhZXi1EAPRxSKeCRdEoESH4UzMqqjdk/export?format=csv&gid=244367079';
+var vltMap    = {};
+var vltLoaded = false;
+var NOTE_COL  = 'NOTE';
+
+// ── INIT ─────────────────────────────────────────────────────────────────────
+window.onload = function(){
+  // Detecta se siamo in un iframe (es. Claude.ai) e mostra warning
+  try{
+    if(window.self !== window.top){
+      var w = document.getElementById('iframeWarning');
+      if(w) w.style.display='block';
+      var btn = document.querySelector('.btn-google');
+      if(btn){ btn.disabled=true; btn.style.opacity='0.4'; btn.style.cursor='not-allowed'; btn.title='Apri il file HTML direttamente nel browser'; }
+      return;
+    }
+  }catch(e){}
+  restoreFilterState();
+  var s = getSavedSession();
+  if(s){ showApp(); setUserUI(s.name,s.email,s.picture); }
+  waitGsi();
+};
+
+var FILTER_STATE_KEY='grn_filter_state';
+
+function saveFilterState(){
+  try{
+    var state={
+      dateFrom: document.getElementById('fDateFrom').value,
+      dateTo:   document.getElementById('fDateTo').value,
+      commessa: document.getElementById('fCommessa').value,
+      ddt:      document.getElementById('fDdt').value,
+      ordine:   document.getElementById('fOrdine').value,
+      statoLogico: document.getElementById('fStatoLogico').value,
+      stato:    document.getElementById('fStato').value
+    };
+    sessionStorage.setItem(FILTER_STATE_KEY, JSON.stringify(state));
+  }catch(e){}
+}
+
+function restoreFilterState(){
+  try{
+    var raw=sessionStorage.getItem(FILTER_STATE_KEY);
+    if(!raw) return;
+    var state=JSON.parse(raw);
+    // I select delle date vengono popolati dopo, usiamo un flag
+    window._pendingFilterState=state;
+  }catch(e){}
+}
+
+function applyPendingFilterState(){
+  if(!window._pendingFilterState) return;
+  var s=window._pendingFilterState;
+  window._pendingFilterState=null;
+  if(s.dateFrom){ var el=document.getElementById('fDateFrom'); if(el) el.value=s.dateFrom; }
+  if(s.dateTo)  { var el=document.getElementById('fDateTo');   if(el) el.value=s.dateTo; }
+  if(s.ddt)     { var el=document.getElementById('fDdt');      if(el) el.value=s.ddt; }
+  if(s.ordine)  { var el=document.getElementById('fOrdine');   if(el) el.value=s.ordine; }
+  // commessa, statoLogico e stato vengono ripristinati dopo populateDynFilters
+  window._pendingCommessa    =s.commessa||'';
+  window._pendingStatoLogico =s.statoLogico||'';
+  window._pendingStato       =s.stato||'';
+}
+
+// ── GSI ──────────────────────────────────────────────────────────────────────
+var tokenClient;
+function waitGsi(){
+  if(typeof google==='undefined'){setTimeout(waitGsi,150);return;}
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope:'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+    callback: onToken
+  });
+  var s = getSavedSession();
+  if(s) tokenClient.requestAccessToken({prompt:'',login_hint:s.email||''});
+}
+function signIn(){ tokenClient.requestAccessToken({prompt:'select_account'}); }
+function signOut(){
+  if(TOKEN) google.accounts.oauth2.revoke(TOKEN,function(){});
+  TOKEN=null; allRows=[]; clearSavedSession();
+  document.getElementById('appShell').style.display='none';
+  document.getElementById('loginScreen').style.display='flex';
+}
+function onToken(resp){
+  if(resp.error){ if(!getSavedSession()){document.getElementById('loginScreen').style.display='flex';document.getElementById('appShell').style.display='none';} return; }
+  TOKEN=resp.access_token;
+  clearTimeout(window._trTimer);
+  window._trTimer=setTimeout(function(){ var s=getSavedSession(); tokenClient.requestAccessToken({prompt:'',login_hint:s?s.email||'':''}); },50*60*1000);
+  showApp(); loadUserInfo(); loadVltSheet(); loadAvailableDates(); initBroadcastChannel();
+}
+
+// ── VLT SHEET LOAD ────────────────────────────────────────────────────────────
+function loadVltSheet(){
+  vltLoaded=false;
+  fetch(VLT_CSV_URL)
+  .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
+  .then(function(txt){
+    vltMap={};
+    var lines=txt.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
+    if(!lines.length) return;
+    var hdr=splitLineVlt(lines[0],',');
+    var normalize=function(h){ return h.replace(/^=+/,'').replace(/"/g,'').trim().toLowerCase(); };
+    hdr=hdr.map(normalize);
+    var idxId    = hdr.indexOf('fr_id');
+    var idxStato = hdr.indexOf('stato');
+    var idxSN    = hdr.indexOf('f_mat_serial_no');
+    var idxPN    = hdr.indexOf('f_mat_tmpn');
+    var idxDepot = hdr.indexOf('depot_origine');
+    if(idxId===-1){ console.warn('VLT sheet: colonna fr_id non trovata. Headers:', hdr); }
+    for(var i=1;i<lines.length;i++){
+      var line=lines[i]; if(!line.trim()) continue;
+      var cells=splitLineVlt(line,',');
+      var key=(cells[idxId]||'').replace(/^=/,'').replace(/"/g,'').trim().toLowerCase();
+      if(!key) continue;
+      vltMap[key]={
+        stato:       (cells[idxStato]||'').replace(/^=/,'').replace(/"/g,'').trim(),
+        sn:          (cells[idxSN]||'').replace(/^=/,'').replace(/"/g,'').trim(),
+        pn:          (cells[idxPN]||'').replace(/^=/,'').replace(/"/g,'').trim(),
+        depot:       (cells[idxDepot]||'').replace(/^=/,'').replace(/"/g,'').trim()
+      };
+    }
+    vltLoaded=true;
+    console.log('VLT sheet caricato: '+Object.keys(vltMap).length+' record');
+    showToast('✓ VLT sheet caricato ('+Object.keys(vltMap).length+' record)','ok');
+    if(allRows.length) renderTable();
+  })
+  .catch(function(e){ console.warn('VLT sheet non caricabile:',e.message); showToast('⚠ VLT sheet non raggiungibile','err'); });
+}
+
+function splitLineVlt(line,sep){
+  var res=[],cur='',inQ=false;
+  for(var i=0;i<line.length;i++){
+    var c=line[i];
+    if(c==='"'){inQ=!inQ;}
+    else if(c===sep&&!inQ){res.push(cur);cur='';}
+    else{cur+=c;}
+  }
+  res.push(cur);
+  return res;
+}
+
+// Calcola i valori VLT per una riga DDT
+function getVlt(row){
+  var rifOrd = (row['Riferimento Ordine']||row['RIFERIMENTO_ORDINE']||row['RiferimentoOrdine']||row['Rif. Ordine']||'').trim().toLowerCase();
+  return vltMap[rifOrd]||null;
+}
+
+// Calcola il testo NOTE automatico per una riga
+function calcNote(row){
+  var v=getVlt(row);
+  if(!v) return row[NOTE_COL]||'';
+  var stato=v.stato||'';
+  var parts=[];
+  if(stato==='Failure Report Sent'){
+    // Solo depot_origine
+    parts.push(v.depot||'');
+  } else {
+    // Prefisso OPEN o SCRAP
+    if(stato==='Open') parts.push('OPEN');
+    else if(stato==='Close for Scrap material') parts.push('SCRAP');
+    // Confronto SERIALE
+    var sn     =(row['Seriale']||row['SERIALE']||'').trim();
+    var snVlt  =v.sn||'';
+    if(sn && snVlt && sn.toLowerCase()!==snVlt.toLowerCase()){
+      parts.push('INSERIRE SERIALE CORRETTO: '+sn);
+    }
+    // Confronto PART NUMBER
+    var pn     =(row['Part Number']||row['PART_NUMBER']||row['PartNumber']||'').trim();
+    var pnVlt  =v.pn||'';
+    if(pn && pnVlt && pn.toLowerCase()!==pnVlt.toLowerCase()){
+      parts.push('INSERIRE TPN CORRETTO: '+pn);
+    }
+  }
+  return parts.filter(Boolean).join(' ');
+}
+function showApp(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('appShell').style.display='flex';
+}
+
+// ── SESSION ───────────────────────────────────────────────────────────────────
+function getSavedSession(){ try{var s=localStorage.getItem('grn_sess');return s?JSON.parse(s):null;}catch(e){return null;} }
+function saveSession(n,e,p){ try{localStorage.setItem('grn_sess',JSON.stringify({name:n,email:e,picture:p}));}catch(e){} }
+function clearSavedSession(){ try{localStorage.removeItem('grn_sess');}catch(e){} }
+
+// ── USER ─────────────────────────────────────────────────────────────────────
+function loadUserInfo(){
+  gFetch('https://www.googleapis.com/oauth2/v2/userinfo').then(function(u){
+    if(u.error)return;
+    saveSession(u.name||u.email||'',u.email||'',u.picture||'');
+    setUserUI(u.name||u.email||'—',u.email||'',u.picture||'');
+    configEmail=u.email||'';
+    loadUserConfig(u.email||'');
+  }).catch(function(){});
+}
+
+// ── CONFIG DRIVE ──────────────────────────────────────────────────────────────
+function configFileName(email){
+  return 'config_'+email.replace(/[^a-zA-Z0-9_\-]/g,'_')+'.json';
+}
+
+function loadUserConfig(email){
+  var ind=document.getElementById('cfgIndicator');
+  if(ind){ ind.style.color='var(--muted)'; ind.textContent='⚙ cfg · caricamento…'; }
+  if(!email||!TOKEN){
+    if(ind){ ind.style.color='var(--red)'; ind.textContent='⚙ cfg · no auth'; }
+    return;
+  }
+  var fname=configFileName(email);
+  listFiles('"'+CONFIG_FOLDER_ID+'" in parents and name="'+fname+'" and trashed=false')
+  .then(function(files){
+    if(!files.length){
+      configFileId=null;
+      hiddenCols={};
+      if(ind){ ind.style.color='var(--amber)'; ind.textContent='⚙ cfg · nuovo (default)'; }
+      console.log('Config non trovata, creo nuovo file per '+email);
+      return saveUserConfig();
+    }
+    configFileId=files[0].id;
+    if(ind){ ind.style.color='var(--muted)'; ind.textContent='⚙ cfg · lettura…'; }
+    return downloadText(configFileId).then(function(txt){
+      try{
+        var cfg=JSON.parse(txt);
+        hiddenCols=cfg.hiddenCols||{};
+        try{localStorage.setItem(COL_HIDE_KEY,JSON.stringify(hiddenCols));}catch(ex){}
+        var n=Object.keys(hiddenCols).length;
+        console.log('Config caricata per '+email+': '+n+' col nascoste');
+        if(ind){ ind.style.color='var(--green)'; ind.textContent='⚙ cfg · '+(n?n+' col nascoste':'default'); }
+        if(allRows.length) renderTable();
+      }catch(e){
+        hiddenCols={};
+        console.warn('Config parse error:',e.message,'testo ricevuto:',txt.substring(0,100));
+        if(ind){ ind.style.color='var(--red)'; ind.textContent='⚙ cfg · parse error'; }
+      }
+    });
+  })
+  .catch(function(e){
+    console.warn('loadUserConfig error:',e.message);
+    if(ind){ ind.style.color='var(--red)'; ind.textContent='⚙ cfg · '+e.message.substring(0,30); }
+  });
+}
+
+function saveUserConfig(){
+  if(!configEmail||!TOKEN) return Promise.resolve();
+  var fname=configFileName(configEmail);
+  var payload=JSON.stringify({hiddenCols:hiddenCols},null,2);
+  var blob=new Blob([payload],{type:'application/json'});
+  var p;
+  if(configFileId){
+    p=uploadText(configFileId,blob,fname,'application/json');
+  } else {
+    p=createFileInFolder(CONFIG_FOLDER_ID,fname,blob).then(function(f){ configFileId=f.id; return f; });
+  }
+  return p.then(function(){
+    console.log('Config salvata su Drive per '+configEmail);
+    var ind=document.getElementById('cfgIndicator');
+    if(ind){
+      var n=Object.keys(hiddenCols).length;
+      ind.style.display='block';
+      ind.style.color='var(--green)';
+      ind.textContent='⚙ cfg · '+(n?n+' col nascoste':'default')+' ✓';
+      setTimeout(function(){ if(ind) ind.textContent=ind.textContent.replace(' ✓',''); },2000);
+    }
+  }).catch(function(e){
+    console.warn('saveUserConfig error:',e.message);
+    var ind=document.getElementById('cfgIndicator');
+    if(ind){ ind.style.color='var(--red)'; ind.textContent='⚙ cfg · errore salvataggio'; }
+  });
+}
+
+function createFileInFolder(folderId,name,blob){
+  var boundary='cfg_'+Date.now(), enc=new TextEncoder();
+  var meta=JSON.stringify({name:name,parents:[folderId]});
+  var pre='--'+boundary+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+meta+'\r\n--'+boundary+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n';
+  var post='\r\n--'+boundary+'--';
+  return blob.arrayBuffer().then(function(buf){
+    var body=cc(cc(enc.encode(pre),new Uint8Array(buf)),enc.encode(post));
+    return fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{
+      method:'POST',
+      headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'multipart/related; boundary='+boundary},
+      body:body
+    });
+  }).then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
+}
+function setUserUI(name,email,picture){
+  document.getElementById('userName').textContent=name||'—';
+  var w=document.getElementById('userAvatarWrap'); w.innerHTML='';
+  if(picture){ var img=document.createElement('img'); img.className='user-avatar'; img.referrerPolicy='no-referrer'; img.src=picture; img.alt=name; img.onerror=function(){w.innerHTML=makeInitial(email||name);}; w.appendChild(img); }
+  else { w.innerHTML=makeInitial(email||name); }
+}
+function makeInitial(s){ var c=(s||'?').includes('@')?(s.split('@')[0].charAt(0)):s.charAt(0); return '<div class="user-avatar-fallback">'+c.toUpperCase()+'</div>'; }
+
+// ── DATES ─────────────────────────────────────────────────────────────────────
+function loadAvailableDates(){
+  listFiles('"'+FOLDER_HIST+'" in parents and mimeType="application/vnd.google-apps.folder" and trashed=false')
+  .then(function(folders){
+    var dated=folders.filter(function(f){return /^\d{4}-\d{2}-\d{2}$/.test(f.name);});
+    dated.sort(function(a,b){return b.name.localeCompare(a.name);});
+    dated.forEach(function(f){dateCache[f.name]=f.id;});
+
+    var fromSel=document.getElementById('fDateFrom');
+    var toSel  =document.getElementById('fDateTo');
+    fromSel.innerHTML='<option value="">— Da —</option>';
+    toSel.innerHTML  ='<option value="">Stessa data</option>';
+
+    // Oggi
+    var today=todayIso();
+    var addOpt=function(sel,val,label,selected){
+      var o=document.createElement('option'); o.value=val; o.textContent=label;
+      if(selected) o.selected=true;
+      sel.appendChild(o);
+    };
+    addOpt(fromSel,'TODAY','Oggi ('+formatDateLabel(today)+')',true);
+    addOpt(toSel,  'TODAY','Oggi ('+formatDateLabel(today)+')',false);
+
+    dated.forEach(function(f){
+      addOpt(fromSel,f.name,formatDateLabel(f.name),false);
+      addOpt(toSel,  f.name,formatDateLabel(f.name),false);
+    });
+
+    document.getElementById('btnLoad').disabled=false;
+    applyPendingFilterState(); // ripristina data se salvata
+    loadData(); // carica
+  }).catch(function(e){ showToast('Errore date: '+e.message,'err'); });
+}
+function formatDateLabel(iso){ var p=iso.split('-'); return p.length===3?p[2]+'/'+p[1]+'/'+p[0]:iso; }
+function todayIso(){ var d=new Date(); return d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2); }
+
+function getFolderForDate(val){
+  if(val==='TODAY'||val==='') return Promise.resolve(FOLDER_TODAY);
+  if(dateCache[val]) return Promise.resolve(dateCache[val]);
+  return listFiles('"'+FOLDER_HIST+'" in parents and mimeType="application/vnd.google-apps.folder" and name="'+val+'" and trashed=false')
+  .then(function(fs){ if(!fs.length) throw new Error('Cartella '+val+' non trovata'); dateCache[val]=fs[0].id; return fs[0].id; });
+}
+
+function buildDateRange(fromVal, toVal){
+  // ritorna lista di valori da caricare
+  if(!fromVal) return [];
+  if(!toVal || toVal===fromVal) return [fromVal];
+  // converti in iso
+  var from = fromVal==='TODAY'?todayIso():fromVal;
+  var to   = toVal==='TODAY'?todayIso():toVal;
+  if(to < from){ var tmp=to; to=from; from=tmp; }
+  var dates=[], cur=from;
+  while(cur<=to){
+    // find the corresponding select value
+    var val = cur===todayIso()?'TODAY':cur;
+    if(cur===from && fromVal==='TODAY') val='TODAY';
+    if(cur===todayIso()) val='TODAY';
+    dates.push(val==='TODAY'?'TODAY':cur);
+    var d=new Date(cur); d.setDate(d.getDate()+1);
+    cur=d.getFullYear()+'-'+('0'+(d.getMonth()+1)).slice(-2)+'-'+('0'+d.getDate()).slice(-2);
+  }
+  return dates;
+}
+
+// ── LOAD DATA ─────────────────────────────────────────────────────────────────
+function loadData(){
+  var fromVal = document.getElementById('fDateFrom').value;
+  if(!fromVal){ showToast('Seleziona una data','err'); return; }
+  var toVal   = document.getElementById('fDateTo').value || fromVal;
+
+  allRows=[]; fileRegistry=[];  fileRegistry={};
+  document.getElementById('statsBar').style.display='none';
+  document.getElementById('btnRefresh').disabled=true;
+  document.getElementById('btnDownload').disabled=true;
+  document.getElementById('btnCols').disabled=true;
+  setSaveUI('','');
+  setContent(spinner('Ricerca cartelle...',10));
+
+  var dates = buildDateRange(fromVal, toVal);
+  // per ogni data ottieni folderId poi lista file
+  Promise.all(dates.map(function(dv){
+    return getFolderForDate(dv).then(function(fid){
+      return listFiles('"'+fid+'" in parents and trashed=false and mimeType!="application/vnd.google-apps.folder"');
+    }).then(function(files){
+      return files.filter(function(f){ return f.name.toLowerCase().indexOf('_eliminato_')===-1; });
+    }).catch(function(){ return []; });
+  }))
+  .then(function(arrays){
+    var files=[].concat.apply([],arrays);
+    // 1) dedup by Drive file id
+    var seenId={}; files=files.filter(function(f){ if(seenId[f.id])return false; seenId[f.id]=true; return true; });
+    if(!files.length) throw new Error('Nessun file trovato per il periodo selezionato');
+    // 2) dedup per nome DDT: stesso (commessa + numero DDT) → tieni solo il più recente per modifiedTime
+    var ddtMap={};
+    files.forEach(function(f){
+      var comm=extractCommessa(f.name);
+      var ddt =extractDdt(f.name);
+      var grn =extractGrn(f.name);
+      // Se c'è GRN → chiave univoca comm+ddt+grn, altrimenti comm+ddt
+      var key=grn
+        ?(comm+'__'+ddt+'__GRN'+grn).toLowerCase()
+        :(comm+'__'+ddt).toLowerCase();
+      var mt=f.modifiedTime||'';
+      if(!ddtMap[key]||mt>ddtMap[key].modifiedTime){
+        ddtMap[key]={id:f.id,name:f.name,modifiedTime:mt,grn:grn};
+      }
+    });
+    var dedupedFiles=Object.values(ddtMap);
+    skippedDups=files.length-dedupedFiles.length;
+    if(skippedDups>0) showToast('ℹ️ '+skippedDups+' duplicat'+(skippedDups===1?'o ignorato':'i ignorati')+' (tenuto il più recente per ogni DDT/GRN)');
+    setContent(spinner('Download '+dedupedFiles.length+' file...',45));
+    return Promise.all(dedupedFiles.map(function(f){
+      return downloadText(f.id).then(function(txt){ return {id:f.id,name:f.name,text:txt}; });
+    }));
+  })
+  .then(function(results){
+    setContent(spinner('Parsing...',75));
+    results.forEach(function(r){
+      var commessa = extractCommessa(r.name);
+      var ddt      = extractDdt(r.name);
+      var parsed   = parseCsv(r.text);
+      fileRegistry[r.id]={name:r.name,commessa:commessa,ddt:ddt,sep:parsed.sep,sepLine:parsed.sepLine,header:parsed.header,rows:parsed.rows,modified:false};
+      var grn=extractGrn(r.name);
+      parsed.rows.forEach(function(row){
+        row.__fileId  =r.id;
+        row.__fileName=r.name;
+        row.__commessa=commessa;
+        row.__ddt     =ddt;
+        row.__grn     =grn||'';
+        if(row[STATO_COL]===undefined||row[STATO_COL]===null) row[STATO_COL]='';
+        allRows.push(row);
+      });
+    });
+    populateDynFilters();
+    // Ripristina filtri dinamici da sessione precedente
+    if(window._pendingCommessa!==undefined){
+      var sc=document.getElementById('fCommessa'); if(sc&&window._pendingCommessa) sc.value=window._pendingCommessa;
+      var ss=document.getElementById('fStato');    if(ss&&window._pendingStato)    ss.value=window._pendingStato;
+      var sl=document.getElementById('fStatoLogico'); if(sl&&window._pendingStatoLogico) sl.value=window._pendingStatoLogico;
+      window._pendingCommessa=undefined; window._pendingStato=undefined; window._pendingStatoLogico=undefined;
+    }
+    applyFilter();
+    document.getElementById('btnRefresh').disabled=false;
+    document.getElementById('btnDownload').disabled=false;
+    document.getElementById('btnCols').disabled=false;
+    updateStats();
+  })
+  .catch(function(e){ setContent('<div class="state"><div class="state-ico">⚠️</div><div class="state-title">Errore</div><div>'+esc(e.message)+'</div></div>'); });
+}
+
+function refreshData(){
+  var icon=document.getElementById('refreshIcon');
+  icon.classList.add('spin');
+  document.getElementById('btnRefresh').disabled=true;
+  // salva prima se ci sono modifiche
+  var dirty=Object.keys(fileRegistry).filter(function(id){return fileRegistry[id].modified;});
+  var p = dirty.length ? doSave(dirty) : Promise.resolve();
+  p.finally(function(){ icon.classList.remove('spin'); loadData(); });
+}
+
+// ── CSV PARSE ─────────────────────────────────────────────────────────────────
+function parseCsv(text){
+  var raw=text.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
+  var sep=';', sepLine=null, dataLines=raw;
+  if(raw[0]&&raw[0].startsWith('sep=')){
+    sep=raw[0].replace('sep=','').trim()||';';
+    sepLine=raw[0];
+    dataLines=raw.slice(1);
+  }
+  var header=dataLines[0]?splitLine(dataLines[0],sep):[];
+  // strip = prefix from header names
+  header=header.map(function(h){ return h.replace(/^=+/,'').trim(); });
+  var rows=[];
+  for(var i=1;i<dataLines.length;i++){
+    var line=dataLines[i]; if(!line.trim())continue;
+    var cells=splitLine(line,sep);
+    var obj={};
+    header.forEach(function(h,idx){
+      // strip leading = from values
+      var v=cells[idx]!==undefined?cells[idx]:'';
+      obj[h]=v.replace(/^=/,'').trim();
+    });
+    obj[STATO_COL]=obj[STATO_COL]||'';
+    obj.__lineIdx=i;
+    rows.push(obj);
+  }
+  return {sep:sep,sepLine:sepLine,header:header,rows:rows};
+}
+
+function splitLine(line,sep){
+  var res=[],cur='',inQ=false;
+  for(var i=0;i<line.length;i++){
+    var c=line[i];
+    if(c==='"'){inQ=!inQ;}
+    else if(c===sep&&!inQ){res.push(cur);cur='';}
+    else{cur+=c;}
+  }
+  res.push(cur);
+  return res;
+}
+
+function extractCommessa(name){
+  var m=name.match(/^([A-Z0-9\-]+)\s/i);
+  return m?m[1].toUpperCase():name.split(' ')[0].toUpperCase();
+}
+function extractDdt(name){
+  // Nuovo formato: "FLM DDT Nr. 678 - GRN 504 - SERIALI.csv" → "678"
+  // Vecchio formato: "SME DDT Nr. 260188685.csv" → "260188685"
+  var m=name.match(/Nr\.\s*([^\s\-\.]+)/i);
+  if(m) return m[1].trim();
+  var parts=name.replace(/\.[^.]+$/,'').split(/\s+/);
+  return parts[parts.length-1]||name;
+}
+function extractGrn(name){
+  // "FLM DDT Nr. 678 - GRN 504 - SERIALI.csv" → "504"
+  // Se non c'è GRN → null
+  var m=name.match(/GRN\s+(\S+)/i);
+  return m?m[1].replace(/[\-\s].*$/,'').trim():null;
+}
+
+// ── FILTERS ───────────────────────────────────────────────────────────────────
+function populateDynFilters(){
+  var commesse={}, statologico={}, ddts={}, ordini={};
+  allRows.forEach(function(r){
+    if(r.__commessa) commesse[r.__commessa]=true;
+    if(r.__ddt)      ddts[r.__ddt]=true;
+    var sl=r['Stato Logico']||r['StatoLogico']||r['STATO_LOGICO']||r['Stato_Logico']||'';
+    if(sl) statologico[sl]=true;
+    var ord=getRifOrdine(r);
+    if(ord) ordini[ord]=true;
+  });
+  fillSelect('fCommessa',commesse,'— Tutte —');
+  fillSelect('fStatoLogico',statologico,'— Tutti —');
+  fillDatalist('listDdt',Object.keys(ddts).sort());
+  fillDatalist('listOrdine',Object.keys(ordini).sort());
+}
+
+function fillDatalist(id,values){
+  var dl=document.getElementById(id);
+  if(!dl) return;
+  dl.innerHTML='';
+  values.forEach(function(v){
+    var o=document.createElement('option'); o.value=v; dl.appendChild(o);
+  });
+}
+
+function fillSelect(id,obj,placeholder){
+  var sel=document.getElementById(id), prev=sel.value;
+  sel.innerHTML='<option value="">'+placeholder+'</option>';
+  Object.keys(obj).sort().forEach(function(v){
+    var o=document.createElement('option'); o.value=v; o.textContent=v;
+    if(v===prev) o.selected=true;
+    sel.appendChild(o);
+  });
+  if(prev&&sel.value!==prev) sel.value='';
+}
+
+function onFilterChange(){ applyFilter(); saveFilterState(); }
+function scheduleFilter(){ clearTimeout(filterTimer); filterTimer=setTimeout(function(){ applyFilter(); saveFilterState(); },350); }
+
+function applyFilter(){
+  var fComm  = document.getElementById('fCommessa').value;
+  var fDdt   = document.getElementById('fDdt').value.trim().toLowerCase();
+  var fOrd   = document.getElementById('fOrdine').value.trim().toLowerCase();
+  var fSL    = document.getElementById('fStatoLogico').value;
+  var fStato = document.getElementById('fStato').value;
+
+  filteredRows = allRows.filter(function(r){
+    if(fComm && r.__commessa!==fComm) return false;
+    if(fDdt  && r.__ddt.toLowerCase().indexOf(fDdt)===-1) return false;
+    // Riferimento Ordine — cerca la colonna dinamicamente
+    if(fOrd){
+      var ordVal=getRifOrdine(r);
+      if(ordVal.toLowerCase().indexOf(fOrd)===-1) return false;
+    }
+    if(fSL){
+      var sl=r['Stato Logico']||r['StatoLogico']||r['STATO_LOGICO']||r['Stato_Logico']||'';
+      if(sl!==fSL) return false;
+    }
+    if(fStato && (r[STATO_COL]||'')!==fStato) return false;
+    return true;
+  });
+  renderTable();
+  updateStats();
+  document.getElementById('fInfo').textContent=filteredRows.length+' / '+allRows.length+' righe';
+}
+
+function getRifOrdine(r){
+  return r['Riferimento Ordine']||r['RIFERIMENTO_ORDINE']||r['RiferimentoOrdine']||r['Rif. Ordine']||'';
+}
+function getStatoLogico(r){
+  return r['Stato Logico']||r['StatoLogico']||r['STATO_LOGICO']||r['Stato_Logico']||'';
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+var COL_ORDER = ['__commessa','__ddt','__fileName']; // colonne fisse a sinistra
+
+function getVisibleCols(){
+  if(!allRows.length) return [];
+  var fid=allRows[0].__fileId;
+  var hdr=(fileRegistry[fid]||{}).header||[];
+  // Escludi colonne gestite manualmente in fondo
+  var managed=[STATO_COL, NOTE_COL];
+  return hdr.filter(function(c){ return c && managed.indexOf(c)===-1; });
+}
+
+// Colonne VLT calcolate (read-only, da sheet)
+var VLT_DISPLAY_COLS=[
+  {key:'__vlt_stato', label:'STATO_VLT',      color:'#a855f7'},
+  {key:'__vlt_sn',    label:'CONFRONTO SN VLT',color:'#06b6d4'},
+  {key:'__vlt_pn',    label:'CONFRONTO PN VLT', color:'#06b6d4'}
+];
+
+function renderTable(){
+  if(!filteredRows.length){
+    setContent('<div class="state"><div class="state-ico">🔍</div><div class="state-title">Nessun risultato</div><div>Nessuna riga corrisponde ai filtri.</div></div>');
+    return;
+  }
+  var csvCols=getVisibleCols();
+  var fixedDefs=[
+    {key:'__commessa',label:'Commessa'},
+    {key:'__ddt',label:'N° DDT'},
+    {key:'__fileName',label:'File'}
+  ];
+
+  function colHidden(name){ return hiddenCols[name]; }
+  function ch(name){ return colHidden(name)?' class="col-hidden"':''; }
+
+  var h='<div class="tbl-outer"><table><thead><tr>';
+  fixedDefs.forEach(function(d){ h+='<th'+ch(d.key)+'>'+esc(d.label)+'</th>'; });
+  // GRN colonna fissa extra (solo se almeno un file ha GRN)
+  var hasGrn=filteredRows.some(function(r){return r.__grn;});
+  if(hasGrn) h+='<th'+ch('__grn')+' style="color:#22d3ee">N° GRN</th>';
+  csvCols.forEach(function(c){ h+='<th'+ch(c)+'>'+esc(c)+'</th>'; });
+  VLT_DISPLAY_COLS.forEach(function(d){
+    h+='<th'+ch(d.key)+' style="color:'+d.color+';border-left:2px solid '+d.color+'40">'+esc(d.label)+'</th>';
+  });
+  h+='<th'+ch(NOTE_COL)+' style="color:#22d3ee;min-width:220px">'+NOTE_COL+'</th>';
+  h+='<th'+ch(STATO_COL)+' style="color:var(--amber);min-width:90px">'+STATO_COL+'</th>';
+  h+='</tr></thead><tbody>';
+
+  filteredRows.forEach(function(row,ri){
+    var isFLM=(row.__commessa||'').toUpperCase()==='FLM';
+    var vlt = isFLM ? getVlt(row) : null;
+    var vStato = vlt?vlt.stato:'';
+    var vSn    = vlt?vlt.sn:'';
+    var vPn    = vlt?vlt.pn:'';
+    row.__vlt_stato=vStato;
+    row.__vlt_sn   =vSn;
+    row.__vlt_pn   =vPn;
+    if(isFLM && !row.__note_manual){ row[NOTE_COL]=calcNote(row); }
+    if(!isFLM){ row.__vlt_stato=''; row.__vlt_sn=''; row.__vlt_pn=''; }
+
+    var statoColor='var(--subtle)';
+    if(vStato==='Open') statoColor='var(--amber)';
+    else if(vStato==='Failure Report Sent') statoColor='var(--green)';
+    else if(vStato==='Close for Scrap material') statoColor='var(--red)';
+
+    var snRow=(row['Seriale']||row['SERIALE']||'').trim();
+    var snOk=!vSn||(snRow.toLowerCase()===vSn.toLowerCase());
+    var pnRow=(row['Part Number']||row['PART_NUMBER']||'').trim();
+    var pnOk=!vPn||(pnRow.toLowerCase()===vPn.toLowerCase());
+
+    h+='<tr>';
+    h+='<td class="td-comm'+(colHidden('__commessa')?' col-hidden':'')+'">'+esc(row.__commessa)+'</td>';
+    h+='<td class="td-ddt'+(colHidden('__ddt')?' col-hidden':'')+'">'+esc(row.__ddt)+'</td>';
+    if(hasGrn) h+='<td'+(colHidden('__grn')?' class="col-hidden"':'')+' style="font-family:var(--ff-mono);font-size:11px;color:#22d3ee">'+esc(row.__grn||'—')+'</td>';
+    h+='<td class="mono td-file'+(colHidden('__fileName')?' col-hidden':'')+'" title="'+esc(row.__fileName)+'">'+esc(shortName(row.__fileName))+'</td>';
+    csvCols.forEach(function(c){
+      var v2=row[c]!==undefined?row[c]:'';
+      h+='<td class="editable'+(colHidden(c)?' col-hidden':'')+'" onclick="editCell(this,'+ri+',\''+escAttr(c)+'\')" title="'+esc(v2)+'">'+esc(v2)+'</td>';
+    });
+    // STATO_VLT
+    h+='<td'+ch('__vlt_stato')+' style="font-family:var(--ff-cond);font-size:11px;font-weight:700;color:'+statoColor+';border-left:2px solid #a855f740">'+esc(vStato||(vltLoaded?'—':'⏳'))+'</td>';
+    // CONFRONTO SN VLT
+    var snColor=snOk?'var(--green)':'var(--red)';
+    h+='<td'+ch('__vlt_sn')+' style="font-family:var(--ff-mono);font-size:11px;color:'+snColor+';border-left:1px solid #06b6d420" title="'+esc(vSn)+'">'+esc(vSn||(vltLoaded?'—':'⏳'))+((!snOk&&vSn)?'<span style="font-size:9px;margin-left:3px">✗</span>':'')+'</td>';
+    // CONFRONTO PN VLT
+    var pnColor=pnOk?'var(--green)':'var(--red)';
+    h+='<td'+ch('__vlt_pn')+' style="font-family:var(--ff-mono);font-size:11px;color:'+pnColor+'" title="'+esc(vPn)+'">'+esc(vPn||(vltLoaded?'—':'⏳'))+((!pnOk&&vPn)?'<span style="font-size:9px;margin-left:3px">✗</span>':'')+'</td>';
+    // NOTE editabile
+    var noteVal=row[NOTE_COL]||'';
+    h+='<td class="editable note-cell'+(colHidden(NOTE_COL)?' col-hidden':'')+'" onclick="editNote(this,'+ri+')" title="'+esc(noteVal)+'" style="max-width:280px;color:#22d3ee;font-size:11px;font-family:var(--ff-mono)">'+esc(noteVal||'—')+'</td>';
+    // Stato_File
+    var stato=row[STATO_COL]||'';
+    var sc=stato==='Chiuso'?'stato-chiuso':stato==='Aperto'?'stato-aperto':'';
+    h+='<td class="editable '+sc+(colHidden(STATO_COL)?' col-hidden':'')+'" onclick="editStato(this,'+ri+')">'+esc(stato||'—')+'</td>';
+    h+='</tr>';
+  });
+  h+='</tbody></table></div>';
+  setContent(h);
+}
+
+function shortName(n){ return n.length>24?n.substring(0,22)+'…':n; }
+
+// ── EDIT CELL ─────────────────────────────────────────────────────────────────
+function editCell(td,ri,col){
+  if(td.classList.contains('editing'))return;
+  var row=filteredRows[ri], cur=row[col]!==undefined?row[col]:'';
+  td.classList.add('editing');
+  var inp=document.createElement('input'); inp.value=cur; td.innerHTML=''; td.appendChild(inp);
+  inp.focus(); inp.select();
+  function save(){
+    var nv=inp.value; td.classList.remove('editing'); td.textContent=nv; td.title=nv;
+    if(nv===cur)return;
+    row[col]=nv; markModified(row.__fileId); autoSave(row.__fileId);
+  }
+  inp.addEventListener('blur',save);
+  inp.addEventListener('keydown',function(e){ if(e.key==='Enter'){e.preventDefault();inp.blur();} if(e.key==='Escape'){inp.removeEventListener('blur',save);td.classList.remove('editing');td.textContent=cur;} });
+}
+
+function editStato(td,ri){
+  if(td.classList.contains('editing'))return;
+  var row=filteredRows[ri], cur=row[STATO_COL]||'';
+  td.classList.remove('stato-aperto','stato-chiuso');
+  td.classList.add('editing');
+  var sel=document.createElement('select');
+  ['','Aperto','Chiuso'].forEach(function(v){ var o=document.createElement('option'); o.value=v; o.textContent=v||'—'; if(v===cur)o.selected=true; sel.appendChild(o); });
+  td.innerHTML=''; td.appendChild(sel); sel.focus();
+  function save(){
+    var nv=sel.value; row[STATO_COL]=nv;
+    td.classList.remove('editing','stato-aperto','stato-chiuso');
+    if(nv==='Chiuso') td.classList.add('stato-chiuso');
+    else if(nv==='Aperto') td.classList.add('stato-aperto');
+    td.textContent=nv||'—';
+    markModified(row.__fileId); autoSave(row.__fileId); updateStats();
+  }
+  sel.addEventListener('change',save); sel.addEventListener('blur',save);
+  sel.addEventListener('keydown',function(e){ if(e.key==='Escape'){sel.removeEventListener('blur',save);td.classList.remove('editing');td.textContent=cur||'—';} });
+}
+
+// ── EDIT NOTE ────────────────────────────────────────────────────────────────
+function editNote(td,ri){
+  if(td.classList.contains('editing'))return;
+  var row=filteredRows[ri];
+  var cur=row[NOTE_COL]||'';
+  td.classList.add('editing');
+  td.style.padding='0';
+  var inp=document.createElement('input');
+  inp.value=cur; inp.style.cssText='width:100%;height:100%;min-height:30px;min-width:240px;background:#0d1629;border:2px solid #22d3ee;border-radius:0;padding:4px 8px;font-family:var(--ff-mono);font-size:12px;color:#22d3ee;outline:none;box-sizing:border-box';
+  td.innerHTML=''; td.appendChild(inp); inp.focus(); inp.select();
+  function save(){
+    var nv=inp.value.trim();
+    td.classList.remove('editing'); td.style.padding='';
+    td.textContent=nv||'—'; td.title=nv;
+    row[NOTE_COL]=nv;
+    // Marca come modifica manuale: non sovrascrivere con calcolo automatico
+    row.__note_manual = (nv !== '');
+    if(nv===cur) return;
+    markModified(row.__fileId); autoSave(row.__fileId);
+  }
+  inp.addEventListener('blur',save);
+  inp.addEventListener('keydown',function(e){
+    if(e.key==='Enter'){e.preventDefault();inp.blur();}
+    if(e.key==='Escape'){inp.removeEventListener('blur',save);td.classList.remove('editing');td.style.padding='';td.textContent=cur||'—';}
+  });
+}
+
+// ── AUTO SAVE ─────────────────────────────────────────────────────────────────
+var saveTimers={};
+function markModified(fid){ fileRegistry[fid].modified=true; setSaveUI('pending','Modifiche non salvate'); }
+
+function autoSave(fid){
+  clearTimeout(saveTimers[fid]);
+  saveTimers[fid]=setTimeout(function(){ doSave([fid]); },1500);
+}
+
+function saveAll(){
+  var dirty=Object.keys(fileRegistry).filter(function(id){return fileRegistry[id].modified;});
+  if(!dirty.length){showToast('Nessuna modifica da salvare');return;}
+  doSave(dirty);
+}
+
+function doSave(fileIds){
+  setSaveUI('pending','Salvataggio...');
+  var promises=fileIds.map(function(fid){
+    var fd=fileRegistry[fid];
+    var rows=allRows.filter(function(r){return r.__fileId===fid;});
+    var csv=buildCsv(rows,fd);
+    var blob=new Blob([csv],{type:'text/csv;charset=utf-8;'});
+    return uploadText(fid,blob,fd.name).then(function(){ fd.modified=false; });
+  });
+  return Promise.all(promises)
+  .then(function(){
+    var stillDirty=Object.keys(fileRegistry).some(function(id){return fileRegistry[id].modified;});
+    if(!stillDirty) setSaveUI('saved','✓ Salvato');
+    showToast('✓ '+fileIds.length+' file salvati','ok');
+    setTimeout(function(){ if(!Object.keys(fileRegistry).some(function(id){return fileRegistry[id].modified;})) setSaveUI('',''); },3000);
+  })
+  .catch(function(e){ setSaveUI('pending','Errore salvataggio'); showToast('✗ '+e.message,'err'); });
+}
+
+function buildCsv(rows,fd){
+  var hdr=fd.header.slice();
+  // NOTE solo per commessa FLM
+  var isFLM=(fd.commessa||'').toUpperCase()==='FLM';
+  if(isFLM && hdr.indexOf(NOTE_COL)===-1) hdr.push(NOTE_COL);
+  if(hdr.indexOf(STATO_COL)===-1) hdr.push(STATO_COL);
+  var sep=fd.sep||';';
+  var lines=[];
+  if(fd.sepLine) lines.push(fd.sepLine);
+  lines.push(hdr.join(sep));
+  rows.forEach(function(r){ lines.push(hdr.map(function(h){return csvEsc(r[h]||'',sep);}).join(sep)); });
+  return lines.join('\r\n');
+}
+function csvEsc(v,sep){ var s=String(v); if(s.indexOf(sep)!==-1||s.indexOf('"')!==-1||s.indexOf('\n')!==-1) return '"'+s.replace(/"/g,'""')+'"'; return s; }
+
+function setSaveUI(state,msg){
+  var dot=document.getElementById('saveDot');
+  var msgEl=document.getElementById('saveMsg');
+  var ind=document.getElementById('saveIndicator');
+  if(!state){ ind.style.display='none'; return; }
+  ind.style.display='flex';
+  dot.className='save-dot';
+  if(state==='pending'){ dot.classList.add('show'); msgEl.style.color='var(--amber)'; }
+  if(state==='saved')  { dot.classList.add('saved'); msgEl.style.color='var(--green)'; }
+  msgEl.textContent=msg;
+}
+
+var skippedDups = 0;
+
+// ── STATS ─────────────────────────────────────────────────────────────────────
+function updateStats(){
+  if(!allRows.length){document.getElementById('statsBar').style.display='none';return;}
+  var comms={};
+  allRows.forEach(function(r){comms[r.__commessa]=true;});
+  var aper=allRows.filter(function(r){return r[STATO_COL]==='Aperto';}).length;
+  var chiu=allRows.filter(function(r){return r[STATO_COL]==='Chiuso';}).length;
+  document.getElementById('sFile').textContent=Object.keys(fileRegistry).length;
+  document.getElementById('sDup').textContent=skippedDups;
+  document.getElementById('sDup').style.color=skippedDups>0?'var(--amber)':'var(--muted)';
+  document.getElementById('sRighe').textContent=allRows.length;
+  document.getElementById('sFiltrate').textContent=filteredRows.length;
+  document.getElementById('sCommesse').textContent=Object.keys(comms).length;
+  document.getElementById('sAperti').textContent=aper;
+  document.getElementById('sChiusi').textContent=chiu;
+  document.getElementById('statsBar').style.display='flex';
+}
+
+// ── COLUMN MANAGER ────────────────────────────────────────────────────────────
+function loadHiddenCols(){
+  try{ var s=localStorage.getItem(COL_HIDE_KEY); return s?JSON.parse(s):{}; }catch(e){ return{}; }
+}
+function saveHiddenCols(){
+  // Salva anche in localStorage come fallback locale
+  try{ localStorage.setItem(COL_HIDE_KEY,JSON.stringify(hiddenCols)); }catch(e){}
+  // Salva su Drive (debounce 1s per non fare troppe chiamate)
+  clearTimeout(window._cfgSaveTimer);
+  window._cfgSaveTimer=setTimeout(function(){ saveUserConfig(); },1000);
+}
+
+function openColMgr(){
+  var csvCols=getVisibleCols();
+  var allCols=[
+    {key:'__commessa',label:'Commessa'},
+    {key:'__ddt',label:'N° DDT'},
+    {key:'__grn',label:'N° GRN'},
+    {key:'__fileName',label:'File'}
+  ].concat(csvCols.map(function(c){return{key:c,label:c};}))
+  .concat(VLT_DISPLAY_COLS.map(function(d){return{key:d.key,label:d.label};}))
+  .concat([{key:NOTE_COL,label:'NOTE'},{key:STATO_COL,label:STATO_COL}]);
+
+  var list=document.getElementById('colMgrList'); list.innerHTML='';
+  allCols.forEach(function(c){
+    var item=document.createElement('div'); item.className='col-mgr-item';
+    var cb=document.createElement('input'); cb.type='checkbox'; cb.id='cmcb_'+c.key; cb.checked=!hiddenCols[c.key];
+    var lbl=document.createElement('label'); lbl.htmlFor='cmcb_'+c.key; lbl.textContent=c.label;
+    cb.addEventListener('change',function(){
+      if(this.checked){ delete hiddenCols[c.key]; } else { hiddenCols[c.key]=true; }
+      saveHiddenCols(); renderTable();
+    });
+    item.appendChild(cb); item.appendChild(lbl); list.appendChild(item);
+  });
+  document.getElementById('colMgrOverlay').classList.remove('hide');
+}
+function closeColMgr(){ document.getElementById('colMgrOverlay').classList.add('hide'); }
+function resetCols(){ hiddenCols={}; saveHiddenCols(); renderTable(); document.querySelectorAll('#colMgrList input').forEach(function(cb){cb.checked=true;}); }
+document.addEventListener('click',function(e){ if(e.target.id==='colMgrOverlay') closeColMgr(); });
+
+// ── DRIVE API ─────────────────────────────────────────────────────────────────
+function listFiles(q){
+  function page(pt){
+    var url='https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name,modifiedTime),nextPageToken&pageSize=1000';
+    if(pt) url+='&pageToken='+encodeURIComponent(pt);
+    return gFetch(url).then(function(r){ var f=r.files||[]; if(r.nextPageToken) return page(r.nextPageToken).then(function(m){return f.concat(m);}); return f; });
+  }
+  return page(null);
+}
+function downloadText(id){
+  return fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}})
+  .then(function(r){ if(!r.ok) throw new Error('Download: '+r.status); return r.text(); });
+}
+function uploadText(fileId,blob,name,contentType){
+  contentType=contentType||'text/csv';
+  var boundary='grn_'+Date.now(), meta=JSON.stringify({name:name}), enc=new TextEncoder();
+  var pre='--'+boundary+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+meta+'\r\n--'+boundary+'\r\nContent-Type: '+contentType+'\r\n\r\n';
+  var post='\r\n--'+boundary+'--';
+  return blob.arrayBuffer().then(function(buf){
+    var body=cc(cc(enc.encode(pre),new Uint8Array(buf)),enc.encode(post));
+    return fetch('https://www.googleapis.com/upload/drive/v3/files/'+fileId+'?uploadType=multipart',{
+      method:'PATCH',
+      headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'multipart/related; boundary='+boundary},
+      body:body
+    });
+  }).then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
+}
+function gFetch(url){ if(!TOKEN)return Promise.reject(new Error('No token')); return fetch(url,{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){return r.json();}); }
+
+// ── UTILITY ───────────────────────────────────────────────────────────────────
+function setContent(h){ document.getElementById('content').innerHTML=h; }
+function spinner(msg,pct){ return '<div class="state"><div class="spinner"></div><div class="state-title">'+esc(msg)+'</div><div class="prog-wrap"><div class="prog-bar" style="width:'+pct+'%"></div></div></div>'; }
+function esc(s){ return String(s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escAttr(s){ return s.replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+function cc(a,b){ var c=new Uint8Array(a.length+b.length); c.set(a); c.set(b,a.length); return c; }
+function clearFld(id){
+  var el=document.getElementById(id);
+  if(el){ el.value=''; onFilterChange(); }
+}
+
+// ── BROADCAST CHANNEL (integrazione Tampermonkey) ────────────────────────────
+var grnChannel = null;
+
+function initBroadcastChannel(){
+  try{
+    grnChannel = new BroadcastChannel('grn_flm_channel');
+    grnChannel.onmessage = function(ev){
+      var msg = ev.data;
+      if(!msg || !msg.type) return;
+
+      // Script TM ha completato un FR → segna riga come Chiuso
+      if(msg.type === 'FR_DONE'){
+        var codeFr = (msg.codice_fr||'').trim().toLowerCase();
+        var matched = 0;
+        allRows.forEach(function(row){
+          if((row.__commessa||'').toUpperCase() !== 'FLM') return;
+          var rif = (getRifOrdine(row)||'').trim().toLowerCase();
+          if(rif !== codeFr) return;
+          var stato = row[STATO_COL]||'';
+          if(stato === 'Chiuso') return;
+          row[STATO_COL] = 'Chiuso';
+          markModified(row.__fileId);
+          autoSave(row.__fileId);
+          matched++;
+        });
+        if(matched > 0){
+          updateStats();
+          renderTable();
+          showToast('✓ FR '+msg.codice_fr+' → Chiuso ('+matched+' riga/e)','ok');
+        }
+        // Risponde con ACK
+        grnChannel.postMessage({type:'FR_DONE_ACK', codice_fr: msg.codice_fr, matched: matched});
+      }
+
+      // Script TM chiede la lista dati FLM
+      if(msg.type === 'GET_FLM_DATA'){
+        sendFlmData();
+      }
+    };
+    console.log('GRN BroadcastChannel attivo');
+  }catch(e){
+    console.warn('BroadcastChannel non disponibile:',e.message);
+  }
+}
+
+function sendFlmData(){
+  if(!grnChannel) return;
+  var flmRows = allRows.filter(function(row){
+    if((row.__commessa||'').toUpperCase() !== 'FLM') return false;
+    var stato = row[STATO_COL]||'';
+    return stato !== 'Chiuso'; // solo aperte o vuote
+  });
+  var data = flmRows.map(function(row){
+    return {
+      CODICE_FR:   getRifOrdine(row),
+      NOTE:        row[NOTE_COL]||'',
+      STATO_VLT:   row.__vlt_stato||'',
+      CONF_SERIAL: (row['Seriale']||row['SERIALE']||'').trim(),
+      CONF_TMPN:   (row['Part Number']||row['PART_NUMBER']||'').trim(),
+      _grn:        row.__grn||'',
+      _ddt:        row.__ddt||''
+    };
+  });
+  grnChannel.postMessage({type:'FLM_DATA', rows: data, total: data.length});
+  console.log('GRN → TM: inviati '+data.length+' record FLM aperti');
+}
+
+function showToast(msg,type){
+  var t=document.getElementById('toast');
+  t.textContent=msg; t.className=(type?'show '+type:'show');
+  clearTimeout(toastTimer); toastTimer=setTimeout(function(){t.className='';},2500);
+}
+</script>
+</body>
+</html>
