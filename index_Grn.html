@@ -876,12 +876,12 @@ function extractGrn(name){
 // ── FILTERS ───────────────────────────────────────────────────────────────────
 function populateDynFilters(){
   var commesse={}, statologico={}, ddts={}, ordini={};
+  // Commesse dalla lista master del config — non dai file caricati
+  (permConfig ? (permConfig.commesse||[]) : []).forEach(function(c){
+    if(userCommesse===null || userCommesse.indexOf(c)!==-1)
+      commesse[c]=true;
+  });
   allRows.forEach(function(r){
-    if(r.__commessa){
-      // mostra solo le commesse permesse (null = tutto)
-      if(userCommesse===null || userCommesse.indexOf(r.__commessa)!==-1)
-        commesse[r.__commessa]=true;
-    }
     if(r.__ddt)      ddts[r.__ddt]=true;
     var sl=r['Stato Logico']||r['StatoLogico']||r['STATO_LOGICO']||r['Stato_Logico']||'';
     if(sl) statologico[sl]=true;
