@@ -188,6 +188,7 @@ td.editing input,td.editing select{width:100%;height:100%;min-height:30px;backgr
       </div>
       <button class="btn-secondary" onclick="loadVltSheet()" title="Ricarica dati dal foglio VLT" style="padding:4px 10px;font-size:11px;align-self:auto">↻ VLT</button>
       <button id="btnSendFlm" class="btn-secondary" onclick="sendFlmData()" title="Invia dati FLM aperti allo script Tampermonkey" style="padding:4px 10px;font-size:11px;align-self:auto;border-color:#f59e0b;color:#f59e0b">📡 FLM</button>
+      <button id="btnPerm" class="btn-secondary" onclick="openPermPanel()" style="padding:4px 10px;font-size:11px;display:none;border-color:var(--blue);color:var(--blue)">🔑 Permessi</button>
       <button class="btn-logout" onclick="signOut()">Esci</button>
     </div>
   </header>
@@ -291,6 +292,49 @@ td.editing input,td.editing select{width:100%;height:100%;min-height:30px;backgr
   </div>
 </div>
 
+<!-- PERMESSI MODAL -->
+<div id="permOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.6);backdrop-filter:blur(3px);z-index:400;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:16px;width:min(560px,96vw);max-height:85vh;display:flex;flex-direction:column;box-shadow:0 24px 64px rgba(0,0,0,.6)">
+    <div style="padding:18px 22px 14px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;flex-shrink:0">
+      <div>
+        <div style="font-family:var(--ff-cond);font-size:18px;font-weight:800;color:var(--blue)">🔑 Gestione Permessi GRN</div>
+        <div id="permCfgStatus" style="font-size:11px;color:var(--muted);margin-top:3px">config_grn.json · Drive</div>
+      </div>
+      <div style="display:flex;gap:8px">
+        <button onclick="reloadPermConfig()" style="background:none;border:1px solid var(--border);border-radius:7px;padding:6px 12px;color:var(--muted);cursor:pointer;font-size:12px">↻ Ricarica</button>
+        <button onclick="savePermConfig()" style="background:var(--blue);border:none;border-radius:7px;padding:6px 14px;color:#fff;cursor:pointer;font-size:12px;font-weight:600">💾 Salva</button>
+        <button onclick="closePermPanel()" style="background:none;border:1px solid var(--border);border-radius:7px;padding:6px 10px;color:var(--muted);cursor:pointer;font-size:14px">✕</button>
+      </div>
+    </div>
+    <div id="permPanelBody" style="flex:1;overflow-y:auto;padding:16px 22px;display:flex;flex-direction:column;gap:16px">
+      <!-- rendered by renderPermPanel() -->
+    </div>
+  </div>
+</div>
+
+<!-- NUOVO UTENTE MODAL -->
+<div id="puOverlay" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.5);z-index:500;align-items:center;justify-content:center">
+  <div style="background:var(--surface);border:1px solid var(--border);border-radius:14px;width:min(440px,94vw);padding:22px 24px;box-shadow:0 16px 48px rgba(0,0,0,.5)">
+    <div id="puTitle" style="font-family:var(--ff-cond);font-size:16px;font-weight:800;color:var(--text);margin-bottom:14px">Nuovo Utente</div>
+    <div style="display:flex;flex-direction:column;gap:12px">
+      <div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:4px;letter-spacing:.5px;text-transform:uppercase">Email</div>
+        <input id="puEmail" type="email" placeholder="utente@esempio.com" style="width:100%;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:8px 12px;color:var(--text);font-size:13px;outline:none">
+        <div id="puErr" style="display:none;font-size:11px;color:var(--red);margin-top:4px">Email non valida</div>
+      </div>
+      <div>
+        <div style="font-size:11px;color:var(--muted);margin-bottom:6px;letter-spacing:.5px;text-transform:uppercase">Commesse visibili</div>
+        <div id="puCommesseList" style="display:flex;flex-wrap:wrap;gap:6px;max-height:160px;overflow-y:auto;padding:4px 0"></div>
+        <div style="font-size:10px;color:var(--muted);margin-top:6px">Nessuna selezionata = accesso negato</div>
+      </div>
+    </div>
+    <div style="display:flex;gap:8px;justify-content:flex-end;margin-top:18px">
+      <button onclick="closePuModal()" style="background:none;border:1px solid var(--border);border-radius:7px;padding:8px 16px;color:var(--muted);cursor:pointer;font-size:13px">Annulla</button>
+      <button onclick="puConfirm()" style="background:var(--blue);border:none;border-radius:7px;padding:8px 16px;color:#fff;cursor:pointer;font-size:13px;font-weight:600">Salva</button>
+    </div>
+  </div>
+</div>
+
 <div id="toast"></div>
 
 <script src="https://accounts.google.com/gsi/client" async defer></script>
@@ -314,6 +358,15 @@ var hiddenCols  = loadHiddenCols();
 var CONFIG_FOLDER_ID = '1LGoR9SKDthz1tUDLxbZhClqA-xhkjoNY';
 var configFileId  = null;
 var configEmail   = '';
+
+// ── PERMESSI ──────────────────────────────────────────────────────────────────
+var SUPER_USER      = 'atssegnalazioni@gmail.com';
+var PERM_FNAME      = 'config_grn.json';
+var permConfig      = null;
+var permFileId      = null;
+var isSuperUser     = false;
+var userCommesse    = null; // null = tutto, [] = niente, ['FLM',...] = filtro
+var puEditEmail     = null;
 
 // VLT SHEET
 var VLT_CSV_URL = 'https://docs.google.com/spreadsheets/d/1KxP-nGn6AbenWhZXi1EAPRxSKeCRdEoESH4UzMqqjdk/export?format=csv&gid=244367079';
@@ -500,6 +553,7 @@ function loadUserInfo(){
     setUserUI(u.name||u.email||'—',u.email||'',u.picture||'');
     configEmail=u.email||'';
     loadUserConfig(u.email||'');
+    loadPermConfig(u.email||'');
   }).catch(function(){});
 }
 
@@ -823,7 +877,11 @@ function extractGrn(name){
 function populateDynFilters(){
   var commesse={}, statologico={}, ddts={}, ordini={};
   allRows.forEach(function(r){
-    if(r.__commessa) commesse[r.__commessa]=true;
+    if(r.__commessa){
+      // mostra solo le commesse permesse (null = tutto)
+      if(userCommesse===null || userCommesse.indexOf(r.__commessa)!==-1)
+        commesse[r.__commessa]=true;
+    }
     if(r.__ddt)      ddts[r.__ddt]=true;
     var sl=r['Stato Logico']||r['StatoLogico']||r['STATO_LOGICO']||r['Stato_Logico']||'';
     if(sl) statologico[sl]=true;
@@ -867,6 +925,8 @@ function applyFilter(){
   var fStato = document.getElementById('fStato').value;
 
   filteredRows = allRows.filter(function(r){
+    // Filtro permessi commessa
+    if(userCommesse!==null && userCommesse.indexOf(r.__commessa)===-1) return false;
     if(fComm && r.__commessa!==fComm) return false;
     if(fDdt  && r.__ddt.toLowerCase().indexOf(fDdt)===-1) return false;
     // Riferimento Ordine — cerca la colonna dinamicamente
@@ -1283,6 +1343,241 @@ function sendFlmData(){
   });
   grnChannel.postMessage({type:'FLM_DATA', rows: data, total: data.length});
   console.log('GRN → TM: inviati '+data.length+' record FLM aperti');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SISTEMA PERMESSI GRN
+// ═══════════════════════════════════════════════════════════
+
+function loadPermConfig(email){
+  listFiles('"'+CONFIG_FOLDER_ID+'" in parents and name="'+PERM_FNAME+'" and trashed=false')
+  .then(function(files){
+    if(!files.length){
+      // Prima volta: crea config base
+      permConfig={super_users:[SUPER_USER],users:{},default:{commesse:[]}};
+      permFileId=null;
+      applyUserPermissions(email);
+      return;
+    }
+    permFileId=files[0].id;
+    return downloadText(permFileId).then(function(txt){
+      try{ permConfig=JSON.parse(txt); }
+      catch(e){ permConfig={super_users:[SUPER_USER],users:{},default:{commesse:[]}}; }
+      applyUserPermissions(email);
+    });
+  })
+  .catch(function(){
+    permConfig={super_users:[SUPER_USER],users:{},default:{commesse:[]}};
+    applyUserPermissions(email);
+  });
+}
+
+function applyUserPermissions(email){
+  var em=(email||'').toLowerCase();
+  var sus=(permConfig.super_users||[]).map(function(s){return s.toLowerCase();});
+  isSuperUser = sus.indexOf(em)!==-1;
+
+  if(isSuperUser){
+    userCommesse=null; // vede tutto
+    var btn=document.getElementById('btnPerm');
+    if(btn) btn.style.display='';
+  } else {
+    var users=permConfig.users||{};
+    var udata=users[em]||users[email]||null;
+    if(udata){
+      userCommesse=udata.commesse||[];
+    } else {
+      // default
+      var def=permConfig.default||{};
+      userCommesse=def.commesse||[];
+    }
+    var btn=document.getElementById('btnPerm');
+    if(btn) btn.style.display='none';
+  }
+
+  // Riapplica filtri se i dati sono già caricati
+  if(allRows.length){ populateDynFilters(); applyFilter(); }
+  console.log('Permessi GRN: superUser='+isSuperUser+', commesse='+(userCommesse===null?'TUTTE':JSON.stringify(userCommesse)));
+}
+
+function reloadPermConfig(){
+  if(configEmail) loadPermConfig(configEmail);
+}
+
+function savePermConfig(){
+  if(!isSuperUser){ showToast('Solo super utenti possono salvare la config','err'); return; }
+  var json=JSON.stringify(permConfig,null,2);
+  var blob=new Blob([json],{type:'application/json'});
+  var p;
+  if(permFileId){
+    p=uploadText(permFileId,blob,PERM_FNAME,'application/json');
+  } else {
+    p=createFileInFolder(CONFIG_FOLDER_ID,PERM_FNAME,blob).then(function(f){ permFileId=f.id; return f; });
+  }
+  p.then(function(){
+    showToast('✓ config_grn.json salvato su Drive','ok');
+    var s=document.getElementById('permCfgStatus');
+    if(s) s.textContent='✅ config_grn.json · salvato';
+  }).catch(function(e){ showToast('Errore salvataggio: '+e.message,'err'); });
+}
+
+function openPermPanel(){
+  if(!isSuperUser) return;
+  renderPermPanel();
+  var o=document.getElementById('permOverlay');
+  o.style.display='flex';
+}
+function closePermPanel(){
+  document.getElementById('permOverlay').style.display='none';
+}
+
+function renderPermPanel(){
+  if(!permConfig){ document.getElementById('permPanelBody').innerHTML='<div style="color:var(--muted);font-size:13px">Config non caricata.</div>'; return; }
+  var status=permFileId?'✅ config_grn.json caricato da Drive':'⚠️ Non trovato su Drive — verrà creato al salvataggio';
+  var s=document.getElementById('permCfgStatus'); if(s) s.textContent=status;
+
+  // Commesse disponibili (da allRows)
+  var availComm={};
+  allRows.forEach(function(r){ if(r.__commessa) availComm[r.__commessa]=true; });
+  var commList=Object.keys(availComm).sort();
+
+  var h='';
+
+  // Super Users
+  h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">';
+  h+='<div style="font-family:var(--ff-cond);font-size:14px;font-weight:700;color:var(--amber)">⭐ Super Utenti</div>';
+  h+='<button onclick="addSuperUser()" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 10px;color:var(--muted);cursor:pointer;font-size:11px">＋ Aggiungi</button>';
+  h+='</div>';
+  var sus=permConfig.super_users||[];
+  if(!sus.length) h+='<div style="font-size:12px;color:var(--muted)">Nessuno</div>';
+  sus.forEach(function(email,i){
+    h+='<div style="display:flex;align-items:center;gap:10px;padding:7px 0;border-bottom:1px solid var(--border)">';
+    h+='<div style="width:28px;height:28px;border-radius:50%;background:rgba(245,158,11,.15);color:var(--amber);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0">'+email.charAt(0).toUpperCase()+'</div>';
+    h+='<div style="flex:1;font-size:13px;color:var(--text)">'+esc(email)+'</div>';
+    h+='<button onclick="delSuperUser('+i+')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 6px" title="Rimuovi">🗑</button>';
+    h+='</div>';
+  });
+  h+='</div>';
+
+  // Utenti
+  h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">';
+  h+='<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:10px">';
+  h+='<div style="font-family:var(--ff-cond);font-size:14px;font-weight:700;color:var(--blue)">👤 Utenti</div>';
+  h+='<button onclick="openPuModal(null)" style="background:var(--blue);border:none;border-radius:6px;padding:4px 12px;color:#fff;cursor:pointer;font-size:11px;font-weight:600">＋ Nuovo</button>';
+  h+='</div>';
+  var users=permConfig.users||{};
+  var ukeys=Object.keys(users);
+  if(!ukeys.length) h+='<div style="font-size:12px;color:var(--muted)">Nessun utente. Chi non è in lista segue le regole Default.</div>';
+  ukeys.forEach(function(email){
+    var u=users[email]; var comms=u.commesse||[];
+    h+='<div style="display:flex;align-items:flex-start;gap:10px;padding:8px 0;border-bottom:1px solid var(--border)">';
+    h+='<div style="width:28px;height:28px;border-radius:50%;background:rgba(59,130,246,.15);color:var(--blue);display:flex;align-items:center;justify-content:center;font-size:13px;font-weight:700;flex-shrink:0;margin-top:2px">'+email.charAt(0).toUpperCase()+'</div>';
+    h+='<div style="flex:1"><div style="font-size:13px;color:var(--text);margin-bottom:4px">'+esc(email)+'</div>';
+    h+='<div style="display:flex;flex-wrap:wrap;gap:4px">';
+    if(!comms.length) h+='<span style="font-size:10px;color:var(--red);background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);border-radius:4px;padding:2px 7px">Nessuna commessa</span>';
+    comms.forEach(function(c){ h+='<span style="font-size:10px;color:var(--teal);background:rgba(20,184,166,.1);border:1px solid rgba(20,184,166,.3);border-radius:4px;padding:2px 7px">'+esc(c)+'</span>'; });
+    h+='</div></div>';
+    h+='<div style="display:flex;gap:4px;flex-shrink:0">';
+    h+='<button onclick="openPuModal(\''+esc(email)+'\')" style="background:none;border:1px solid var(--border);border-radius:6px;padding:4px 8px;color:var(--muted);cursor:pointer;font-size:12px" title="Modifica">✏️</button>';
+    h+='<button onclick="delPermUser(\''+esc(email)+'\')" style="background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:4px 6px" title="Rimuovi">🗑</button>';
+    h+='</div></div>';
+  });
+  h+='</div>';
+
+  // Default
+  h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">';
+  h+='<div style="font-family:var(--ff-cond);font-size:14px;font-weight:700;color:var(--subtle);margin-bottom:10px">🌐 Default (utenti non in lista)</div>';
+  var def=permConfig.default||{}; var dcomms=def.commesse||[];
+  h+='<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Commesse visibili per chi non è in lista: '+(dcomms.length?dcomms.map(function(c){return '<strong style="color:var(--teal)">'+esc(c)+'</strong>';}).join(', '):'<strong style="color:var(--red)">Nessuna (accesso negato)</strong>')+'</div>';
+  h+='<div style="display:flex;flex-wrap:wrap;gap:8px">';
+  commList.forEach(function(c){
+    var checked=dcomms.indexOf(c)!==-1;
+    h+='<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--subtle);cursor:pointer">';
+    h+='<input type="checkbox" data-defcomm="'+esc(c)+'"'+(checked?' checked':'')+' onchange="updateDefault()">';
+    h+=esc(c)+'</label>';
+  });
+  if(!commList.length) h+='<div style="font-size:12px;color:var(--muted)">Carica i dati prima per vedere le commesse disponibili.</div>';
+  h+='</div></div>';
+
+  document.getElementById('permPanelBody').innerHTML=h;
+}
+
+function updateDefault(){
+  var checks=document.querySelectorAll('[data-defcomm]');
+  var comms=[];
+  checks.forEach(function(cb){ if(cb.checked) comms.push(cb.dataset.defcomm); });
+  if(!permConfig.default) permConfig.default={};
+  permConfig.default.commesse=comms;
+}
+
+function addSuperUser(){
+  var em=prompt('Email super utente:'); if(!em) return;
+  if(!permConfig.super_users) permConfig.super_users=[];
+  permConfig.super_users.push(em.trim().toLowerCase());
+  renderPermPanel(); showToast('✓ Super utente aggiunto');
+}
+function delSuperUser(i){
+  if(!permConfig.super_users) return;
+  permConfig.super_users.splice(i,1);
+  renderPermPanel();
+}
+function delPermUser(email){
+  if(!permConfig.users) return;
+  delete permConfig.users[email];
+  renderPermPanel(); showToast('✓ Utente rimosso');
+}
+
+function openPuModal(email){
+  puEditEmail=email;
+  document.getElementById('puTitle').textContent=email?'Modifica Utente':'Nuovo Utente';
+  var emailInput=document.getElementById('puEmail');
+  emailInput.value=email||''; emailInput.disabled=!!email;
+  document.getElementById('puErr').style.display='none';
+
+  // Commesse disponibili
+  var availComm={};
+  allRows.forEach(function(r){ if(r.__commessa) availComm[r.__commessa]=true; });
+  // Aggiungi anche quelle già assegnate all'utente (potrebbero non essere nei dati attuali)
+  if(email && permConfig.users && permConfig.users[email]){
+    (permConfig.users[email].commesse||[]).forEach(function(c){ availComm[c]=true; });
+  }
+  var commList=Object.keys(availComm).sort();
+  var selComms=(email && permConfig.users && permConfig.users[email])?(permConfig.users[email].commesse||[]):[];
+
+  var h='';
+  commList.forEach(function(c){
+    var checked=selComms.indexOf(c)!==-1;
+    h+='<label style="display:flex;align-items:center;gap:6px;font-size:12px;color:var(--text);cursor:pointer;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:5px 10px">';
+    h+='<input type="checkbox" class="pu-comm-check" value="'+esc(c)+'"'+(checked?' checked':'')+'>';
+    h+=esc(c)+'</label>';
+  });
+  if(!commList.length) h='<div style="font-size:12px;color:var(--muted)">Nessuna commessa disponibile. Carica i dati prima.</div>';
+
+  document.getElementById('puCommesseList').innerHTML=h;
+  document.getElementById('puOverlay').style.display='flex';
+  if(!email) setTimeout(function(){ document.getElementById('puEmail').focus(); },100);
+}
+
+function closePuModal(){
+  document.getElementById('puOverlay').style.display='none';
+}
+
+function puConfirm(){
+  var email=(document.getElementById('puEmail').value||'').trim().toLowerCase();
+  var errEl=document.getElementById('puErr');
+  if(!email||!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){
+    errEl.style.display='block'; return;
+  }
+  errEl.style.display='none';
+  var checks=document.querySelectorAll('.pu-comm-check');
+  var comms=[];
+  checks.forEach(function(cb){ if(cb.checked) comms.push(cb.value); });
+  if(!permConfig.users) permConfig.users={};
+  permConfig.users[email]={commesse:comms};
+  closePuModal();
+  renderPermPanel();
+  showToast('✓ Utente salvato — premi Salva per confermare');
 }
 
 function showToast(msg,type){
