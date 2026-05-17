@@ -16,6 +16,7 @@
     --blue: #3b82f6;
     --teal: #14b8a6;
     --amber: #f59e0b;
+    --green: #10b981;
     --red: #ef4444;
     --text: #e2e8f0;
     --muted: #64748b;
@@ -28,12 +29,7 @@
   html, body { height: 100%; overflow: hidden; }
   body { background: var(--bg); color: var(--text); font-family: var(--ff); font-size: 14px; }
 
-  /* ══ MAIN occupa tutto ══ */
-  .main {
-    position: fixed;
-    inset: 0;
-    z-index: 1;
-  }
+  .main { position: fixed; inset: 0; z-index: 1; }
 
   /* ══ HAMBURGER ══ */
   .menu-btn {
@@ -144,12 +140,14 @@
   }
   .dr-item:hover { background: var(--card); color: var(--subtle); }
   .dr-item.active { background: var(--card); border-color: var(--border); color: var(--text); }
-  .dr-item.app-home.active   { border-color: rgba(20,184,166,.3); }
+  .dr-item.app-home.active     { border-color: rgba(20,184,166,.3); }
   .dr-item.app-home.active .dr-item-name { color: var(--teal); }
   .dr-item.app-presenze.active { border-color: rgba(59,130,246,.3); }
   .dr-item.app-presenze.active .dr-item-name { color: var(--blue); }
   .dr-item.app-spedizioni.active { border-color: rgba(245,158,11,.3); }
   .dr-item.app-spedizioni.active .dr-item-name { color: var(--amber); }
+  .dr-item.app-grn.active      { border-color: rgba(16,185,129,.3); }
+  .dr-item.app-grn.active .dr-item-name { color: var(--green); }
 
   .dr-item-icon { font-size: 17px; flex-shrink: 0; width: 22px; text-align: center; }
   .dr-item-info { display: flex; flex-direction: column; gap: 1px; }
@@ -199,6 +197,7 @@
   .welcome-title .c3 { color: var(--subtle); font-weight: 500; }
   .welcome-sub { font-size: 11px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
 
+  /* 3 card in griglia: 2 sopra + 1 centrata sotto */
   .welcome-grid {
     display: grid;
     grid-template-columns: 1fr 1fr;
@@ -229,19 +228,27 @@
   }
   .app-card:hover { transform: translateY(-3px); box-shadow: 0 14px 40px rgba(0,0,0,.45); }
   .app-card:hover::before { opacity: 1; }
-  .card-presenze::before { background: radial-gradient(ellipse at top left, rgba(59,130,246,.1), transparent 70%); }
+  .card-presenze::before  { background: radial-gradient(ellipse at top left, rgba(59,130,246,.1), transparent 70%); }
   .card-spedizioni::before { background: radial-gradient(ellipse at top left, rgba(245,158,11,.1), transparent 70%); }
-  .card-presenze:hover { border-color: rgba(59,130,246,.35); }
+  .card-grn::before        { background: radial-gradient(ellipse at top left, rgba(16,185,129,.1), transparent 70%); }
+  .card-presenze:hover  { border-color: rgba(59,130,246,.35); }
   .card-spedizioni:hover { border-color: rgba(245,158,11,.35); }
+  .card-grn:hover        { border-color: rgba(16,185,129,.35); }
+
+  /* card GRN centrata su riga intera */
+  .card-grn { grid-column: 1 / -1; max-width: 253px; justify-self: center; }
+
   .card-icon { font-size: 30px; }
   .card-title { font-family: var(--ffc); font-size: 18px; font-weight: 800; letter-spacing: .5px; }
-  .card-presenze .card-title { color: var(--blue); }
+  .card-presenze .card-title  { color: var(--blue); }
   .card-spedizioni .card-title { color: var(--amber); }
+  .card-grn .card-title        { color: var(--green); }
   .card-desc { font-size: 11px; color: var(--muted); line-height: 1.6; }
   .card-arrow { font-size: 15px; color: var(--muted); margin-top: 4px; transition: transform 0.18s, color 0.18s; }
   .app-card:hover .card-arrow { transform: translateX(5px); }
-  .card-presenze:hover .card-arrow { color: var(--blue); }
+  .card-presenze:hover .card-arrow  { color: var(--blue); }
   .card-spedizioni:hover .card-arrow { color: var(--amber); }
+  .card-grn:hover .card-arrow        { color: var(--green); }
 
   /* ══ IFRAMES ══ */
   .app-frame {
@@ -334,6 +341,15 @@
         <span class="dr-item-desc">Tracking AWB</span>
       </div>
     </div>
+
+    <div class="dr-item app-grn" id="nav-grn" onclick="openApp('grn')">
+      <span class="dr-item-icon">🟢</span>
+      <div class="dr-item-info">
+        <span class="dr-item-name">GRN Manager</span>
+        <span class="dr-item-desc">Entrate merci · SAP B1</span>
+      </div>
+    </div>
+
   </div>
 
   <div class="dr-footer">WMS Hub · ATS v1.0</div>
@@ -361,6 +377,12 @@
         <div class="card-desc">Tracking e gestione spedizioni WMS con codici AWB.</div>
         <div class="card-arrow">→</div>
       </div>
+      <div class="app-card card-grn" onclick="openApp('grn')">
+        <div class="card-icon">🟢</div>
+        <div class="card-title">GRN Manager</div>
+        <div class="card-desc">Entrate merci WMS da web app · integrazione SAP B1.</div>
+        <div class="card-arrow">→</div>
+      </div>
     </div>
   </div>
 
@@ -369,27 +391,29 @@
     <div class="loader-text" id="loader-text">Caricamento...</div>
   </div>
 
-  <iframe class="app-frame" id="frame-presenze" src="" data-src="index_Presenze.html" title="Presenze"></iframe>
+  <iframe class="app-frame" id="frame-presenze"   src="" data-src="index_Presenze.html"      title="Presenze"></iframe>
   <iframe class="app-frame" id="frame-spedizioni" src="" data-src="index_Spedizioni-awb.html" title="Spedizioni AWB"></iframe>
+  <iframe class="app-frame" id="frame-grn"        src="" data-src="index_Grn.html"            title="GRN Manager"></iframe>
 
 </main>
 
 <script>
   const frames = {
-    presenze: document.getElementById('frame-presenze'),
+    presenze:   document.getElementById('frame-presenze'),
     spedizioni: document.getElementById('frame-spedizioni'),
+    grn:        document.getElementById('frame-grn'),
   };
   const navItems = {
-    home: document.getElementById('nav-home'),
-    presenze: document.getElementById('nav-presenze'),
+    home:       document.getElementById('nav-home'),
+    presenze:   document.getElementById('nav-presenze'),
     spedizioni: document.getElementById('nav-spedizioni'),
+    grn:        document.getElementById('nav-grn'),
   };
   let currentApp = null;
   let drawerOpen = false;
 
-  function toggleDrawer() {
-    drawerOpen ? closeDrawer() : openDrawer();
-  }
+  function toggleDrawer() { drawerOpen ? closeDrawer() : openDrawer(); }
+
   function openDrawer() {
     drawerOpen = true;
     document.getElementById('drawer').classList.add('open');
@@ -423,18 +447,21 @@
     if (!frame) return;
     setActiveNav(app);
     document.getElementById('welcome').classList.add('hidden');
-
     if (currentApp === app) return;
     Object.values(frames).forEach(f => f.classList.remove('active'));
 
     const loader = document.getElementById('loader');
-    const labels = { presenze: 'Caricamento Presenze...', spedizioni: 'Caricamento Spedizioni AWB...' };
+    const labels = {
+      presenze:   'Caricamento Presenze...',
+      spedizioni: 'Caricamento Spedizioni AWB...',
+      grn:        'Caricamento GRN Manager...',
+    };
     document.getElementById('loader-text').textContent = labels[app] || 'Caricamento...';
 
     if (!frame.src || frame.src === window.location.href) {
       loader.classList.add('show');
       frame.src = frame.dataset.src;
-      frame.onload = () => { loader.classList.remove('show'); frame.classList.add('active'); };
+      frame.onload  = () => { loader.classList.remove('show'); frame.classList.add('active'); };
       frame.onerror = () => { loader.classList.remove('show'); frame.classList.add('active'); };
     } else {
       frame.classList.add('active');
@@ -444,7 +471,7 @@
     localStorage.setItem('wms_lastApp', app);
   }
 
-  // Al caricamento ripristina l'ultima app aperta
+  // Ripristina ultima app aperta
   const lastApp = localStorage.getItem('wms_lastApp');
   if (lastApp && frames[lastApp]) {
     openApp(lastApp);
@@ -452,11 +479,12 @@
     setActiveNav('home');
   }
 
-  // Chiudi con ESC
+  // Shortcuts
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeDrawer();
     if (e.altKey && e.key === '1') openApp('presenze');
     if (e.altKey && e.key === '2') openApp('spedizioni');
+    if (e.altKey && e.key === '3') openApp('grn');
     if (e.altKey && e.key === '0') showHome();
   });
 </script>
