@@ -723,7 +723,7 @@ var SIGLE = [
 var SM={};SIGLE.forEach(function(s){SM[s.code]=s;});
 
 // ── FIX 1: Sigle disponibili in Coop (modifica qui per aggiungere/rimuovere) ──
-var COOP_SIGLE_CODES = ['X','F','M','HP'];
+var COOP_SIGLE_CODES = ['X'];
 // Le sigle ATS restano tutte quelle in SIGLE (H104, 104, CP, HPE, PE incluse)
 
 var SIGLE_NO_ORARIO=['F','M','CP','104','PE','Lutto'];
@@ -1557,7 +1557,7 @@ function coopExport(){
   XLSX.utils.book_append_sheet(wb,coopSheet,mName+'_Coop');
   // Report con sole sigle attive in Coop
   var COOP_REP=[
-    {l:'P',k:'X'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},{l:'ORD',k:'ord'},{l:'STR',k:'str'}
+    {l:'P',k:'X'},{l:'ORD',k:'ord'},{l:'STR',k:'str'}
   ];
   var repHdr=['SAP','Nominativo','Resp.','Plant'].concat(COOP_REP.map(function(c){return c.l;}));
   var repRows=[repHdr];
@@ -2402,9 +2402,10 @@ function downloadTemplate(){
     });
     return rows;
   }
+  var sampleEmps=[{sap:'001',nome:'Dipendente 1'},{sap:'002',nome:'Dipendente 2'}];
   var wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(buildSheet([])),mName+'_Coop');
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(buildSheet([])),mName+'_ATS');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(buildSheet(sampleEmps)),mName+'_Coop');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(buildSheet(sampleEmps)),mName+'_ATS');
   var legRows=[['SIGLA','DESCRIZIONE']];SIGLE.forEach(function(s){legRows.push([s.code,s.label]);});
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(legRows),'Leggenda');
   XLSX.writeFile(wb,fname+'_template.xlsx');
