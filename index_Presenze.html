@@ -1538,8 +1538,8 @@ function applyHolidayStyles(sheet, dates, month, year, totalRows){
 
 function coopExport(){
   if(!coopEmps.length)return;
-  var y=document.getElementById('cYear').value,m=document.getElementById('cMonth').value;
-  var dates=coopData?coopData.dates:getDates(parseInt(y),parseInt(m));
+  var y=parseInt(document.getElementById('cYear').value),m=parseInt(document.getElementById('cMonth').value);
+  var dates=coopData?coopData.dates:getDates(y,m);
   var mName=MESI[parseInt(m)-1];
   var wb=XLSX.utils.book_new();
   var hdr=['SAP','Nominativo','Responsabile','Plant','Tipo'];
@@ -1761,8 +1761,8 @@ function aSave(){
 
 function atsExport(){
   if(!atsEmps.length)return;
-  var y=document.getElementById('aYear').value,m=document.getElementById('aMonth').value;
-  var dates=atsData?atsData.dates:getDates(parseInt(y),parseInt(m));
+  var y=parseInt(document.getElementById('aYear').value),m=parseInt(document.getElementById('aMonth').value);
+  var dates=atsData?atsData.dates:getDates(y,m);
   var mName=MESI[parseInt(m)-1];
   var wb=XLSX.utils.book_new();
   var hdr=['SAP','Nominativo','Responsabile','Plant','Tipo'];
