@@ -2402,10 +2402,9 @@ function downloadTemplate(){
     });
     return rows;
   }
-  var sampleEmps=[{sap:'001',nome:'Dipendente 1'},{sap:'002',nome:'Dipendente 2'}];
   var wb=XLSX.utils.book_new();
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(buildSheet(sampleEmps)),mName+'_Coop');
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(buildSheet(sampleEmps)),mName+'_ATS');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(buildSheet([])),mName+'_Coop');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(buildSheet([])),mName+'_ATS');
   var legRows=[['SIGLA','DESCRIZIONE']];SIGLE.forEach(function(s){legRows.push([s.code,s.label]);});
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(legRows),'Leggenda');
   XLSX.writeFile(wb,fname+'_template.xlsx');
