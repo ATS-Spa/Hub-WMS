@@ -140,6 +140,9 @@ th.dh.we .dn{color:var(--muted)}th.dh.we .dw{color:var(--border)}
 th.dh.today{background:rgba(20,184,166,.18);border-bottom:2px solid var(--teal)!important}
 th.dh.today .dn{color:var(--teal);font-weight:800}
 th.dh.today .dw{color:rgba(20,184,166,.85)}
+th.dh.holiday .dn{color:var(--red);font-weight:800}
+th.dh.holiday .dw{color:rgba(239,68,68,.7)}
+td.dc.holiday{background:rgba(239,68,68,.07);}
 td.dc.today{background:rgba(20,184,166,.06);box-shadow:inset 1.5px 0 0 rgba(20,184,166,.4),inset -1.5px 0 0 rgba(20,184,166,.4)}
 td.dc{text-align:center;min-width:36px;max-width:36px;padding:4px 2px;font-family:var(--ffc);font-size:13px;font-weight:700}
 td.dc.we{background:rgba(36,48,72,.28)}td.dc.emp{color:rgba(36,48,72,.7)}
@@ -658,6 +661,28 @@ var SUPER_USER = 'atssegnalazioni@gmail.com';
 var MESI  = ['Gennaio','Febbraio','Marzo','Aprile','Maggio','Giugno','Luglio','Agosto','Settembre','Ottobre','Novembre','Dicembre'];
 var GGS   = ['dom','lun','mar','mer','gio','ven','sab'];
 
+// ── Festività nazionali italiane (giorno, mese) + Pasqua calcolata ──
+var FESTIVITA_FISSE=[
+  [1,1],[6,1],[25,4],[1,5],[2,6],[15,8],[1,11],[8,12],[25,12],[26,12]
+];
+function calcPasqua(y){
+  // Algoritmo di Oudin
+  var g=y%19,c=Math.floor(y/100),h=(c-Math.floor(c/4)-Math.floor((8*c+13)/25)+19*g+15)%30;
+  var i=h-Math.floor(h/28)*(1-Math.floor(29/(h+1))*Math.floor((21-g)/11));
+  var j=(y+Math.floor(y/4)+i+2-c+Math.floor(c/4))%7;
+  var l=i-j;var m=3+Math.floor((l+40)/44);var d=l+28-31*Math.floor(m/4);
+  return{day:d,month:m};
+}
+function isHoliday(day,month,year){
+  for(var i=0;i<FESTIVITA_FISSE.length;i++){if(FESTIVITA_FISSE[i][0]===day&&FESTIVITA_FISSE[i][1]===month)return true;}
+  var p=calcPasqua(year);
+  if(p.day===day&&p.month===month)return true;
+  // Lunedì dell'Angelo (Pasquetta)
+  var ep=new Date(year,p.month-1,p.day);ep.setDate(ep.getDate()+1);
+  if(ep.getDate()===day&&ep.getMonth()+1===month)return true;
+  return false;
+}
+
 var SIGLE = [
   {code:'X',    label:'Presenza',         cls:'s-X',    color:'var(--c-X)',    bg:'rgba(16,185,129,.12)', border:'rgba(16,185,129,.35)'},
   {code:'F',    label:'Ferie',            cls:'s-F',    color:'var(--c-F)',    bg:'rgba(59,130,246,.12)', border:'rgba(59,130,246,.35)'},
@@ -676,7 +701,7 @@ var SIGLE = [
 var SM={};SIGLE.forEach(function(s){SM[s.code]=s;});
 
 // ── FIX 1: Sigle disponibili in Coop (modifica qui per aggiungere/rimuovere) ──
-var COOP_SIGLE_CODES = ['X','F','1/2F','M','HP','SW','Lutto','TFS'];
+var COOP_SIGLE_CODES = ['X','F','M','HP','H104','104','CP','HPE','PE'];
 // Le sigle ATS restano tutte quelle in SIGLE (H104, 104, CP, HPE, PE incluse)
 
 var SIGLE_NO_ORARIO=['F','1/2F','M','CP','104','PE','Lutto'];
@@ -1132,7 +1157,7 @@ function renderSection(sec, emps, data, opts){
   h+='<th class="sf ca0" style="z-index:7;font-size:10px">#</th>';
   h+='<th class="sf ca1" style="z-index:7">Dipendente</th>';
   h+='<th class="sf ca2" style="z-index:7">T</th>';
-  dates.forEach(function(d){var w=d.weekday===0||d.weekday===6;h+='<th class="dh'+(w?' we':'')+(d.day===_todayDay?' today':'')+'"><div class="dn">'+d.day+'</div><div class="dw">'+GGS[d.weekday]+'</div></th>';});
+  dates.forEach(function(d){var w=d.weekday===0||d.weekday===6;var hol=isHoliday(d.day,m,y);h+='<th class="dh'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+'"><div class="dn">'+d.day+'</div><div class="dw">'+GGS[d.weekday]+'</div></th>';});
   totHdrs.forEach(function(th){h+='<th class="'+totClass+'" style="min-width:36px;text-align:center;background:var(--card);color:'+th.c+';position:sticky;top:0;z-index:4;border-right:1px solid var(--border);font-family:var(--ffc);font-size:11px;padding:4px 3px">'+th.l+'</th>';});
   if(adminMode)h+='<th style="min-width:28px;background:var(--card);position:sticky;top:0;z-index:4"></th>';
   h+='</tr></thead><tbody>';
@@ -1165,9 +1190,9 @@ function renderSection(sec, emps, data, opts){
       +'</td>';
     h+='<td class="sf ca2" style="font-size:11px;font-weight:700;color:'+(isAts?'var(--teal)':'var(--blue)')+';font-family:var(--ffc)">SIG</td>';
     dates.forEach(function(d,di){
-      var v=(emp.sigla||[])[di]||'';var w=d.weekday===0||d.weekday===6;
+      var v=(emp.sigla||[])[di]||'';var w=d.weekday===0||d.weekday===6;var hol=isHoliday(d.day,m,y);
       var sg=xSig(v);var sc=SM[sg]||null;
-      var cl='dc'+(w?' we':'')+(d.day===_todayDay?' today':'')+(sc?' '+sc.cls:(!v?' emp':''))+(adminMode?' editable':'');
+      var cl='dc'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+(sc?' '+sc.cls:(!v?' emp':''))+(adminMode?' editable':'');
       h+='<td class="'+cl+'"'+(adminMode?' onclick="'+opts.openPickerFn+'('+ri+','+di+',this)"':'')+'>'+esc(v||(!w?'·':''))+'</td>';
     });
     totHdrs.forEach(function(th){
@@ -1180,16 +1205,16 @@ function renderSection(sec, emps, data, opts){
 
     h+='<tr>';
     h+='<td class="sf ca2" style="font-size:11px;color:var(--green);font-family:var(--ffc);font-weight:700">IN</td>';
-    dates.forEach(function(d,di){var v=(emp.ingresso||[])[di]||'';var w=d.weekday===0||d.weekday===6;
-      h+='<td class="dc'+(w?' we':'')+(d.day===_todayDay?' today':'')+(v?' ':' emp')+(adminMode&&!w?' editable':'')+'"'
+    dates.forEach(function(d,di){var v=(emp.ingresso||[])[di]||'';var w=d.weekday===0||d.weekday===6;var hol=isHoliday(d.day,m,y);
+      h+='<td class="dc'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+(v?' ':' emp')+(adminMode&&!w?' editable':'')+'"'
         +(adminMode&&!w?' onclick="'+opts.editOrFn+'(this,'+ri+',\'ingresso\','+di+')"':'')
         +(v?' style="color:var(--green)"':'')+'>'+(v||(!w?'·':''))+'</td>';});
     h+='</tr>';
 
     h+='<tr>';
     h+='<td class="sf ca2" style="font-size:11px;color:var(--red);font-family:var(--ffc);font-weight:700">OUT</td>';
-    dates.forEach(function(d,di){var v=(emp.uscita||[])[di]||'';var w=d.weekday===0||d.weekday===6;
-      h+='<td class="dc'+(w?' we':'')+(d.day===_todayDay?' today':'')+(v?' ':' emp')+(adminMode&&!w?' editable':'')+'"'
+    dates.forEach(function(d,di){var v=(emp.uscita||[])[di]||'';var w=d.weekday===0||d.weekday===6;var hol=isHoliday(d.day,m,y);
+      h+='<td class="dc'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+(v?' ':' emp')+(adminMode&&!w?' editable':'')+'"'
         +(adminMode&&!w?' onclick="'+opts.editOrFn+'(this,'+ri+',\'uscita\','+di+')"':'')
         +(v?' style="color:var(--red)"':'')+'>'+(v||(!w?'·':''))+'</td>';});
     h+='</tr>';
@@ -1353,16 +1378,45 @@ function coopAeConfirm(){
   if(!n){document.getElementById('aeErr').classList.add('show');return;}
   var y=parseInt(document.getElementById('cYear').value),m=parseInt(document.getElementById('cMonth').value);
   var nd=getDates(y,m).length;
+  var empSap=document.getElementById('aeId').value.trim()||('C-'+(coopEmps.length+1).toString().padStart(3,'0'));
+  var empResp=document.getElementById('aeResp').value.trim();
+  var empPlant=document.getElementById('aePlant').value.trim()||document.getElementById('cPlant').value||'';
   var newEmp={
-    nom2:n,nome:n,
-    sap:document.getElementById('aeId').value.trim()||('C-'+(coopEmps.length+1).toString().padStart(3,'0')),
-    resp:document.getElementById('aeResp').value.trim(),
-    plant:document.getElementById('aePlant').value.trim()||document.getElementById('cPlant').value||'',
+    nom2:n,nome:n,sap:empSap,resp:empResp,plant:empPlant,
     sigla:Array(nd).fill(''),ingresso:Array(nd).fill(''),uscita:Array(nd).fill(''),pausa:Array(nd).fill(null),
     _manual:true
   };
-  coopEmps.push(newEmp);
-  mClose('moAddEmp');coopRender();cSave();toast('✓ Aggiunto');
+
+  var targetResp=empResp||document.getElementById('cResp').value||'';
+  var targetPlant=empPlant||document.getElementById('cPlant').value||'';
+  var matchFiles=findAllFiles(targetResp,targetPlant,y,m);
+  var fid=matchFiles.length===1?matchFiles[0].id:(coopFileId||null);
+  var sname=coopData?coopData.sheetName:(MESI[m-1]+'_Coop');
+
+  if(fid&&sname&&coopData){
+    var nextRow=2+(coopEmps.length)*4;
+    var rowN=nextRow,rowI=nextRow+1,rowU=nextRow+2;
+    newEmp._manual=false;
+    newEmp.sheetRows={n:rowN,i:rowI,u:rowU,fileId:fid,sheetName:sname};
+    coopEmps.push(newEmp);
+    mClose('moAddEmp');coopRender();
+    toast('⏳ Salvo su Drive…','warn');
+    var makeRow=function(tipo){
+      var r=[empSap,n,tipo];for(var i=0;i<nd;i++)r.push('');return r;
+    };
+    sheetsBatchUpdate(fid,[
+      {range:sname+'!A'+(rowN+1),values:[makeRow('Sigla')]},
+      {range:sname+'!A'+(rowI+1),values:[makeRow('Ingresso')]},
+      {range:sname+'!A'+(rowU+1),values:[makeRow('Uscita')]},
+      {range:sname+'!A'+(rowU+2),values:[['']]}
+    ]).then(function(){toast('✓ '+n+' aggiunto su Drive');})
+    .catch(function(e){toast('✗ Errore Drive: '+e.message,'err');});
+  }else{
+    newEmp._manual=true;
+    coopEmps.push(newEmp);
+    mClose('moAddEmp');coopRender();
+    toast('✓ Aggiunto (solo locale – nessun file Drive trovato)');
+  }
 }
 
 // ── FIX 3: cDelEmp usa il fileId salvato dentro sheetRows ──
@@ -1442,7 +1496,7 @@ function coopExport(){
   var mName=MESI[parseInt(m)-1];
   var wb=XLSX.utils.book_new();
   var hdr=['SAP','Nominativo','Responsabile','Plant','Tipo'];
-  dates.forEach(function(d){hdr.push(d.day+'/'+GGS[d.weekday]);});
+  dates.forEach(function(d){hdr.push(d.day+'/'+GGS[d.weekday]+(isHoliday(d.day,parseInt(m),parseInt(y))?'*':''));});
   var calRows=[hdr];
   coopEmps.forEach(function(e){
     var mkRow=function(tipo,arr){var r=[e.sap||e.id||'',e.nom2||e.nome||'',e.resp||'',e.plant||'',tipo];(arr||[]).forEach(function(v){r.push(v||'');});return r;};
@@ -1451,11 +1505,19 @@ function coopExport(){
     calRows.push(mkRow('Uscita',e.uscita));
     calRows.push([]);
   });
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(calRows),mName+'_Coop');
+  var coopSheet=XLSX.utils.aoa_to_sheet(calRows);
+  // Colora intestazioni festivi in rosso
+  var festCols=[];dates.forEach(function(d,di){if(isHoliday(d.day,parseInt(m),parseInt(y)))festCols.push(di+5);});
+  festCols.forEach(function(col){
+    var cellAddr=XLSX.utils.encode_cell({r:0,c:col});
+    if(coopSheet[cellAddr]){coopSheet[cellAddr].s={font:{color:{rgb:'CC0000'},bold:true},fill:{fgColor:{rgb:'FFE5E5'}}};}
+  });
+  XLSX.utils.book_append_sheet(wb,coopSheet,mName+'_Coop');
   // Report con sole sigle attive in Coop
   var COOP_REP=[
     {l:'P',k:'X'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},
-    {l:'SW',k:'SW'},{l:'Lutto',k:'Lutto'},{l:'TFS',k:'TFS'},{l:'ORD',k:'ord'},{l:'STR',k:'str'}
+    {l:'H104',k:'H104'},{l:'104',k:'104'},{l:'CP',k:'CP'},{l:'HPE',k:'HPE'},{l:'PE',k:'PE'},
+    {l:'ORD',k:'ord'},{l:'STR',k:'str'}
   ];
   var repHdr=['SAP','Nominativo','Resp.','Plant'].concat(COOP_REP.map(function(c){return c.l;}));
   var repRows=[repHdr];
@@ -1570,15 +1632,50 @@ function aeConfirm(){
   if(!n){document.getElementById('aeErr').classList.add('show');return;}
   var y=parseInt(document.getElementById('aYear').value),m=parseInt(document.getElementById('aMonth').value);
   var nd=getDates(y,m).length;
+  var empId=document.getElementById('aeId').value.trim()||('ATS-'+(atsEmps.length+1).toString().padStart(3,'0'));
+  var empResp=document.getElementById('aeResp').value.trim();
+  var empPlant=document.getElementById('aePlant').value.trim()||document.getElementById('aPlant').value||'';
   var newEmp={
-    nome:n,id:document.getElementById('aeId').value.trim()||('ATS-'+(atsEmps.length+1).toString().padStart(3,'0')),
-    resp:document.getElementById('aeResp').value.trim(),
-    plant:document.getElementById('aePlant').value.trim()||document.getElementById('aPlant').value||'',
+    nome:n,id:empId,resp:empResp,plant:empPlant,
     sigla:Array(nd).fill(''),ingresso:Array(nd).fill(''),uscita:Array(nd).fill(''),pausa:Array(nd).fill(null),
     _manual:true
   };
-  atsEmps.push(newEmp);
-  mClose('moAddEmp');atsRender();aSave();toast('✓ Aggiunto');
+
+  // Cerca il file corretto: rispetta responsabile inserito (o quello del filtro), stesso mese/anno
+  var targetResp=empResp||document.getElementById('aResp').value||'';
+  var targetPlant=empPlant||document.getElementById('aPlant').value||'';
+  var matchFiles=findAllFiles(targetResp,targetPlant,y,m);
+  var fid=matchFiles.length===1?matchFiles[0].id:(atsFileId||null);
+  var sname=atsData?atsData.sheetName:(MESI[m-1]+'_ATS');
+
+  if(fid&&sname&&atsData){
+    // Calcola la prima riga libera dopo l'ultimo dipendente (4 righe per dip: sigla, ingresso, uscita, vuota)
+    var DST=atsData.dayStart||3;
+    // Numero di righe occupate: header (2) + 4 righe per ogni dipendente
+    var nextRow=2+(atsEmps.length)*4; // 0-indexed: riga 0 e 1 sono header
+    var rowN=nextRow, rowI=nextRow+1, rowU=nextRow+2;
+    newEmp._manual=false;
+    newEmp.sheetRows={n:rowN,i:rowI,u:rowU,fileId:fid,sheetName:sname};
+    atsEmps.push(newEmp);
+    mClose('moAddEmp');atsRender();
+    toast('⏳ Salvo su Drive…','warn');
+    // Costruisce le 3 righe (sigla, ingresso, uscita)
+    var makeRow=function(tipo){
+      var r=[empId,n,tipo];for(var i=0;i<nd;i++)r.push('');return r;
+    };
+    sheetsBatchUpdate(fid,[
+      {range:sname+'!A'+(rowN+1),values:[makeRow('Sigla')]},
+      {range:sname+'!A'+(rowI+1),values:[makeRow('Ingresso')]},
+      {range:sname+'!A'+(rowU+1),values:[makeRow('Uscita')]},
+      {range:sname+'!A'+(rowU+2),values:[['']]}
+    ]).then(function(){toast('✓ '+n+' aggiunto su Drive');})
+    .catch(function(e){toast('✗ Errore Drive: '+e.message,'err');});
+  }else{
+    newEmp._manual=true;
+    atsEmps.push(newEmp);
+    mClose('moAddEmp');atsRender();
+    toast('✓ Aggiunto (solo locale – nessun file Drive trovato)');
+  }
 }
 
 // ── FIX 3: aDel usa il fileId salvato dentro sheetRows ──
@@ -1629,13 +1726,19 @@ function atsExport(){
   var mName=MESI[parseInt(m)-1];
   var wb=XLSX.utils.book_new();
   var hdr=['SAP','Nominativo','Responsabile','Plant','Tipo'];
-  dates.forEach(function(d){hdr.push(d.day+'/'+GGS[d.weekday]);});
+  dates.forEach(function(d){hdr.push(d.day+'/'+GGS[d.weekday]+(isHoliday(d.day,parseInt(m),parseInt(y))?'*':''));});
   var calRows=[hdr];
   atsEmps.forEach(function(e){
     var mkRow=function(tipo,arr){var r=[e.id||'',e.nome,e.resp||'',e.plant||'',tipo];(arr||[]).forEach(function(v){r.push(v||'');});return r;};
     calRows.push(mkRow('Sigla',e.sigla));calRows.push(mkRow('Ingresso',e.ingresso));calRows.push(mkRow('Uscita',e.uscita));calRows.push([]);
   });
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(calRows),mName+'_ATS');
+  var atsSheet=XLSX.utils.aoa_to_sheet(calRows);
+  var festColsA=[];dates.forEach(function(d,di){if(isHoliday(d.day,parseInt(m),parseInt(y)))festColsA.push(di+5);});
+  festColsA.forEach(function(col){
+    var cellAddr=XLSX.utils.encode_cell({r:0,c:col});
+    if(atsSheet[cellAddr]){atsSheet[cellAddr].s={font:{color:{rgb:'CC0000'},bold:true},fill:{fgColor:{rgb:'FFE5E5'}}};}
+  });
+  XLSX.utils.book_append_sheet(wb,atsSheet,mName+'_ATS');
   // Report con tutte le sigle ATS
   var ATS_REP=[
     {l:'P',k:'X'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},
