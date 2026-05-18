@@ -708,7 +708,6 @@ function isHoliday(day,month,year){
 var SIGLE = [
   {code:'X',    label:'Presenza',         cls:'s-X',    color:'var(--c-X)',    bg:'rgba(16,185,129,.12)', border:'rgba(16,185,129,.35)'},
   {code:'F',    label:'Ferie',            cls:'s-F',    color:'var(--c-F)',    bg:'rgba(59,130,246,.12)', border:'rgba(59,130,246,.35)'},
-  {code:'1/2F', label:'½ Ferie',          cls:'s-hF',   color:'var(--c-hF)',   bg:'rgba(96,165,250,.12)', border:'rgba(96,165,250,.35)'},
   {code:'M',    label:'Malattia',         cls:'s-M',    color:'var(--c-M)',    bg:'rgba(239,68,68,.12)',  border:'rgba(239,68,68,.35)'},
   {code:'HP',   label:'Ore Permesso',     cls:'s-HP',   color:'var(--c-HP)',   bg:'rgba(168,85,247,.12)', border:'rgba(168,85,247,.35)', hasQty:true},
   {code:'H104', label:'Ore 104',          cls:'s-H104', color:'var(--c-H104)', bg:'rgba(245,158,11,.12)', border:'rgba(245,158,11,.35)', hasQty:true},
@@ -723,8 +722,8 @@ var SIGLE = [
 var SM={};SIGLE.forEach(function(s){SM[s.code]=s;});
 
 // ── FIX 1: Sigle disponibili in Coop (modifica qui per aggiungere/rimuovere) ──
-var COOP_SIGLE_CODES = ['X'];
-// Le sigle ATS restano tutte quelle in SIGLE (H104, 104, CP, HPE, PE incluse)
+var COOP_SIGLE_CODES = ['X','F','M','HP'];
+// Le sigle ATS escludono 1/2F (rimossa dall'array SIGLE)
 
 var SIGLE_NO_ORARIO=['F','M','CP','104','PE','Lutto'];
 
@@ -1138,9 +1137,9 @@ function renderSection(sec, emps, data, opts){
   var dates=data?data.dates:getDates(y,m);
   var _td=new Date(),_todayDay=(_td.getFullYear()===y&&_td.getMonth()+1===m)?_td.getDate():-1;
 
-  var T={X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,ord:0,str:0};
+  var T={X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,ord:0,str:0,fest:0};
   emps.forEach(function(e){
-    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa);
+    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
     Object.keys(T).forEach(function(k){T[k]+=(t[k]||0);});
   });
   var sb=document.getElementById(opts.statsId);sb.style.display='flex';
@@ -1150,7 +1149,7 @@ function renderSection(sec, emps, data, opts){
     {l:'Malattia',v:T.M,c:'var(--c-M)'},{l:'HP',v:T.HP,c:'var(--c-HP)'},
     {l:'H104',v:T.H104,c:'var(--c-H104)'},{l:'SW',v:T.SW,c:'var(--c-SW)'},
     {l:'TFS',v:T.TFS,c:'var(--c-TFS)'},
-    {l:'H.Ord.',v:fmtOre(T.ord),c:'var(--green)'},{l:'H.Str.',v:fmtOre(T.str),c:'var(--amber)'}
+    {l:'H.Ord.',v:fmtOre(T.ord),c:'var(--green)'},{l:'H.Str.',v:fmtOre(T.str),c:'var(--amber)'},{l:'H.Fest.',v:fmtOre(T.fest),c:'var(--red)'}
   ];
   sb.innerHTML=statDefs.filter(function(d){return d.v!==0&&d.v!=='0'&&d.v!=='';})
     .map(function(d){return '<div class="stat" style="border-top:2px solid '+d.c+'"><div class="sl">'+d.l+'</div><div class="sv" style="color:'+d.c+'">'+d.v+'</div></div>';}).join('');
@@ -1162,12 +1161,12 @@ function renderSection(sec, emps, data, opts){
     {l:'HP',c:'var(--c-HP)',k:'HP'},{l:'H104',c:'var(--c-H104)',k:'H104'},{l:'104',c:'var(--c-104)',k:'104'},
     {l:'CP',c:'var(--c-CP)',k:'CP'},{l:'HPE',c:'var(--c-HPE)',k:'HPE'},{l:'PE',c:'var(--c-PE)',k:'PE'},
     {l:'SW',c:'var(--c-SW)',k:'SW'},{l:'Lut',c:'var(--c-Lutto)',k:'Lutto'},{l:'TFS',c:'var(--c-TFS)',k:'TFS'},
-    {l:'ORD',c:'var(--green)',k:'ord'},{l:'STR',c:'var(--amber)',k:'str'}
+    {l:'ORD',c:'var(--green)',k:'ord'},{l:'STR',c:'var(--amber)',k:'str'},{l:'FEST',c:'var(--red)',k:'fest'}
   ];
   // Mappa sigla-code → chiave totale (X=P, Lutto=Lut, ecc.)
   var SIGLA_TO_TOT={X:'X',F:'F','1/2F':'F',M:'M',HP:'HP',H104:'H104','104':'104',CP:'CP',HPE:'HPE',PE:'PE',SW:'SW',Lutto:'Lutto',TFS:'TFS'};
-  var activeSiglaCodes=isAts?SIGLE.map(function(s){return s.code;}):COOP_SIGLE_CODES;
-  var activeTotKeys=['ord','str'];
+  var activeSiglaCodes=isAts?SIGLE.filter(function(s){return ATS_EXCL_CODES.indexOf(s.code)===-1;}).map(function(s){return s.code;}):COOP_SIGLE_CODES;
+  var activeTotKeys=['ord','str','fest'];
   activeSiglaCodes.forEach(function(code){var k=SIGLA_TO_TOT[code];if(k&&activeTotKeys.indexOf(k)===-1)activeTotKeys.push(k);});
   var totHdrs=ALL_TOT_HDRS.filter(function(th){return activeTotKeys.indexOf(th.k)!==-1;});
   var NCOLS_TOT=totHdrs.length;
@@ -1187,7 +1186,7 @@ function renderSection(sec, emps, data, opts){
   var allEmps=isAts?atsEmps:coopEmps;
   emps.forEach(function(emp,ei){
     var ri=allEmps.indexOf(emp);
-    var tots=calcTots(emp.sigla||[],emp.ingresso,emp.uscita,emp.pausa);
+    var tots=calcTots(emp.sigla||[],emp.ingresso,emp.uscita,emp.pausa,dates,m,y);
     var empId=(isAts?'emp_':'cemp_')+ri;
 
     var oreGiorno=dates.map(function(d,di){
@@ -1557,14 +1556,14 @@ function coopExport(){
   XLSX.utils.book_append_sheet(wb,coopSheet,mName+'_Coop');
   // Report con sole sigle attive in Coop
   var COOP_REP=[
-    {l:'P',k:'X'},{l:'ORD',k:'ord'},{l:'STR',k:'str'}
+    {l:'P',k:'X'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},{l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'H.FEST',k:'fest'}
   ];
   var repHdr=['SAP','Nominativo','Resp.','Plant'].concat(COOP_REP.map(function(c){return c.l;}));
   var repRows=[repHdr];
   coopEmps.forEach(function(e){
-    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa);
+    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
     var row=[e.sap||e.id||'',e.nom2||e.nome||'',e.resp||'',e.plant||''];
-    COOP_REP.forEach(function(c){row.push(c.k==='ord'||c.k==='str'?fmtOre(t[c.k])||0:t[c.k]||0);});
+    COOP_REP.forEach(function(c){row.push(c.k==='ord'||c.k==='str'||c.k==='fest'?fmtOre(t[c.k])||0:t[c.k]||0);});
     repRows.push(row);
   });
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(repRows),mName+'_Report_Coop');
@@ -1581,7 +1580,7 @@ function coopPrint(){
   dates.forEach(function(d){h+='<th'+(d.weekday===0||d.weekday===6?' class="we"':'')+'>'+d.day+'</th>';});
   h+='<th>ORD</th><th>STR</th></tr></thead><tbody>';
   coopEmps.forEach(function(e){
-    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa);
+    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
     h+='<tr><td class="nc" rowspan="3">'+esc(e.nom2||e.nome||'')+'</td><td rowspan="3">'+esc(e.sap||e.id||'')+'</td>';
     h+='<td style="color:#14b8a6;font-weight:700">S</td>';
     dates.forEach(function(d,di){h+='<td'+(d.weekday===0||d.weekday===6?' class="we"':'')+'>'+esc((e.sigla||[])[di]||'')+'</td>';});
@@ -1779,14 +1778,14 @@ function atsExport(){
   var ATS_REP=[
     {l:'P',k:'X'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},
     {l:'H104',k:'H104'},{l:'104',k:'104'},{l:'CP',k:'CP'},{l:'HPE',k:'HPE'},{l:'PE',k:'PE'},
-    {l:'SW',k:'SW'},{l:'Lutto',k:'Lutto'},{l:'TFS',k:'TFS'},{l:'ORD',k:'ord'},{l:'STR',k:'str'}
+    {l:'SW',k:'SW'},{l:'Lutto',k:'Lutto'},{l:'TFS',k:'TFS'},{l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'H.FEST',k:'fest'}
   ];
   var atsRepHdr=['SAP','Nominativo','Resp.','Plant'].concat(ATS_REP.map(function(c){return c.l;}));
   var repRows=[atsRepHdr];
   atsEmps.forEach(function(e){
-    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa);
+    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
     var row=[e.id||'',e.nome,e.resp||'',e.plant||''];
-    ATS_REP.forEach(function(c){row.push(c.k==='ord'||c.k==='str'?fmtOre(t[c.k])||0:t[c.k]||0);});
+    ATS_REP.forEach(function(c){row.push(c.k==='ord'||c.k==='str'||c.k==='fest'?fmtOre(t[c.k])||0:t[c.k]||0);});
     repRows.push(row);
   });
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(repRows),mName+'_Report_ATS');
@@ -1803,7 +1802,7 @@ function atsPrint(){
   dates.forEach(function(d){h+='<th'+(d.weekday===0||d.weekday===6?' class="we"':'')+'>'+d.day+'</th>';});
   h+='<th>ORD</th><th>STR</th></tr></thead><tbody>';
   atsEmps.forEach(function(e){
-    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa);
+    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
     h+='<tr><td class="nc" rowspan="3">'+esc(e.nome)+'</td><td rowspan="3">'+esc(e.id||'')+'</td>';
     h+='<td style="color:#14b8a6;font-weight:700">S</td>';
     dates.forEach(function(d,di){h+='<td'+(d.weekday===0||d.weekday===6?' class="we"':'')+'>'+esc((e.sigla||[])[di]||'')+'</td>';});
@@ -2427,8 +2426,8 @@ function calcOreGiorno(ing,usc,pausaOre){
 function timeToMin(t){if(!t)return 0;var p=t.split(':');return parseInt(p[0]||0)*60+parseInt(p[1]||0);}
 function fmtOre(h){if(!h)return '';var i=Math.floor(h),f=h-i;return i+(f===0.5?'.5':f>0?'.'+Math.round(f*10):'');}
 
-function calcTots(sig,ingresso,uscita,pause){
-  var r={X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,ord:0,str:0};
+function calcTots(sig,ingresso,uscita,pause,dates,month,year){
+  var r={X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,ord:0,str:0,fest:0};
   (sig||[]).forEach(function(v,di){
     if(!v)return;
     var sg=xSig(v);
@@ -2437,7 +2436,14 @@ function calcTots(sig,ingresso,uscita,pause){
     if(sg==='X'||sg==='SW'||sg==='TFS'){
       var ing=(ingresso||[])[di]||'',usc2=(uscita||[])[di]||'';
       var ps=(pause||[])[di];var ph=(ps===undefined||ps===null)?1:parseFloat(ps);
-      if(ing&&usc2){var o=calcOreGiorno(ing,usc2,ph);r.ord+=o.ord;r.str+=o.str;}
+      if(ing&&usc2){
+        var o=calcOreGiorno(ing,usc2,ph);
+        // Se il giorno è festivo (non weekend), somma in fest; altrimenti in ord/str
+        var d=dates&&dates[di];
+        var hol=d&&month&&year&&isHoliday(d.day,month,year);
+        if(hol){r.fest+=o.ord+o.str;}
+        else{r.ord+=o.ord;r.str+=o.str;}
+      }
     }
   });
   return r;
