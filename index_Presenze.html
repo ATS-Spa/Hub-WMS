@@ -516,6 +516,28 @@ body.admin-mode .bdel:hover{color:var(--red);background:rgba(239,68,68,.1)}
   </div>
 </div></div>
 
+<div id="moNewFileDips" class="mo hide"><div class="mc" style="width:520px;max-height:85vh;display:flex;flex-direction:column">
+  <div class="mt">👥 Aggiungi Dipendenti</div>
+  <div class="ms" id="nfdSub" style="color:var(--subtle);font-size:12px"></div>
+  <div style="display:flex;gap:8px;align-items:flex-end;margin-top:4px;flex-wrap:wrap">
+    <div class="fg" style="flex:2"><div class="fl">Nominativo *</div><input class="mi" id="nfdNome" type="text" placeholder="Cognome Nome" autocomplete="off" onkeydown="if(event.key==='Enter')nfdAdd()"></div>
+    <div class="fg" style="flex:1"><div class="fl">ExtEmpN_SAP</div><input class="mi" id="nfdSap" type="text" placeholder="001" autocomplete="off" onkeydown="if(event.key==='Enter')nfdAdd()"></div>
+    <div class="fg" style="flex:1"><div class="fl">Plant</div><input class="mi" id="nfdPlant" type="text" placeholder="Es. P52" autocomplete="off" onkeydown="if(event.key==='Enter')nfdAdd()"></div>
+    <button class="ba bteal" onclick="nfdAdd()" style="flex-shrink:0;margin-bottom:0">＋</button>
+  </div>
+  <div class="merr" id="nfdErr">Inserisci il nominativo.</div>
+  <div style="margin-top:10px;flex:1;overflow-y:auto;min-height:60px;max-height:260px;border:1px solid var(--border);border-radius:8px;background:var(--card)">
+    <div id="nfdList" style="padding:6px 0">
+      <div id="nfdEmpty" style="text-align:center;color:var(--muted);font-size:12px;padding:20px">Nessun dipendente aggiunto ancora</div>
+    </div>
+  </div>
+  <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">Premi Invio o ＋ per aggiungere. Puoi aggiungerne altri in seguito con ＋ Dipendente.</div>
+  <div class="mbtns" style="margin-top:10px">
+    <button class="mbtn cancel" onclick="nfdSkip()">Salta (file vuoto)</button>
+    <button class="mbtn ok" id="nfdSaveBtn" onclick="nfdSave()" disabled>💾 Salva su Drive</button>
+  </div>
+</div></div>
+
 <div id="moConf" class="mo hide"><div class="mc" style="width:360px">
   <div class="mt" id="confTitle">Conferma</div>
   <div class="ms" id="confMsg" style="margin-top:0;color:var(--subtle);font-size:13px"></div>
@@ -2084,24 +2106,124 @@ function fileOpenExisting(){
   else{toast('File non trovato su Drive','warn');}
 }
 
+// ═══════════════════════════════════════════════════════════
+//  MODAL DIPENDENTI NUOVO FILE
+// ═══════════════════════════════════════════════════════════
+var _nfdCtx={ssId:null,fname:null,resp:null,plant:null,y:null,m:null,mName:null,dates:null,emps:[]};
+
+function nfdOpen(ssId,fname,resp,plant,y,m,mName,dates){
+  _nfdCtx={ssId:ssId,fname:fname,resp:resp,plant:plant,y:y,m:m,mName:mName,dates:dates,emps:[]};
+  document.getElementById('nfdSub').textContent='File: '+fname+' · Aggiungi i dipendenti da inserire nel foglio';
+  document.getElementById('nfdNome').value='';
+  document.getElementById('nfdSap').value='';
+  document.getElementById('nfdPlant').value=plant||'';
+  document.getElementById('nfdErr').classList.remove('show');
+  document.getElementById('nfdSaveBtn').disabled=true;
+  nfdRenderList();
+  mOpen('moNewFileDips');
+  setTimeout(function(){document.getElementById('nfdNome').focus();},120);
+}
+
+function nfdRenderList(){
+  var list=document.getElementById('nfdList');
+  var emps=_nfdCtx.emps;
+  if(!emps.length){
+    list.innerHTML='<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px">Nessun dipendente aggiunto ancora</div>';
+    document.getElementById('nfdSaveBtn').disabled=true;
+    return;
+  }
+  var h='';
+  emps.forEach(function(e,i){
+    h+='<div style="display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid rgba(36,48,72,.4)">'
+      +'<span style="font-size:10px;color:var(--muted);min-width:18px;font-family:var(--ffm)">'+(i+1)+'</span>'
+      +'<span style="font-weight:700;font-size:13px;flex:1">'+esc(e.nome)+'</span>'
+      +(e.sap?'<span style="font-family:var(--ffm);font-size:11px;color:var(--muted)">#'+esc(e.sap)+'</span>':'')
+      +(e.plant?'<span style="font-size:11px;color:var(--blue);font-family:var(--ffc);font-weight:700;margin-left:4px">'+esc(e.plant)+'</span>':'')
+      +'<button onclick="nfdRemove('+i+')" style="background:none;border:none;color:var(--border);cursor:pointer;font-size:13px;padding:2px 5px;border-radius:3px" onmouseover="this.style.color=\'var(--red)\'" onmouseout="this.style.color=\'var(--border)\'">✕</button>'
+      +'</div>';
+  });
+  list.innerHTML=h;
+  document.getElementById('nfdSaveBtn').disabled=false;
+}
+
+function nfdAdd(){
+  var n=document.getElementById('nfdNome').value.trim();
+  if(!n){document.getElementById('nfdErr').classList.add('show');return;}
+  document.getElementById('nfdErr').classList.remove('show');
+  _nfdCtx.emps.push({
+    nome:n,
+    sap:document.getElementById('nfdSap').value.trim(),
+    plant:document.getElementById('nfdPlant').value.trim()||_nfdCtx.plant||''
+  });
+  document.getElementById('nfdNome').value='';
+  document.getElementById('nfdSap').value='';
+  nfdRenderList();
+  setTimeout(function(){document.getElementById('nfdNome').focus();},50);
+}
+
+function nfdRemove(i){
+  _nfdCtx.emps.splice(i,1);
+  nfdRenderList();
+}
+
+function nfdSkip(){
+  mClose('moNewFileDips');
+  if(confirm('"'+_nfdCtx.fname+'" creato su Drive (senza dipendenti).\nAprirlo in Google Sheets?'))
+    window.open('https://docs.google.com/spreadsheets/d/'+_nfdCtx.ssId+'/edit','_blank');
+}
+
+function nfdSave(){
+  var emps=_nfdCtx.emps;
+  if(!emps.length)return;
+  var ctx=_nfdCtx;
+  var allRows=[];
+  emps.forEach(function(emp,i){
+    var baseRow=2+i*4;
+    var sig=[emp.sap||'',emp.nome||'','Sigla'];ctx.dates.forEach(function(){sig.push('');});
+    var ing=[emp.sap||'',emp.nome||'','Ingresso'];ctx.dates.forEach(function(){ing.push('');});
+    var usc=[emp.sap||'',emp.nome||'','Uscita'];ctx.dates.forEach(function(){usc.push('');});
+    allRows.push({range:ctx.mName+'_Coop!A'+(baseRow+1),values:[sig]});
+    allRows.push({range:ctx.mName+'_Coop!A'+(baseRow+2),values:[ing]});
+    allRows.push({range:ctx.mName+'_Coop!A'+(baseRow+3),values:[usc]});
+    allRows.push({range:ctx.mName+'_Coop!A'+(baseRow+4),values:[['']]});
+    allRows.push({range:ctx.mName+'_ATS!A'+(baseRow+1),values:[sig]});
+    allRows.push({range:ctx.mName+'_ATS!A'+(baseRow+2),values:[ing]});
+    allRows.push({range:ctx.mName+'_ATS!A'+(baseRow+3),values:[usc]});
+    allRows.push({range:ctx.mName+'_ATS!A'+(baseRow+4),values:[['']]});
+  });
+  mClose('moNewFileDips');
+  toast('⏳ Salvo '+emps.length+' dipendenti su Drive…','warn');
+  sheetsBatchUpdate(ctx.ssId,allRows)
+    .then(function(){
+      toast('✅ '+emps.length+' dipendenti salvati!');
+      loadAllFiles();
+      if(confirm('"'+ctx.fname+'" creato con '+emps.length+' dipendenti.\nAprirlo in Google Sheets?'))
+        window.open('https://docs.google.com/spreadsheets/d/'+ctx.ssId+'/edit','_blank');
+    })
+    .catch(function(e){toast('✗ Errore salvataggio: '+e.message,'err');});
+}
+
+
 function buildAndCreateSpreadsheet(fname,resp,plant,y,m,mName,dates,extraEmps){
   var h0=['Resp. '+resp,'Dipendenti ATS','Plant','Data'];
   var h1=['ExtEmpN_SAP','Nominativo','Plant '+plant,mName.substring(0,3).toLowerCase()+'-'+String(y).slice(2)];
   dates.forEach(function(d){h0.push(d.day);h1.push(GGS[d.weekday]);});
 
-  var sampleEmps=extraEmps&&extraEmps.length?extraEmps:[{sap:'',nome:'Dipendente 1',plant:plant,resp:resp},{sap:'',nome:'Dipendente 2',plant:plant,resp:resp}];
+  // Se arrivano dipendenti dall'import, li usa; altrimenti foglio vuoto (solo intestazioni)
   function buildEmpRows(rows,emps){
-    emps.forEach(function(emp){
-      var sig=[emp.sap||'',emp.nome||'','Sigla'];dates.forEach(function(){sig.push('');});rows.push(sig);
-      var ing=[emp.sap||'',emp.nome||'','Ingresso'];dates.forEach(function(){ing.push('');});rows.push(ing);
-      var usc=[emp.sap||'',emp.nome||'','Uscita'];dates.forEach(function(){usc.push('');});rows.push(usc);
-      rows.push([]);
-    });
+    if(emps&&emps.length){
+      emps.forEach(function(emp){
+        var sig=[emp.sap||'',emp.nome||'','Sigla'];dates.forEach(function(){sig.push('');});rows.push(sig);
+        var ing=[emp.sap||'',emp.nome||'','Ingresso'];dates.forEach(function(){ing.push('');});rows.push(ing);
+        var usc=[emp.sap||'',emp.nome||'','Uscita'];dates.forEach(function(){usc.push('');});rows.push(usc);
+        rows.push([]);
+      });
+    }
     return rows;
   }
 
-  var coopRows=buildEmpRows([h0,h1],sampleEmps);
-  var atsRows=buildEmpRows([h0,h1],sampleEmps);
+  var coopRows=buildEmpRows([h0,h1],extraEmps);
+  var atsRows=buildEmpRows([h0,h1],extraEmps);
   var legRows=[['SIGLA','DESCRIZIONE','NOTE']];
   SIGLE.forEach(function(s){legRows.push([s.code,s.label,s.hasQty?'Es. 1'+s.code:'']);});
 
@@ -2126,8 +2248,14 @@ function buildAndCreateSpreadsheet(fname,resp,plant,y,m,mName,dates,extraEmps){
   }).then(function(ssId){
     toast('✅ Spreadsheet creato: '+fname);
     loadAllFiles();
-    if(confirm('"'+fname+'" creato su Drive.\nAprirlo in Google Sheets?'))
-      window.open('https://docs.google.com/spreadsheets/d/'+ssId+'/edit','_blank');
+    // Se arrivano dipendenti dall'import non serve il modal manuale
+    if(extraEmps&&extraEmps.length){
+      if(confirm('"'+fname+'" creato su Drive con '+extraEmps.length+' dipendenti.\nAprirlo in Google Sheets?'))
+        window.open('https://docs.google.com/spreadsheets/d/'+ssId+'/edit','_blank');
+    }else{
+      // Apri modal per inserimento dipendenti
+      nfdOpen(ssId,fname,resp,plant,y,m,mName,dates);
+    }
   }).catch(function(e){toast('✗ '+e.message,'err');});
 }
 
