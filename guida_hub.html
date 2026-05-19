@@ -1628,8 +1628,8 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
       <div class="step-header">
         <span class="step-num amber">●</span>
         <div>
-          <div class="step-title"><span class="tag" style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:var(--green)">Dettagli Carico</span> — Articoli caricati</div>
-          <div class="step-body">Una riga per ogni articolo caricato nella spedizione. Contiene quantità, volumi, pesi e altri attributi logistici. La colonna DESTINO è mostrata come prima colonna extra per facilitare la lettura.</div>
+          <div class="step-title"><span class="tag" style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:var(--green)">Dettagli Carico</span> — Pallet caricati</div>
+          <div class="step-body">Una riga per ogni tipo di pallet caricato nella spedizione. Contiene quantità, volumi, pesi e altri attributi logistici. La colonna DESTINO è mostrata come prima colonna extra per facilitare la lettura.</div>
         </div>
       </div>
     </div>
@@ -1637,8 +1637,8 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
       <div class="step-header">
         <span class="step-num amber">●</span>
         <div>
-          <div class="step-title"><span class="tag blue">Dettagli ODP</span> — Ordini di produzione</div>
-          <div class="step-body">Una riga per ogni ODP (Ordine Di Produzione) collegato alla spedizione. Contiene numero ODP, quantità e attributi specifici della produzione.</div>
+          <div class="step-title"><span class="tag blue">Dettagli ODP</span> — Ordini di prelievo</div>
+          <div class="step-body">Una riga per ogni ODP (Ordine Di Prelievo) collegato alla spedizione. Contiene numero ODP, quantità e attributi specifici del prelievo.</div>
         </div>
       </div>
     </div>
@@ -2079,7 +2079,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
   <div class="chapter-header">
     <div class="ch-tag green">Introduzione · Passo 2 di 8</div>
     <h1 class="ch-title">Accesso e Login</h1>
-    <p class="ch-desc">Il GRN Manager richiede l'autenticazione Google per accedere ai file DDT nella cartella Drive e al foglio VLT (valori di riferimento per SAP B1).</p>
+    <p class="ch-desc">Il GRN Manager richiede l'autenticazione Google per accedere ai file DDT nella cartella Drive. Per la commessa FLM, dopo il login sono disponibili anche i pulsanti VLT e FLM per la comunicazione con il sistema del cliente.</p>
   </div>
 
   <div class="steps">
@@ -2110,7 +2110,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
         <span class="step-num green">2</span>
         <div>
           <div class="step-title">Topbar e pulsanti speciali</div>
-          <div class="step-body">Dopo il login la topbar mostra nome utente e quattro pulsanti aggiuntivi: <strong>↻ VLT</strong> (ricarica dati di riferimento), <strong>📡 FLM</strong> (invia dati al Tampermonkey), <strong>🔑 Permessi</strong> (solo super utente) ed <strong>Esci</strong>.</div>
+          <div class="step-body">Dopo il login la topbar mostra nome utente e i pulsanti principali. Per la commessa FLM compaiono anche <strong>↻ VLT</strong> (ricarica dati dal sistema cliente VLT) e <strong>📡 FLM</strong> (invia dati al Tampermonkey per la chiusura item). Tutti hanno inoltre <strong>🔑 Permessi</strong> (solo super utente) ed <strong>Esci</strong>.</div>
         </div>
       </div>
       <div class="step-detail">
@@ -2135,14 +2135,14 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
       <div class="step-header">
         <span class="step-num green">3</span>
         <div>
-          <div class="step-title">Caricamento automatico VLT</div>
-          <div class="step-body">All'accesso il modulo carica automaticamente il foglio VLT da Google Sheets. Questo foglio contiene i valori di riferimento usati per calcolare le note e validare le righe DDT. Se il caricamento fallisce, compare un avviso arancione.</div>
+          <div class="step-title">Caricamento automatico VLT (solo commessa FLM)</div>
+          <div class="step-body">Per la commessa FLM, all'accesso il modulo carica automaticamente i dati dal sistema VLT del cliente. Questi dati vengono usati per calcolare le note e validare le righe DDT prima della chiusura. Se il caricamento fallisce, compare un avviso arancione.</div>
         </div>
       </div>
       <div class="step-detail">
         <div class="infobox tip">
           <span class="ib-icon">💡</span>
-          <div class="ib-body">Se vuoi aggiornare i dati VLT senza ricaricare la pagina, usa il pulsante <strong>↻ VLT</strong> nella topbar. I dati vengono aggiornati in background.</div>
+          <div class="ib-body">Se vuoi aggiornare i dati VLT senza ricaricare la pagina, usa il pulsante <strong>↻ VLT</strong> nella topbar. I dati vengono aggiornati in background. Questo pulsante è visibile solo sulla commessa FLM.</div>
         </div>
       </div>
     </div>
@@ -2265,8 +2265,8 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
       <div class="step-header">
         <span class="step-num green">2</span>
         <div>
-          <div class="step-title">Colonna NOTE e integrazione VLT</div>
-          <div class="step-body">La colonna <strong>NOTE</strong> viene calcolata automaticamente incrociando i dati del DDT con il foglio VLT. Indica eventuali discrepanze, articoli non trovati o valori fuori tolleranza da segnalare a SAP.</div>
+          <div class="step-title">Colonna NOTE e integrazione VLT (commessa FLM)</div>
+          <div class="step-body">Per la commessa FLM la colonna <strong>NOTE</strong> viene calcolata automaticamente incrociando i dati del DDT con quelli ricevuti dal sistema VLT del cliente. Indica eventuali discrepanze o item da verificare prima della chiusura. Per le altre commesse le NOTE sono gestite manualmente.</div>
         </div>
       </div>
       <div class="step-detail">
@@ -2393,7 +2393,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
   <div class="chapter-header">
     <div class="ch-tag green">Operatività · Passo 6 di 8</div>
     <h1 class="ch-title">FLM e VLT</h1>
-    <p class="ch-desc">FLM e VLT sono due integrazioni specifiche del GRN Manager per l'automazione SAP B1. Il VLT fornisce i dati di riferimento; il FLM invia i dati aperti allo script Tampermonkey installato nel browser.</p>
+    <p class="ch-desc">VLT è il nome del sistema del cliente usato dalla commessa FLM. Sia il pulsante VLT che il pulsante FLM sono presenti <strong>esclusivamente per la commessa FLM</strong>: serve comunicare con il sistema VLT del cliente per la chiusura degli item entrati. Le altre commesse registrano le GR normalmente, senza nessuna integrazione esterna.</p>
   </div>
 
   <div class="steps">
@@ -2401,14 +2401,14 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
       <div class="step-header">
         <span class="step-num green">1</span>
         <div>
-          <div class="step-title">VLT — Foglio valori di riferimento</div>
-          <div class="step-body">Il VLT è un Google Sheet condiviso che contiene i valori di riferimento per la validazione dei DDT (quantità attese, codici articolo, tolleranze). Il modulo lo carica automaticamente all'accesso.</div>
+          <div class="step-title">VLT — Sistema del cliente FLM</div>
+          <div class="step-body">VLT è il sistema esterno del cliente FLM. Il GRN Manager si connette ad esso per scaricare i dati necessari alla validazione delle righe DDT (item attesi, quantità, riferimenti). Il caricamento avviene automaticamente all'accesso quando si è sulla commessa FLM.</div>
         </div>
       </div>
       <div class="step-detail">
         <div class="infobox info">
           <span class="ib-icon">ℹ️</span>
-          <div class="ib-body">Il pulsante <strong>↻ VLT</strong> nella topbar ricarica il foglio VLT senza ricaricare la pagina. Utile quando il foglio VLT è stato aggiornato nel frattempo da un collega.</div>
+          <div class="ib-body">Il pulsante <strong>↻ VLT</strong> nella topbar aggiorna i dati dal sistema VLT senza ricaricare la pagina. Utile se nel frattempo il cliente ha aggiornato i dati sul suo sistema.</div>
         </div>
       </div>
     </div>
@@ -2417,8 +2417,8 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
       <div class="step-header">
         <span class="step-num green">2</span>
         <div>
-          <div class="step-title">FLM — Invio dati a SAP tramite Tampermonkey</div>
-          <div class="step-body">Il pulsante <strong style="color:var(--amber)">📡 FLM</strong> invia i dati delle bolle aperte allo script Tampermonkey installato nel browser. Lo script automatizza l'inserimento in SAP B1, riducendo il lavoro manuale.</div>
+          <div class="step-title">FLM — Chiusura item per la commessa FLM</div>
+          <div class="step-body">Il pulsante <strong style="color:var(--amber)">📡 FLM</strong> è attivo <strong>solo per la commessa FLM</strong>. Invia i dati delle bolle aperte allo script Tampermonkey installato nel browser, che comunica con il sistema del cliente per chiudere gli item entrati. Le altre commesse non usano questo flusso: le loro GR vengono salvate normalmente senza nessun invio esterno.</div>
         </div>
       </div>
       <div class="step-detail">
