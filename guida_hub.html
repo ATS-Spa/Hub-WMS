@@ -1,0 +1,2654 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Guida · WMS Hub</title>
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<style>
+:root {
+  --bg:#0b0f18; --surface:#131929; --card:#1a2236; --border:#243048;
+  --blue:#3b82f6; --teal:#14b8a6; --amber:#f59e0b; --green:#10b981;
+  --red:#ef4444; --purple:#a855f7; --cyan:#06b6d4;
+  --text:#e2e8f0; --muted:#64748b; --subtle:#94a3b8;
+  --ff:'IBM Plex Sans',sans-serif; --ffm:'IBM Plex Mono',monospace; --ffc:'Barlow Condensed',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{background:var(--bg);color:var(--text);font-family:var(--ff);font-size:14px;line-height:1.6}
+
+/* ── MODULE SWITCHER ── */
+.mod-switcher{position:fixed;top:0;left:0;right:0;height:48px;background:var(--bg);border-bottom:1px solid var(--border);z-index:400;display:flex;align-items:center;gap:0;padding:0 0 0 260px}
+.mod-btn{height:48px;padding:0 22px;border:none;background:none;border-bottom:3px solid transparent;font-family:var(--ffc);font-size:13px;font-weight:700;letter-spacing:.5px;color:var(--muted);cursor:pointer;transition:all .18s;display:flex;align-items:center;gap:7px;margin-bottom:-1px}
+.mod-btn:hover{color:var(--subtle)}
+.mod-btn.active-p{color:var(--blue);border-bottom-color:var(--blue)}
+.mod-btn.active-s{color:var(--amber);border-bottom-color:var(--amber)}
+.mod-btn.active-g{color:var(--green);border-bottom-color:var(--green)}
+.mod-icon{font-size:15px}
+
+/* ── LAYOUT ── */
+.layout{display:flex;min-height:100vh;padding-top:48px}
+.sidebar{width:260px;flex-shrink:0;background:var(--surface);border-right:1px solid var(--border);position:fixed;top:48px;left:0;height:calc(100vh - 48px);overflow-y:auto;padding:20px 0 40px;transition:opacity .2s}
+.content{flex:1;max-width:820px;padding:48px 48px 80px;overflow:hidden;margin-left:260px}
+
+/* ── SIDEBAR ── */
+.sb-logo{padding:0 20px 16px;border-bottom:1px solid var(--border);margin-bottom:12px}
+.sb-logo-title{font-family:var(--ffc);font-size:20px;font-weight:800;letter-spacing:1.5px}
+.sb-logo-title .c1{color:var(--blue)}.sb-logo-title .c2{color:var(--teal)}.sb-logo-title .c3{color:var(--subtle);font-weight:500}
+.sb-logo-sub{font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-top:3px}
+
+.sb-sect{font-size:9px;font-weight:700;letter-spacing:2px;text-transform:uppercase;color:var(--muted);padding:14px 20px 5px}
+.sb-link{display:flex;align-items:center;gap:10px;padding:9px 20px;color:var(--muted);text-decoration:none;font-size:13px;transition:all .15s;border-left:2px solid transparent;cursor:pointer}
+.sb-link:hover{color:var(--subtle);background:rgba(255,255,255,.03)}
+.sb-link.active{border-left-color:var(--teal);background:rgba(20,184,166,.05)}
+.sb-link.active-p{color:var(--blue);border-left-color:var(--blue);background:rgba(59,130,246,.05)}
+.sb-link.active-s{color:var(--amber);border-left-color:var(--amber);background:rgba(245,158,11,.05)}
+.sb-link.active-g{color:var(--green);border-left-color:var(--green);background:rgba(16,185,129,.05)}
+.sb-link .icon{font-size:14px;width:18px;text-align:center;flex-shrink:0}
+.sb-link .num{margin-left:auto;font-family:var(--ffm);font-size:10px;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:1px 7px;color:var(--muted)}
+
+.progress-bar{margin:20px 20px 0;background:var(--card);border:1px solid var(--border);border-radius:20px;height:5px;overflow:hidden}
+.progress-fill{height:100%;background:linear-gradient(90deg,var(--teal),var(--blue));border-radius:20px;transition:width .4s ease;width:0%}
+.progress-label{font-size:10px;color:var(--muted);padding:5px 20px 0;font-family:var(--ffm)}
+
+/* ── CONTENT ── */
+.module-panel{display:none}
+.module-panel.active{display:block}
+
+.chapter{display:none;animation:fadeIn .3s ease}
+.chapter.active{display:block}
+@keyframes fadeIn{from{opacity:0;transform:translateY(8px)}to{opacity:1;transform:translateY(0)}}
+
+.chapter-header{margin-bottom:36px}
+.ch-tag{font-size:10px;font-weight:700;letter-spacing:2.5px;text-transform:uppercase;color:var(--teal);font-family:var(--ffc);margin-bottom:10px}
+.ch-tag.amber{color:var(--amber)}
+.ch-tag.green{color:var(--green)}
+.ch-title{font-family:var(--ffc);font-size:36px;font-weight:800;letter-spacing:1px;line-height:1.1;color:var(--text)}
+.ch-desc{font-size:15px;color:var(--subtle);margin-top:12px;line-height:1.7;max-width:620px}
+
+/* ── STEP CARDS ── */
+.steps{display:flex;flex-direction:column;gap:16px;margin-bottom:32px}
+.step{background:var(--surface);border:1px solid var(--border);border-radius:14px;overflow:hidden;transition:border-color .2s}
+.step:hover{border-color:rgba(20,184,166,.3)}
+.step-header{display:flex;align-items:flex-start;gap:16px;padding:20px 22px}
+.step-num{font-family:var(--ffc);font-size:22px;font-weight:800;color:var(--teal);opacity:.5;flex-shrink:0;width:28px;line-height:1}
+.step-num.amber{color:var(--amber)}
+.step-num.green{color:var(--green)}
+.step-title{font-family:var(--ffc);font-size:17px;font-weight:700;letter-spacing:.3px;color:var(--text);margin-bottom:6px}
+.step-body{font-size:13px;color:var(--subtle);line-height:1.7}
+.step-detail{padding:0 22px 20px 66px}
+
+/* ── SCREEN MOCKUP ── */
+.mockup{background:var(--bg);border:1px solid var(--border);border-radius:10px;overflow:hidden;margin:16px 0;font-size:12px}
+.mock-bar{background:var(--card);border-bottom:1px solid var(--border);padding:8px 14px;display:flex;align-items:center;gap:8px}
+.mock-dot{width:8px;height:8px;border-radius:50%}
+.mock-url{font-family:var(--ffm);font-size:10px;color:var(--muted);margin-left:6px;flex:1;background:var(--bg);padding:3px 10px;border-radius:4px}
+.mock-body{padding:16px}
+
+/* ── SCREEN ELEMENTS ── */
+.screen-home{display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:10px}
+.sc-card{border:1px solid var(--border);border-radius:10px;padding:14px;background:var(--surface);cursor:pointer;transition:all .2s;position:relative;overflow:hidden}
+.sc-card.highlight{border-color:rgba(59,130,246,.6);box-shadow:0 0 0 3px rgba(59,130,246,.15);animation:pulse-border 1.5s infinite}
+.sc-card.highlight-a{border-color:rgba(245,158,11,.6);box-shadow:0 0 0 3px rgba(245,158,11,.15);animation:pulse-border-a 1.5s infinite}
+.sc-card.highlight-g{border-color:rgba(16,185,129,.6);box-shadow:0 0 0 3px rgba(16,185,129,.15);animation:pulse-border-g 1.5s infinite}
+@keyframes pulse-border{0%,100%{box-shadow:0 0 0 3px rgba(59,130,246,.15)}50%{box-shadow:0 0 0 6px rgba(59,130,246,.25)}}
+@keyframes pulse-border-a{0%,100%{box-shadow:0 0 0 3px rgba(245,158,11,.15)}50%{box-shadow:0 0 0 6px rgba(245,158,11,.25)}}
+@keyframes pulse-border-g{0%,100%{box-shadow:0 0 0 3px rgba(16,185,129,.15)}50%{box-shadow:0 0 0 6px rgba(16,185,129,.25)}}
+.sc-card-icon{font-size:20px;margin-bottom:6px}
+.sc-card-title{font-family:var(--ffc);font-size:14px;font-weight:700}
+.sc-card-desc{font-size:10px;color:var(--muted);margin-top:3px}
+
+/* ── HAMBURGER MOCK ── */
+.mock-hamburger{position:relative;margin-bottom:14px}
+.hbtn{width:30px;height:30px;background:var(--surface);border:1px solid var(--border);border-radius:7px;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:4px;cursor:pointer;transition:all .2s}
+.hbtn:hover{background:var(--card)}
+.hbar{width:13px;height:2px;background:var(--subtle);border-radius:2px}
+.hbtn.glow{box-shadow:0 0 0 3px rgba(20,184,166,.35);border-color:var(--teal)}
+.arrow-indicator{display:inline-flex;align-items:center;gap:6px;font-size:11px;color:var(--teal);font-family:var(--ffm);margin-left:8px;animation:blink .8s ease infinite}
+@keyframes blink{0%,100%{opacity:1}50%{opacity:.4}}
+
+/* ── DRAWER MOCK ── */
+.drawer-mock{background:var(--surface);border:1px solid var(--border);border-radius:10px;width:200px;padding:12px 0;margin:10px 0}
+.dm-item{display:flex;align-items:center;gap:10px;padding:9px 14px;font-size:12px;color:var(--muted);cursor:pointer;transition:all .15s;border-left:2px solid transparent}
+.dm-item:hover{background:var(--card);color:var(--subtle)}
+.dm-item.act{background:var(--card);color:var(--blue);border-left-color:var(--blue)}
+.dm-item.act-a{background:var(--card);color:var(--amber);border-left-color:var(--amber)}
+.dm-item.act-g{background:var(--card);color:var(--green);border-left-color:var(--green)}
+.dm-item .di{font-size:14px;width:18px;text-align:center}
+
+/* ── INFO BOXES ── */
+.infobox{border-radius:10px;padding:14px 18px;margin:16px 0;font-size:13px;line-height:1.65;display:flex;gap:12px;align-items:flex-start}
+.infobox.tip{background:rgba(20,184,166,.07);border:1px solid rgba(20,184,166,.25)}
+.infobox.warn{background:rgba(245,158,11,.07);border:1px solid rgba(245,158,11,.25)}
+.infobox.info{background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.25)}
+.infobox.danger{background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.25)}
+.ib-icon{font-size:18px;flex-shrink:0;margin-top:1px}
+.ib-body strong{color:var(--text);font-weight:600}
+
+/* ── LEGEND TABLE ── */
+.legend-table{width:100%;border-collapse:collapse;margin:16px 0;font-size:12px}
+.legend-table th{background:var(--card);border:1px solid var(--border);padding:7px 12px;font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--subtle);text-align:left}
+.legend-table td{border:1px solid var(--border);padding:7px 12px;vertical-align:top}
+.legend-table tr:hover td{background:rgba(255,255,255,.015)}
+.sig{font-family:var(--ffc);font-size:14px;font-weight:800;padding:3px 9px;border-radius:5px;display:inline-block}
+
+/* ── CODE INLINE ── */
+code{font-family:var(--ffm);background:var(--card);border:1px solid var(--border);border-radius:4px;padding:1px 6px;font-size:12px;color:var(--cyan)}
+kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border);border-bottom-width:2px;border-radius:5px;padding:2px 8px;font-size:11px;color:var(--text)}
+
+/* ── SECTION DIVIDER ── */
+.divider{border:none;border-top:1px solid var(--border);margin:32px 0}
+
+/* ── NAVIGATION BUTTONS ── */
+.nav-btns{display:flex;gap:12px;margin-top:40px;padding-top:24px;border-top:1px solid var(--border)}
+.nbtn{border:none;border-radius:8px;padding:10px 22px;font-family:var(--ffc);font-size:13px;font-weight:700;letter-spacing:.5px;cursor:pointer;transition:all .2s;display:inline-flex;align-items:center;gap:8px}
+.nbtn.prev{background:var(--card);border:1px solid var(--border);color:var(--subtle)}
+.nbtn.prev:hover{border-color:var(--teal);color:var(--teal)}
+.nbtn.next{background:var(--teal);color:#021a17}
+.nbtn.next:hover{background:#0d9488;transform:translateX(2px)}
+.nbtn.next.amber{background:var(--amber);color:#000}
+.nbtn.next.amber:hover{background:#d97706}
+.nbtn.next.green{background:var(--green);color:#021a10}
+.nbtn.next.green:hover{background:#059669}
+.nbtn:disabled{opacity:.3;cursor:not-allowed;transform:none!important}
+
+/* ── TOPBAR MOCK ── */
+.topbar-mock{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 16px;display:flex;align-items:center;gap:10px;font-size:12px;margin:12px 0}
+.tm-logo{font-family:var(--ffc);font-size:15px;font-weight:800;color:var(--blue)}
+.tm-div{width:1px;height:16px;background:var(--border)}
+.tm-right{margin-left:auto;display:flex;gap:8px;align-items:center}
+.tm-badge{font-family:var(--ffc);font-size:10px;font-weight:700;padding:2px 8px;border-radius:10px;border:1px solid var(--border);color:var(--amber);background:rgba(245,158,11,.08)}
+.tm-badge.admin{color:var(--red);border-color:var(--red);background:rgba(239,68,68,.1)}
+.tm-btn{font-family:var(--ffc);font-size:10px;border:1px solid var(--border);border-radius:5px;padding:3px 9px;color:var(--muted);cursor:pointer;background:none}
+
+/* ── FILTERS MOCK ── */
+.filters-mock{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;display:flex;flex-wrap:wrap;gap:10px;align-items:flex-end;margin:12px 0}
+.fm-group{display:flex;flex-direction:column;gap:4px}
+.fm-label{font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+.fm-input{background:var(--bg);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:11px;color:var(--text);font-family:var(--ffm)}
+.fm-btn{border:none;border-radius:6px;padding:6px 12px;font-family:var(--ffc);font-size:11px;font-weight:700;cursor:pointer}
+.fm-btn.teal{background:var(--teal);color:#021a17}
+.fm-btn.blue{background:var(--blue);color:#fff}
+.fm-btn.amber{background:var(--amber);color:#000}
+.fm-btn.ghost{background:none;border:1px solid var(--border);color:var(--subtle)}
+.fm-btn.highlight{animation:pulse-border-teal 1.2s infinite}
+@keyframes pulse-border-teal{0%,100%{box-shadow:0 0 0 2px rgba(20,184,166,.2)}50%{box-shadow:0 0 0 5px rgba(20,184,166,.35)}}
+
+/* ── TABLE MOCK ── */
+.table-mock{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin:12px 0;font-size:11px}
+.tm-head{background:var(--card);padding:8px 12px;display:flex;gap:8px;align-items:center;border-bottom:1px solid var(--border)}
+.tm-th{font-family:var(--ffc);font-size:10px;font-weight:700;color:var(--muted);letter-spacing:.5px;text-transform:uppercase;text-align:center}
+.tm-row{display:grid;grid-template-columns:24px 130px 40px repeat(7,36px);gap:0;border-bottom:1px solid rgba(36,48,72,.5);align-items:stretch}
+.tm-cell{padding:5px 8px;border-right:1px solid rgba(36,48,72,.4);display:flex;align-items:center;justify-content:center;font-family:var(--ffc);font-size:12px;font-weight:700}
+.tm-cell.name{justify-content:flex-start;font-family:var(--ff);font-weight:500;font-size:11px}
+.tm-cell.mat{font-family:var(--ffm);font-size:10px;color:var(--muted)}
+.cell-X{color:var(--green)}.cell-F{color:var(--blue)}.cell-M{color:var(--red)}.cell-HP{color:var(--purple)}.cell-empty{color:rgba(36,48,72,.7)}
+.cell-today{background:rgba(20,184,166,.08);box-shadow:inset 1.5px 0 0 rgba(20,184,166,.4),inset -1.5px 0 0 rgba(20,184,166,.4)}
+.cell-editable{cursor:cell;transition:all .15s}
+.cell-editable:hover{outline:2px solid var(--teal);background:rgba(20,184,166,.08)}
+
+/* ── MODAL MOCK ── */
+.modal-mock{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:20px;max-width:400px;box-shadow:0 20px 60px rgba(0,0,0,.5);margin:12px auto}
+.mm-title{font-family:var(--ffc);font-size:16px;font-weight:700;margin-bottom:5px}
+.mm-sub{font-size:11px;color:var(--muted);margin-bottom:14px}
+.sig-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:5px;margin-bottom:14px}
+.sig-opt{border:1px solid var(--border);border-radius:6px;padding:7px 4px;text-align:center;font-family:var(--ffc);font-size:10px;font-weight:700;cursor:pointer;background:var(--card);display:flex;flex-direction:column;align-items:center;gap:2px;transition:all .15s}
+.sig-opt:hover{border-color:var(--teal)}
+.sig-opt.sel{border-color:var(--teal);background:rgba(20,184,166,.12)}
+.sig-opt .sc{font-size:13px;font-weight:800}
+.sig-opt .sd{font-size:7px;color:var(--muted);font-family:var(--ff)}
+.mm-orari{background:var(--card);border:1px solid var(--border);border-radius:7px;padding:12px;margin-bottom:12px;display:flex;gap:12px;align-items:center;flex-wrap:wrap}
+.mm-calc{background:rgba(20,184,166,.06);border:1px solid rgba(20,184,166,.2);border-radius:7px;padding:10px;font-family:var(--ffm);font-size:11px;display:flex;gap:14px;margin-bottom:12px}
+.calc-item{display:flex;flex-direction:column;gap:2px}
+.calc-label{font-size:9px;color:var(--muted)}
+.calc-val{font-size:16px;color:var(--teal)}
+.mm-btns{display:flex;justify-content:flex-end;gap:8px}
+.mm-btn{border:none;border-radius:6px;padding:7px 16px;font-family:var(--ffc);font-size:12px;font-weight:700;cursor:pointer}
+.mm-btn.ok{background:var(--teal);color:#021a17}.mm-btn.ok-a{background:var(--amber);color:#000}.mm-btn.ok-g{background:var(--green);color:#021a10}.mm-btn.cancel{background:var(--card);color:var(--muted);border:1px solid var(--border)}
+
+/* ── SECTION NAV MOCK ── */
+.snav-mock{background:var(--card);border:1px solid var(--border);border-radius:8px;padding:0 12px;display:flex;gap:0;margin:12px 0}
+.snb-mock{background:none;border:none;border-bottom:2px solid transparent;padding:9px 16px;font-family:var(--ffc);font-size:12px;font-weight:700;color:var(--muted);cursor:pointer;transition:all .2s;margin-bottom:-1px}
+.snb-mock.on-b{color:var(--blue);border-bottom-color:var(--blue)}
+.snb-mock.on-t{color:var(--teal);border-bottom-color:var(--teal)}
+.snb-mock.on-a{color:var(--amber);border-bottom-color:var(--amber)}
+.snb-mock.on-c{color:var(--cyan);border-bottom-color:var(--cyan)}
+.snb-mock.on-g{color:var(--green);border-bottom-color:var(--green)}
+
+/* ── SCROLLBAR ── */
+::-webkit-scrollbar{width:5px;height:5px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+
+/* ── MOBILE ── */
+@media(max-width:780px){
+  .sidebar{display:none}
+  .mod-switcher{padding-left:12px}
+  .content{padding:24px 20px 60px;margin-left:0}
+  .ch-title{font-size:26px}
+}
+
+/* ── BADGE ROLE ── */
+.role-badge{display:inline-flex;align-items:center;gap:5px;font-family:var(--ffc);font-size:11px;font-weight:700;padding:3px 10px;border-radius:20px}
+.rb-viewer{background:rgba(100,116,139,.1);border:1px solid rgba(100,116,139,.3);color:var(--muted)}
+.rb-admin{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.3);color:var(--red)}
+.rb-super{background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);color:var(--amber)}
+
+/* ── CHECKLIST ── */
+.checklist{list-style:none;display:flex;flex-direction:column;gap:8px;margin:14px 0}
+.checklist li{display:flex;align-items:flex-start;gap:10px;font-size:13px;color:var(--subtle);line-height:1.6}
+.checklist li::before{content:'✓';color:var(--teal);font-weight:700;font-family:var(--ffm);flex-shrink:0;margin-top:1px}
+.checklist.amber li::before{color:var(--amber)}
+.checklist.green li::before{color:var(--green)}
+
+/* ── EXPORT PANEL MOCK ── */
+.export-mock{background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:16px;margin:12px 0}
+.em-title{font-family:var(--ffc);font-size:13px;font-weight:700;color:var(--cyan);margin-bottom:10px;display:flex;align-items:center;gap:6px}
+.em-item{display:flex;align-items:center;gap:10px;padding:8px;background:var(--card);border:1px solid var(--border);border-radius:7px;margin-bottom:6px;font-size:12px}
+
+/* ── TAG ── */
+.tag{display:inline-block;font-family:var(--ffc);font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;letter-spacing:.5px}
+.tag.blue{background:rgba(59,130,246,.12);border:1px solid rgba(59,130,246,.3);color:var(--blue)}
+.tag.teal{background:rgba(20,184,166,.12);border:1px solid rgba(20,184,166,.3);color:var(--teal)}
+.tag.amber{background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.3);color:var(--amber)}
+.tag.red{background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.3);color:var(--red)}
+.tag.purple{background:rgba(168,85,247,.12);border:1px solid rgba(168,85,247,.3);color:var(--purple)}
+.tag.green{background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:var(--green)}
+
+/* ── SHORTCUT TABLE ── */
+.shortcut-table{width:100%;border-collapse:collapse;margin:10px 0;font-size:12px}
+.shortcut-table tr{border-bottom:1px solid var(--border)}
+.shortcut-table td{padding:8px 12px;color:var(--subtle)}
+.shortcut-table td:first-child{color:var(--text);width:160px}
+
+/* ── STATS BAR MOCK ── */
+.stats-mock{display:flex;gap:8px;flex-wrap:wrap;margin:10px 0}
+.stat-item{background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:8px 12px;min-width:80px}
+.stat-label{font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);margin-bottom:3px}
+.stat-val{font-family:var(--ffm);font-size:18px;font-weight:500}
+
+/* ── COMPLETE CHAPTER ── */
+.complete-screen{text-align:center;padding:40px 20px}
+.complete-icon{font-size:60px;margin-bottom:16px;animation:bounce .6s ease}
+@keyframes bounce{0%,100%{transform:translateY(0)}40%{transform:translateY(-12px)}}
+.complete-title{font-family:var(--ffc);font-size:32px;font-weight:800;color:var(--teal);letter-spacing:1px;margin-bottom:10px}
+.complete-title.amber{color:var(--amber)}
+.complete-title.green{color:var(--green)}
+.complete-sub{font-size:15px;color:var(--subtle);line-height:1.7;max-width:500px;margin:0 auto}
+
+/* ── AWB PANEL MOCK ── */
+.awb-panel-mock{background:linear-gradient(135deg,#160f00 0%,#1a1500 50%,#0d1117 100%);border:1px solid var(--amber-dim,#78350f);border-radius:8px;padding:12px 16px;display:flex;align-items:center;gap:14px;flex-wrap:wrap;margin:12px 0}
+.awb-dot{width:7px;height:7px;background:var(--amber);border-radius:50%;animation:pulse 2s infinite}
+@keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
+
+/* ── GENERIC TABLE MOCK ── */
+.gtbl{background:var(--surface);border:1px solid var(--border);border-radius:8px;overflow:hidden;margin:12px 0;font-size:12px}
+.gtbl-head{background:var(--card);border-bottom:1px solid var(--border)}
+.gtbl-th{font-family:var(--ffc);font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--subtle);padding:6px 10px;border-right:1px solid var(--border)}
+.gtbl-row{display:flex;border-bottom:1px solid rgba(36,48,72,.5)}
+.gtbl-cell{padding:6px 10px;border-right:1px solid rgba(36,48,72,.4);font-size:11px;color:var(--subtle);flex:1}
+.gtbl-cell.mono{font-family:var(--ffm);color:var(--amber)}
+.gtbl-cell.green{color:var(--green)}
+.gtbl-cell.blue{color:var(--blue)}
+.gtbl-cell.muted{color:var(--muted)}
+</style>
+</head>
+<body>
+
+<!-- ══ MODULE SWITCHER ══ -->
+<div class="mod-switcher">
+  <button class="mod-btn active-p" id="mbtn-p" onclick="switchModule('p')"><span class="mod-icon">📋</span>Presenze</button>
+  <button class="mod-btn" id="mbtn-s" onclick="switchModule('s')"><span class="mod-icon">📦</span>Spedizioni AWB</button>
+  <button class="mod-btn" id="mbtn-g" onclick="switchModule('g')"><span class="mod-icon">🟢</span>GRN Manager</button>
+</div>
+
+<div class="layout">
+
+<!-- ══ SIDEBAR ══ -->
+<aside class="sidebar" id="sidebar">
+  <div class="sb-logo">
+    <div class="sb-logo-title"><span class="c1">WMS</span> <span class="c2">·</span> <span class="c3">Guida</span></div>
+    <div class="sb-logo-sub" id="sb-sub">📋 Modulo Presenze</div>
+  </div>
+
+  <div class="progress-bar"><div class="progress-fill" id="progressFill"></div></div>
+  <div class="progress-label" id="progressLabel">0 / 8 sezioni</div>
+
+  <!-- Sidebar Presenze -->
+  <div id="sb-p">
+    <div class="sb-sect">Introduzione</div>
+    <a class="sb-link active-p" onclick="goto('p',0)" id="p-nav-0"><span class="icon">🏠</span> Menu Principale <span class="num">1</span></a>
+    <a class="sb-link" onclick="goto('p',1)" id="p-nav-1"><span class="icon">🔑</span> Accesso e Login <span class="num">2</span></a>
+    <div class="sb-sect">Interfaccia</div>
+    <a class="sb-link" onclick="goto('p',2)" id="p-nav-2"><span class="icon">🗂</span> Sezioni del Modulo <span class="num">3</span></a>
+    <a class="sb-link" onclick="goto('p',3)" id="p-nav-3"><span class="icon">🔍</span> Filtri e Ricerca <span class="num">4</span></a>
+    <div class="sb-sect">Operatività</div>
+    <a class="sb-link" onclick="goto('p',4)" id="p-nav-4"><span class="icon">✏️</span> Inserire Presenze <span class="num">5</span></a>
+    <a class="sb-link" onclick="goto('p',5)" id="p-nav-5"><span class="icon">⚡</span> Presenza a Tutti <span class="num">6</span></a>
+    <a class="sb-link" onclick="goto('p',6)" id="p-nav-6"><span class="icon">📤</span> Export e Stampa <span class="num">7</span></a>
+    <div class="sb-sect">Avanzato</div>
+    <a class="sb-link" onclick="goto('p',7)" id="p-nav-7"><span class="icon">🔐</span> Admin e Permessi <span class="num">8</span></a>
+  </div>
+
+  <!-- Sidebar Spedizioni -->
+  <div id="sb-s" style="display:none">
+    <div class="sb-sect">Introduzione</div>
+    <a class="sb-link active-s" onclick="goto('s',0)" id="s-nav-0"><span class="icon">🏠</span> Menu Principale <span class="num">1</span></a>
+    <a class="sb-link" onclick="goto('s',1)" id="s-nav-1"><span class="icon">🔑</span> Accesso e Login <span class="num">2</span></a>
+    <div class="sb-sect">Interfaccia</div>
+    <a class="sb-link" onclick="goto('s',2)" id="s-nav-2"><span class="icon">📅</span> Selezione Data <span class="num">3</span></a>
+    <a class="sb-link" onclick="goto('s',3)" id="s-nav-3"><span class="icon">🔍</span> Filtri e Ricerca <span class="num">4</span></a>
+    <a class="sb-link" onclick="goto('s',4)" id="s-nav-4"><span class="icon">📊</span> Tabelle e Schede <span class="num">5</span></a>
+    <div class="sb-sect">Operatività</div>
+    <a class="sb-link" onclick="goto('s',5)" id="s-nav-5"><span class="icon">📝</span> Inserire AWB <span class="num">6</span></a>
+    <a class="sb-link" onclick="goto('s',6)" id="s-nav-6"><span class="icon">📋</span> Copia ODP <span class="num">7</span></a>
+    <a class="sb-link" onclick="goto('s',7)" id="s-nav-7"><span class="icon">📤</span> Export e Stampa <span class="num">8</span></a>
+    <div class="sb-sect">Avanzato</div>
+    <a class="sb-link" onclick="goto('s',8)" id="s-nav-8"><span class="icon">🔐</span> Modalità Admin <span class="num">9</span></a>
+  </div>
+
+  <!-- Sidebar GRN -->
+  <div id="sb-g" style="display:none">
+    <div class="sb-sect">Introduzione</div>
+    <a class="sb-link active-g" onclick="goto('g',0)" id="g-nav-0"><span class="icon">🏠</span> Menu Principale <span class="num">1</span></a>
+    <a class="sb-link" onclick="goto('g',1)" id="g-nav-1"><span class="icon">🔑</span> Accesso e Login <span class="num">2</span></a>
+    <div class="sb-sect">Interfaccia</div>
+    <a class="sb-link" onclick="goto('g',2)" id="g-nav-2"><span class="icon">📅</span> Selezione Data <span class="num">3</span></a>
+    <a class="sb-link" onclick="goto('g',3)" id="g-nav-3"><span class="icon">🔍</span> Filtri e Tabella <span class="num">4</span></a>
+    <div class="sb-sect">Operatività</div>
+    <a class="sb-link" onclick="goto('g',4)" id="g-nav-4"><span class="icon">✏️</span> Modificare i Dati <span class="num">5</span></a>
+    <a class="sb-link" onclick="goto('g',5)" id="g-nav-5"><span class="icon">📡</span> FLM e VLT <span class="num">6</span></a>
+    <a class="sb-link" onclick="goto('g',6)" id="g-nav-6"><span class="icon">📤</span> Salva CSV <span class="num">7</span></a>
+    <div class="sb-sect">Avanzato</div>
+    <a class="sb-link" onclick="goto('g',7)" id="g-nav-7"><span class="icon">🔑</span> Permessi e Config <span class="num">8</span></a>
+  </div>
+</aside>
+
+<!-- ══ CONTENT ══ -->
+<main class="content">
+
+<!-- ════════════════════════════════
+     MODULO PRESENZE
+     ════════════════════════════════ -->
+<div class="module-panel active" id="panel-p">
+
+<!-- ══ 0: MENU PRINCIPALE ══ -->
+<div class="chapter active" id="p-ch-0">
+  <div class="chapter-header">
+    <div class="ch-tag">Introduzione · Passo 1 di 8</div>
+    <h1 class="ch-title">Menu Principale<br>WMS Hub</h1>
+    <p class="ch-desc">Il WMS Hub è il punto di accesso centralizzato a tutti i moduli: Presenze, Spedizioni AWB e GRN Manager. Dalla schermata iniziale puoi selezionare il modulo che ti serve.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">1</span>
+        <div>
+          <div class="step-title">Apri WMS Hub</div>
+          <div class="step-body">All'avvio vedi la schermata home con tre card cliccabili. Il logo ATS è animato. Puoi tornare qui in qualsiasi momento.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="mockup">
+          <div class="mock-bar">
+            <div class="mock-dot" style="background:#ef4444"></div>
+            <div class="mock-dot" style="background:#f59e0b;margin-left:5px"></div>
+            <div class="mock-dot" style="background:#10b981;margin-left:5px"></div>
+            <div class="mock-url">WMS · Hub</div>
+          </div>
+          <div class="mock-body">
+            <div style="text-align:center;padding:10px 0 18px;font-family:var(--ffc);font-size:26px;font-weight:800">
+              <span style="color:var(--blue)">WM</span><span style="color:var(--teal)">S</span><span style="color:var(--subtle);font-weight:500"> Hub</span>
+            </div>
+            <div style="text-align:center;font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:18px">Seleziona un modulo per iniziare</div>
+            <div class="screen-home">
+              <div class="sc-card highlight">
+                <div class="sc-card-icon">📋</div>
+                <div class="sc-card-title" style="color:var(--blue)">Presenze</div>
+                <div class="sc-card-desc">Gestione turni, assenze e straordinari</div>
+                <div style="font-size:13px;color:var(--blue);margin-top:6px">→</div>
+              </div>
+              <div class="sc-card">
+                <div class="sc-card-icon">📦</div>
+                <div class="sc-card-title" style="color:var(--amber)">Spedizioni AWB</div>
+                <div class="sc-card-desc">Tracking e gestione spedizioni</div>
+                <div style="font-size:13px;color:var(--amber);margin-top:6px">→</div>
+              </div>
+            </div>
+            <div style="max-width:253px;margin:0 auto">
+              <div class="sc-card" style="border-color:rgba(16,185,129,.25)">
+                <div class="sc-card-icon">🟢</div>
+                <div class="sc-card-title" style="color:var(--green)">GRN Manager</div>
+                <div class="sc-card-desc">Entrate merci · integrazione SAP B1</div>
+                <div style="font-size:13px;color:var(--green);margin-top:6px">→</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="infobox tip">
+          <span class="ib-icon">💡</span>
+          <div class="ib-body">La card <strong>Presenze</strong> (evidenziata in blu) è quella da cliccare per accedere al modulo di gestione turni e assenze. Il modulo si aprirà nella stessa finestra.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">2</span>
+        <div>
+          <div class="step-title">Menu laterale (hamburger)</div>
+          <div class="step-body">In alto a sinistra c'è il pulsante ☰ per aprire il menu a tendina. Da lì puoi passare da un modulo all'altro senza tornare alla home.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div style="display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap">
+          <div>
+            <div style="display:flex;align-items:center;margin-bottom:10px">
+              <div class="hbtn glow"><div class="hbar"></div><div class="hbar"></div><div class="hbar"></div></div>
+              <span class="arrow-indicator">← clicca qui</span>
+            </div>
+            <div class="drawer-mock">
+              <div style="padding:10px 14px 8px;border-bottom:1px solid var(--border);margin-bottom:6px;font-family:var(--ffc);font-size:12px;font-weight:700;color:var(--blue)">WMS Hub</div>
+              <div style="font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);padding:6px 14px 3px">Navigazione</div>
+              <div class="dm-item"><span class="di">🏠</span>Home</div>
+              <div style="font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);padding:6px 14px 3px">Moduli</div>
+              <div class="dm-item act"><span class="di">📋</span>Presenze</div>
+              <div class="dm-item"><span class="di">📦</span>Spedizioni AWB</div>
+              <div class="dm-item"><span class="di">🟢</span>GRN Manager</div>
+            </div>
+          </div>
+          <div style="flex:1;min-width:200px">
+            <div class="infobox info">
+              <span class="ib-icon">ℹ️</span>
+              <div class="ib-body">Il modulo attivo è evidenziato (blu per Presenze). Cliccare su un modulo lo carica e il menu si chiude automaticamente.</div>
+            </div>
+            <div class="infobox tip">
+              <span class="ib-icon">⌨️</span>
+              <div class="ib-body"><strong>Scorciatoie da tastiera:</strong><br>
+              <kbd>Alt</kbd>+<kbd>1</kbd> → Presenze<br>
+              <kbd>Alt</kbd>+<kbd>2</kbd> → Spedizioni<br>
+              <kbd>Alt</kbd>+<kbd>3</kbd> → GRN<br>
+              <kbd>Esc</kbd> → chiude menu</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">3</span>
+        <div>
+          <div class="step-title">Aprire il modulo Presenze</div>
+          <div class="step-body">Fai clic sulla card <strong style="color:var(--blue)">Presenze</strong> oppure su <strong style="color:var(--blue)">📋 Presenze</strong> nel menu laterale. Il sistema carica il modulo con un breve spinner di caricamento.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" disabled>← Precedente</button>
+    <button class="nbtn next" onclick="goto('p',1)">Accesso e Login →</button>
+  </div>
+</div>
+
+<!-- ══ 1: LOGIN ══ -->
+<div class="chapter" id="p-ch-1">
+  <div class="chapter-header">
+    <div class="ch-tag">Introduzione · Passo 2 di 8</div>
+    <h1 class="ch-title">Accesso e Login</h1>
+    <p class="ch-desc">Il modulo Presenze richiede l'autenticazione con un account Google. L'accesso viene gestito tramite un file di configurazione nella cartella Drive condivisa.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">1</span>
+        <div>
+          <div class="step-title">Schermata di login</div>
+          <div class="step-body">Alla prima apertura (o dopo il logout) compare la schermata di accesso. Clicca il pulsante <strong>Accedi con Google</strong>.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div style="max-width:380px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;text-align:center;margin:12px 0">
+          <div style="font-family:var(--ffc);font-size:26px;font-weight:800;margin-bottom:8px"><span style="color:var(--blue)">WMS</span> <span style="color:var(--teal)">·</span> <span style="color:var(--subtle);font-weight:500">Presenze</span></div>
+          <div style="display:inline-block;font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;padding:3px 12px;background:var(--card);border-radius:20px;margin-bottom:16px">📋 Cooperativa &amp; ATS · Gestione Mensile</div>
+          <p style="font-size:12px;color:var(--subtle);line-height:1.7;margin-bottom:20px">Accedi con Google per visualizzare e gestire i fogli presenze. L'accesso ai dati è regolato dal profilo assegnato.</p>
+          <button style="display:inline-flex;align-items:center;gap:10px;background:#fff;color:#1f2937;border:none;border-radius:8px;padding:11px 22px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.3)">
+            <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+            Accedi con Google
+          </button>
+          <p style="font-size:10px;color:var(--muted);margin-top:14px;line-height:1.5">L'accesso è regolato da <code>config_presenze.json</code> nella cartella Drive condivisa.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">2</span>
+        <div>
+          <div class="step-title">Profili di accesso</div>
+          <div class="step-body">Ogni utente ha un profilo definito dall'amministratore. Il profilo determina cosa puoi vedere e fare.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div style="display:flex;flex-direction:column;gap:10px;margin:10px 0">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;display:flex;align-items:flex-start;gap:12px">
+            <span class="role-badge rb-viewer">VIEWER</span>
+            <div>
+              <div style="font-weight:600;font-size:13px;margin-bottom:3px">Visualizzatore</div>
+              <div style="font-size:12px;color:var(--muted);line-height:1.6">Può solo visualizzare i fogli presenze delle sezioni a cui ha accesso. Non può modificare i dati.</div>
+            </div>
+          </div>
+          <div style="background:var(--surface);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:14px;display:flex;align-items:flex-start;gap:12px">
+            <span class="role-badge rb-admin">ADMIN</span>
+            <div>
+              <div style="font-weight:600;font-size:13px;margin-bottom:3px">Amministratore</div>
+              <div style="font-size:12px;color:var(--muted);line-height:1.6">Può visualizzare e modificare le presenze. Ha accesso alla modalità Admin (celle editabili). Può gestire il tab File Import.</div>
+            </div>
+          </div>
+          <div style="background:var(--surface);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:14px;display:flex;align-items:flex-start;gap:12px">
+            <span class="role-badge rb-super">SUPER</span>
+            <div>
+              <div style="font-weight:600;font-size:13px;margin-bottom:3px">Super Utente</div>
+              <div style="font-size:12px;color:var(--muted);line-height:1.6">Accesso completo a tutte le funzioni inclusa la gestione dei permessi utente (tab Permessi).</div>
+            </div>
+          </div>
+        </div>
+        <div class="infobox warn">
+          <span class="ib-icon">⚠️</span>
+          <div class="ib-body">Se compare <strong>"Accesso Negato"</strong>, il tuo account Google non è ancora autorizzato. Contatta l'amministratore del sistema per richiedere l'accesso.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">3</span>
+        <div>
+          <div class="step-title">Barra in alto dopo l'accesso</div>
+          <div class="step-body">Una volta entrati, la topbar mostra il tuo nome, il ruolo e i pulsanti Admin ed Esci.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="topbar-mock">
+          <div class="tm-logo">WMS · <span style="color:var(--teal)">Presenze</span></div>
+          <div class="tm-div"></div>
+          <span style="font-size:10px;color:var(--muted)">Mag 2026</span>
+          <div class="tm-right">
+            <span class="tm-badge">ADMIN</span>
+            <div style="display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:3px 10px 3px 4px;font-size:11px;color:var(--subtle)">
+              <div style="width:20px;height:20px;border-radius:50%;background:var(--blue-dim);display:flex;align-items:center;justify-content:center;font-family:var(--ffc);font-size:9px;font-weight:700;color:var(--blue)">M</div>
+              Mario Rossi
+            </div>
+            <div class="tm-btn">Admin</div>
+            <div class="tm-btn" style="color:var(--red)">Esci</div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('p',0)">← Menu Principale</button>
+    <button class="nbtn next" onclick="goto('p',2)">Sezioni del Modulo →</button>
+  </div>
+</div>
+
+<!-- ══ 2: SEZIONI ══ -->
+<div class="chapter" id="p-ch-2">
+  <div class="chapter-header">
+    <div class="ch-tag">Interfaccia · Passo 3 di 8</div>
+    <h1 class="ch-title">Sezioni del Modulo</h1>
+    <p class="ch-desc">Il modulo Presenze è diviso in tab (sezioni) accessibili dalla barra di navigazione interna. Ogni tab ha uno scopo preciso.</p>
+  </div>
+
+  <div class="snav-mock">
+    <button class="snb-mock on-b">● Cooperativa</button>
+    <button class="snb-mock on-t">● ATS</button>
+    <button class="snb-mock on-c">● File Import</button>
+    <button class="snb-mock on-a">● Permessi</button>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">●</span>
+        <div>
+          <div class="step-title"><span class="tag blue">Cooperativa</span> — Tab principale</div>
+          <div class="step-body">Mostra il foglio presenze dei dipendenti della cooperativa. Colonne per ogni giorno del mese, righe per ogni dipendente. Solo la sigla <strong style="color:var(--green)">X</strong> (presenza) è disponibile per questa sezione.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">●</span>
+        <div>
+          <div class="step-title"><span class="tag teal">ATS</span> — Dipendenti diretti</div>
+          <div class="step-body">Foglio presenze dei dipendenti ATS. Supporta tutte le sigle (ferie, malattia, permessi, ecc.) e la visualizzazione delle ore ordinarie/straordinarie.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">●</span>
+        <div>
+          <div class="step-title"><span class="tag" style="background:rgba(6,182,212,.12);border:1px solid rgba(6,182,212,.3);color:var(--cyan)">File Import</span> — Solo Admin</div>
+          <div class="step-body">Permette di importare dipendenti da un file Excel o da Google Sheets. Disponibile solo per utenti con ruolo Admin o Super.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">●</span>
+        <div>
+          <div class="step-title"><span class="tag amber">Permessi</span> — Solo Super</div>
+          <div class="step-body">Gestione degli accessi utente. Aggiunta, modifica e rimozione di utenti autorizzati. Visibile solo al Super Utente.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <h3 style="font-family:var(--ffc);font-size:16px;font-weight:700;margin-bottom:16px;color:var(--subtle)">Legenda sigle presenze</h3>
+  <table class="legend-table">
+    <thead>
+      <tr><th>Sigla</th><th>Descrizione</th><th>Sezione</th></tr>
+    </thead>
+    <tbody>
+      <tr><td><span class="sig" style="color:var(--green);background:rgba(16,185,129,.12)">X</span></td><td>Presenza in sede</td><td><span class="tag blue">Coop</span> <span class="tag teal">ATS</span></td></tr>
+      <tr><td><span class="sig" style="color:var(--blue);background:rgba(59,130,246,.12)">F</span></td><td>Ferie</td><td><span class="tag teal">ATS</span></td></tr>
+      <tr><td><span class="sig" style="color:var(--red);background:rgba(239,68,68,.12)">M</span></td><td>Malattia</td><td><span class="tag teal">ATS</span></td></tr>
+      <tr><td><span class="sig" style="color:var(--purple);background:rgba(168,85,247,.12)">HP</span></td><td>Ore Permesso (con quantità)</td><td><span class="tag teal">ATS</span></td></tr>
+      <tr><td><span class="sig" style="color:var(--amber);background:rgba(245,158,11,.12)">H104</span></td><td>Ore 104 (con quantità)</td><td><span class="tag teal">ATS</span></td></tr>
+      <tr><td><span class="sig" style="color:#fb923c;background:rgba(251,146,60,.12)">104</span></td><td>Giornata 104</td><td><span class="tag teal">ATS</span></td></tr>
+      <tr><td><span class="sig" style="color:#ec4899;background:rgba(236,72,153,.12)">CP</span></td><td>Congedo Parentale</td><td><span class="tag teal">ATS</span></td></tr>
+      <tr><td><span class="sig" style="color:var(--teal);background:rgba(20,184,166,.12)">HPE</span></td><td>Ore Permesso Esami</td><td><span class="tag teal">ATS</span></td></tr>
+      <tr><td><span class="sig" style="color:var(--cyan);background:rgba(6,182,212,.12)">PE</span></td><td>Permesso Esami (giornata)</td><td><span class="tag teal">ATS</span></td></tr>
+      <tr><td><span class="sig" style="color:#84cc16;background:rgba(132,204,22,.12)">SW</span></td><td>Smartworking</td><td><span class="tag teal">ATS</span></td></tr>
+      <tr><td><span class="sig" style="color:var(--subtle);background:rgba(148,163,184,.12)">Lutto</span></td><td>Lutto</td><td><span class="tag teal">ATS</span></td></tr>
+      <tr><td><span class="sig" style="color:#38bdf8;background:rgba(56,189,248,.12)">TFS</span></td><td>Trasferta Fuori Sede</td><td><span class="tag teal">ATS</span></td></tr>
+    </tbody>
+  </table>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('p',1)">← Accesso e Login</button>
+    <button class="nbtn next" onclick="goto('p',3)">Filtri e Ricerca →</button>
+  </div>
+</div>
+
+<!-- ══ 3: FILTRI ══ -->
+<div class="chapter" id="p-ch-3">
+  <div class="chapter-header">
+    <div class="ch-tag">Interfaccia · Passo 4 di 8</div>
+    <h1 class="ch-title">Filtri e Ricerca</h1>
+    <p class="ch-desc">Prima di visualizzare i dati devi selezionare il periodo e, opzionalmente, filtrare per responsabile o plant. Poi premi Carica.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">1</span>
+        <div>
+          <div class="step-title">Barra dei filtri</div>
+          <div class="step-body">In cima a ogni sezione (Cooperativa e ATS) trovi la barra filtri. È sempre visibile e ti permette di raffinare la visualizzazione.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="filters-mock">
+          <div class="fm-group">
+            <div class="fm-label">Responsabile</div>
+            <select class="fm-input" style="min-width:140px"><option>— Tutti —</option><option>Ferrara</option></select>
+          </div>
+          <div class="fm-group">
+            <div class="fm-label">Plant</div>
+            <select class="fm-input" style="min-width:80px"><option>— Tutti —</option><option>P52</option></select>
+          </div>
+          <div class="fm-group">
+            <div class="fm-label">Anno</div>
+            <select class="fm-input" style="min-width:75px"><option>2026</option></select>
+          </div>
+          <div class="fm-group">
+            <div class="fm-label">Mese</div>
+            <select class="fm-input" style="min-width:110px"><option>Maggio</option></select>
+          </div>
+          <div class="fm-group">
+            <div class="fm-label">Cerca</div>
+            <input class="fm-input" placeholder="🔍 Nome o SAP…" style="min-width:130px">
+          </div>
+          <button class="fm-btn teal highlight">↓ Carica</button>
+          <button class="fm-btn ghost">↻ Aggiorna</button>
+          <button class="fm-btn ghost" style="border-color:rgba(245,158,11,.4);color:var(--amber)">⬇ Excel</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">2</span>
+        <div>
+          <div class="step-title">Seleziona Anno e Mese, poi clicca <strong style="color:var(--teal)">↓ Carica</strong></div>
+          <div class="step-body">Il pulsante Carica recupera i dati da Google Drive. La prima volta il caricamento include anche lo spinner. I filtri scelti vengono ricordati alla prossima apertura.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">3</span>
+        <div>
+          <div class="step-title">Ricerca per nome o matricola</div>
+          <div class="step-body">Il campo <strong>Cerca</strong> filtra istantaneamente la tabella mentre digiti. Funziona sia con il nome completo che con il codice SAP/matricola del dipendente.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">4</span>
+        <div>
+          <div class="step-title">Statistiche riepilogative</div>
+          <div class="step-body">Dopo il caricamento, sotto la barra filtri appare una riga di statistiche con il totale presenze, assenze e altre sigle per il mese visualizzato.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="stats-mock">
+          <div class="stat-item"><div class="stat-label">Presenti</div><div class="stat-val" style="color:var(--green)">142</div></div>
+          <div class="stat-item"><div class="stat-label">Ferie</div><div class="stat-val" style="color:var(--blue)">18</div></div>
+          <div class="stat-item"><div class="stat-label">Malattia</div><div class="stat-val" style="color:var(--red)">5</div></div>
+          <div class="stat-item"><div class="stat-label">Permessi</div><div class="stat-val" style="color:var(--purple)">9</div></div>
+          <div class="stat-item"><div class="stat-label">Totale</div><div class="stat-val" style="color:var(--subtle)">174</div></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">5</span>
+        <div>
+          <div class="step-title">Pulsanti aggiuntivi (ATS)</div>
+          <div class="step-body">Nella sezione ATS trovi pulsanti extra per mostrare/nascondere le righe ORD/STR e i totali mensili per ogni dipendente.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div style="display:flex;gap:8px;flex-wrap:wrap;margin:10px 0">
+          <button style="display:inline-flex;align-items:center;gap:5px;background:rgba(20,184,166,.07);border:1px solid rgba(20,184,166,.2);color:var(--teal);border-radius:6px;padding:5px 12px;font-family:var(--ffc);font-size:11px;font-weight:700;cursor:pointer">▸ ORD/STR</button>
+          <button style="display:inline-flex;align-items:center;gap:5px;background:rgba(59,130,246,.07);border:1px solid rgba(59,130,246,.2);color:var(--blue);border-radius:6px;padding:5px 12px;font-family:var(--ffc);font-size:11px;font-weight:700;cursor:pointer">⊟ Totali</button>
+          <button style="display:inline-flex;align-items:center;gap:5px;background:rgba(20,184,166,.07);border:1px solid rgba(20,184,166,.2);color:var(--teal);border-radius:6px;padding:5px 12px;font-family:var(--ffc);font-size:11px;font-weight:700;cursor:pointer">⊟ Sigle</button>
+        </div>
+        <div class="infobox tip">
+          <span class="ib-icon">💡</span>
+          <div class="ib-body"><strong>ORD/STR</strong> mostra, per ogni dipendente ATS, le righe con ore ordinarie e straordinarie. <strong>Totali</strong> aggiunge colonne riepilogative a destra. <strong>Sigle</strong> mostra/nasconde la legenda in cima alla tabella.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('p',2)">← Sezioni del Modulo</button>
+    <button class="nbtn next" onclick="goto('p',4)">Inserire Presenze →</button>
+  </div>
+</div>
+
+<!-- ══ 4: INSERIRE PRESENZE ══ -->
+<div class="chapter" id="p-ch-4">
+  <div class="chapter-header">
+    <div class="ch-tag">Operatività · Passo 5 di 8</div>
+    <h1 class="ch-title">Inserire Presenze</h1>
+    <p class="ch-desc">Per modificare le presenze devi attivare la modalità Admin. Le celle diventano cliccabili e ti compare il pannello di selezione della sigla.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">1</span>
+        <div>
+          <div class="step-title">Attiva la modalità Admin</div>
+          <div class="step-body">Clicca il pulsante <strong>Admin</strong> in alto a destra. Inserisci la password quando richiesta. Il pulsante diventa rosso con l'indicatore lampeggiante.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:10px 0">
+          <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:5px 12px;font-family:var(--ffc);font-size:12px;font-weight:700;color:var(--muted);cursor:pointer">
+            <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--muted);margin-right:4px;vertical-align:middle"></span>Admin
+          </div>
+          <span style="color:var(--muted);font-size:13px">→ inserisci password →</span>
+          <div style="background:rgba(239,68,68,.08);border:1px solid var(--red);border-radius:8px;padding:5px 12px;font-family:var(--ffc);font-size:12px;font-weight:700;color:var(--red);cursor:pointer;animation:pulse 1.5s infinite">
+            <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--red);margin-right:4px;vertical-align:middle;animation:pulse 1.5s infinite"></span>Admin ON
+          </div>
+        </div>
+        <div class="infobox danger">
+          <span class="ib-icon">🔐</span>
+          <div class="ib-body">La modalità Admin è disponibile solo se il tuo profilo ha i permessi di scrittura. Se non vedi il pulsante o non riesci ad attivarlo, contatta l'amministratore.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">2</span>
+        <div>
+          <div class="step-title">Clicca su una cella del calendario</div>
+          <div class="step-body">In modalità Admin le celle giornaliere si evidenziano con un bordo teal al passaggio del mouse. Clicca sulla cella del giorno da modificare per un determinato dipendente.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="table-mock">
+          <div class="tm-head" style="display:grid;grid-template-columns:24px 130px 40px repeat(7,36px);gap:0">
+            <div class="tm-th"></div>
+            <div class="tm-th" style="text-align:left;padding-left:8px">NOMINATIVO</div>
+            <div class="tm-th">SAP</div>
+            <div class="tm-th"><div style="font-size:11px">1</div><div style="font-size:8px;color:var(--muted)">ven</div></div>
+            <div class="tm-th" style="background:rgba(36,48,72,.28)"><div style="font-size:11px;color:var(--muted)">2</div><div style="font-size:8px;color:var(--border)">sab</div></div>
+            <div class="tm-th" style="background:rgba(20,184,166,.18)"><div style="font-size:11px;color:var(--teal);font-weight:800">19</div><div style="font-size:8px;color:rgba(20,184,166,.85)">lun</div></div>
+            <div class="tm-th"><div style="font-size:11px">20</div><div style="font-size:8px;color:var(--muted)">mar</div></div>
+            <div class="tm-th"><div style="font-size:11px">21</div><div style="font-size:8px;color:var(--muted)">mer</div></div>
+            <div class="tm-th"><div style="font-size:11px">22</div><div style="font-size:8px;color:var(--muted)">gio</div></div>
+            <div class="tm-th"><div style="font-size:11px">23</div><div style="font-size:8px;color:var(--muted)">ven</div></div>
+          </div>
+          <div class="tm-row">
+            <div class="tm-cell" style="font-size:10px;color:var(--muted)">1</div>
+            <div class="tm-cell name">Rossi Mario</div>
+            <div class="tm-cell mat">001</div>
+            <div class="tm-cell cell-X">X</div>
+            <div class="tm-cell" style="background:rgba(36,48,72,.28)"></div>
+            <div class="tm-cell cell-X cell-today">X</div>
+            <div class="tm-cell cell-editable" title="clicca per modificare" style="outline:2px solid var(--teal);background:rgba(20,184,166,.08)">F</div>
+            <div class="tm-cell cell-X">X</div>
+            <div class="tm-cell cell-X">X</div>
+            <div class="tm-cell cell-M">M</div>
+          </div>
+          <div class="tm-row">
+            <div class="tm-cell" style="font-size:10px;color:var(--muted)">2</div>
+            <div class="tm-cell name">Bianchi Anna</div>
+            <div class="tm-cell mat">002</div>
+            <div class="tm-cell cell-X">X</div>
+            <div class="tm-cell" style="background:rgba(36,48,72,.28)"></div>
+            <div class="tm-cell cell-X cell-today">X</div>
+            <div class="tm-cell cell-X">X</div>
+            <div class="tm-cell cell-empty">—</div>
+            <div class="tm-cell cell-X">X</div>
+            <div class="tm-cell cell-X">X</div>
+          </div>
+        </div>
+        <div style="font-size:11px;color:var(--muted);margin-top:4px">La cella evidenziata in teal indica quella che si sta per modificare.</div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">3</span>
+        <div>
+          <div class="step-title">Seleziona la sigla nel pannello</div>
+          <div class="step-body">Si apre una finestra modale. Scegli la sigla cliccando sul bottone corrispondente. Per sigle come HP, H104, HPE puoi specificare anche la quantità in ore.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="modal-mock">
+          <div class="mm-title">Imposta Presenza</div>
+          <div class="mm-sub">Rossi Mario · gio 22 mag</div>
+          <div class="sig-grid">
+            <div class="sig-opt sel"><div class="sc" style="color:var(--green)">X</div><div class="sd">Presenza</div></div>
+            <div class="sig-opt"><div class="sc" style="color:var(--blue)">F</div><div class="sd">Ferie</div></div>
+            <div class="sig-opt"><div class="sc" style="color:var(--red)">M</div><div class="sd">Malattia</div></div>
+            <div class="sig-opt"><div class="sc" style="color:var(--purple)">HP</div><div class="sd">Ore Perm.</div></div>
+            <div class="sig-opt"><div class="sc" style="color:var(--amber)">H104</div><div class="sd">Ore 104</div></div>
+            <div class="sig-opt"><div class="sc" style="color:#fb923c">104</div><div class="sd">G.ta 104</div></div>
+            <div class="sig-opt"><div class="sc" style="color:#ec4899">CP</div><div class="sd">C.Parentale</div></div>
+            <div class="sig-opt"><div class="sc" style="color:#84cc16">SW</div><div class="sd">SmartWork</div></div>
+            <div class="sig-opt" style="border-color:var(--red);background:rgba(239,68,68,.08);color:var(--red)"><div class="sc">✕</div><div class="sd">Cancella</div></div>
+          </div>
+          <div class="mm-orari">
+            <div class="fm-group"><div class="fm-label">Ingresso</div><input class="fm-input" value="08:00" style="width:80px"></div>
+            <div class="fm-group"><div class="fm-label">Uscita</div><input class="fm-input" value="18:00" style="width:80px"></div>
+            <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--subtle)">
+              <input type="checkbox" checked style="accent-color:var(--teal)"> Pausa pranzo
+              <select class="fm-input" style="width:80px;padding:3px 6px"><option>1 ora</option></select>
+            </div>
+          </div>
+          <div class="mm-calc">
+            <div class="calc-item"><span class="calc-label">Totali</span><span class="calc-val">10h</span></div>
+            <div style="color:var(--border);align-self:center">→</div>
+            <div class="calc-item"><span class="calc-label">Pausa</span><span class="calc-val" style="color:var(--muted)">-1h</span></div>
+            <div style="color:var(--border);align-self:center">→</div>
+            <div class="calc-item"><span class="calc-label">Effettive</span><span class="calc-val">9h</span></div>
+            <div style="margin-left:auto;text-align:right">
+              <div><span style="color:var(--green);font-size:9px">ORD</span> <span style="color:var(--green);font-size:14px;font-weight:700">8h</span></div>
+              <div><span style="color:var(--amber);font-size:9px">STR</span> <span style="color:var(--amber);font-size:14px;font-weight:700">1h</span></div>
+            </div>
+          </div>
+          <div class="mm-btns">
+            <button class="mm-btn cancel">Annulla</button>
+            <button class="mm-btn ok">Imposta</button>
+          </div>
+        </div>
+        <div class="infobox tip">
+          <span class="ib-icon">💡</span>
+          <div class="ib-body">Per le sigle che richiedono orari (X, SW, TFS…) il sistema calcola automaticamente le ore ordinarie e straordinarie in base all'orario inserito. Le sigle F, M, CP, 104, PE, Lutto non richiedono orario.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">4</span>
+        <div>
+          <div class="step-title">Conferma e salvataggio</div>
+          <div class="step-body">Dopo aver cliccato <strong style="color:var(--teal)">Imposta</strong>, la cella si aggiorna subito e i dati vengono salvati automaticamente su Google Sheets. Appare un toast verde di conferma.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+          <div style="background:var(--green);color:#021a10;font-family:var(--ffm);font-size:12px;font-weight:700;padding:8px 16px;border-radius:7px">✓ Presenza salvata</div>
+          <div style="background:var(--red);color:#fff;font-family:var(--ffm);font-size:12px;font-weight:700;padding:8px 16px;border-radius:7px">✗ Errore salvataggio</div>
+          <div style="background:var(--amber);color:#000;font-family:var(--ffm);font-size:12px;font-weight:700;padding:8px 16px;border-radius:7px">⚠ Attenzione</div>
+        </div>
+        <div class="infobox info">
+          <span class="ib-icon">ℹ️</span>
+          <div class="ib-body">Il salvataggio avviene direttamente su Google Sheets. Non è necessario premere nessun pulsante "Salva" aggiuntivo. In caso di errore di rete, riprova con il pulsante <strong>↻ Aggiorna</strong>.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">5</span>
+        <div>
+          <div class="step-title">Cancellare una presenza</div>
+          <div class="step-body">Per rimuovere una sigla già inserita, apri il pannello cliccando sulla cella e scegli il pulsante <strong style="color:var(--red)">✕ Cancella</strong> in basso nella griglia. La cella tornerà vuota.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('p',3)">← Filtri e Ricerca</button>
+    <button class="nbtn next" onclick="goto('p',5)">Presenza a Tutti →</button>
+  </div>
+</div>
+
+<!-- ══ 5: PRESENZA A TUTTI ══ -->
+<div class="chapter" id="p-ch-5">
+  <div class="chapter-header">
+    <div class="ch-tag">Operatività · Passo 6 di 8</div>
+    <h1 class="ch-title">Presenza a Tutti</h1>
+    <p class="ch-desc">La funzione "Presenza a Tutti" permette di impostare la stessa sigla su tutti i dipendenti visibili per un determinato giorno, in un'unica operazione.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">1</span>
+        <div>
+          <div class="step-title">Clicca <strong style="color:var(--green)">✔ Presenza a Tutti</strong></div>
+          <div class="step-body">Il pulsante si trova nella barra filtri, attivo solo dopo aver caricato i dati. Funziona sia per la sezione Cooperativa che per ATS.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <button style="background:none;border:1px solid rgba(16,185,129,.5);color:var(--green);border-radius:7px;padding:8px 16px;font-family:var(--ffc);font-size:13px;font-weight:700;cursor:pointer;display:inline-flex;align-items:center;gap:6px;animation:pulse-green 1.5s infinite">✔ Presenza a Tutti</button>
+        <style>@keyframes pulse-green{0%,100%{box-shadow:0 0 0 2px rgba(16,185,129,.15)}50%{box-shadow:0 0 0 5px rgba(16,185,129,.3)}}</style>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">2</span>
+        <div>
+          <div class="step-title">Configura l'operazione di massa</div>
+          <div class="step-body">Si apre un pannello modale. Seleziona la sigla da applicare, il giorno del mese, l'orario (se richiesto) e la pausa.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="modal-mock" style="max-width:440px">
+          <div class="mm-title">✔ Presenza a Tutti</div>
+          <div class="mm-sub" style="margin-bottom:14px">Imposta la stessa sigla su tutti i dipendenti visualizzati</div>
+          <div style="display:flex;flex-direction:column;gap:10px">
+            <div>
+              <div class="fm-label" style="margin-bottom:6px">Sigla</div>
+              <div style="display:flex;gap:6px;flex-wrap:wrap">
+                <div class="sig-opt sel" style="flex:1;min-width:60px"><div class="sc" style="color:var(--green)">X</div><div class="sd">Presenza</div></div>
+                <div class="sig-opt" style="flex:1;min-width:60px"><div class="sc" style="color:var(--blue)">F</div><div class="sd">Ferie</div></div>
+                <div class="sig-opt" style="flex:1;min-width:60px"><div class="sc" style="color:var(--red)">M</div><div class="sd">Malattia</div></div>
+                <div class="sig-opt" style="flex:1;min-width:60px"><div class="sc" style="color:#84cc16">SW</div><div class="sd">SmartWork</div></div>
+              </div>
+            </div>
+            <div style="display:flex;gap:10px">
+              <div class="fm-group" style="flex:1"><div class="fm-label">Data</div><input class="fm-input" type="date" value="2026-05-19" style="width:100%"></div>
+            </div>
+            <div class="mm-orari">
+              <div class="fm-group"><div class="fm-label">Ingresso</div><input class="fm-input" value="08:00" style="width:78px"></div>
+              <div class="fm-group"><div class="fm-label">Uscita</div><input class="fm-input" value="18:00" style="width:78px"></div>
+              <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--subtle)"><input type="checkbox" checked style="accent-color:var(--teal)"> Pausa 1h</div>
+            </div>
+            <div style="background:rgba(20,184,166,.06);border:1px solid rgba(20,184,166,.2);border-radius:6px;padding:10px;font-size:11px;color:var(--teal)">
+              Verrà impostato "X" il giorno 19/05/2026 su <strong>24 dipendenti</strong>.
+            </div>
+          </div>
+          <div class="mm-btns" style="margin-top:12px">
+            <button class="mm-btn cancel">Annulla</button>
+            <button class="mm-btn ok">✔ Conferma</button>
+          </div>
+        </div>
+        <div class="infobox warn">
+          <span class="ib-icon">⚠️</span>
+          <div class="ib-body">L'operazione sovrascrive le sigle esistenti per il giorno selezionato su <strong>tutti i dipendenti visibili</strong> (considerando l'eventuale filtro di ricerca attivo). Usa con attenzione.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">3</span>
+        <div>
+          <div class="step-title">Filtro attivo = operazione parziale</div>
+          <div class="step-body">Se hai attivo un filtro per responsabile, plant o una ricerca per nome, la funzione "Presenza a Tutti" agisce solo sui dipendenti filtrati. Puoi usarla per impostare presenze su un gruppo specifico.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('p',4)">← Inserire Presenze</button>
+    <button class="nbtn next" onclick="goto('p',6)">Export e Stampa →</button>
+  </div>
+</div>
+
+<!-- ══ 6: EXPORT ══ -->
+<div class="chapter" id="p-ch-6">
+  <div class="chapter-header">
+    <div class="ch-tag">Operatività · Passo 7 di 8</div>
+    <h1 class="ch-title">Export e Stampa</h1>
+    <p class="ch-desc">I dati del mese possono essere esportati in formato Excel o stampati direttamente. Le funzioni sono disponibili tramite i pulsanti nella barra filtri.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">1</span>
+        <div>
+          <div class="step-title">Esporta in Excel</div>
+          <div class="step-body">Clicca il pulsante <strong style="color:var(--amber)">⬇ Excel</strong> nella barra filtri. Il file viene generato direttamente nel browser e scaricato automaticamente con il nome del mese.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="export-mock">
+          <div class="em-title">⬇ Export Excel</div>
+          <div class="em-item">
+            <span style="font-size:16px">📊</span>
+            <div>
+              <div style="font-family:var(--ffc);font-size:12px;font-weight:700;color:var(--text)">Presenze_ATS_Maggio_2026.xlsx</div>
+              <div style="font-size:10px;color:var(--muted);margin-top:2px">Generato con xlsx-js-style · Include sigle, orari e totali</div>
+            </div>
+            <button style="margin-left:auto;background:var(--amber);color:#000;border:none;border-radius:5px;padding:4px 12px;font-family:var(--ffc);font-size:11px;font-weight:700;cursor:pointer">Scarica</button>
+          </div>
+        </div>
+        <div class="infobox tip">
+          <span class="ib-icon">💡</span>
+          <div class="ib-body">Il file Excel mantiene la formattazione a colori delle sigle. È compatibile con Microsoft Excel e Google Sheets.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">2</span>
+        <div>
+          <div class="step-title">Stampa</div>
+          <div class="step-body">Clicca <strong style="color:var(--purple)">🖨 Stampa</strong> per aprire la finestra di stampa del browser. Il foglio presenze viene ottimizzato per la stampa in orizzontale.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="infobox info">
+          <span class="ib-icon">🖨️</span>
+          <div class="ib-body">Per una stampa ottimale usa <strong>Orientamento: Orizzontale</strong> e imposta i margini su "Minimi" nelle opzioni del browser. La tabella si adatta automaticamente alla larghezza della pagina.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">3</span>
+        <div>
+          <div class="step-title">Aggiornamento manuale dei dati</div>
+          <div class="step-body">Se hai aperto il foglio e vuoi sincronizzare le ultime modifiche (fatte da un altro utente), clicca <strong style="color:var(--subtle)">↻ Aggiorna</strong>. Il badge in alto mostra l'ora dell'ultimo aggiornamento.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap;margin:10px 0">
+          <div style="font-size:10px;font-family:var(--ffm);color:var(--muted);padding:3px 9px;background:var(--card);border:1px solid var(--border);border-radius:20px">Aggiornato alle 10:34</div>
+          <div style="font-size:10px;font-family:var(--ffm);color:var(--green);padding:3px 9px;background:rgba(16,185,129,.06);border:1px solid rgba(16,185,129,.3);border-radius:20px;display:flex;align-items:center;gap:4px">
+            <span style="width:5px;height:5px;border-radius:50%;background:var(--green);display:inline-block;animation:pulse 2s infinite"></span>Live · 11:02
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('p',5)">← Presenza a Tutti</button>
+    <button class="nbtn next" onclick="goto('p',7)">Admin e Permessi →</button>
+  </div>
+</div>
+
+<!-- ══ 7: ADMIN E PERMESSI ══ -->
+<div class="chapter" id="p-ch-7">
+  <div class="chapter-header">
+    <div class="ch-tag">Avanzato · Passo 8 di 8</div>
+    <h1 class="ch-title">Admin e Permessi</h1>
+    <p class="ch-desc">Funzionalità avanzate per la gestione degli accessi e l'importazione di dati. Disponibili solo per utenti con ruolo Admin o Super.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">1</span>
+        <div>
+          <div class="step-title">Aggiungere un dipendente manualmente</div>
+          <div class="step-body">Con la modalità Admin attiva, clicca <strong style="color:var(--teal)">＋ Dipendente</strong> nella barra filtri. Inserisci nominativo, matricola/SAP, responsabile e plant.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="modal-mock" style="max-width:380px">
+          <div class="mm-title">➕ Nuovo Dipendente</div>
+          <div class="mm-sub">Aggiunge al registro del mese corrente</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div class="fm-group"><div class="fm-label">Nominativo *</div><input class="fm-input" placeholder="Cognome Nome" style="width:100%"></div>
+            <div style="display:flex;gap:8px">
+              <div class="fm-group" style="flex:1"><div class="fm-label">Matricola/SAP</div><input class="fm-input" placeholder="001" style="width:100%"></div>
+              <div class="fm-group" style="flex:1"><div class="fm-label">Responsabile</div><input class="fm-input" placeholder="Cognome" style="width:100%"></div>
+            </div>
+            <div class="fm-group"><div class="fm-label">Plant</div><input class="fm-input" placeholder="Es. P52" style="width:100%"></div>
+          </div>
+          <div class="mm-btns" style="margin-top:12px">
+            <button class="mm-btn cancel">Annulla</button>
+            <button class="mm-btn ok">Aggiungi</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">2</span>
+        <div>
+          <div class="step-title">File Import (tab dedicato)</div>
+          <div class="step-body">Il tab <span class="tag" style="background:rgba(6,182,212,.12);border:1px solid rgba(6,182,212,.3);color:var(--cyan)">File Import</span> permette di importare in blocco i dipendenti da un file Excel o da un Google Sheet. Disponibile per gli Admin.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <ul class="checklist">
+          <li>Seleziona il file Excel (.xlsx) contenente l'anagrafica dipendenti</li>
+          <li>Il sistema legge nome, matricola, responsabile e plant dal foglio</li>
+          <li>Visualizza un'anteprima delle righe importate prima di confermare</li>
+          <li>I dipendenti vengono aggiunti al mese correntemente selezionato</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">3</span>
+        <div>
+          <div class="step-title">Gestione Permessi utenti (Super)</div>
+          <div class="step-body">Il tab <span class="tag amber">Permessi</span> è visibile solo al Super Utente. Permette di aggiungere, modificare e rimuovere gli accessi al modulo.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="modal-mock" style="max-width:440px">
+          <div class="mm-title">Aggiungi Utente</div>
+          <div class="mm-sub">Configura accesso per un indirizzo email</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div class="fm-group"><div class="fm-label">Email *</div><input class="fm-input" placeholder="utente@dominio.it" style="width:100%"></div>
+            <div class="fm-group">
+              <div class="fm-label">Tag Responsabile (uno per riga)</div>
+              <textarea class="fm-input" rows="2" placeholder="Ferrara&#10;Izzo" style="resize:vertical;font-family:var(--ffm);width:100%"></textarea>
+            </div>
+            <div class="fm-group">
+              <div class="fm-label" style="margin-bottom:6px">Sezioni accessibili</div>
+              <div style="display:flex;gap:8px">
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px"><input type="checkbox" checked style="accent-color:var(--teal)"> Cooperativa</label>
+                <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px"><input type="checkbox" checked style="accent-color:var(--teal)"> ATS</label>
+              </div>
+            </div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer;padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:6px;width:fit-content"><input type="checkbox" style="accent-color:var(--red)"> Admin (può modificare le presenze)</label>
+          </div>
+          <div class="mm-btns" style="margin-top:12px">
+            <button class="mm-btn cancel">Annulla</button>
+            <button class="mm-btn ok">Salva</button>
+          </div>
+        </div>
+        <div class="infobox tip">
+          <span class="ib-icon">💡</span>
+          <div class="ib-body">Il campo <strong>Tag Responsabile</strong> limita la visibilità dell'utente ai soli dipendenti il cui campo "Responsabile" corrisponde. Lasciando vuoto, l'utente vede tutti i dipendenti delle sezioni abilitate.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">4</span>
+        <div>
+          <div class="step-title">Riepilogo scorciatoie</div>
+          <div class="step-body">Tutte le scorciatoie da tastiera disponibili nel modulo.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <table class="shortcut-table">
+          <tr><td><kbd>Alt</kbd>+<kbd>1</kbd></td><td>Apre il modulo Presenze</td></tr>
+          <tr><td><kbd>Alt</kbd>+<kbd>2</kbd></td><td>Apre Spedizioni AWB</td></tr>
+          <tr><td><kbd>Alt</kbd>+<kbd>3</kbd></td><td>Apre GRN Manager</td></tr>
+          <tr><td><kbd>Alt</kbd>+<kbd>0</kbd></td><td>Torna alla Home</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Chiude menu o modale aperta</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <div class="complete-screen">
+    <div class="complete-icon">🎉</div>
+    <div class="complete-title">Guida completata!</div>
+    <p class="complete-sub">Hai esplorato tutte le funzionalità del modulo Presenze di WMS Hub. Puoi rileggere qualsiasi sezione cliccando sul menu laterale.</p>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:20px">
+      <button class="nbtn prev" onclick="goto('p',0)" style="border-radius:8px">↩ Ricomincia dall'inizio</button>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('p',6)">← Export e Stampa</button>
+    <button class="nbtn next" disabled>Fine ✓</button>
+  </div>
+</div>
+
+</div><!-- /panel-p -->
+
+
+<!-- ════════════════════════════════
+     MODULO SPEDIZIONI AWB
+     ════════════════════════════════ -->
+<div class="module-panel" id="panel-s">
+
+<!-- ══ S0: MENU PRINCIPALE ══ -->
+<div class="chapter active" id="s-ch-0">
+  <div class="chapter-header">
+    <div class="ch-tag amber">Introduzione · Passo 1 di 9</div>
+    <h1 class="ch-title">Menu Principale<br>WMS Hub</h1>
+    <p class="ch-desc">Il WMS Hub è il punto di accesso centralizzato. Per aprire il modulo Spedizioni AWB puoi cliccare la card dalla home oppure usare il menu laterale.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">1</span>
+        <div>
+          <div class="step-title">Apri WMS Hub e seleziona Spedizioni AWB</div>
+          <div class="step-body">Dalla schermata home clicca sulla card <strong style="color:var(--amber)">Spedizioni AWB</strong> oppure usa il menu hamburger ☰ in alto a sinistra.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="mockup">
+          <div class="mock-bar">
+            <div class="mock-dot" style="background:#ef4444"></div>
+            <div class="mock-dot" style="background:#f59e0b;margin-left:5px"></div>
+            <div class="mock-dot" style="background:#10b981;margin-left:5px"></div>
+            <div class="mock-url">WMS · Hub</div>
+          </div>
+          <div class="mock-body">
+            <div class="screen-home">
+              <div class="sc-card">
+                <div class="sc-card-icon">📋</div>
+                <div class="sc-card-title" style="color:var(--blue)">Presenze</div>
+                <div class="sc-card-desc">Gestione turni e assenze</div>
+                <div style="font-size:13px;color:var(--blue);margin-top:6px">→</div>
+              </div>
+              <div class="sc-card highlight-a">
+                <div class="sc-card-icon">📦</div>
+                <div class="sc-card-title" style="color:var(--amber)">Spedizioni AWB</div>
+                <div class="sc-card-desc">Tracking e gestione spedizioni</div>
+                <div style="font-size:13px;color:var(--amber);margin-top:6px">→</div>
+              </div>
+            </div>
+            <div style="max-width:253px;margin:0 auto">
+              <div class="sc-card">
+                <div class="sc-card-icon">🟢</div>
+                <div class="sc-card-title" style="color:var(--green)">GRN Manager</div>
+                <div class="sc-card-desc">Entrate merci · integrazione SAP B1</div>
+                <div style="font-size:13px;color:var(--green);margin-top:6px">→</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="infobox tip">
+          <span class="ib-icon">💡</span>
+          <div class="ib-body">La card <strong>Spedizioni AWB</strong> (evidenziata in arancio) ti porta al modulo per visualizzare, filtrare e bollettare le spedizioni WMS con codici AWB.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">2</span>
+        <div>
+          <div class="step-title">Menu laterale e scorciatoie</div>
+          <div class="step-body">Dal menu hamburger puoi passare direttamente al modulo senza tornare alla home. Il modulo attivo è evidenziato in arancio.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div style="display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap">
+          <div class="drawer-mock">
+            <div style="padding:10px 14px 8px;border-bottom:1px solid var(--border);margin-bottom:6px;font-family:var(--ffc);font-size:12px;font-weight:700;color:var(--blue)">WMS Hub</div>
+            <div style="font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);padding:6px 14px 3px">Moduli</div>
+            <div class="dm-item"><span class="di">📋</span>Presenze</div>
+            <div class="dm-item act-a"><span class="di">📦</span>Spedizioni AWB</div>
+            <div class="dm-item"><span class="di">🟢</span>GRN Manager</div>
+          </div>
+          <div style="flex:1;min-width:200px">
+            <div class="infobox tip">
+              <span class="ib-icon">⌨️</span>
+              <div class="ib-body"><strong>Scorciatoie:</strong><br>
+              <kbd>Alt</kbd>+<kbd>2</kbd> → Spedizioni AWB<br>
+              <kbd>Alt</kbd>+<kbd>0</kbd> → Home</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" disabled>← Precedente</button>
+    <button class="nbtn next amber" onclick="goto('s',1)">Accesso e Login →</button>
+  </div>
+</div>
+
+<!-- ══ S1: LOGIN ══ -->
+<div class="chapter" id="s-ch-1">
+  <div class="chapter-header">
+    <div class="ch-tag amber">Introduzione · Passo 2 di 9</div>
+    <h1 class="ch-title">Accesso e Login</h1>
+    <p class="ch-desc">Il modulo Spedizioni AWB richiede l'autenticazione con Google per accedere ai file Excel nella cartella Drive condivisa.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">1</span>
+        <div>
+          <div class="step-title">Schermata di login</div>
+          <div class="step-body">Alla prima apertura compare la schermata di accesso. Clicca <strong>Accedi con Google</strong> e seleziona il tuo account aziendale.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div style="max-width:380px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;text-align:center;margin:12px 0">
+          <div style="font-family:var(--ffc);font-size:26px;font-weight:800;color:var(--amber);margin-bottom:6px">Spedizioni <span style="color:var(--subtle);font-weight:600">WMS</span></div>
+          <div style="font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:16px">Bollettazione AWB · Gestione Consegne</div>
+          <p style="font-size:12px;color:var(--subtle);line-height:1.7;margin-bottom:20px">Accedi con il tuo account Google per visualizzare e gestire le spedizioni dalla cartella Drive condivisa.</p>
+          <button style="display:inline-flex;align-items:center;gap:10px;background:#fff;color:#1f2937;border:none;border-radius:8px;padding:11px 22px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.3)">
+            <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+            Accedi con Google
+          </button>
+          <p style="font-size:10px;color:var(--muted);margin-top:14px;line-height:1.5">Richiede accesso a Google Drive per leggere e aggiornare i file xlsx nella cartella Spedizioni.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">2</span>
+        <div>
+          <div class="step-title">Topbar dopo l'accesso</div>
+          <div class="step-body">Dopo il login vedi la barra superiore con il tuo nome utente, i pulsanti <strong>Admin</strong> ed <strong>Esci</strong>. Nessuna gestione di ruoli: l'accesso è basato solo sull'account Google.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="topbar-mock" style="border-color:rgba(245,158,11,.3)">
+          <div class="tm-logo" style="color:var(--amber)">Spedizioni <span style="color:var(--subtle);font-weight:600">WMS</span></div>
+          <div class="tm-div"></div>
+          <span style="font-size:10px;color:var(--muted)">Bollettazione AWB</span>
+          <div class="tm-right">
+            <div style="display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:3px 10px 3px 4px;font-size:11px;color:var(--subtle)">
+              <div style="width:20px;height:20px;border-radius:50%;background:rgba(245,158,11,.2);display:flex;align-items:center;justify-content:center;font-family:var(--ffc);font-size:9px;font-weight:700;color:var(--amber)">M</div>
+              Mario Rossi
+            </div>
+            <div class="tm-btn">Admin</div>
+            <div class="tm-btn" style="color:var(--red)">Esci</div>
+          </div>
+        </div>
+        <div class="infobox info">
+          <span class="ib-icon">ℹ️</span>
+          <div class="ib-body">Il sistema ricorda la sessione. Al successivo accesso non dovrai ripetere il login, a meno che non esca esplicitamente con <strong>Esci</strong>.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('s',0)">← Menu Principale</button>
+    <button class="nbtn next amber" onclick="goto('s',2)">Selezione Data →</button>
+  </div>
+</div>
+
+<!-- ══ S2: SELEZIONE DATA ══ -->
+<div class="chapter" id="s-ch-2">
+  <div class="chapter-header">
+    <div class="ch-tag amber">Interfaccia · Passo 3 di 9</div>
+    <h1 class="ch-title">Selezione Data</h1>
+    <p class="ch-desc">Prima di visualizzare le spedizioni devi selezionare la data (o un intervallo di date) e premere Carica Dati. Il modulo scarica i file Excel da Google Drive.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">1</span>
+        <div>
+          <div class="step-title">Campo Data e dropdown</div>
+          <div class="step-body">Digita la data nel formato <code>GG/MM/AAAA</code> oppure clicca il pulsante <strong>▾</strong> a fianco per aprire il dropdown con tutte le date disponibili (cartelle su Drive).</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="filters-mock" style="background:var(--surface)">
+          <div class="fm-group">
+            <div class="fm-label">Data</div>
+            <div style="display:flex;align-items:center;gap:0">
+              <input class="fm-input" value="19/05/2026" style="border-radius:6px 0 0 6px;border-right:none;width:126px">
+              <button style="background:var(--card);border:1px solid var(--border);border-radius:0 6px 6px 0;padding:5px 9px;cursor:pointer;color:var(--muted);font-size:13px;height:29px">▾</button>
+            </div>
+          </div>
+          <div class="fm-group">
+            <div class="fm-label">A Data</div>
+            <div style="display:flex;align-items:center;gap:0">
+              <input class="fm-input" placeholder="Stessa data" style="border-radius:6px 0 0 6px;border-right:none;width:126px">
+              <button style="background:var(--card);border:1px solid var(--border);border-radius:0 6px 6px 0;padding:5px 9px;cursor:pointer;color:var(--muted);font-size:13px;height:29px">▾</button>
+            </div>
+          </div>
+          <button class="fm-btn blue highlight">Carica Dati</button>
+          <button class="fm-btn ghost">↻ Aggiorna</button>
+        </div>
+        <div class="infobox tip">
+          <span class="ib-icon">💡</span>
+          <div class="ib-body">Se vuoi visualizzare più giorni in un colpo solo, imposta anche il campo <strong>A Data</strong>. Tutti i file delle cartelle nell'intervallo vengono uniti automaticamente.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">2</span>
+        <div>
+          <div class="step-title">Struttura cartelle su Drive</div>
+          <div class="step-body">I file xlsx sono organizzati su Google Drive in cartelle con nome <code>YYYYMMDD</code> (es. <code>20260519</code>). Il modulo cerca automaticamente nella cartella della data selezionata.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:var(--ffm);font-size:11px;color:var(--subtle);line-height:2">
+          📁 Spedizioni WMS (cartella radice)<br>
+          &nbsp;&nbsp;📁 <span style="color:var(--amber)">20260519</span><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;📄 Spedizioni_20260519_001.xlsx<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;📄 Spedizioni_20260519_002.xlsx<br>
+          &nbsp;&nbsp;📁 20260518<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;📄 Spedizioni_20260518_001.xlsx
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">3</span>
+        <div>
+          <div class="step-title">Spinner e stati di caricamento</div>
+          <div class="step-body">Durante il download dei file compare uno spinner con il progresso. Se la cartella non esiste per la data scelta, compare un messaggio di errore.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div style="display:flex;gap:10px;flex-wrap:wrap">
+          <div style="background:var(--surface);border:1px solid var(--border);border-radius:8px;padding:14px;display:flex;flex-direction:column;align-items:center;gap:8px;min-width:120px">
+            <div style="width:24px;height:24px;border:3px solid var(--border);border-top-color:var(--amber);border-radius:50%;animation:spin .7s linear infinite"></div>
+            <span style="font-size:10px;color:var(--muted)">Download file...</span>
+          </div>
+          <div style="background:rgba(16,185,129,.07);border:1px solid rgba(16,185,129,.3);border-radius:8px;padding:14px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--green)">✓ 3 file caricati · 48 spedizioni</div>
+          <div style="background:rgba(239,68,68,.07);border:1px solid rgba(239,68,68,.3);border-radius:8px;padding:14px;display:flex;align-items:center;gap:8px;font-size:12px;color:var(--red)">⚠ Cartella 20260519 non trovata</div>
+        </div>
+        <style>@keyframes spin{to{transform:rotate(360deg)}}</style>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('s',1)">← Accesso e Login</button>
+    <button class="nbtn next amber" onclick="goto('s',3)">Filtri e Ricerca →</button>
+  </div>
+</div>
+
+<!-- ══ S3: FILTRI ══ -->
+<div class="chapter" id="s-ch-3">
+  <div class="chapter-header">
+    <div class="ch-tag amber">Interfaccia · Passo 4 di 9</div>
+    <h1 class="ch-title">Filtri e Ricerca</h1>
+    <p class="ch-desc">Dopo aver caricato i dati puoi raffinare la visualizzazione con una serie di filtri combinabili: plant, commessa, tipo spedizione, destino, AWB e numero ODP.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">1</span>
+        <div>
+          <div class="step-title">Filtri a selezione (dropdown)</div>
+          <div class="step-body">I filtri <strong>Plant</strong>, <strong>Commessa</strong>, <strong>Tipo Spedizione</strong> e <strong>Destino</strong> sono select dinamici: si popolano con i valori effettivamente presenti nei dati caricati.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="filters-mock" style="background:var(--surface)">
+          <div class="fm-group"><div class="fm-label">Plant</div><select class="fm-input" style="min-width:90px"><option>— Tutti —</option><option>P52</option><option>P53</option></select></div>
+          <div class="fm-group"><div class="fm-label">Commessa</div><select class="fm-input" style="min-width:100px"><option>— Tutte —</option><option>COMM001</option></select></div>
+          <div class="fm-group"><div class="fm-label">Tipo Sped.</div><select class="fm-input" style="min-width:100px"><option>— Tutti —</option><option>EXPORT</option></select></div>
+          <div class="fm-group"><div class="fm-label">Destino</div><select class="fm-input" style="min-width:120px"><option>— Tutti —</option><option>MILANO</option></select></div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">2</span>
+        <div>
+          <div class="step-title">Filtri a testo libero (AWB e ODP)</div>
+          <div class="step-body">I campi <strong>AWB</strong> e <strong>Numero ODP</strong> accettano testo libero con suggerimenti automatici (datalist). Digita per filtrare le righe che contengono il valore.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="filters-mock" style="background:var(--surface)">
+          <div class="fm-group">
+            <div class="fm-label">AWB</div>
+            <input class="fm-input" placeholder="Digita o scegli…" style="font-family:var(--ffm)">
+          </div>
+          <div class="fm-group">
+            <div class="fm-label">Numero ODP</div>
+            <input class="fm-input" placeholder="Digita o scegli…" style="font-family:var(--ffm)">
+          </div>
+        </div>
+        <div class="infobox tip">
+          <span class="ib-icon">💡</span>
+          <div class="ib-body">Per filtrare le spedizioni senza AWB, seleziona <strong>__VUOTI__</strong> dal suggerimento nel campo AWB. Tutte le righe senza codice AWB verranno mostrate.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">3</span>
+        <div>
+          <div class="step-title">Statistiche riepilogative</div>
+          <div class="step-body">Dopo il caricamento appare la barra statistiche con conteggi di spedizioni, dettagli carico, righe ODP, AWB assegnati e totali di colli e peso.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="stats-mock">
+          <div class="stat-item"><div class="stat-label">Spedizioni</div><div class="stat-val" style="color:var(--text)">12</div></div>
+          <div class="stat-item"><div class="stat-label">Det. Carico</div><div class="stat-val" style="color:var(--text)">34</div></div>
+          <div class="stat-item"><div class="stat-label">Righe ODP</div><div class="stat-val" style="color:var(--text)">67</div></div>
+          <div class="stat-item"><div class="stat-label">Con AWB</div><div class="stat-val" style="color:var(--amber)">9 / 12</div></div>
+          <div class="stat-item"><div class="stat-label">Tot. Colli</div><div class="stat-val" style="color:var(--subtle);font-size:14px">1.240</div></div>
+          <div class="stat-item"><div class="stat-label">Peso kg</div><div class="stat-val" style="color:var(--subtle);font-size:14px">4.830</div></div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('s',2)">← Selezione Data</button>
+    <button class="nbtn next amber" onclick="goto('s',4)">Tabelle e Schede →</button>
+  </div>
+</div>
+
+<!-- ══ S4: TABELLE ══ -->
+<div class="chapter" id="s-ch-4">
+  <div class="chapter-header">
+    <div class="ch-tag amber">Interfaccia · Passo 5 di 9</div>
+    <h1 class="ch-title">Tabelle e Schede</h1>
+    <p class="ch-desc">I dati sono organizzati in tre tab corrispondenti ai tre fogli del file Excel: Intestazione, Dettagli Carico e Dettagli ODP.</p>
+  </div>
+
+  <div class="snav-mock">
+    <button class="snb-mock on-a">● Intestazione</button>
+    <button class="snb-mock">● Dettagli Carico</button>
+    <button class="snb-mock">● Dettagli ODP</button>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">●</span>
+        <div>
+          <div class="step-title"><span class="tag amber">Intestazione</span> — Dati principali spedizione</div>
+          <div class="step-body">Una riga per ogni documento di spedizione (DocNum). Contiene data, tipo, plant, commessa, destino, AWB, numero colli e peso totale.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">●</span>
+        <div>
+          <div class="step-title"><span class="tag" style="background:rgba(16,185,129,.12);border:1px solid rgba(16,185,129,.3);color:var(--green)">Dettagli Carico</span> — Articoli caricati</div>
+          <div class="step-body">Una riga per ogni articolo caricato nella spedizione. Contiene quantità, volumi, pesi e altri attributi logistici. La colonna DESTINO è mostrata come prima colonna extra per facilitare la lettura.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">●</span>
+        <div>
+          <div class="step-title"><span class="tag blue">Dettagli ODP</span> — Ordini di produzione</div>
+          <div class="step-body">Una riga per ogni ODP (Ordine Di Produzione) collegato alla spedizione. Contiene numero ODP, quantità e attributi specifici della produzione.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <h3 style="font-family:var(--ffc);font-size:16px;font-weight:700;margin-bottom:16px;color:var(--subtle)">Gestione colonne</h3>
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">⚙</span>
+        <div>
+          <div class="step-title">Nascondi / mostra colonne</div>
+          <div class="step-body">Ogni tab ha un pulsante <strong>⚙</strong> per aprire il pannello Gestisci Colonne. Puoi deselezionare le colonne che non ti servono per ridurre il rumore visivo. La configurazione viene salvata in locale.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="infobox tip">
+          <span class="ib-icon">💡</span>
+          <div class="ib-body">Se alcune colonne risultano nascoste, un badge <strong style="color:var(--amber)">⚙N</strong> compare sulla tab. Clicca <strong>↺ Mostra tutte</strong> nel pannello per ripristinare la visualizzazione completa.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('s',3)">← Filtri e Ricerca</button>
+    <button class="nbtn next amber" onclick="goto('s',5)">Inserire AWB →</button>
+  </div>
+</div>
+
+<!-- ══ S5: INSERIRE AWB ══ -->
+<div class="chapter" id="s-ch-5">
+  <div class="chapter-header">
+    <div class="ch-tag amber">Operatività · Passo 6 di 9</div>
+    <h1 class="ch-title">Inserire AWB</h1>
+    <p class="ch-desc">L'AWB (Air Waybill) è il codice di tracking della spedizione. Puoi applicarlo a una o più righe filtrate in un'unica operazione direttamente dal pannello arancione in cima.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">1</span>
+        <div>
+          <div class="step-title">Pannello inserimento AWB</div>
+          <div class="step-body">In cima alla pagina (sotto la topbar) c'è sempre visibile il pannello AWB con sfondo scuro. Digita il codice AWB nel campo e premi <strong style="color:var(--amber)">Applica AWB</strong> oppure <kbd>Invio</kbd>.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="awb-panel-mock">
+          <div style="display:flex;align-items:center;gap:7px;font-family:var(--ffc);font-size:12px;font-weight:700;color:var(--amber);flex-shrink:0">
+            <div class="awb-dot"></div>Inserisci AWB
+          </div>
+          <input class="fm-input" value="AWB123456789IT" style="flex:1;font-family:var(--ffm);font-size:14px;color:var(--amber);background:var(--card);border-color:rgba(245,158,11,.5)">
+          <button class="fm-btn amber">Applica AWB</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">2</span>
+        <div>
+          <div class="step-title">Filtro destino prima dell'AWB</div>
+          <div class="step-body">Il sistema applica l'AWB a tutte le righe <em>attualmente filtrate</em>. Se ci sono più destini nei risultati, l'operazione viene bloccata. <strong>Filtra sempre per un singolo destino</strong> prima di applicare.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="infobox warn">
+          <span class="ib-icon">⚠️</span>
+          <div class="ib-body"><strong>Regola fondamentale:</strong> Un codice AWB non può essere usato per destini diversi. Il sistema blocca l'operazione se rileva un conflitto e mostra un avviso dettagliato con i documenti coinvolti.</div>
+        </div>
+        <div class="infobox tip">
+          <span class="ib-icon">💡</span>
+          <div class="ib-body">Se l'AWB è già stato assegnato allo <em>stesso</em> destino in precedenza, il sistema mostra un avviso ma ti consente comunque di procedere (es. aggiungere nuove righe alla stessa spedizione).</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">3</span>
+        <div>
+          <div class="step-title">Conferma e salvataggio su Drive</div>
+          <div class="step-body">Se ci sono più documenti filtrati, compare una modale di conferma con il numero di righe e il destino coinvolto. Conferma e l'AWB viene scritto direttamente nei file xlsx su Drive.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div style="display:flex;gap:10px;flex-wrap:wrap;margin:10px 0">
+          <div style="background:rgba(245,158,11,.1);border:1px solid rgba(245,158,11,.3);border-radius:7px;padding:8px 14px;font-family:var(--ffm);font-size:12px;color:var(--amber)">⏳ Salvataggio AWB su 3 file...</div>
+          <div style="background:rgba(16,185,129,.1);border:1px solid rgba(16,185,129,.3);border-radius:7px;padding:8px 14px;font-family:var(--ffm);font-size:12px;color:var(--green)">✓ AWB "AWB123..." applicato a 5 righe</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">4</span>
+        <div>
+          <div class="step-title">Modalità Click per copiare</div>
+          <div class="step-body">Attiva il toggle <strong>Click per copiare</strong> nella barra filtri per copiare negli appunti qualsiasi valore di cella con un semplice clic. Un toast verde conferma la copia.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div style="display:flex;align-items:center;gap:8px;padding:8px 12px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;font-size:12px;color:var(--amber);width:fit-content">
+          <input type="checkbox" checked style="accent-color:var(--amber)">
+          Click per copiare
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('s',4)">← Tabelle e Schede</button>
+    <button class="nbtn next amber" onclick="goto('s',6)">Copia ODP →</button>
+  </div>
+</div>
+
+<!-- ══ S6: COPIA ODP ══ -->
+<div class="chapter" id="s-ch-6">
+  <div class="chapter-header">
+    <div class="ch-tag amber">Operatività · Passo 7 di 9</div>
+    <h1 class="ch-title">Copia ODP</h1>
+    <p class="ch-desc">La funzione ODP Smart Copy raccoglie tutti i numeri ODP delle righe filtrate, li comprime e li divide in scaglioni pronti per essere incollati in SAP o altri sistemi con limite di caratteri.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">1</span>
+        <div>
+          <div class="step-title">Apri il pannello ODP</div>
+          <div class="step-body">Clicca il pulsante <strong style="color:var(--green)">ODP</strong> nella barra filtri (attivo solo se i dati sono caricati). Si apre la finestra con gli ODP raggruppati per destino, tipo e data.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <button style="display:inline-flex;align-items:center;gap:6px;background:none;border:1px solid var(--border);border-radius:6px;padding:8px 14px;font-family:var(--ffc);font-size:13px;font-weight:700;letter-spacing:1px;color:var(--subtle);cursor:pointer">
+          <svg width="14" height="14" viewBox="0 0 16 16" fill="none" stroke="currentColor" stroke-width="1.5"><rect x="5" y="1" width="9" height="11" rx="1.5"/><rect x="2" y="4" width="9" height="11" rx="1.5"/></svg>
+          ODP
+        </button>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">2</span>
+        <div>
+          <div class="step-title">Modalità Compatto vs Solo+</div>
+          <div class="step-body">Scegli la modalità di compressione:<br>
+          <strong>Compatto</strong> raggruppa gli ODP con prefisso comune usando il carattere <code>+</code> (es. <code>ORD001+234+235</code>).<br>
+          <strong>Solo+</strong> lista tutti gli ODP uno per uno separati da <code>;</code>.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">3</span>
+        <div>
+          <div class="step-title">Scaglioni e copia</div>
+          <div class="step-body">Gli ODP sono divisi automaticamente in scaglioni da max 30 caratteri. Ogni scaglione ha il suo pulsante <strong>Copia</strong>. Usa <strong>📋 Copia tutto</strong> per copiare tutti gli scaglioni in una volta.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div style="background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:14px;margin:10px 0">
+          <div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:10px">
+            <span style="font-family:var(--ffc);font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(245,158,11,.25);color:#fff">MILANO</span>
+            <span style="font-family:var(--ffc);font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(59,130,246,.25);color:#fff">EXPORT</span>
+            <span style="font-family:var(--ffc);font-size:10px;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(16,185,129,.25);color:#fff">AWB123</span>
+            <span style="font-size:10px;color:var(--muted);font-family:var(--ffm);margin-left:auto">8 ODP</span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:6px">
+            <span style="font-family:var(--ffc);font-size:10px;font-weight:700;color:var(--muted);min-width:20px">1.</span>
+            <span style="font-family:var(--ffm);font-size:12px;color:var(--amber);flex:1">ORD001+234+235;ORD002</span>
+            <span style="font-size:10px;color:var(--muted);font-family:var(--ffm)">24 ch</span>
+            <button style="background:none;border:1px solid var(--border);border-radius:4px;padding:4px 10px;font-family:var(--ffc);font-size:11px;font-weight:700;color:var(--subtle);cursor:pointer">Copia</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('s',5)">← Inserire AWB</button>
+    <button class="nbtn next amber" onclick="goto('s',7)">Export e Stampa →</button>
+  </div>
+</div>
+
+<!-- ══ S7: EXPORT ══ -->
+<div class="chapter" id="s-ch-7">
+  <div class="chapter-header">
+    <div class="ch-tag amber">Operatività · Passo 8 di 9</div>
+    <h1 class="ch-title">Export e Stampa</h1>
+    <p class="ch-desc">Puoi scaricare i dati filtrati in formato Excel o stampare le spedizioni in un documento ottimizzato per la stampa.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">1</span>
+        <div>
+          <div class="step-title">Scarica Excel filtrato</div>
+          <div class="step-body">Clicca <strong style="color:var(--amber)">⬇ Scarica Excel</strong> nella barra filtri. Viene generato un file xlsx con i soli dati visibili (filtri applicati), con tutti e tre i fogli.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="export-mock">
+          <div class="em-title" style="color:var(--amber)">⬇ Scarica Excel</div>
+          <div class="em-item">
+            <span style="font-size:16px">📊</span>
+            <div>
+              <div style="font-family:var(--ffc);font-size:12px;font-weight:700;color:var(--text)">Spedizioni_19052026_MILANO.xlsx</div>
+              <div style="font-size:10px;color:var(--muted);margin-top:2px">Foglio Intestazione + Dettagli Carico + Dettagli ODP</div>
+            </div>
+            <button style="margin-left:auto;background:var(--amber);color:#000;border:none;border-radius:5px;padding:4px 12px;font-family:var(--ffc);font-size:11px;font-weight:700;cursor:pointer">Scarica</button>
+          </div>
+        </div>
+        <div class="infobox tip">
+          <span class="ib-icon">💡</span>
+          <div class="ib-body">Il nome del file include data, plant e destino se i rispettivi filtri sono attivi, facilitando l'archiviazione.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">2</span>
+        <div>
+          <div class="step-title">Stampa spedizioni</div>
+          <div class="step-body">Clicca <strong style="color:var(--purple)">🖨 Stampa</strong>. Si apre una nuova finestra con il layout ottimizzato per la stampa: ogni spedizione ha un blocco con header, tabella carico e tabella ODP.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="infobox info">
+          <span class="ib-icon">🖨️</span>
+          <div class="ib-body">Il layout di stampa usa un font leggibile e una struttura a blocchi. Ogni DocNum occupa il suo spazio. Usa la stampa per la documentazione fisica delle spedizioni.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">3</span>
+        <div>
+          <div class="step-title">Aggiorna dati</div>
+          <div class="step-body">Se un altro utente ha modificato i file mentre eri connesso, clicca <strong>↻ Aggiorna</strong> per riscaricare i file aggiornati da Drive mantenendo i filtri attivi.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('s',6)">← Copia ODP</button>
+    <button class="nbtn next amber" onclick="goto('s',8)">Modalità Admin →</button>
+  </div>
+</div>
+
+<!-- ══ S8: ADMIN ══ -->
+<div class="chapter" id="s-ch-8">
+  <div class="chapter-header">
+    <div class="ch-tag amber">Avanzato · Passo 9 di 9</div>
+    <h1 class="ch-title">Modalità Admin</h1>
+    <p class="ch-desc">La modalità Admin consente di modificare direttamente le celle delle tabelle, aggiungere nuove righe ed eliminare documenti o righe esistenti — con salvataggio immediato su Drive.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">1</span>
+        <div>
+          <div class="step-title">Attiva la modalità Admin</div>
+          <div class="step-body">Clicca il pulsante <strong>Admin</strong> nella topbar. Inserisci la password quando richiesta. Il pulsante diventa rosso con il pallino lampeggiante.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div style="display:flex;gap:16px;align-items:center;flex-wrap:wrap;margin:10px 0">
+          <div class="tm-btn">Admin</div>
+          <span style="color:var(--muted);font-size:13px">→ password →</span>
+          <div style="background:rgba(239,68,68,.08);border:1px solid var(--red);border-radius:6px;padding:5px 12px;font-family:var(--ffc);font-size:11px;font-weight:700;color:var(--red);cursor:pointer">
+            <span style="display:inline-block;width:6px;height:6px;border-radius:50%;background:var(--red);margin-right:4px;vertical-align:middle;animation:pulse 1.5s infinite"></span>Admin ON
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">2</span>
+        <div>
+          <div class="step-title">Modifica celle</div>
+          <div class="step-body">In modalità Admin le celle diventano cliccabili (bordo blu al passaggio del mouse). Clicca sulla cella da modificare, digita il nuovo valore e premi <kbd>Invio</kbd> per salvare o <kbd>Esc</kbd> per annullare.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="infobox info">
+          <span class="ib-icon">ℹ️</span>
+          <div class="ib-body">Ogni modifica viene salvata immediatamente nel file xlsx su Drive. Il DocNum (colonna 0) non è modificabile per garantire l'integrità dei dati.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num amber">3</span>
+        <div>
+          <div class="step-title">Aggiungere ed eliminare righe</div>
+          <div class="step-body">Nella tab Dettagli Carico e Dettagli ODP, in modalità Admin, compare il pulsante <strong>🗑</strong> per eliminare una riga e il pulsante <strong>➕</strong> per aggiungerne una nuova in fondo al gruppo.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="infobox warn">
+          <span class="ib-icon">⚠️</span>
+          <div class="ib-body">Per eliminare un'intera <strong>spedizione</strong> (tutte le righe di un DocNum da tutti e tre i fogli), usa il pulsante <strong>🗑</strong> nella tab Intestazione. Viene mostrata una conferma prima dell'operazione irreversibile.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <div class="complete-screen">
+    <div class="complete-icon">📦</div>
+    <div class="complete-title amber">Guida completata!</div>
+    <p class="complete-sub">Hai esplorato tutte le funzionalità del modulo Spedizioni AWB. Puoi rileggere qualsiasi sezione cliccando sul menu laterale.</p>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:20px">
+      <button class="nbtn prev" onclick="goto('s',0)" style="border-radius:8px">↩ Ricomincia dall'inizio</button>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('s',7)">← Export e Stampa</button>
+    <button class="nbtn next" disabled>Fine ✓</button>
+  </div>
+</div>
+
+</div><!-- /panel-s -->
+
+
+<!-- ════════════════════════════════
+     MODULO GRN MANAGER
+     ════════════════════════════════ -->
+<div class="module-panel" id="panel-g">
+
+<!-- ══ G0: MENU PRINCIPALE ══ -->
+<div class="chapter active" id="g-ch-0">
+  <div class="chapter-header">
+    <div class="ch-tag green">Introduzione · Passo 1 di 8</div>
+    <h1 class="ch-title">Menu Principale<br>WMS Hub</h1>
+    <p class="ch-desc">GRN Manager gestisce le bolle di consegna (DDT) e le entrate merci WMS con integrazione SAP B1. Per aprirlo usa la card verde dalla home oppure il menu laterale.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">1</span>
+        <div>
+          <div class="step-title">Apri WMS Hub e seleziona GRN Manager</div>
+          <div class="step-body">Clicca sulla card <strong style="color:var(--green)">GRN Manager</strong> in home oppure usa il menu hamburger ☰ in alto a sinistra e seleziona GRN dalla lista.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="mockup">
+          <div class="mock-bar">
+            <div class="mock-dot" style="background:#ef4444"></div>
+            <div class="mock-dot" style="background:#f59e0b;margin-left:5px"></div>
+            <div class="mock-dot" style="background:#10b981;margin-left:5px"></div>
+            <div class="mock-url">WMS · Hub</div>
+          </div>
+          <div class="mock-body">
+            <div class="screen-home">
+              <div class="sc-card">
+                <div class="sc-card-icon">📋</div>
+                <div class="sc-card-title" style="color:var(--blue)">Presenze</div>
+                <div class="sc-card-desc">Gestione turni e assenze</div>
+              </div>
+              <div class="sc-card">
+                <div class="sc-card-icon">📦</div>
+                <div class="sc-card-title" style="color:var(--amber)">Spedizioni AWB</div>
+                <div class="sc-card-desc">Tracking e gestione spedizioni</div>
+              </div>
+            </div>
+            <div style="max-width:253px;margin:0 auto">
+              <div class="sc-card highlight-g">
+                <div class="sc-card-icon">🟢</div>
+                <div class="sc-card-title" style="color:var(--green)">GRN Manager</div>
+                <div class="sc-card-desc">Entrate merci · integrazione SAP B1</div>
+                <div style="font-size:13px;color:var(--green);margin-top:6px">→</div>
+              </div>
+            </div>
+          </div>
+        </div>
+        <div class="infobox tip">
+          <span class="ib-icon">💡</span>
+          <div class="ib-body">La card <strong>GRN Manager</strong> (evidenziata in verde) apre il modulo per la visualizzazione e modifica delle bolle di consegna DDT con integrazione VLT e FLM per SAP B1.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">2</span>
+        <div>
+          <div class="step-title">Menu laterale e scorciatoie</div>
+          <div class="step-body">Dal menu hamburger puoi passare direttamente al GRN Manager. Il modulo attivo è evidenziato in verde nel drawer.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div style="display:flex;align-items:flex-start;gap:20px;flex-wrap:wrap">
+          <div class="drawer-mock">
+            <div style="padding:10px 14px 8px;border-bottom:1px solid var(--border);margin-bottom:6px;font-family:var(--ffc);font-size:12px;font-weight:700;color:var(--blue)">WMS Hub</div>
+            <div style="font-size:9px;font-weight:700;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted);padding:6px 14px 3px">Moduli</div>
+            <div class="dm-item"><span class="di">📋</span>Presenze</div>
+            <div class="dm-item"><span class="di">📦</span>Spedizioni AWB</div>
+            <div class="dm-item act-g"><span class="di">🟢</span>GRN Manager</div>
+          </div>
+          <div style="flex:1;min-width:200px">
+            <div class="infobox tip">
+              <span class="ib-icon">⌨️</span>
+              <div class="ib-body"><strong>Scorciatoie:</strong><br>
+              <kbd>Alt</kbd>+<kbd>3</kbd> → GRN Manager<br>
+              <kbd>Alt</kbd>+<kbd>0</kbd> → Home</div>
+            </div>
+          </div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" disabled>← Precedente</button>
+    <button class="nbtn next green" onclick="goto('g',1)">Accesso e Login →</button>
+  </div>
+</div>
+
+<!-- ══ G1: LOGIN ══ -->
+<div class="chapter" id="g-ch-1">
+  <div class="chapter-header">
+    <div class="ch-tag green">Introduzione · Passo 2 di 8</div>
+    <h1 class="ch-title">Accesso e Login</h1>
+    <p class="ch-desc">Il GRN Manager richiede l'autenticazione Google per accedere ai file DDT nella cartella Drive e al foglio VLT (valori di riferimento per SAP B1).</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">1</span>
+        <div>
+          <div class="step-title">Schermata di login</div>
+          <div class="step-body">Alla prima apertura compare la schermata di accesso. Clicca <strong>Accedi con Google</strong> e seleziona il tuo account.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div style="max-width:380px;background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:28px;text-align:center;margin:12px 0">
+          <div style="font-family:var(--ffc);font-size:26px;font-weight:800;color:var(--blue);margin-bottom:6px">GRN <span style="color:var(--subtle);font-weight:600">Manager</span></div>
+          <div style="font-size:10px;color:var(--muted);letter-spacing:2px;text-transform:uppercase;margin-bottom:16px">Gestione Bolle di Consegna</div>
+          <p style="font-size:12px;color:var(--subtle);line-height:1.7;margin-bottom:20px">Visualizza, modifica e aggiorna i file DDT dalla cartella Drive condivisa.</p>
+          <button style="display:inline-flex;align-items:center;gap:10px;background:#fff;color:#1f2937;border:none;border-radius:8px;padding:11px 22px;font-size:13px;font-weight:600;cursor:pointer;box-shadow:0 2px 12px rgba(0,0,0,.3)">
+            <svg width="18" height="18" viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+            Accedi con Google
+          </button>
+          <p style="font-size:10px;color:var(--muted);margin-top:14px;line-height:1.5">Richiede accesso a Google Drive per leggere e modificare i file nella cartella GRN.</p>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">2</span>
+        <div>
+          <div class="step-title">Topbar e pulsanti speciali</div>
+          <div class="step-body">Dopo il login la topbar mostra nome utente e quattro pulsanti aggiuntivi: <strong>↻ VLT</strong> (ricarica dati di riferimento), <strong>📡 FLM</strong> (invia dati al Tampermonkey), <strong>🔑 Permessi</strong> (solo super utente) ed <strong>Esci</strong>.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="topbar-mock" style="border-color:rgba(16,185,129,.3)">
+          <div class="tm-logo" style="color:var(--blue)">GRN <span style="color:var(--subtle);font-weight:600">Manager</span></div>
+          <div class="tm-div"></div>
+          <span style="font-size:10px;color:var(--muted)">Bolle di Consegna</span>
+          <div class="tm-right">
+            <div style="display:flex;align-items:center;gap:6px;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:3px 10px 3px 4px;font-size:11px;color:var(--subtle)">
+              <div style="width:20px;height:20px;border-radius:50%;background:rgba(16,185,129,.2);display:flex;align-items:center;justify-content:center;font-family:var(--ffc);font-size:9px;font-weight:700;color:var(--green)">M</div>
+              Mario Rossi
+            </div>
+            <div class="tm-btn">↻ VLT</div>
+            <div class="tm-btn" style="color:var(--amber)">📡 FLM</div>
+            <div class="tm-btn" style="color:var(--red)">Esci</div>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">3</span>
+        <div>
+          <div class="step-title">Caricamento automatico VLT</div>
+          <div class="step-body">All'accesso il modulo carica automaticamente il foglio VLT da Google Sheets. Questo foglio contiene i valori di riferimento usati per calcolare le note e validare le righe DDT. Se il caricamento fallisce, compare un avviso arancione.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="infobox tip">
+          <span class="ib-icon">💡</span>
+          <div class="ib-body">Se vuoi aggiornare i dati VLT senza ricaricare la pagina, usa il pulsante <strong>↻ VLT</strong> nella topbar. I dati vengono aggiornati in background.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('g',0)">← Menu Principale</button>
+    <button class="nbtn next green" onclick="goto('g',2)">Selezione Data →</button>
+  </div>
+</div>
+
+<!-- ══ G2: SELEZIONE DATA ══ -->
+<div class="chapter" id="g-ch-2">
+  <div class="chapter-header">
+    <div class="ch-tag green">Interfaccia · Passo 3 di 8</div>
+    <h1 class="ch-title">Selezione Data</h1>
+    <p class="ch-desc">Prima di visualizzare le bolle di consegna seleziona la data o un intervallo. I file DDT sono organizzati in cartelle con formato <code>YYYY-MM-DD</code> su Google Drive.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">1</span>
+        <div>
+          <div class="step-title">Dropdown date e intervallo</div>
+          <div class="step-body">Seleziona la data dal dropdown <strong>Data</strong> (si popola con le cartelle disponibili su Drive). Puoi anche impostare un intervallo con i campi <strong>Da Data</strong> e <strong>A Data</strong>.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="filters-mock" style="background:var(--surface)">
+          <div class="fm-group">
+            <div class="fm-label">Da Data</div>
+            <select class="fm-input" style="min-width:130px"><option>19/05/2026</option><option>18/05/2026</option></select>
+          </div>
+          <div class="fm-group">
+            <div class="fm-label">A Data</div>
+            <select class="fm-input" style="min-width:130px"><option>Stessa data</option><option>19/05/2026</option></select>
+          </div>
+          <button class="fm-btn" style="background:var(--blue);color:#fff">Carica Dati</button>
+          <button class="fm-btn ghost">↻ Aggiorna</button>
+        </div>
+        <div class="infobox tip">
+          <span class="ib-icon">💡</span>
+          <div class="ib-body">Il modulo ricorda l'ultimo filtro usato e lo ripristina all'apertura successiva. Se vuoi ripartire da zero, cambia manualmente data e filtri.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">2</span>
+        <div>
+          <div class="step-title">Struttura cartelle GRN su Drive</div>
+          <div class="step-body">I file DDT sono organizzati in cartelle con il formato ISO <code>YYYY-MM-DD</code>, diversamente dalle Spedizioni che usano <code>YYYYMMDD</code>.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:14px;font-family:var(--ffm);font-size:11px;color:var(--subtle);line-height:2">
+          📁 GRN Manager (cartella radice)<br>
+          &nbsp;&nbsp;📁 <span style="color:var(--green)">2026-05-19</span><br>
+          &nbsp;&nbsp;&nbsp;&nbsp;📄 DDT_20260519_001.xlsx<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;📄 DDT_20260519_002.xlsx<br>
+          &nbsp;&nbsp;📁 2026-05-18<br>
+          &nbsp;&nbsp;&nbsp;&nbsp;📄 DDT_20260518_001.xlsx
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('g',1)">← Accesso e Login</button>
+    <button class="nbtn next green" onclick="goto('g',3)">Filtri e Tabella →</button>
+  </div>
+</div>
+
+<!-- ══ G3: FILTRI ══ -->
+<div class="chapter" id="g-ch-3">
+  <div class="chapter-header">
+    <div class="ch-tag green">Interfaccia · Passo 4 di 8</div>
+    <h1 class="ch-title">Filtri e Tabella</h1>
+    <p class="ch-desc">Dopo il caricamento dei dati puoi filtrare le bolle per plant, stato, numero DDT e altri campi. La tabella principale mostra tutte le righe con la colonna NOTE calcolata automaticamente dal VLT.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">1</span>
+        <div>
+          <div class="step-title">Barra dei filtri</div>
+          <div class="step-body">La barra filtri include plant, stato bolla, numero DDT e una ricerca testo libero. I filtri si applicano in tempo reale mentre digiti o selezioni.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="filters-mock" style="background:var(--surface)">
+          <div class="fm-group">
+            <div class="fm-label">Plant</div>
+            <select class="fm-input" style="min-width:90px"><option>— Tutti —</option><option>P52</option></select>
+          </div>
+          <div class="fm-group">
+            <div class="fm-label">Stato</div>
+            <select class="fm-input" style="min-width:100px"><option>— Tutti —</option><option>APERTO</option><option>CHIUSO</option></select>
+          </div>
+          <div class="fm-group">
+            <div class="fm-label">N° DDT</div>
+            <input class="fm-input" placeholder="Digita DDT…" style="font-family:var(--ffm);min-width:120px">
+          </div>
+          <div class="fm-group">
+            <div class="fm-label">Cerca</div>
+            <input class="fm-input" placeholder="🔍 Testo libero…" style="min-width:130px">
+          </div>
+          <button class="fm-btn" style="background:var(--blue);color:#fff">Carica</button>
+          <button class="fm-btn ghost">↻</button>
+          <button class="fm-btn ghost" style="border-color:rgba(245,158,11,.4);color:var(--amber)">⬇ CSV</button>
+          <button class="fm-btn ghost" style="border-color:rgba(168,85,247,.4);color:#a855f7">⚙ Colonne</button>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">2</span>
+        <div>
+          <div class="step-title">Colonna NOTE e integrazione VLT</div>
+          <div class="step-body">La colonna <strong>NOTE</strong> viene calcolata automaticamente incrociando i dati del DDT con il foglio VLT. Indica eventuali discrepanze, articoli non trovati o valori fuori tolleranza da segnalare a SAP.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="gtbl">
+          <div class="gtbl-head" style="display:flex">
+            <div class="gtbl-th" style="flex:0 0 80px">N° DDT</div>
+            <div class="gtbl-th" style="flex:0 0 60px">Plant</div>
+            <div class="gtbl-th" style="flex:0 0 80px">Stato</div>
+            <div class="gtbl-th" style="flex:1">Fornitore</div>
+            <div class="gtbl-th" style="flex:1;color:var(--green)">NOTE</div>
+          </div>
+          <div class="gtbl-row">
+            <div class="gtbl-cell mono" style="flex:0 0 80px">DDT-001</div>
+            <div class="gtbl-cell blue" style="flex:0 0 60px">P52</div>
+            <div class="gtbl-cell green" style="flex:0 0 80px">APERTO</div>
+            <div class="gtbl-cell" style="flex:1">Fornitore Alfa</div>
+            <div class="gtbl-cell" style="flex:1;color:var(--muted)">—</div>
+          </div>
+          <div class="gtbl-row">
+            <div class="gtbl-cell mono" style="flex:0 0 80px">DDT-002</div>
+            <div class="gtbl-cell blue" style="flex:0 0 60px">P53</div>
+            <div class="gtbl-cell" style="flex:0 0 80px;color:var(--amber)">APERTO</div>
+            <div class="gtbl-cell" style="flex:1">Fornitore Beta</div>
+            <div class="gtbl-cell" style="flex:1;color:var(--amber)">⚠ Qty fuori tol.</div>
+          </div>
+        </div>
+        <div class="infobox warn">
+          <span class="ib-icon">⚠️</span>
+          <div class="ib-body">Quando una riga ha una nota, richiede attenzione prima di procedere con l'inserimento in SAP B1. Verifica la discrepanza segnalata con l'ufficio acquisti o il fornitore.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">3</span>
+        <div>
+          <div class="step-title">Gestione colonne</div>
+          <div class="step-body">Clicca il pulsante <strong style="color:var(--purple)">⚙ Colonne</strong> per aprire il pannello di gestione colonne. Puoi nascondere le colonne non necessarie per una vista più pulita. La configurazione è salvata localmente.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('g',2)">← Selezione Data</button>
+    <button class="nbtn next green" onclick="goto('g',4)">Modificare i Dati →</button>
+  </div>
+</div>
+
+<!-- ══ G4: MODIFICARE DATI ══ -->
+<div class="chapter" id="g-ch-4">
+  <div class="chapter-header">
+    <div class="ch-tag green">Operatività · Passo 5 di 8</div>
+    <h1 class="ch-title">Modificare i Dati</h1>
+    <p class="ch-desc">Puoi modificare direttamente le celle della tabella DDT. Le modifiche vengono salvate nel file CSV associato su Google Drive. Non è necessaria una modalità Admin separata: la modifica è disponibile a tutti gli utenti loggati.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">1</span>
+        <div>
+          <div class="step-title">Clicca su una cella per modificarla</div>
+          <div class="step-body">Le celle della tabella DDT sono direttamente editabili. Clicca sulla cella da modificare, compare un campo di testo. Premi <kbd>Invio</kbd> per confermare o <kbd>Esc</kbd> per annullare.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="infobox info">
+          <span class="ib-icon">ℹ️</span>
+          <div class="ib-body">A differenza di Presenze e Spedizioni, il GRN Manager non richiede una password Admin per modificare i dati. Tutti gli utenti autenticati possono aggiornare le celle.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">2</span>
+        <div>
+          <div class="step-title">Salva CSV</div>
+          <div class="step-body">Dopo aver modificato i dati, clicca <strong style="color:var(--amber)">⬇ Salva CSV</strong> per scaricare il file CSV aggiornato oppure per sovrascrivere il file su Drive. Il pulsante si abilita solo dopo una modifica.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="export-mock">
+          <div class="em-title" style="color:var(--amber)">⬇ Salva CSV</div>
+          <div class="em-item">
+            <span style="font-size:16px">📄</span>
+            <div>
+              <div style="font-family:var(--ffc);font-size:12px;font-weight:700;color:var(--text)">GRN_2026-05-19.csv</div>
+              <div style="font-size:10px;color:var(--muted);margin-top:2px">Salva le modifiche su Drive e scarica una copia locale</div>
+            </div>
+            <button style="margin-left:auto;background:var(--amber);color:#000;border:none;border-radius:5px;padding:4px 12px;font-family:var(--ffc);font-size:11px;font-weight:700;cursor:pointer">Salva</button>
+          </div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">3</span>
+        <div>
+          <div class="step-title">File marcati come eliminati</div>
+          <div class="step-body">Se un file DDT viene eliminato tramite le funzioni Admin, viene rinominato con il prefisso <code>_ELIMINATO_</code> anziché cancellato fisicamente da Drive. Il modulo lo esclude automaticamente dai risultati.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="infobox tip">
+          <span class="ib-icon">💡</span>
+          <div class="ib-body">I file rinominati con <code>_ELIMINATO_</code> rimangono su Drive per sicurezza. Un amministratore Drive può recuperarli in qualsiasi momento rinominandoli normalmente.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('g',3)">← Filtri e Tabella</button>
+    <button class="nbtn next green" onclick="goto('g',5)">FLM e VLT →</button>
+  </div>
+</div>
+
+<!-- ══ G5: FLM E VLT ══ -->
+<div class="chapter" id="g-ch-5">
+  <div class="chapter-header">
+    <div class="ch-tag green">Operatività · Passo 6 di 8</div>
+    <h1 class="ch-title">FLM e VLT</h1>
+    <p class="ch-desc">FLM e VLT sono due integrazioni specifiche del GRN Manager per l'automazione SAP B1. Il VLT fornisce i dati di riferimento; il FLM invia i dati aperti allo script Tampermonkey installato nel browser.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">1</span>
+        <div>
+          <div class="step-title">VLT — Foglio valori di riferimento</div>
+          <div class="step-body">Il VLT è un Google Sheet condiviso che contiene i valori di riferimento per la validazione dei DDT (quantità attese, codici articolo, tolleranze). Il modulo lo carica automaticamente all'accesso.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="infobox info">
+          <span class="ib-icon">ℹ️</span>
+          <div class="ib-body">Il pulsante <strong>↻ VLT</strong> nella topbar ricarica il foglio VLT senza ricaricare la pagina. Utile quando il foglio VLT è stato aggiornato nel frattempo da un collega.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">2</span>
+        <div>
+          <div class="step-title">FLM — Invio dati a SAP tramite Tampermonkey</div>
+          <div class="step-body">Il pulsante <strong style="color:var(--amber)">📡 FLM</strong> invia i dati delle bolle aperte allo script Tampermonkey installato nel browser. Lo script automatizza l'inserimento in SAP B1, riducendo il lavoro manuale.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div style="display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin:10px 0">
+          <div style="background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:10px 14px;font-size:12px;color:var(--amber);display:flex;align-items:center;gap:7px">
+            📡 <strong>FLM</strong> attivo — 3 bolle aperte in coda per SAP B1
+          </div>
+        </div>
+        <div class="infobox warn">
+          <span class="ib-icon">⚠️</span>
+          <div class="ib-body">Il pulsante FLM funziona solo se lo script Tampermonkey è installato e attivo nel browser. Se non appare nulla dopo il clic, verifica che l'estensione sia abilitata sulla pagina SAP B1.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">3</span>
+        <div>
+          <div class="step-title">Configurazione utente</div>
+          <div class="step-body">Il modulo salva una configurazione per utente (plant preferito, filtri ricorrenti) su un file JSON in Google Drive. La configurazione viene caricata automaticamente ad ogni accesso.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('g',4)">← Modificare i Dati</button>
+    <button class="nbtn next green" onclick="goto('g',6)">Salva CSV →</button>
+  </div>
+</div>
+
+<!-- ══ G6: SALVA CSV ══ -->
+<div class="chapter" id="g-ch-6">
+  <div class="chapter-header">
+    <div class="ch-tag green">Operatività · Passo 7 di 8</div>
+    <h1 class="ch-title">Salva CSV</h1>
+    <p class="ch-desc">Il GRN Manager lavora con file CSV (non xlsx come le Spedizioni). Il salvataggio può avvenire localmente o sovrascrivendo il file su Drive.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">1</span>
+        <div>
+          <div class="step-title">Pulsante ⬇ Salva CSV</div>
+          <div class="step-body">Clicca <strong style="color:var(--amber)">⬇ Salva CSV</strong> nella barra filtri per scaricare il file CSV con tutti i dati visibili. Il file include le ultime modifiche apportate nella sessione.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">2</span>
+        <div>
+          <div class="step-title">Aggiornamento dati</div>
+          <div class="step-body">Clicca <strong>↻ Aggiorna</strong> per riscaricare i file dalla cartella Drive mantenendo i filtri attivi. Utile per sincronizzare con le modifiche di altri utenti.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="infobox tip">
+          <span class="ib-icon">💡</span>
+          <div class="ib-body">Il modulo usa un sistema di Broadcast Channel: se apri più schede dello stesso modulo, le modifiche vengono propagate automaticamente tra le schede aperte.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('g',5)">← FLM e VLT</button>
+    <button class="nbtn next green" onclick="goto('g',7)">Permessi e Config →</button>
+  </div>
+</div>
+
+<!-- ══ G7: PERMESSI ══ -->
+<div class="chapter" id="g-ch-7">
+  <div class="chapter-header">
+    <div class="ch-tag green">Avanzato · Passo 8 di 8</div>
+    <h1 class="ch-title">Permessi e Config</h1>
+    <p class="ch-desc">Il pannello Permessi del GRN Manager è accessibile solo ai super utenti. Permette di gestire chi può accedere al modulo e con quale livello di autorizzazione.</p>
+  </div>
+
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">1</span>
+        <div>
+          <div class="step-title">Pulsante 🔑 Permessi</div>
+          <div class="step-body">Il pulsante <strong style="color:var(--blue)">🔑 Permessi</strong> è visibile nella topbar solo se l'utente ha il ruolo di super utente. Cliccandolo si apre il pannello di gestione accessi GRN.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="infobox info">
+          <span class="ib-icon">ℹ️</span>
+          <div class="ib-body">Se non vedi il pulsante Permessi, il tuo account non ha il ruolo super. Contatta l'amministratore per richiedere l'elevazione del profilo.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">2</span>
+        <div>
+          <div class="step-title">File di configurazione utente</div>
+          <div class="step-body">Il modulo salva un file <code>config_grn_[email].json</code> in una cartella dedicata su Drive. Contiene plant preferito e altri parametri personali che vengono ripristinati ad ogni accesso.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <ul class="checklist green">
+          <li>Plant predefinito ripristinato automaticamente</li>
+          <li>Filtri dell'ultima sessione memorizzati</li>
+          <li>Configurazione colonne salvata per utente</li>
+          <li>File creato automaticamente al primo accesso</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num green">3</span>
+        <div>
+          <div class="step-title">Riepilogo scorciatoie</div>
+          <div class="step-body">Tutte le scorciatoie da tastiera del WMS Hub valide anche in GRN Manager.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <table class="shortcut-table">
+          <tr><td><kbd>Alt</kbd>+<kbd>1</kbd></td><td>Apre il modulo Presenze</td></tr>
+          <tr><td><kbd>Alt</kbd>+<kbd>2</kbd></td><td>Apre Spedizioni AWB</td></tr>
+          <tr><td><kbd>Alt</kbd>+<kbd>3</kbd></td><td>Apre GRN Manager</td></tr>
+          <tr><td><kbd>Alt</kbd>+<kbd>0</kbd></td><td>Torna alla Home</td></tr>
+          <tr><td><kbd>Esc</kbd></td><td>Chiude menu o modale aperta</td></tr>
+        </table>
+      </div>
+    </div>
+  </div>
+
+  <hr class="divider">
+
+  <div class="complete-screen">
+    <div class="complete-icon">🟢</div>
+    <div class="complete-title green">Guida completata!</div>
+    <p class="complete-sub">Hai esplorato tutte le funzionalità del modulo GRN Manager di WMS Hub. Puoi rileggere qualsiasi sezione cliccando sul menu laterale.</p>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:20px">
+      <button class="nbtn prev" onclick="goto('g',0)" style="border-radius:8px">↩ Ricomincia dall'inizio</button>
+    </div>
+  </div>
+
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('g',6)">← Salva CSV</button>
+    <button class="nbtn next" disabled>Fine ✓</button>
+  </div>
+</div>
+
+</div><!-- /panel-g -->
+
+</main>
+</div>
+
+<script>
+// ── STATO ──────────────────────────────────────
+var state = {
+  p: { current: 0, total: 8,  visited: new Set([0]) },
+  s: { current: 0, total: 9,  visited: new Set([0]) },
+  g: { current: 0, total: 8,  visited: new Set([0]) }
+};
+var activeModule = 'p';
+
+// ── SWITCH MODULE ──────────────────────────────
+function switchModule(mod) {
+  // Nascondi pannello corrente
+  document.getElementById('panel-'+activeModule).classList.remove('active');
+  document.getElementById('sb-'+activeModule).style.display = 'none';
+  document.getElementById('mbtn-'+activeModule).className = 'mod-btn';
+
+  activeModule = mod;
+
+  // Mostra nuovo pannello
+  document.getElementById('panel-'+mod).classList.add('active');
+  document.getElementById('sb-'+mod).style.display = '';
+  var cls = {p:'active-p', s:'active-s', g:'active-g'}[mod];
+  document.getElementById('mbtn-'+mod).className = 'mod-btn ' + cls;
+
+  // Aggiorna sidebar logo
+  var subs = {p:'📋 Modulo Presenze', s:'📦 Spedizioni AWB', g:'🟢 GRN Manager'};
+  document.getElementById('sb-sub').textContent = subs[mod];
+
+  // Vai alla sezione corrente del modulo
+  var s = state[mod];
+  updateSidebarActive(mod, s.current);
+  updateProgress(mod);
+
+  window.scrollTo({top:0});
+}
+
+// ── NAVIGA CAPITOLO ────────────────────────────
+function goto(mod, idx) {
+  var s = state[mod];
+  // Nascondi capitolo corrente
+  document.getElementById(mod+'-ch-'+s.current).classList.remove('active');
+  // Attiva nuovo
+  s.current = idx;
+  s.visited.add(idx);
+  document.getElementById(mod+'-ch-'+idx).classList.add('active');
+  updateSidebarActive(mod, idx);
+  updateProgress(mod);
+  window.scrollTo({top:0, behavior:'smooth'});
+}
+
+function updateSidebarActive(mod, idx) {
+  // Rimuovi tutti gli active nel modulo
+  var navLinks = document.querySelectorAll('#sb-'+mod+' .sb-link');
+  navLinks.forEach(function(el){ el.classList.remove('active', 'active-p', 'active-s', 'active-g'); });
+  var link = document.getElementById(mod+'-nav-'+idx);
+  if (link) {
+    var cls = {p:'active-p', s:'active-s', g:'active-g'}[mod];
+    link.classList.add(cls);
+  }
+}
+
+function updateProgress(mod) {
+  var s = state[mod];
+  var pct = Math.round((s.visited.size / s.total) * 100);
+  document.getElementById('progressFill').style.width = pct + '%';
+  document.getElementById('progressLabel').textContent = s.visited.size + ' / ' + s.total + ' sezioni';
+}
+
+// ── INIT ───────────────────────────────────────
+updateSidebarActive('p', 0);
+updateProgress('p');
+</script>
+</body>
+</html>
