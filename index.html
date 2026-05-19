@@ -148,6 +148,8 @@
   .dr-item.app-spedizioni.active .dr-item-name { color: var(--amber); }
   .dr-item.app-grn.active      { border-color: rgba(16,185,129,.3); }
   .dr-item.app-grn.active .dr-item-name { color: var(--green); }
+  .dr-item.app-guida.active    { border-color: rgba(148,163,184,.3); }
+  .dr-item.app-guida.active .dr-item-name { color: var(--subtle); }
 
   .dr-item-icon { font-size: 17px; flex-shrink: 0; width: 22px; text-align: center; }
   .dr-item-info { display: flex; flex-direction: column; gap: 1px; }
@@ -350,6 +352,16 @@
       </div>
     </div>
 
+    <div class="dr-sect">Risorse</div>
+
+    <div class="dr-item app-guida" id="nav-guida" onclick="openApp('guida')">
+      <span class="dr-item-icon">📖</span>
+      <div class="dr-item-info">
+        <span class="dr-item-name">Guida</span>
+        <span class="dr-item-desc">Documentazione moduli</span>
+      </div>
+    </div>
+
   </div>
 
   <div class="dr-footer">WMS Hub · ATS v1.0</div>
@@ -394,6 +406,7 @@
   <iframe class="app-frame" id="frame-presenze"   src="" data-src="index_Presenze.html"      title="Presenze"></iframe>
   <iframe class="app-frame" id="frame-spedizioni" src="" data-src="index_Spedizioni-awb.html" title="Spedizioni AWB"></iframe>
   <iframe class="app-frame" id="frame-grn"        src="" data-src="index_Grn.html"            title="GRN Manager"></iframe>
+  <iframe class="app-frame" id="frame-guida"      src="" data-src="guida_hub.html"            title="Guida"></iframe>
 
 </main>
 
@@ -402,12 +415,14 @@
     presenze:   document.getElementById('frame-presenze'),
     spedizioni: document.getElementById('frame-spedizioni'),
     grn:        document.getElementById('frame-grn'),
+    guida:      document.getElementById('frame-guida'),
   };
   const navItems = {
     home:       document.getElementById('nav-home'),
     presenze:   document.getElementById('nav-presenze'),
     spedizioni: document.getElementById('nav-spedizioni'),
     grn:        document.getElementById('nav-grn'),
+    guida:      document.getElementById('nav-guida'),
   };
   let currentApp = null;
   let drawerOpen = false;
@@ -455,6 +470,7 @@
       presenze:   'Caricamento Presenze...',
       spedizioni: 'Caricamento Spedizioni AWB...',
       grn:        'Caricamento GRN Manager...',
+      guida:      'Caricamento Guida...',
     };
     document.getElementById('loader-text').textContent = labels[app] || 'Caricamento...';
 
