@@ -1075,12 +1075,52 @@ var spIdx=-1, spDi=-1, spSigla=null;
 var puEditEmail=null;
 var oreVisible=false, coopOreVisible=false;
 
-// ── Config orario default (salvata in localStorage) ──
-var wmsConfig=(function(){
-  try{var s=localStorage.getItem('wms_config');return s?JSON.parse(s):{ingresso:'08:00',uscita:'18:00'};}
-  catch(e){return{ingresso:'08:00',uscita:'18:00'};}
-})();
-function saveWmsConfig(){try{localStorage.setItem('wms_config',JSON.stringify(wmsConfig));}catch(e){}}
+// ── Config orario utente (salvata su Drive per cartella) ──
+var USER_CONFIG_FOLDER = '1LGoR9SKDthz1tUDLxbZhClqA-xhkjoNY';
+var wmsConfig = {ingresso:'08:00', uscita:'18:00'};
+var wmsConfigFileId = null;
+
+function userConfigFname(email){
+  return 'config_user_'+(email||'').replace(/[^a-zA-Z0-9@._-]/g,'_')+'.json';
+}
+function loadUserConfig(){
+  if(!TOKEN||!uEmail) return Promise.resolve();
+  var fname=userConfigFname(uEmail);
+  return listFiles('"'+USER_CONFIG_FOLDER+'" in parents and name="'+fname+'" and trashed=false')
+    .then(function(files){
+      if(!files.length){wmsConfigFileId=null;return;}
+      wmsConfigFileId=files[0].id;
+      return fetch('https://www.googleapis.com/drive/v3/files/'+wmsConfigFileId+'?alt=media',
+        {headers:{Authorization:'Bearer '+TOKEN}})
+        .then(function(r){return r.json();})
+        .then(function(cfg){
+          if(cfg.ingresso) wmsConfig.ingresso=cfg.ingresso;
+          if(cfg.uscita)   wmsConfig.uscita=cfg.uscita;
+        });
+    }).catch(function(){});
+}
+function saveUserConfig(){
+  if(!TOKEN||!uEmail){toast('Accedi prima','err');return Promise.reject();}
+  var fname=userConfigFname(uEmail);
+  var json=JSON.stringify(wmsConfig,null,2);
+  var blob=new Blob([json],{type:'application/json'});
+  var bnd='ucfg_'+Date.now(), enc=new TextEncoder();
+  var meta=wmsConfigFileId
+    ? JSON.stringify({name:fname})
+    : JSON.stringify({name:fname, parents:[USER_CONFIG_FOLDER]});
+  var pre='--'+bnd+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+meta+'\r\n--'+bnd+'\r\nContent-Type: application/json\r\n\r\n';
+  var post='\r\n--'+bnd+'--';
+  var method=wmsConfigFileId?'PATCH':'POST';
+  var url=wmsConfigFileId
+    ? 'https://www.googleapis.com/upload/drive/v3/files/'+wmsConfigFileId+'?uploadType=multipart'
+    : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+  return blob.arrayBuffer().then(function(buf){
+    var ab=enc.encode(pre),bb=new Uint8Array(buf),cb=enc.encode(post);
+    var body=new Uint8Array(ab.length+bb.length+cb.length);body.set(ab);body.set(bb,ab.length);body.set(cb,ab.length+bb.length);
+    return fetch(url,{method:method,headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'multipart/related; boundary='+bnd},body:body});
+  }).then(function(r){return r.json();})
+    .then(function(d){if(d.id)wmsConfigFileId=d.id;});
+}
 var totVisible=false, coopTotVisible=false;
 var legVisible=true, coopLegVisible=true;
 var autoRefreshTimer=null, autoRefreshInterval=5;
@@ -1253,6 +1293,7 @@ function onToken(r){
     document.getElementById('loginScreen').style.display='none';
     showShell(uName,uEmail,uPic);
     loadConfig();
+    loadUserConfig();
   }).catch(function(){document.getElementById('loginScreen').style.display='flex';});
 }
 function showShell(name,email,pic){
@@ -3076,10 +3117,12 @@ function cfgSave(){
   var ing=document.getElementById('cfgIng').value;
   var usc=document.getElementById('cfgUsc').value;
   if(!ing||!usc){toast('Inserisci ingresso e uscita','warn');return;}
-  wmsConfig.ingresso=ing;wmsConfig.uscita=usc;
-  saveWmsConfig();
+  wmsConfig.ingresso=ing; wmsConfig.uscita=usc;
   mClose('moConfig');
-  toast('✓ Orario default salvato: '+ing+' – '+usc);
+  toast('⏳ Salvo config su Drive…','warn');
+  saveUserConfig()
+    .then(function(){toast('✓ Config salvata: '+ing+' – '+usc);})
+    .catch(function(e){toast('✗ Errore salvataggio config','err');console.error(e);});
 }
 
 /* ═══════════════════════════════════════
