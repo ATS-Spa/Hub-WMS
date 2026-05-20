@@ -253,6 +253,322 @@ body.admin-mode .bdel:hover{color:var(--red);background:rgba(239,68,68,.1)}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
+
+/* ══════════════════════════════════════════
+   RESPONSIVE — tablet (≤1024px) e mobile (≤768px)
+   Nessuna modifica al JS, solo layout adattivo
+   ══════════════════════════════════════════ */
+
+/* ── TABLET ── */
+@media (max-width:1024px){
+  .topbar{padding:0 16px 0 16px}
+  .filters{gap:8px;padding:10px 16px}
+  .scroll{padding:10px 16px 24px}
+  .sbar{padding:10px 16px 0}
+  .legbar{padding:6px 16px}
+  .snav{padding:0 16px}
+}
+
+/* ── MOBILE ── */
+@media (max-width:768px){
+
+  /* Topbar compatta */
+  .topbar{
+    height:48px;
+    padding:0 12px;
+    gap:8px;
+    position:fixed;
+    top:0;left:0;right:0;
+    z-index:300;
+  }
+  .tlogo{font-size:17px}
+  .tsub{display:none}
+  .tdiv{display:none}
+  /* Nascondi badge permesso e pulsante Admin dalla topbar su mobile — sono nel drawer */
+  .pbadge{display:none}
+  .btn-top:not([onclick*="signOut"]){display:none}
+  /* Nome utente compatto */
+  .ubadge span#uName{display:none}
+  .uav-fb,.uav{width:28px;height:28px}
+
+  /* Shell: toglie overflow hidden per permettere scroll nativo */
+  #appShell{
+    padding-top:48px; /* offset topbar fissa */
+    height:auto;
+    min-height:100vh;
+    overflow:visible;
+  }
+
+  /* Section nav → bottom bar fissa */
+  .snav{
+    position:fixed;
+    bottom:0;left:0;right:0;
+    z-index:300;
+    background:var(--surface);
+    border-top:1px solid var(--border);
+    border-bottom:none;
+    padding:0;
+    display:flex;
+    justify-content:space-around;
+    height:56px;
+    overflow:hidden;
+  }
+  .snb{
+    flex:1;
+    height:56px;
+    padding:0;
+    flex-direction:column;
+    gap:2px;
+    font-size:9px;
+    letter-spacing:.3px;
+    border-bottom:none;
+    border-top:3px solid transparent;
+    margin-bottom:0;
+    justify-content:center;
+  }
+  .snb.on.coop,.snb.on.ats,.snb.on.perm,.snb.on.file{border-bottom:none;border-top-width:3px}
+  .snb.on.coop{border-top-color:var(--blue)}
+  .snb.on.ats{border-top-color:var(--teal)}
+  .snb.on.perm{border-top-color:var(--amber)}
+  .snb.on.file{border-top-color:var(--cyan)}
+  .sndot{width:16px;height:16px;border-radius:4px;flex-shrink:0}
+
+  /* Sezioni: scroll normale, padding bottom per bottom bar */
+  .sec{
+    display:none;
+    flex-direction:column;
+    overflow:visible;
+    min-height:0;
+    padding-bottom:64px;
+  }
+  .sec.on{display:flex}
+
+  /* Legend bar compatta */
+  .legbar{padding:5px 12px;gap:4px}
+  .legt{display:none}
+
+  /* ── FILTRI ACCORDION ── */
+  .filters{
+    flex-direction:column;
+    padding:0;
+    gap:0;
+    background:var(--surface);
+    border-bottom:1px solid var(--border);
+  }
+  /* Riga visibile sempre: carica + filtri rapidi */
+  .filter-quickrow{
+    display:flex;
+    align-items:center;
+    gap:8px;
+    padding:10px 12px;
+    flex-wrap:wrap;
+  }
+  /* Pannello espandibile */
+  .filter-body{
+    overflow:hidden;
+    max-height:0;
+    transition:max-height .28s ease;
+    padding:0 12px;
+  }
+  .filter-body.open{
+    max-height:600px;
+    padding:0 12px 12px;
+  }
+  .filter-body .fg{width:100%}
+  .filter-body .fc{width:100%}
+  .filter-body .fcsw{width:100%}
+  .filter-body .fcsw input{width:100%}
+  /* Pulsanti azione nel pannello espanso */
+  .filter-body .ba{width:100%;justify-content:center}
+  .filter-body .finfo{display:none}
+  .filter-body .refresh-badge{display:none}
+
+  /* Toggle filtri button */
+  .filter-toggle-btn{
+    margin-left:auto;
+    background:none;
+    border:1px solid var(--border);
+    border-radius:6px;
+    color:var(--muted);
+    font-size:18px;
+    width:34px;height:34px;
+    display:flex;align-items:center;justify-content:center;
+    cursor:pointer;
+    flex-shrink:0;
+    transition:border-color .15s,color .15s;
+  }
+  .filter-toggle-btn.open{border-color:var(--teal);color:var(--teal)}
+
+  /* Selezioni rapide sempre visibili (mese+anno come chip) */
+  .filter-quickrow .fg{flex-direction:row;align-items:center;gap:6px}
+  .filter-quickrow select.fc{
+    padding:6px 8px;
+    font-size:12px;
+    min-width:0 !important;
+    width:auto;
+    flex:1;
+  }
+  .filter-quickrow .ba{
+    padding:7px 14px;
+    font-size:12px;
+    white-space:nowrap;
+    flex-shrink:0;
+  }
+
+  /* Stats bar */
+  .sbar{padding:8px 12px 0;gap:6px}
+  .stat{padding:7px 10px;min-width:70px}
+  .sv{font-size:16px}
+
+  /* Scroll area */
+  .scroll{
+    padding:8px 0 0;
+    overflow:visible;
+    flex:none;
+  }
+
+  /* ── TABELLA → CARD MOBILE ── */
+  /* Wrapper esterno */
+  .tout{
+    border-radius:0;
+    border-left:none;border-right:none;
+    overflow:visible;
+    margin-top:0;
+  }
+  /* Nascondi la tabella classica su mobile */
+  .tout table{display:none}
+  /* Card list generata da JS via classe .mob-cards */
+  .mob-cards{display:flex;flex-direction:column;gap:6px;padding:8px 12px}
+  .mob-card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:10px 12px;
+    display:flex;
+    flex-direction:column;
+    gap:6px;
+    animation:fadeIn .18s ease;
+  }
+  .mob-card-header{
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .mob-card-name{
+    font-family:var(--ffc);
+    font-size:15px;
+    font-weight:700;
+    color:var(--text);
+    flex:1;
+  }
+  .mob-card-sap{
+    font-family:var(--ffm);
+    font-size:10px;
+    color:var(--muted);
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:2px 7px;
+  }
+  .mob-card-plant{
+    font-family:var(--ffc);
+    font-size:10px;
+    font-weight:700;
+    color:var(--blue);
+    background:rgba(59,130,246,.08);
+    border:1px solid rgba(59,130,246,.2);
+    border-radius:10px;
+    padding:2px 7px;
+  }
+  /* Riga giorni scrollabile */
+  .mob-card-days{
+    display:flex;
+    gap:3px;
+    overflow-x:auto;
+    padding-bottom:4px;
+    scrollbar-width:none;
+  }
+  .mob-card-days::-webkit-scrollbar{display:none}
+  .mob-day{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    min-width:28px;
+    gap:1px;
+    flex-shrink:0;
+  }
+  .mob-day-label{
+    font-size:8px;
+    color:var(--muted);
+    font-family:var(--ffm);
+  }
+  .mob-day-val{
+    font-family:var(--ffc);
+    font-size:11px;
+    font-weight:700;
+    width:26px;height:26px;
+    display:flex;align-items:center;justify-content:center;
+    border-radius:5px;
+    background:var(--card);
+    color:var(--muted);
+  }
+  .mob-day-val.we{background:rgba(36,48,72,.4);color:var(--border)}
+  .mob-day-val.today{background:rgba(20,184,166,.15);color:var(--teal);box-shadow:0 0 0 1.5px rgba(20,184,166,.4)}
+  .mob-day-val.holiday{background:rgba(239,68,68,.1);color:var(--red)}
+  .mob-day-val.has-val{background:rgba(255,255,255,.05)}
+  /* Totali */
+  .mob-card-totals{
+    display:flex;
+    gap:6px;
+    flex-wrap:wrap;
+    padding-top:4px;
+    border-top:1px solid var(--border);
+  }
+  .mob-tot-chip{
+    font-family:var(--ffm);
+    font-size:10px;
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:3px 8px;
+    color:var(--subtle);
+    display:flex;gap:4px;align-items:center;
+  }
+  .mob-tot-chip span{color:var(--text);font-weight:600}
+
+  /* ── MODAL full-screen su mobile ── */
+  .mo{align-items:flex-end}
+  .mc{
+    border-radius:16px 16px 0 0;
+    width:100% !important;
+    max-width:100% !important;
+    max-height:92vh;
+    padding:20px 18px 28px;
+    border-bottom:none;
+  }
+  /* Griglia sigle modal: 5 colonne invece di 4 */
+  .sgrid{grid-template-columns:repeat(5,1fr)}
+
+  /* Toast in basso centrato sopra bottom bar */
+  #toast{
+    bottom:68px;
+    right:12px;left:12px;
+    text-align:center;
+    white-space:normal;
+    max-width:none;
+  }
+
+  /* Login card */
+  .lcard{padding:36px 24px;border-radius:16px}
+  .llogo{font-size:28px}
+}
+
+/* ── SMALL PHONE (≤390px) ── */
+@media (max-width:390px){
+  .mob-day{min-width:24px}
+  .mob-day-val{width:22px;height:22px;font-size:10px}
+  .mob-card-name{font-size:14px}
+}
 </style>
 </head>
 <body>
@@ -290,6 +606,7 @@ body.admin-mode .bdel:hover{color:var(--red);background:rgba(239,68,68,.1)}
       <span class="pbadge" id="permBadge" onclick="goPermSection()">—</span>
       <div class="ubadge"><div id="uavW"></div><span id="uName">—</span></div>
       <button class="btn-top" id="btnAdmin" onclick="toggleAdmin()"><span class="adot"></span>Admin</button>
+      <button class="btn-top" id="btnConfig" onclick="openConfig()" style="color:var(--muted)">⚙ Config</button>
       <button class="btn-top" style="color:var(--red)" onclick="signOut()">Esci</button>
     </div>
   </header>
@@ -544,6 +861,21 @@ body.admin-mode .bdel:hover{color:var(--red);background:rgba(239,68,68,.1)}
   <div class="mbtns" style="margin-top:4px"><button class="mbtn cancel" onclick="mClose('moConf')">Annulla</button><button class="mbtn danger" id="confOk">Conferma</button></div>
 </div></div>
 
+<!-- ── MODAL CONFIG ORARIO ── -->
+<div id="moConfig" class="mo hide"><div class="mc" style="width:360px">
+  <div class="mt">⚙ Config Orario Default</div>
+  <div class="ms">Orario usato come default nei modal presenza e nel calcolo H.Fest. quando mancano gli orari individuali.</div>
+  <div style="display:flex;gap:12px;margin-top:4px">
+    <div class="fg" style="flex:1"><div class="fl">Ingresso</div><input class="mi" id="cfgIng" type="time"></div>
+    <div class="fg" style="flex:1"><div class="fl">Uscita</div><input class="mi" id="cfgUsc" type="time"></div>
+  </div>
+  <div style="font-size:11px;color:var(--muted);background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px 12px" id="cfgPreview">—</div>
+  <div class="mbtns">
+    <button class="mbtn cancel" onclick="mClose('moConfig')">Annulla</button>
+    <button class="mbtn ok" onclick="cfgSave()">💾 Salva</button>
+  </div>
+</div></div>
+
 <div id="moBulk" class="mo hide"><div class="mc" style="width:500px">
   <div class="mt">✔ Presenza a Tutti</div>
   <div class="ms" id="bulkSub">Imposta la stessa presenza per tutti i dipendenti visibili</div>
@@ -742,6 +1074,13 @@ var spMode='ats';
 var spIdx=-1, spDi=-1, spSigla=null;
 var puEditEmail=null;
 var oreVisible=false, coopOreVisible=false;
+
+// ── Config orario default (salvata in localStorage) ──
+var wmsConfig=(function(){
+  try{var s=localStorage.getItem('wms_config');return s?JSON.parse(s):{ingresso:'08:00',uscita:'18:00'};}
+  catch(e){return{ingresso:'08:00',uscita:'18:00'};}
+})();
+function saveWmsConfig(){try{localStorage.setItem('wms_config',JSON.stringify(wmsConfig));}catch(e){}}
 var totVisible=false, coopTotVisible=false;
 var legVisible=true, coopLegVisible=true;
 var autoRefreshTimer=null, autoRefreshInterval=5;
@@ -1834,8 +2173,8 @@ function openPickerGeneric(mode,ri,di){
   var nome=mode==='ats'?(emp.nome||''):(emp.nom2||emp.nome||'');
   document.getElementById('spTitle').textContent='Presenza · '+nome;
   document.getElementById('spSub').textContent=GGS[dt.weekday].toUpperCase()+' '+dt.day+'/'+('0'+m).slice(-2)+'/'+y;
-  document.getElementById('spIng').value=(emp.ingresso||[])[di]||'08:00';
-  document.getElementById('spUsc').value=(emp.uscita||[])[di]||'18:00';
+  document.getElementById('spIng').value=(emp.ingresso||[])[di]||wmsConfig.ingresso||'08:00';
+  document.getElementById('spUsc').value=(emp.uscita||[])[di]||wmsConfig.uscita||'18:00';
   document.getElementById('spPausa').checked=(curPs===undefined||curPs===null)?true:(curPs>0);
   document.getElementById('spPausaDur').value=(curPs===undefined||curPs===null||curPs===0)?'1':String(curPs<=0?1:curPs);
   var g=document.getElementById('spGrid');g.innerHTML='';
@@ -2437,11 +2776,12 @@ function calcTots(sig,ingresso,uscita,pause,dates,month,year){
     if(sg==='X'||sg==='SW'||sg==='TFS'){
       var ing=(ingresso||[])[di]||'',usc2=(uscita||[])[di]||'';
       var ps=(pause||[])[di];var ph=(ps===undefined||ps===null)?1:parseFloat(ps);
+      var d=dates&&dates[di];
+      var hol=d&&month&&year&&isHoliday(d.day,month,year);
+      // Se mancano gli orari e il giorno è festivo, usa il default config
+      if(!ing||!usc2){if(hol){ing=wmsConfig.ingresso||'08:00';usc2=wmsConfig.uscita||'18:00';}}
       if(ing&&usc2){
         var o=calcOreGiorno(ing,usc2,ph);
-        // Se il giorno è festivo (non weekend), somma in fest; altrimenti in ord/str
-        var d=dates&&dates[di];
-        var hol=d&&month&&year&&isHoliday(d.day,month,year);
         if(hol){r.fest+=o.ord+o.str;}
         else{r.ord+=o.ord;r.str+=o.str;}
       }
@@ -2564,8 +2904,8 @@ function openBulkPresenza(mode){
   var lastDay=new Date(y,m,0).getDate();
   document.getElementById('bulkDate').max=y+'-'+('0'+m).slice(-2)+'-'+('0'+lastDay).slice(-2);
 
-  document.getElementById('bulkIng').value='08:00';
-  document.getElementById('bulkUsc').value='18:00';
+  document.getElementById('bulkIng').value=wmsConfig.ingresso||'08:00';
+  document.getElementById('bulkUsc').value=wmsConfig.uscita||'18:00';
   document.getElementById('bulkPausa').checked=true;
   document.getElementById('bulkPausaDur').value='1';
   document.getElementById('bulkQty').style.display='none';
@@ -2714,6 +3054,241 @@ function disBtn(ids){ids.forEach(function(id){var el=document.getElementById(id)
 function lsS(k,v){try{localStorage.setItem('wms_'+k,JSON.stringify(v));}catch(e){}}
 function lsG(k){try{var s=localStorage.getItem('wms_'+k);return s?JSON.parse(s):null;}catch(e){return null;}}
 function lsDel(k){try{localStorage.removeItem('wms_'+k);}catch(e){}}
+
+// ── Config orario default ──
+function openConfig(){
+  document.getElementById('cfgIng').value=wmsConfig.ingresso||'08:00';
+  document.getElementById('cfgUsc').value=wmsConfig.uscita||'18:00';
+  cfgUpdatePreview();
+  document.getElementById('cfgIng').oninput=cfgUpdatePreview;
+  document.getElementById('cfgUsc').oninput=cfgUpdatePreview;
+  mOpen('moConfig');
+}
+function cfgUpdatePreview(){
+  var ing=document.getElementById('cfgIng').value;
+  var usc=document.getElementById('cfgUsc').value;
+  var o=calcOreGiorno(ing,usc,1);
+  var prev=document.getElementById('cfgPreview');
+  if(!ing||!usc){prev.textContent='—';return;}
+  prev.textContent='Orario: '+ing+' → '+usc+' · '+o.eff.toFixed(1)+'h effettive (pausa 1h) → Ord: '+fmtOre(o.ord)+'h · Str: '+fmtOre(o.str)+'h';
+}
+function cfgSave(){
+  var ing=document.getElementById('cfgIng').value;
+  var usc=document.getElementById('cfgUsc').value;
+  if(!ing||!usc){toast('Inserisci ingresso e uscita','warn');return;}
+  wmsConfig.ingresso=ing;wmsConfig.uscita=usc;
+  saveWmsConfig();
+  mClose('moConfig');
+  toast('✓ Orario default salvato: '+ing+' – '+usc);
+}
+
+/* ═══════════════════════════════════════
+   MOBILE RESPONSIVE — accordion filtri + card view
+   ═══════════════════════════════════════ */
+(function(){
+  var MOBILE = function(){ return window.innerWidth <= 768; };
+
+  /* ── Accordion filtri ──────────────────────────────────── */
+  function wrapFilters(){
+    if(!MOBILE()) return;
+    document.querySelectorAll('.filters').forEach(function(flt){
+      if(flt.dataset.mobWrapped) return;
+      flt.dataset.mobWrapped = '1';
+
+      // Raccoglie tutti i figli originali
+      var children = Array.from(flt.childNodes);
+
+      // Quickrow: btn Carica + mese + anno (sempre visibili)
+      var quickrow = document.createElement('div');
+      quickrow.className = 'filter-quickrow';
+
+      // Body espandibile
+      var body = document.createElement('div');
+      body.className = 'filter-body';
+
+      // Toggle button
+      var togBtn = document.createElement('button');
+      togBtn.className = 'filter-toggle-btn';
+      togBtn.innerHTML = '⚙';
+      togBtn.setAttribute('type','button');
+      togBtn.onclick = function(){
+        body.classList.toggle('open');
+        togBtn.classList.toggle('open');
+      };
+
+      // Distingui elementi da mettere in quickrow vs body
+      children.forEach(function(node){
+        if(node.nodeType !== 1){ return; } // skip text nodes
+        var el = node;
+        var isLoad = el.id && (el.id==='cLoad'||el.id==='aLoad');
+        var isMonthYear = el.querySelector&&(el.querySelector('#cMonth,#aMonth,#cYear,#aYear'));
+        if(isLoad || isMonthYear){
+          quickrow.appendChild(el);
+        } else {
+          body.appendChild(el);
+        }
+      });
+
+      // Ricostituisci
+      flt.appendChild(quickrow);
+      quickrow.appendChild(togBtn);
+      flt.appendChild(body);
+    });
+  }
+
+  /* ── Card view per tabella presenze ───────────────────── */
+  function buildMobCards(tableEl){
+    if(!tableEl) return null;
+    var wrap = document.createElement('div');
+    wrap.className = 'mob-cards';
+
+    var rows = tableEl.querySelectorAll('tbody tr');
+    if(!rows.length) return null;
+
+    // Recupera intestazioni giorni dall'header
+    var thDays = tableEl.querySelectorAll('thead th.dh');
+    var dayLabels = [];
+    thDays.forEach(function(th){
+      var dn = th.querySelector('.dn');
+      var dw = th.querySelector('.dw');
+      dayLabels.push({
+        n: dn ? dn.textContent.trim() : '',
+        w: dw ? dw.textContent.trim() : '',
+        isWe: th.classList.contains('we'),
+        isToday: th.classList.contains('today'),
+        isHoliday: th.classList.contains('holiday')
+      });
+    });
+
+    rows.forEach(function(tr){
+      // Salta separatori e righe ore
+      if(tr.classList.contains('ats-sep')) return;
+      if(tr.classList.contains('ats-ore')) return;
+
+      var card = document.createElement('div');
+      card.className = 'mob-card';
+
+      // Header card: nome + SAP + plant
+      var ca0 = tr.querySelector('td.ca0');
+      var ca1 = tr.querySelector('td.ca1');
+      var ca2 = tr.querySelector('td.ca2');
+      var header = document.createElement('div');
+      header.className = 'mob-card-header';
+
+      var nameEl = document.createElement('div');
+      nameEl.className = 'mob-card-name';
+      nameEl.textContent = ca1 ? ca1.textContent.trim() : '';
+      header.appendChild(nameEl);
+
+      if(ca0){
+        var sapEl = document.createElement('div');
+        sapEl.className = 'mob-card-sap';
+        sapEl.textContent = ca0.textContent.trim();
+        header.appendChild(sapEl);
+      }
+      if(ca2){
+        var plantEl = document.createElement('div');
+        plantEl.className = 'mob-card-plant';
+        plantEl.textContent = ca2.textContent.trim();
+        header.appendChild(plantEl);
+      }
+      card.appendChild(header);
+
+      // Riga giorni scrollabile
+      var dayCells = tr.querySelectorAll('td.dc');
+      if(dayCells.length && dayLabels.length){
+        var daysRow = document.createElement('div');
+        daysRow.className = 'mob-card-days';
+        dayCells.forEach(function(td, i){
+          var info = dayLabels[i] || {};
+          var dayWrap = document.createElement('div');
+          dayWrap.className = 'mob-day';
+
+          var lbl = document.createElement('div');
+          lbl.className = 'mob-day-label';
+          lbl.textContent = info.n || (i+1);
+          dayWrap.appendChild(lbl);
+
+          var val = document.createElement('div');
+          val.className = 'mob-day-val';
+          var txt = td.textContent.trim();
+          if(info.isWe) val.classList.add('we');
+          if(info.isToday) val.classList.add('today');
+          if(info.isHoliday) val.classList.add('holiday');
+          if(txt) val.classList.add('has-val');
+          val.textContent = txt || '';
+          // Copia colore da classe sigla
+          var sigClass = Array.from(td.classList).find(function(c){return c.startsWith('s-');});
+          if(sigClass) val.style.color = getComputedStyle(document.documentElement).getPropertyValue('--c-'+sigClass.replace('s-','')) || '';
+          dayWrap.appendChild(val);
+          daysRow.appendChild(dayWrap);
+        });
+        card.appendChild(daysRow);
+      }
+
+      // Totali
+      var totCells = tr.querySelectorAll('td.tot');
+      if(totCells.length){
+        var totsEl = document.createElement('div');
+        totsEl.className = 'mob-card-totals';
+        // Cerca le intestazioni totali
+        var totHeaders = tableEl.querySelectorAll('thead th.tot, thead th[class*="tot"]');
+        totCells.forEach(function(td, i){
+          var v = td.textContent.trim();
+          if(!v || v==='0' || v==='0.0') return;
+          var chip = document.createElement('div');
+          chip.className = 'mob-tot-chip';
+          var lbl = totHeaders[i] ? totHeaders[i].textContent.trim() : ('T'+(i+1));
+          chip.innerHTML = lbl+' <span>'+v+'</span>';
+          totsEl.appendChild(chip);
+        });
+        if(totsEl.children.length) card.appendChild(totsEl);
+      }
+
+      wrap.appendChild(card);
+    });
+
+    return wrap;
+  }
+
+  /* Osserva modifiche al DOM per intercettare le tabelle quando vengono renderizzate */
+  function hookTableRender(){
+    ['cContent','aContent'].forEach(function(cid){
+      var container = document.getElementById(cid);
+      if(!container) return;
+      var obs = new MutationObserver(function(){
+        if(!MOBILE()) return;
+        var tout = container.querySelector('.tout');
+        if(!tout) return;
+        // Rimuovi cards precedenti
+        var old = tout.querySelector('.mob-cards');
+        if(old) old.remove();
+        var tbl = tout.querySelector('table');
+        if(!tbl) return;
+        var cards = buildMobCards(tbl);
+        if(cards) tout.appendChild(cards);
+      });
+      obs.observe(container, {childList:true, subtree:true});
+    });
+  }
+
+  /* Init */
+  function init(){
+    wrapFilters();
+    hookTableRender();
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+  // Re-wrap se schermo cambia da desktop a mobile
+  window.addEventListener('resize', function(){
+    if(MOBILE()) wrapFilters();
+  });
+})();
 </script>
 </body>
 </html>
