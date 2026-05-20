@@ -292,6 +292,51 @@
   }
   .loader-text { font-family: var(--ffc); font-size: 12px; color: var(--muted); letter-spacing: 1px; }
   @keyframes spin { to { transform: rotate(360deg); } }
+
+  /* ══ FRAME WRAP (per overlay desktop-only) ══ */
+  .frame-wrap {
+    position: absolute;
+    inset: 0;
+    display: none; /* mostrato via JS come gli altri app-frame */
+  }
+  .frame-wrap.active { display: block; }
+  .frame-wrap .app-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: none; }
+
+  /* ══ DESKTOP-ONLY OVERLAY (Spedizioni + GRN su mobile) ══ */
+  .desktop-only-overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: var(--bg);
+    z-index: 50;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    text-align: center;
+    padding: 32px;
+  }
+  .desktop-only-overlay .do-icon { font-size: 48px; opacity: .5; }
+  .desktop-only-overlay .do-title { font-family: var(--ffc); font-size: 20px; font-weight: 700; color: var(--subtle); letter-spacing: 1px; }
+  .desktop-only-overlay .do-sub { font-size: 13px; color: var(--muted); max-width: 280px; line-height: 1.7; }
+
+  /* ══ MOBILE HUB ══ */
+  @media (max-width: 768px) {
+    html, body { overflow: auto; }
+    .main { position: relative; inset: auto; }
+
+    /* Drawer invariato, si apre sopra */
+    .drawer { width: 280px; }
+
+    /* Mostra overlay desktop-only su mobile */
+    .desktop-only-overlay { display: flex; }
+
+    /* Home: scroll normale */
+    #homeScreen { overflow-y: auto; min-height: 100svh; padding-bottom: 24px; }
+
+    /* Card home: 1 colonna */
+    .app-grid { grid-template-columns: 1fr !important; max-width: 420px; margin: 0 auto; }
+  }
 </style>
 </head>
 <body>
@@ -404,14 +449,38 @@
   </div>
 
   <iframe class="app-frame" id="frame-presenze"   src="" data-src="index_Presenze.html"      title="Presenze"></iframe>
-  <iframe class="app-frame" id="frame-spedizioni" src="" data-src="index_Spedizioni-awb.html" title="Spedizioni AWB"></iframe>
-  <iframe class="app-frame" id="frame-grn"        src="" data-src="index_Grn.html"            title="GRN Manager"></iframe>
+
+  <div class="frame-wrap" id="wrap-spedizioni">
+    <iframe class="app-frame" id="frame-spedizioni" src="" data-src="index_Spedizioni-awb.html" title="Spedizioni AWB"></iframe>
+    <div class="desktop-only-overlay" id="doo-spedizioni">
+      <div class="do-icon">🖥️</div>
+      <div class="do-title">Solo Desktop</div>
+      <div class="do-sub">Spedizioni AWB è ottimizzato per schermi grandi. Aprilo da PC o tablet orizzontale.</div>
+    </div>
+  </div>
+
+  <div class="frame-wrap" id="wrap-grn">
+    <iframe class="app-frame" id="frame-grn"        src="" data-src="index_Grn.html"            title="GRN Manager"></iframe>
+    <div class="desktop-only-overlay" id="doo-grn">
+      <div class="do-icon">🖥️</div>
+      <div class="do-title">Solo Desktop</div>
+      <div class="do-sub">GRN Manager è ottimizzato per schermi grandi. Aprilo da PC o tablet orizzontale.</div>
+    </div>
+  </div>
+
   <iframe class="app-frame" id="frame-guida"      src="" data-src="guida_hub.html"            title="Guida"></iframe>
 
 </main>
 
 <script>
   const frames = {
+    presenze:   document.getElementById('frame-presenze'),
+    spedizioni: document.getElementById('wrap-spedizioni'),   // wrapper div
+    grn:        document.getElementById('wrap-grn'),          // wrapper div
+    guida:      document.getElementById('frame-guida'),
+  };
+  // Iframe reali (per lazy-load src)
+  const iframes = {
     presenze:   document.getElementById('frame-presenze'),
     spedizioni: document.getElementById('frame-spedizioni'),
     grn:        document.getElementById('frame-grn'),
@@ -447,9 +516,14 @@
     if (navItems[key]) navItems[key].classList.add('active');
   }
 
+  // Mostra/nasconde tutti i "pannelli" (iframe + wrapper div)
+  function hideAllPanels() {
+    document.querySelectorAll('.app-frame, .frame-wrap').forEach(el => el.classList.remove('active'));
+  }
+
   function showHome() {
     closeDrawer();
-    Object.values(frames).forEach(f => f.classList.remove('active'));
+    hideAllPanels();
     document.getElementById('welcome').classList.remove('hidden');
     setActiveNav('home');
     currentApp = null;
@@ -458,12 +532,12 @@
 
   function openApp(app) {
     closeDrawer();
-    const frame = frames[app];
-    if (!frame) return;
+    const panel = frames[app];
+    if (!panel) return;
     setActiveNav(app);
     document.getElementById('welcome').classList.add('hidden');
     if (currentApp === app) return;
-    Object.values(frames).forEach(f => f.classList.remove('active'));
+    hideAllPanels();
 
     const loader = document.getElementById('loader');
     const labels = {
@@ -474,13 +548,15 @@
     };
     document.getElementById('loader-text').textContent = labels[app] || 'Caricamento...';
 
-    if (!frame.src || frame.src === window.location.href) {
+    // Lazy-load sull'iframe reale
+    const frame = iframes[app];
+    if (frame && (!frame.src || frame.src === window.location.href)) {
       loader.classList.add('show');
       frame.src = frame.dataset.src;
-      frame.onload  = () => { loader.classList.remove('show'); frame.classList.add('active'); };
-      frame.onerror = () => { loader.classList.remove('show'); frame.classList.add('active'); };
+      frame.onload  = () => { loader.classList.remove('show'); panel.classList.add('active'); };
+      frame.onerror = () => { loader.classList.remove('show'); panel.classList.add('active'); };
     } else {
-      frame.classList.add('active');
+      panel.classList.add('active');
     }
 
     currentApp = app;
