@@ -2399,7 +2399,10 @@ function atsPrint(){
 // ═══════════════════════════════════════════════════════════
 function openPickerGeneric(mode,ri,di){
   if(!adminMode)return;
-  spMode=mode;spIdx=ri;spDi=di;spSigla=null;
+  spMode=mode;spIdx=ri;spDi=di;
+  var _emp=mode==='ats'?atsEmps[ri]:coopEmps[ri];
+  spSigla=_emp?xSig((_emp.sigla||[])[di]||''):null;
+  if(!spSigla)spSigla=null; // se vuoto rimane null
   var emp=mode==='ats'?atsEmps[ri]:coopEmps[ri];
   var y=parseInt(document.getElementById(mode==='ats'?'aYear':'cYear').value);
   var m=parseInt(document.getElementById(mode==='ats'?'aMonth':'cMonth').value);
