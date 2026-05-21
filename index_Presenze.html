@@ -983,7 +983,7 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
       </div>
     </div>
   </div>
-  <div class="mbtns"><button class="mbtn cancel" onclick="mClose('moSigla')">Annulla</button><button class="mbtn ok" id="spConfirmBtn" onclick="spConfirm()">Imposta</button></div>
+  <div class="mbtns"><button class="mbtn cancel" onclick="mClose('moSigla')">Annulla</button><button class="mbtn" id="spNotaBtn" onclick="spOpenNota()" style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);color:var(--amber);display:none">📝 Nota</button><button class="mbtn ok" id="spConfirmBtn" onclick="spConfirm()">Imposta</button></div>
 </div></div>
 
 <div id="moAddEmp" class="mo hide"><div class="mc" style="width:420px">
@@ -1629,8 +1629,7 @@ function renderSection(sec, emps, data, opts){
       var cl='dc'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+(sc?' '+sc.cls:(!v?' emp':''))+(adminMode?' editable':'')+(hasNote?' has-note':'');
       var cellTxt=esc(v||(!w?'·':''));
       if(adminMode){
-        var nb=hasNote?'<span class="note-badge" onclick="event.stopPropagation();openNota(\''+opts.mode+'\','+ri+','+di+')">&#9998;</span>':'';
-        h+='<td class="'+cl+'" onclick="'+opts.openPickerFn+'('+ri+','+di+',this)">'+cellTxt+nb+'</td>';
+        h+='<td class="'+cl+'" onclick="'+opts.openPickerFn+'('+ri+','+di+',this)">'+cellTxt+'</td>';
       } else {
         h+='<td class="'+cl+'" onclick="openNota(\''+opts.mode+'\','+ri+','+di+')">'+cellTxt+'</td>';
       }
@@ -1798,7 +1797,7 @@ function coopRender(){
     contentId:'cContent',statsId:'cStats',
     totVisible:coopTotVisible,oreVisible:coopOreVisible,
     openPickerFn:'coopOpenPicker',editOrFn:'cEditOr',delFn:'cDelEmp',
-    toggleOreFn:'toggleCoopEmpOre'
+    toggleOreFn:'toggleCoopEmpOre',mode:'coop'
   });
 }
 
@@ -2068,7 +2067,7 @@ function atsRender(){
     contentId:'aContent',statsId:'aStats',
     totVisible:totVisible,oreVisible:oreVisible,
     openPickerFn:'atsOpenPicker',editOrFn:'aEditOr',delFn:'aDel',
-    toggleOreFn:'toggleEmpOre'
+    toggleOreFn:'toggleEmpOre',mode:'ats'
   });
 }
 
@@ -2289,7 +2288,17 @@ function openPickerGeneric(mode,ri,di){
   document.getElementById('spCalcBox').style.display='none';
   if(cs)spCalcLive();
   document.getElementById('spConfirmBtn').onclick=spConfirm;
+  // Mostra pulsante Nota se c'è già una nota sulla cella
+  var hasNote=!!(emp.notes&&emp.notes[di]);
+  var notaBtn=document.getElementById('spNotaBtn');
+  notaBtn.style.display='';
+  notaBtn.textContent=hasNote?'📝 Nota ✓':'📝 Nota';
+  notaBtn.style.borderColor=hasNote?'rgba(245,158,11,.6)':'rgba(245,158,11,.35)';
   mOpen('moSigla');
+}
+function spOpenNota(){
+  mClose('moSigla');
+  openNota(spMode,spIdx,spDi);
 }
 function spCalcLive(){
   var emps=spMode==='ats'?atsEmps:coopEmps;
