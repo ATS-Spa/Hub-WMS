@@ -169,10 +169,11 @@ body.admin-mode .bdel{color:var(--muted)}
 body.admin-mode .bdel:hover{color:var(--red);background:rgba(239,68,68,.1)}
 
 /* ── Riga confermata ── */
-tr.confirmed-row td{background:rgba(16,185,129,.10) !important;border-color:rgba(16,185,129,.25) !important;}
-tr.confirmed-row td.sf{background:rgba(16,185,129,.14) !important;}
+tr.confirmed-row td{background:rgba(16,185,129,.10)!important;border-color:rgba(16,185,129,.25)!important;}
+tr.confirmed-row td.sf{background:rgba(16,185,129,.14)!important;}
 
-/* ── Indicatore nota su cella ── */
+/* ── Badge nota su cella sigla ── */
+.note-badge{display:inline-block;font-size:9px;background:rgba(245,158,11,.18);border:1px solid rgba(245,158,11,.4);color:var(--amber);border-radius:4px;padding:0 4px;margin-left:3px;cursor:pointer;vertical-align:middle;line-height:14px;}
 td.has-note{position:relative;}
 td.has-note::after{content:'';position:absolute;top:0;right:0;width:0;height:0;border-style:solid;border-width:0 6px 6px 0;border-color:transparent var(--amber) transparent transparent;}
 
@@ -180,16 +181,17 @@ td.has-note::after{content:'';position:absolute;top:0;right:0;width:0;height:0;b
 .conf-cb{width:16px;height:16px;cursor:pointer;accent-color:var(--green);}
 .conf-th{min-width:72px;text-align:center;background:var(--card);color:var(--green);position:sticky;top:0;z-index:4;border-right:1px solid var(--border);font-family:var(--ffc);font-size:11px;padding:4px 3px;}
 
-/* ── Readonly mode: nascondi controlli admin ── */
+/* ── Readonly: nascondi controlli modifica ── */
 body.readonly-mode .bdel{display:none!important;}
 body.readonly-mode .btn-top#btnAdmin{display:none!important;}
 body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important;}
+body.readonly-mode #btnConfig{display:none!important;}
 
 /* ── Modal nota ── */
-#moNota .mc{width:340px;}
+#moNota .mc{width:360px;}
 #notaText{width:100%;min-height:80px;resize:vertical;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--ffc);font-size:13px;padding:10px 12px;box-sizing:border-box;}
 #notaText:focus{outline:none;border-color:var(--amber);}
-.nota-cell-info{font-size:11px;color:var(--muted);margin-bottom:8px;font-family:var(--ffm);}
+.nota-info{font-size:11px;color:var(--muted);margin-bottom:8px;font-family:var(--ffm);}
 
 /* ── FILE TAB ── */
 .file-panel{padding:24px;display:flex;flex-direction:column;gap:20px;overflow-y:auto;flex:1;min-height:0}
@@ -878,22 +880,22 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
   </div>
 </div></div>
 
+<!-- ── MODAL NOTA CELLA ── -->
+<div id="moNota" class="mo hide"><div class="mc" style="width:380px">
+  <div class="mt">📝 Nota Cella</div>
+  <div class="nota-info" id="notaInfo">—</div>
+  <textarea id="notaText" placeholder="Inserisci una nota…"></textarea>
+  <div class="mbtns" style="margin-top:12px">
+    <button class="mbtn cancel" onclick="mClose('moNota')">Annulla</button>
+    <button class="mbtn danger" id="notaDelBtn" onclick="notaSave(true)" style="margin-right:auto">🗑 Rimuovi</button>
+    <button class="mbtn ok" onclick="notaSave(false)">💾 Salva</button>
+  </div>
+</div></div>
+
 <div id="moConf" class="mo hide"><div class="mc" style="width:360px">
   <div class="mt" id="confTitle">Conferma</div>
   <div class="ms" id="confMsg" style="margin-top:0;color:var(--subtle);font-size:13px"></div>
   <div class="mbtns" style="margin-top:4px"><button class="mbtn cancel" onclick="mClose('moConf')">Annulla</button><button class="mbtn danger" id="confOk">Conferma</button></div>
-</div></div>
-
-<!-- ── MODAL NOTA CELLA ── -->
-<div id="moNota" class="mo hide"><div class="mc">
-  <div class="mt">📝 Nota Cella</div>
-  <div class="nota-cell-info" id="notaCellInfo">—</div>
-  <textarea id="notaText" placeholder="Inserisci una nota…"></textarea>
-  <div class="mbtns">
-    <button class="mbtn cancel" onclick="mClose('moNota')">Annulla</button>
-    <button class="mbtn danger" id="notaClearBtn" onclick="notaSave(true)" style="margin-right:auto">🗑 Rimuovi</button>
-    <button class="mbtn ok" onclick="notaSave(false)">💾 Salva</button>
-  </div>
 </div></div>
 
 <!-- ── MODAL CONFIG ORARIO ── -->
@@ -1102,6 +1104,7 @@ var TOKEN=null, uEmail='', uName='', uPic='';
 var adminMode=false, toastT=null, confCb=null;
 var permConfig=null, configFileId=null;
 var userTags=[], userSecs=[], isSuperUser=false, isAdminUser=false, isReadOnly=false;
+var notaMode='coop', notaRi=-1, notaDi=-1;
 var allFiles=[];
 var coopData=null, coopFileId=null, coopEmps=[];
 var atsData=null, atsFileId=null, atsEmps=[];
@@ -1109,7 +1112,6 @@ var spMode='ats';
 var spIdx=-1, spDi=-1, spSigla=null;
 var puEditEmail=null;
 var oreVisible=false, coopOreVisible=false;
-var notaMode='coop', notaRi=-1, notaDi=-1;
 
 // ── Config orario utente (salvata su Drive per cartella) ──
 var USER_CONFIG_FOLDER = '1LGoR9SKDthz1tUDLxbZhClqA-xhkjoNY';
@@ -1611,6 +1613,7 @@ function renderSection(sec, emps, data, opts){
     var ri=allEmps.indexOf(emp);
     var tots=calcTots(emp.sigla||[],emp.ingresso,emp.uscita,emp.pausa,dates,m,y);
     var empId=(isAts?'emp_':'cemp_')+ri;
+    var isConfirmed=!isAts&&!!emp.confermato;
 
     var oreGiorno=dates.map(function(d,di){
       var sg=xSig((emp.sigla||[])[di]||'');
@@ -1620,10 +1623,9 @@ function renderSection(sec, emps, data, opts){
       return ing&&usc2?calcOreGiorno(ing,usc2,ph):null;
     });
 
-    var isConfirmed=!isAts&&!!(emp.confermato);
     if(ei>0) h+='<tr class="ats-sep"><td colspan="999"></td></tr>';
 
-    h+='<tr class="an'+(isConfirmed?' confirmed-row':'')+'" id="emprow_'+ri+'">';
+    h+='<tr class="an'+(isConfirmed?' confirmed-row':'')+'" id="emprow_coop_'+ri+'">';
     h+='<td class="sf ca0" rowspan="3" style="font-size:10px;color:var(--muted);text-align:center">'+(ei+1)+'</td>';
     var nome=isAts?(emp.nome||''):(emp.nom2||emp.nome||'');
     h+='<td class="sf ca1" rowspan="3">'
@@ -1639,10 +1641,15 @@ function renderSection(sec, emps, data, opts){
       var sg=xSig(v);var sc=SM[sg]||null;
       var hasNote=!!(emp.notes&&emp.notes[di]);
       var cl='dc'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+(sc?' '+sc.cls:(!v?' emp':''))+(adminMode?' editable':'')+(hasNote?' has-note':'');
-      var clickFn='';
-      if(adminMode) clickFn=' onclick="'+opts.openPickerFn+'('+ri+','+di+',this)"';
-      else if(!isAts) clickFn=' onclick="openNota(\''+opts.mode+'\','+ri+','+di+')"';
-      h+='<td class="'+cl+'"'+clickFn+'>'+esc(v||(!w?'·':''))+'</td>';
+      var cellContent=esc(v||(!w?'·':''));
+      // Admin: picker + badge nota se presente
+      if(adminMode){
+        var noteBadge=hasNote?'<span class="note-badge" onclick="event.stopPropagation();openNota(\''+opts.mode+'\','+ri+','+di+')" title="Nota">✎</span>':'';
+        h+='<td class="'+cl+'" onclick="'+opts.openPickerFn+'('+ri+','+di+',this)">'+cellContent+noteBadge+'</td>';
+      } else {
+        // Readonly: clic apre popup nota
+        h+='<td class="'+cl+'" onclick="openNota(\''+opts.mode+'\','+ri+','+di+')">'+cellContent+'</td>';
+      }
     });
     totHdrs.forEach(function(th){
       var val=th.k==='ord'||th.k==='str'?fmtOre(tots[th.k]):tots[th.k];
@@ -1653,7 +1660,7 @@ function renderSection(sec, emps, data, opts){
     if(adminMode)h+='<td rowspan="3" style="padding:2px 3px;text-align:center"><button class="bdel" onclick="'+opts.delFn+'('+ri+')" title="Rimuovi">🗑</button></td>';
     h+='</tr>';
 
-    h+='<tr'+(isConfirmed?' class="confirmed-row"':'')+'>';
+    h+='<tr>';
     h+='<td class="sf ca2" style="font-size:11px;color:var(--green);font-family:var(--ffc);font-weight:700">IN</td>';
     dates.forEach(function(d,di){var v=(emp.ingresso||[])[di]||'';var w=d.weekday===0||d.weekday===6;var hol=isHoliday(d.day,m,y);
       h+='<td class="dc'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+(v?' ':' emp')+(adminMode&&!w?' editable':'')+'"'
@@ -1661,7 +1668,7 @@ function renderSection(sec, emps, data, opts){
         +(v?' style="color:var(--green)"':'')+'>'+(v||(!w?'·':''))+'</td>';});
     h+='</tr>';
 
-    h+='<tr'+(isConfirmed?' class="confirmed-row"':'')+'>';
+    h+='<tr>';
     h+='<td class="sf ca2" style="font-size:11px;color:var(--red);font-family:var(--ffc);font-weight:700">OUT</td>';
     dates.forEach(function(d,di){var v=(emp.uscita||[])[di]||'';var w=d.weekday===0||d.weekday===6;var hol=isHoliday(d.day,m,y);
       h+='<td class="dc'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+(v?' ':' emp')+(adminMode&&!w?' editable':'')+'"'
@@ -1913,9 +1920,7 @@ function cSave(){
     });
     var fileIds=Object.keys(byFile);
     if(!fileIds.length){toast('—');return;}
-    Promise.all(fileIds.map(function(fid){
-      return sheetsBatchUpdate(fid,byFile[fid]);
-    }))
+    Promise.all(fileIds.map(function(fid){return sheetsBatchUpdate(fid,byFile[fid]);}))
     .then(function(){toast('✓ Coop salvato');lastRefreshTimeCoop=new Date();})
     .catch(function(e){toast('✗ '+e.message,'err');});
   },700);
@@ -1980,25 +1985,27 @@ function coopExport(){
   dates.forEach(function(d){hdr.push(d.day+'/'+GGS[d.weekday]);});
   hdr.push('Confermato');
   var calRows=[hdr];
-  coopEmps.forEach(function(e){
+  var noteMap={}; // {rowIndex: {colOffset: note}}
+  coopEmps.forEach(function(e,ei){
+    var rowBase=1+ei*4;
     var mkRow=function(tipo,arr,extra){var r=[e.sap||e.id||'',e.nom2||e.nome||'',e.resp||'',e.plant||'',tipo];(arr||[]).forEach(function(v){r.push(v||'');});if(extra!==undefined)r.push(extra);return r;};
-    var sigRow=mkRow('Sigla',e.sigla,e.confermato?'SI':'');
-    // Aggiungi note come commenti cella nella riga Sigla
-    calRows.push(sigRow);
+    calRows.push(mkRow('Sigla',e.sigla,e.confermato?'SI':''));
     calRows.push(mkRow('Ingresso',e.ingresso,''));
     calRows.push(mkRow('Uscita',e.uscita,''));
     calRows.push([]);
+    // Mappa note per riga sigla
+    (e.notes||[]).forEach(function(note,di){if(note)noteMap[rowBase]=(noteMap[rowBase]||{}),noteMap[rowBase][di]=note;});
   });
   var coopSheet=XLSX.utils.aoa_to_sheet(calRows);
-  // Applica note come commenti alle celle sigla
-  coopEmps.forEach(function(e,ei){
-    var rowBase=1+ei*4; // header=0, ogni emp occupa 4 righe (sig+ing+usc+vuota)
-    (e.notes||[]).forEach(function(note,di){
-      if(!note)return;
+  // Applica note come commenti xlsx
+  Object.keys(noteMap).forEach(function(rowStr){
+    var rowIdx=parseInt(rowStr);
+    Object.keys(noteMap[rowIdx]).forEach(function(diStr){
+      var di=parseInt(diStr);
       var DST=coopData?coopData.dayStart:3;
-      var cellAddr=XLSX.utils.encode_cell({r:rowBase,c:DST+di});
+      var cellAddr=XLSX.utils.encode_cell({r:rowIdx,c:DST+di});
       if(!coopSheet[cellAddr])coopSheet[cellAddr]={t:'s',v:''};
-      coopSheet[cellAddr].c=[{a:'WMS',t:note}];
+      coopSheet[cellAddr].c=[{a:'WMS',t:noteMap[rowIdx][diStr]}];
     });
   });
   applyHolidayStyles(coopSheet,dates,parseInt(m),parseInt(y),calRows.length);
@@ -2189,9 +2196,7 @@ function aSave(){
   if(!atsData)return;
   clearTimeout(aST);aST=setTimeout(function(){
     toast('⏳ Salvo ATS su Sheets…','warn');
-    // Raggruppa per fileId (ogni dipendente porta il suo fileId in sheetRows)
-    var byFile={};
-    var DST=atsData.dayStart||3;var nd=atsData.dates.length;
+    var byFile={};var DST=atsData.dayStart||3;var nd=atsData.dates.length;
     atsEmps.forEach(function(emp){
       if(!emp.sheetRows||emp._manual)return;
       var fid=emp.sheetRows.fileId||atsFileId;
@@ -2209,11 +2214,11 @@ function aSave(){
     });
     var fileIds=Object.keys(byFile);
     if(!fileIds.length){toast('—');return;}
-    Promise.all(fileIds.map(function(fid){
-      return sheetsBatchUpdate(fid,byFile[fid]);
-    }))
+    Promise.all(fileIds.map(function(fid){return sheetsBatchUpdate(fid,byFile[fid]);}))
     .then(function(){toast('✓ ATS salvato');lastRefreshTimeAts=new Date();})
     .catch(function(e){toast('✗ '+e.message,'err');});
+  },800);
+}
   },800);
 }
 
@@ -2495,24 +2500,21 @@ function parseSheetValues(values,year,month,fileId,sheetName,secType){
       var t1=String(nr1[TIPO_COL]||'').trim().toLowerCase();
       var t2=String(nr2[TIPO_COL]||'').trim().toLowerCase();
       var hasI=t1.indexOf('ingresso')!==-1;var hasU=t2.indexOf('uscita')!==-1;
-      var sig=[],ing=[],usc=[],notes=[];
-      // Colonna Confermato: ultima colonna dopo i giorni (DST+nd)
-      var confCol=DST+nd;
+      var sig=[],ing=[],usc=[];
+      var confCol=DST+nd; // colonna Confermato: subito dopo i giorni
       var confVal=String(row[confCol]||'').trim().toUpperCase();
       var confermato=confVal==='SI'||confVal==='TRUE'||confVal==='1';
       for(var di=0;di<nd;di++){
         sig.push(fAV(row[DST+di]));
         ing.push(fTM(hasI?nr1[DST+di]:''));
         usc.push(fTM(hasU?nr2[DST+di]:''));
-        // Leggi note dalla cella (passate come metadato esteso — caricate via API notes separata)
-        notes.push('');
       }
       var emp={
         nome:nomeVal,nom2:nomeVal,id:sapVal,sap:sapVal,
         resp:globalResp,plant:plantVal,
         sigla:sig,ingresso:ing,uscita:usc,
         pausa:Array(nd).fill(null),
-        notes:notes,
+        notes:Array(nd).fill(''),
         confermato:confermato,
         confCol:confCol,
         sheetRows:{
@@ -3178,10 +3180,8 @@ function setEl(id,h){var el=document.getElementById(id);if(el)el.innerHTML=h;}
 function spinH(msg){return '<div class="state"><div class="spinner"></div><div class="state-title">'+esc(msg)+'</div></div>';}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
 function mOpen(id){document.getElementById(id).classList.remove('hide');}
-function mClose(id){document.getElementById(id).classList.add('hide');}
-
 // ═══════════════════════════════════════════════════════════
-//  NOTE DI CELLA
+//  NOTE DI CELLA (Coop + ATS)
 // ═══════════════════════════════════════════════════════════
 function openNota(mode, ri, di){
   notaMode=mode; notaRi=ri; notaDi=di;
@@ -3191,8 +3191,11 @@ function openNota(mode, ri, di){
   var d=data&&data.dates&&data.dates[di];
   var dayLabel=d?(d.day+'/'+['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][d.weekday]):'—';
   var nome=emp.nom2||emp.nome||'';
-  document.getElementById('notaCellInfo').textContent=nome+' · '+dayLabel;
-  document.getElementById('notaText').value=(emp.notes&&emp.notes[di])||'';
+  var sigla=(emp.sigla||[])[di]||'';
+  document.getElementById('notaInfo').textContent=nome+' · '+dayLabel+(sigla?' ('+sigla+')':'');
+  var nota=(emp.notes&&emp.notes[di])||'';
+  document.getElementById('notaText').value=nota;
+  document.getElementById('notaDelBtn').style.display=nota?'':'none';
   mOpen('moNota');
   setTimeout(function(){document.getElementById('notaText').focus();},120);
 }
@@ -3205,39 +3208,30 @@ function notaSave(clear){
   var txt=clear?'':(document.getElementById('notaText').value||'').trim();
   emp.notes[notaDi]=txt;
   mClose('moNota');
-  // Salva nota su Sheets tramite UpdateCells API (campo note)
-  if(!emp.sheetRows||emp.sheetRows.n===undefined)return;
+  if(!emp.sheetRows||emp.sheetRows.n===undefined){toast('✓ Nota salvata localmente');return;}
   var fid=emp.sheetRows.fileId||(notaMode==='coop'?coopFileId:atsFileId);
   var dst=(data&&data.dayStart)||3;
-  var col=dst+notaDi; // indice colonna 0-based
-  var rowIdx=emp.sheetRows.n; // riga 0-based della sigla
-  saveNoteToSheets(fid,emp.sheetRows.sheetName,rowIdx,col,txt);
-  // Aggiorna triangolino visivo
-  if(notaMode==='coop')coopRender(); else atsRender();
-  toast(clear?'✓ Nota rimossa':'✓ Nota salvata');
-}
-
-function saveNoteToSheets(fileId, sheetName, rowIdx, colIdx, note){
-  // Leggi sheetId dal nome foglio
-  gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties')
+  var col=dst+notaDi;
+  var rowIdx=emp.sheetRows.n;
+  var sname=emp.sheetRows.sheetName;
+  // Salva nota come commento (note) sulla cella via Sheets batchUpdate
+  gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fid+'?fields=sheets.properties')
   .then(function(meta){
-    var sheets=meta.sheets||[];
-    var sh=sheets.find(function(s){return s.properties.title===sheetName;});
-    if(!sh)throw new Error('Foglio non trovato: '+sheetName);
-    var sheetId=sh.properties.sheetId;
-    return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+':batchUpdate',{
+    var sh=(meta.sheets||[]).find(function(s){return s.properties.title===sname;});
+    if(!sh)throw new Error('Foglio non trovato');
+    return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+fid+':batchUpdate',{
       method:'POST',
       headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
-      body:JSON.stringify({requests:[{
-        updateCells:{
-          range:{sheetId:sheetId,startRowIndex:rowIdx,endRowIndex:rowIdx+1,startColumnIndex:colIdx,endColumnIndex:colIdx+1},
-          rows:[{values:[{note:note}]}],
-          fields:'note'
-        }
-      }]})
+      body:JSON.stringify({requests:[{updateCells:{
+        range:{sheetId:sh.properties.sheetId,startRowIndex:rowIdx,endRowIndex:rowIdx+1,startColumnIndex:col,endColumnIndex:col+1},
+        rows:[{values:[{note:txt}]}],
+        fields:'note'
+      }}]})
     });
-  }).then(function(r){if(!r.ok)return r.json().then(function(e){throw new Error(e.error&&e.error.message||r.statusText);});})
-  .catch(function(e){toast('✗ Nota non salvata: '+e.message,'err');});
+  }).then(function(){
+    if(notaMode==='coop')coopRender(); else atsRender();
+    toast(clear?'✓ Nota rimossa':'✓ Nota salvata');
+  }).catch(function(e){toast('✗ '+e.message,'err');});
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -3246,22 +3240,21 @@ function saveNoteToSheets(fileId, sheetName, rowIdx, colIdx, note){
 function toggleConferma(ri, cb){
   var emp=coopEmps[ri]; if(!emp)return;
   emp.confermato=cb.checked;
-  // Aggiorna visivo riga
-  var row=document.getElementById('emprow_'+ri);
-  if(row){
-    // Aggiorna tutte le righe del blocco (an, IN, OUT)
-    var tbody=row.closest('tbody');
-    if(tbody){
-      var rows=Array.from(tbody.querySelectorAll('tr'));
-      var idx=rows.indexOf(row);
-      // Blocco: SIG + IN + OUT = 3 righe (+ eventuali sep/ore)
-      for(var i=idx;i<Math.min(idx+3,rows.length);i++){
-        if(rows[i].classList.contains('ats-sep'))break;
-        if(emp.confermato) rows[i].classList.add('confirmed-row');
-        else rows[i].classList.remove('confirmed-row');
-      }
+  // Aggiorna classi visive su tutte le righe del blocco
+  ['emprow_coop_'+ri].forEach(function(id){
+    var row=document.getElementById(id);
+    if(!row)return;
+    var sibs=[row];
+    var nx=row.nextElementSibling;
+    while(nx&&!nx.classList.contains('ats-sep')&&sibs.length<5){
+      if(nx.classList.contains('an'))break;
+      sibs.push(nx); nx=nx.nextElementSibling;
     }
-  }
+    sibs.forEach(function(r){
+      if(emp.confermato) r.classList.add('confirmed-row');
+      else r.classList.remove('confirmed-row');
+    });
+  });
   saveConfermaToSheets(ri);
 }
 
@@ -3273,14 +3266,14 @@ function saveConfermaToSheets(ri){
   var confCol=emp.confCol!==undefined?emp.confCol:(dst+nd);
   var colL=colToLetter(confCol);
   var rowN=emp.sheetRows.n;
-  // Prima verifica se la colonna Confermato esiste (intestazione)
-  // Se confCol è oltre le colonne usate, crea l'intestazione
   sheetsBatchUpdate(fid,[
     {range:emp.sheetRows.sheetName+'!'+colL+'1',values:[['Confermato']]},
     {range:emp.sheetRows.sheetName+'!'+colL+(rowN+1),values:[[emp.confermato?'SI':'']]}
   ]).then(function(){toast(emp.confermato?'✓ Confermato':'✓ Conferma rimossa');})
   .catch(function(e){toast('✗ '+e.message,'err');});
 }
+
+function mClose(id){document.getElementById(id).classList.add('hide');}
 function showConf(t,m,cb){document.getElementById('confTitle').textContent=t;document.getElementById('confMsg').textContent=m;confCb=cb;mOpen('moConf');}
 document.getElementById('confOk').addEventListener('click',function(){var cb=confCb;mClose('moConf');if(cb)cb();});
 function toast(msg,type){var t=document.getElementById('toast');t.textContent=msg;t.className='show '+(type||'');clearTimeout(toastT);toastT=setTimeout(function(){t.className='';},type==='warn'?90000:2600);}
