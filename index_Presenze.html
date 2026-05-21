@@ -2501,15 +2501,22 @@ function spConfirm(){
     emp.pausa[spDi]=hasPausa?parseFloat(document.getElementById('spPausaDur').value)||1:0;
   }else if(spSigla===''){
     emp.ingresso[spDi]='';emp.uscita[spDi]='';emp.pausa[spDi]=null;
+    // Cancella anche le commesse del giorno
+    if(emp.commesse&&emp.commesse[spDi])emp.commesse[spDi]=null;
   }
-  // Salva distribuzione commesse
-  saveCommesse();
   var y2=parseInt(document.getElementById(spMode==='ats'?'aYear':'cYear').value);
   var m2=parseInt(document.getElementById(spMode==='ats'?'aMonth':'cMonth').value);
   var fid2=(spMode==='ats'?atsEmps:coopEmps)[spIdx];
   var fid3=fid2&&fid2.sheetRows&&fid2.sheetRows.fileId||(spMode==='ats'?atsFileId:coopFileId);
   var sname2=fid2&&fid2.sheetRows&&fid2.sheetRows.sheetName||((spMode==='ats'?atsData:coopData)&&(spMode==='ats'?atsData:coopData).sheetName);
-  if(fid3&&sname2)saveCommesseToSheet(spMode,fid2,spDi,fid3,sname2,y2,m2);
+  if(spSigla===''){
+    // Elimina riga dal foglio _Commesse
+    if(fid3&&sname2)deleteCommessaRow(spMode,fid2,spDi,fid3,sname2,y2,m2);
+  } else {
+    // Salva distribuzione commesse
+    saveCommesse();
+    if(fid3&&sname2)saveCommesseToSheet(spMode,fid2,spDi,fid3,sname2,y2,m2);
+  }
   mClose('moSigla');
   if(spMode==='ats'){atsRender();aSave();}else{coopRender();cSave();}
   toast('✓ Salvato');
@@ -3359,6 +3366,32 @@ function saveCommesseToSheet(mode, emp, di, fileId, sheetName, y, m){
       });
     }
   }).catch(function(e){console.warn('[WMS] commesse sheet error:',e.message);});
+}
+
+function deleteCommessaRow(mode, emp, di, fileId, sheetName, y, m){
+  var nome=emp.nom2||emp.nome||'';
+  var data=mode==='ats'?atsData:coopData;
+  var dates=data?data.dates:[];
+  var d=dates[di];if(!d)return;
+  var tabName=(MESI[m-1]||m)+'_'+(mode==='ats'?'ATS':'Coop')+'_Commesse';
+  // Leggi tutte le righe, trova quella di questo dipendente+giorno e svuotala
+  gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties')
+  .then(function(meta){
+    var sh=(meta.sheets||[]).find(function(s){return s.properties.title===tabName;});
+    if(!sh)return; // sheet non esiste, niente da fare
+    return sheetsRead(fileId,tabName+'!A:C').then(function(rows){
+      var targetRow=null;
+      (rows||[]).forEach(function(r,ri){
+        if(ri===0)return;
+        if(String(r[0]||'').trim()===nome&&String(r[2]||'').trim()===String(d.day))targetRow=ri+1;
+      });
+      if(!targetRow)return;
+      // Sovrascrivi la riga con valori vuoti
+      var emptyRow=Array(50).fill('');
+      return sheetsBatchUpdate(fileId,[{range:tabName+'!A'+targetRow,values:[emptyRow]}]);
+    });
+  }).then(function(){toast('✓ Commesse eliminate');})
+  .catch(function(e){console.warn('[WMS] deleteCommessaRow error:',e.message);});
 }
 
 function createSheetTab(fileId, title){
