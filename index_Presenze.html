@@ -2127,9 +2127,12 @@ function aSave(){
       if(!emp.sheetRows||emp._manual)return;
       for(var di=0;di<nd;di++){
         var col=DST+di;var colL=colToLetter(col);
-        data.push({range:atsData.sheetName+'!'+colL+(emp.sheetRows.n+1),values:[[(emp.sigla||[])[di]||'']]});
-        data.push({range:atsData.sheetName+'!'+colL+(emp.sheetRows.i+1),values:[[(emp.ingresso||[])[di]||'']]});
-        data.push({range:atsData.sheetName+'!'+colL+(emp.sheetRows.u+1),values:[[(emp.uscita||[])[di]||'']]});
+        var sv=(emp.sigla||[])[di]||'';
+        var iv=(emp.ingresso||[])[di]||'';
+        var uv=(emp.uscita||[])[di]||'';
+        if(emp.sheetRows.n!==undefined) data.push({range:atsData.sheetName+'!'+colL+(emp.sheetRows.n+1),values:[[sv]]});
+        if(emp.sheetRows.i!==undefined) data.push({range:atsData.sheetName+'!'+colL+(emp.sheetRows.i+1),values:[[iv]]});
+        if(emp.sheetRows.u!==undefined) data.push({range:atsData.sheetName+'!'+colL+(emp.sheetRows.u+1),values:[[uv]]});
       }
     });
     if(!data.length){toast('—');return;}
