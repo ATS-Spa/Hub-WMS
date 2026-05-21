@@ -178,6 +178,12 @@ body.readonly-mode .bdel{display:none!important;}
 body.readonly-mode .btn-top#btnAdmin{display:none!important;}
 body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important;}
 #moNota .mc{width:360px;}
+.comm-row{display:flex;align-items:center;gap:8px;}
+.comm-label{font-family:var(--ffc);font-size:12px;font-weight:700;min-width:60px;color:var(--subtle);}
+.comm-inp{width:70px;padding:5px 8px;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--ffm);font-size:13px;text-align:center;}
+.comm-inp:focus{outline:none;border-color:var(--teal);}
+.comm-bar{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden;}
+.comm-bar-fill{height:100%;background:var(--teal);border-radius:3px;transition:width .2s;}
 #notaText{width:100%;min-height:80px;resize:vertical;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--ffc);font-size:13px;padding:10px 12px;box-sizing:border-box;}
 #notaText:focus{outline:none;border-color:var(--amber);}
 .nota-info{font-size:11px;color:var(--muted);margin-bottom:8px;font-family:var(--ffm);}
@@ -983,7 +989,31 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
       </div>
     </div>
   </div>
+  <!-- Distribuzione ore commesse -->
+  <div id="spCommesseWrap" style="display:none;margin-top:8px">
+    <div style="font-family:var(--ffc);font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--muted);margin-bottom:8px">DISTRIBUZIONE ORE COMMESSE</div>
+    <div id="spCommesseGrid" style="display:flex;flex-direction:column;gap:6px"></div>
+    <div style="margin-top:6px;font-family:var(--ffm);font-size:11px;display:flex;gap:8px;align-items:center">
+      <span style="color:var(--muted)">Assegnate:</span>
+      <span id="spCommTot" style="color:var(--teal);font-weight:700">0h</span>
+      <span style="color:var(--muted)">/ Disponibili:</span>
+      <span id="spCommDisp" style="color:var(--green);font-weight:700">0h</span>
+      <span id="spCommWarn" style="color:var(--red);display:none">⚠ Supera le ore disponibili</span>
+    </div>
+  </div>
   <div class="mbtns"><button class="mbtn cancel" onclick="mClose('moSigla')">Annulla</button><button class="mbtn" id="spNotaBtn" onclick="spOpenNota()" style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);color:var(--amber);display:none">📝 Nota</button><button class="mbtn ok" id="spConfirmBtn" onclick="spConfirm()">Imposta</button></div>
+</div></div>
+
+<!-- MODAL COMMESSA -->
+<div id="moCommessa" class="mo hide"><div class="mc" style="width:380px">
+  <div class="mt" id="commTitle">Nuova Commessa</div>
+  <div class="ms">Codice commessa e plant associati (lascia vuoto = tutti i plant).</div>
+  <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+    <div class="fg"><div class="fl">Codice Commessa *</div><input class="mi" id="commCode" type="text" placeholder="Es. FLM" style="text-transform:uppercase" autocomplete="off"></div>
+    <div class="fg"><div class="fl">Plant (uno per riga o virgola, vuoto = tutti)</div><textarea class="mi" id="commPlants" rows="3" placeholder="P52&#10;P14" style="resize:vertical;font-family:var(--ffm)"></textarea></div>
+  </div>
+  <div class="merr" id="commErr">Inserisci un codice commessa.</div>
+  <div class="mbtns"><button class="mbtn cancel" onclick="mClose('moCommessa')">Annulla</button><button class="mbtn ok" onclick="commessaConfirm()">Salva</button></div>
 </div></div>
 
 <div id="moAddEmp" class="mo hide"><div class="mc" style="width:420px">
@@ -1995,7 +2025,43 @@ function coopExport(){
     COOP_REP.forEach(function(c){row.push(c.k==='ord'||c.k==='str'||c.k==='fest'?fmtOre(t[c.k])||0:t[c.k]||0);});
     repRows.push(row);
   });
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(repRows),mName+'_Report_Coop');
+  // Commesse nel report Coop
+  var commesseAllC=(permConfig&&permConfig.commesse)||[];
+  var COOP_REP_C=COOP_REP.slice();
+  commesseAllC.forEach(function(c){COOP_REP_C.push({l:c.code+'_h',k:'__comm_'+c.code});});
+  var repHdrC=['SAP','Nominativo','Resp.','Plant','Confermato'].concat(COOP_REP_C.map(function(c){return c.l;}));
+  var repRowsC=[repHdrC];
+  coopEmps.forEach(function(e){
+    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
+    var row=[e.sap||e.id||'',e.nom2||e.nome||'',e.resp||'',e.plant||'',e.confermato?'SI':''];
+    COOP_REP_C.forEach(function(c){
+      if(c.k.indexOf('__comm_')===0){
+        var code=c.k.replace('__comm_','');
+        var tot=0;(e.commesse||[]).forEach(function(dc){if(dc&&dc[code])tot+=dc[code];});
+        row.push(tot||'');
+      } else {
+        row.push(c.k==='ord'||c.k==='str'||c.k==='fest'?fmtOre(t[c.k])||0:t[c.k]||0);
+      }
+    });
+    repRowsC.push(row);
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(repRowsC),mName+'_Report_Coop');
+  // Sheet Commesse Coop
+  if(commesseAllC.length){
+    var commHdrC=['Nominativo','SAP','Giorno'];
+    commesseAllC.forEach(function(c){commHdrC.push(c.code);commHdrC.push(c.code+'_h');});
+    var commRowsC=[commHdrC];
+    coopEmps.forEach(function(e){
+      (e.commesse||[]).forEach(function(dc,di){
+        if(!dc)return;
+        var d=dates[di];if(!d)return;
+        var row=[e.nom2||e.nome||'',e.sap||e.id||'',d.day];
+        commesseAllC.forEach(function(c){row.push(dc[c.code]?'✓':'');row.push(dc[c.code]||'');});
+        commRowsC.push(row);
+      });
+    });
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(commRowsC),mName+'_Coop_Commesse');
+  }
   XLSX.utils.book_append_sheet(wb,buildLegendSheet('coop'),'Legenda');
   XLSX.writeFile(wb,'Presenze_Coop_'+y+('0'+m).slice(-2)+'.xlsx',{cellStyles:true});
   toast('✓ Export Coop scaricato');
@@ -2221,7 +2287,46 @@ function atsExport(){
     ATS_REP.forEach(function(c){row.push(c.k==='ord'||c.k==='str'||c.k==='fest'?fmtOre(t[c.k])||0:t[c.k]||0);});
     repRows.push(row);
   });
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(repRows),mName+'_Report_ATS');
+  // Commesse nel report
+  var commesseAll=(permConfig&&permConfig.commesse)||[];
+  commesseAll.forEach(function(c){
+    ATS_REP.push({l:c.code+'_h',k:'__comm_'+c.code});
+  });
+  // Ricalcola intestazioni con commesse
+  var atsRepHdr2=['SAP','Nominativo','Resp.','Plant'].concat(ATS_REP.map(function(c){return c.l;}));
+  var repRows2=[atsRepHdr2];
+  atsEmps.forEach(function(e){
+    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
+    var row=[e.id||'',e.nome,e.resp||'',e.plant||''];
+    ATS_REP.forEach(function(c){
+      if(c.k.indexOf('__comm_')===0){
+        var code=c.k.replace('__comm_','');
+        var tot=0;
+        (e.commesse||[]).forEach(function(dc){if(dc&&dc[code])tot+=dc[code];});
+        row.push(tot||'');
+      } else {
+        row.push(c.k==='ord'||c.k==='str'||c.k==='fest'?fmtOre(t[c.k])||0:t[c.k]||0);
+      }
+    });
+    repRows2.push(row);
+  });
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(repRows2),mName+'_Report_ATS');
+  // Sheet Commesse
+  if(commesseAll.length){
+    var commHdr=['Nominativo','SAP','Giorno'];
+    commesseAll.forEach(function(c){commHdr.push(c.code);commHdr.push(c.code+'_h');});
+    var commRows=[commHdr];
+    atsEmps.forEach(function(e){
+      (e.commesse||[]).forEach(function(dc,di){
+        if(!dc)return;
+        var d=dates[di];if(!d)return;
+        var row=[e.nome,e.id||'',d.day];
+        commesseAll.forEach(function(c){row.push(dc[c.code]?'✓':'');row.push(dc[c.code]||'');});
+        commRows.push(row);
+      });
+    });
+    XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(commRows),mName+'_ATS_Commesse');
+  }
   XLSX.utils.book_append_sheet(wb,buildLegendSheet('ats'),'Legenda');
   XLSX.writeFile(wb,'Presenze_ATS_'+y+('0'+m).slice(-2)+'.xlsx',{cellStyles:true});
   toast('✓ Export ATS scaricato');
@@ -2288,6 +2393,7 @@ function openPickerGeneric(mode,ri,di){
       var showOr=SIGLE_NO_ORARIO.indexOf(s.code)===-1;
       document.getElementById('spOrariWrap').style.display=showOr?'':'none';
       spCalcLive();
+      renderCommesseGrid();
     });
     g.appendChild(el);
   });
@@ -2300,6 +2406,7 @@ function openPickerGeneric(mode,ri,di){
   document.getElementById('spOrariWrap').style.display=showOrInit?'':'none';
   document.getElementById('spCalcBox').style.display='none';
   if(cs)spCalcLive();
+  renderCommesseGrid();
   document.getElementById('spConfirmBtn').onclick=spConfirm;
   // Mostra pulsante Nota se c'è già una nota sulla cella
   var hasNote=!!(emp.notes&&emp.notes[di]);
@@ -2313,7 +2420,8 @@ function spOpenNota(){
   mClose('moSigla');
   openNota(spMode,spIdx,spDi);
 }
-function spCalcLive(){
+function spCalcLive(){renderCommesseGrid();
+
   var emps=spMode==='ats'?atsEmps:coopEmps;
   var sig=spSigla!==null?spSigla:xSig((emps[spIdx]?((emps[spIdx].sigla||[])[spDi]||''):''));
   if(!sig||SIGLE_NO_ORARIO.indexOf(sig)!==-1){document.getElementById('spCalcBox').style.display='none';return;}
@@ -2352,6 +2460,14 @@ function spConfirm(){
   }else if(spSigla===''){
     emp.ingresso[spDi]='';emp.uscita[spDi]='';emp.pausa[spDi]=null;
   }
+  // Salva distribuzione commesse
+  saveCommesse();
+  var y2=parseInt(document.getElementById(spMode==='ats'?'aYear':'cYear').value);
+  var m2=parseInt(document.getElementById(spMode==='ats'?'aMonth':'cMonth').value);
+  var fid2=(spMode==='ats'?atsEmps:coopEmps)[spIdx];
+  var fid3=fid2&&fid2.sheetRows&&fid2.sheetRows.fileId||(spMode==='ats'?atsFileId:coopFileId);
+  var sname2=fid2&&fid2.sheetRows&&fid2.sheetRows.sheetName||((spMode==='ats'?atsData:coopData)&&(spMode==='ats'?atsData:coopData).sheetName);
+  if(fid3&&sname2)saveCommesseToSheet(spMode,fid2,spDi,fid3,sname2,y2,m2);
   mClose('moSigla');
   if(spMode==='ats'){atsRender();aSave();}else{coopRender();cSave();}
   toast('✓ Salvato');
@@ -2932,6 +3048,17 @@ function renderPermPanel(){
   var def=permConfig.default||{};var dsecs=def.sections||[];
   h+='<div style="font-size:13px;color:var(--subtle);margin-bottom:10px">Accesso per chi non è in lista: '+(dsecs.length?dsecs.map(function(s){return '<strong style="color:var(--teal)">'+s+'</strong>';}).join(', '):'<strong style="color:var(--red)">Negato</strong>')+'</div>';
   h+='<div style="display:flex;gap:10px"><label class="sc-item"><input type="checkbox" id="defCoop"'+(dsecs.indexOf('coop')!==-1?' checked':'')+' onchange="updateDefault()"> Cooperativa</label><label class="sc-item"><input type="checkbox" id="defAts"'+(dsecs.indexOf('ats')!==-1?' checked':'')+' onchange="updateDefault()"> ATS</label></div></div></div>';
+  // Sezione Commesse
+  var commesse=permConfig.commesse||[];
+  h+='<div class="perm-section"><div class="perm-section-header"><div class="perm-section-title">🏭 Commesse per Plant</div><button class="ba bteal" style="padding:6px 12px;font-size:12px" onclick="openCommessaEdit(null)">＋ Nuova</button></div><div class="perm-section-body">';
+  if(!commesse.length)h+='<div style="font-size:12px;color:var(--muted)">Nessuna commessa configurata.</div>';
+  commesse.forEach(function(c,ci){
+    h+='<div class="ucard"><div class="ucard-avatar" style="background:rgba(99,102,241,.15);color:#818cf8;font-size:11px;font-weight:700">'+esc(c.code)+'</div>';
+    h+='<div class="ucard-body"><div class="ucard-email">'+esc(c.code)+'</div>';
+    h+='<div class="ucard-meta"><span style="font-size:11px;color:var(--muted)">Plant: '+(c.plants&&c.plants.length?c.plants.join(', '):'tutti')+'</span></div></div>';
+    h+='<div class="ucard-actions"><button class="icon-btn" onclick="openCommessaEdit('+ci+')" title="Modifica">✏️</button><button class="icon-btn del" onclick="delCommessa('+ci+')" title="Rimuovi">🗑</button></div></div>';
+  });
+  h+='</div></div>';
   document.getElementById('permPanel').innerHTML=h;
 }
 function updateDefault(){
@@ -2940,6 +3067,208 @@ function updateDefault(){
   if(document.getElementById('defAts').checked)secs.push('ats');
   if(!permConfig.default)permConfig.default={};permConfig.default.sections=secs;
 }
+// ═══════════════════════════════════════════════════════════
+//  COMMESSE CONFIG
+// ═══════════════════════════════════════════════════════════
+var commEditIdx=null;
+function getCommesse(plant){
+  var all=(permConfig&&permConfig.commesse)||[];
+  if(!plant)return all;
+  return all.filter(function(c){
+    return !c.plants||!c.plants.length||c.plants.indexOf(plant)!==-1;
+  });
+}
+function openCommessaEdit(ci){
+  commEditIdx=ci;
+  document.getElementById('commTitle').textContent=ci!==null?'Modifica Commessa':'Nuova Commessa';
+  document.getElementById('commErr').classList.remove('show');
+  if(ci!==null){
+    var c=(permConfig.commesse||[])[ci]||{};
+    document.getElementById('commCode').value=c.code||'';
+    document.getElementById('commPlants').value=(c.plants||[]).join('\n');
+  } else {
+    document.getElementById('commCode').value='';
+    document.getElementById('commPlants').value='';
+  }
+  mOpen('moCommessa');
+  setTimeout(function(){document.getElementById('commCode').focus();},120);
+}
+function commessaConfirm(){
+  var code=(document.getElementById('commCode').value||'').trim().toUpperCase();
+  if(!code){document.getElementById('commErr').classList.add('show');return;}
+  var plants=document.getElementById('commPlants').value.split(/[\n,]+/).map(function(p){return p.trim().toUpperCase();}).filter(Boolean);
+  if(!permConfig.commesse)permConfig.commesse=[];
+  if(commEditIdx!==null){
+    permConfig.commesse[commEditIdx]={code:code,plants:plants};
+  } else {
+    permConfig.commesse.push({code:code,plants:plants});
+  }
+  mClose('moCommessa');renderPermPanel();toast('✓ Commessa salvata — premi Salva Config');
+}
+function delCommessa(ci){
+  showConf('Rimuovi commessa','Rimuovere questa commessa?',function(){
+    if(permConfig.commesse)permConfig.commesse.splice(ci,1);
+    renderPermPanel();toast('✓ Rimossa');
+  });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  DISTRIBUZIONE ORE COMMESSE NEL PICKER
+// ═══════════════════════════════════════════════════════════
+var SIGLE_COMMESSE=['X','HP','TFS','H104','CP'];
+
+function calcOreDisponibili(sigla, ing, usc, pausa, qty){
+  // Ore base dal turno
+  if(!ing||!usc)return 0;
+  var o=calcOreGiorno(ing,usc,pausa!==undefined?pausa:1);
+  var eff=o.eff||0;
+  var sg=xSig(sigla||'');
+  // Sottrai ore permesso/104
+  if(sg==='HP'||sg==='H104'){
+    var qtyH=parseFloat((String(sigla||'').match(/^[\d.]*/)||['1'])[0])||1;
+    eff=Math.max(0,eff-qtyH);
+  }
+  return Math.round(eff*10)/10;
+}
+
+function renderCommesseGrid(){
+  var wrap=document.getElementById('spCommesseWrap');
+  var grid=document.getElementById('spCommesseGrid');
+  var emps=spMode==='ats'?atsEmps:coopEmps;
+  var emp=emps[spIdx];
+  if(!emp){wrap.style.display='none';return;}
+  var sg=spSigla!==null?spSigla:xSig((emp.sigla||[])[spDi]||'');
+  var sigBase=xSig(sg);
+  if(SIGLE_COMMESSE.indexOf(sigBase)===-1){wrap.style.display='none';return;}
+  var commesse=getCommesse(emp.plant||'');
+  if(!commesse.length){wrap.style.display='none';return;}
+  var ing=document.getElementById('spIng').value;
+  var usc=document.getElementById('spUsc').value;
+  var pausa=document.getElementById('spPausa').checked?parseFloat(document.getElementById('spPausaDur').value)||1:0;
+  var disp=calcOreDisponibili(sg,ing,usc,pausa,null);
+  document.getElementById('spCommDisp').textContent=disp+'h';
+  // Leggi valori esistenti
+  var existing=(emp.commesse&&emp.commesse[spDi])||{};
+  grid.innerHTML='';
+  var tot=0;
+  commesse.forEach(function(c){
+    var val=existing[c.code]||0;
+    tot+=val;
+    var row=document.createElement('div');row.className='comm-row';
+    var pct=disp>0?Math.min(100,Math.round(val/disp*100)):0;
+    row.innerHTML='<span class="comm-label">'+esc(c.code)+'</span>'
+      +'<input class="comm-inp" type="number" min="0" max="24" step="0.5" value="'+val+'" data-code="'+esc(c.code)+'" oninput="updateCommTot()">'
+      +'<span style="font-size:11px;color:var(--muted);min-width:22px">h</span>'
+      +'<div class="comm-bar"><div class="comm-bar-fill" id="cbar_'+esc(c.code)+'" style="width:'+pct+'%"></div></div>';
+    grid.appendChild(row);
+  });
+  document.getElementById('spCommTot').textContent=Math.round(tot*10)/10+'h';
+  document.getElementById('spCommWarn').style.display=tot>disp+0.01?'':'none';
+  wrap.style.display='';
+}
+
+function updateCommTot(){
+  var inputs=document.getElementById('spCommesseGrid').querySelectorAll('.comm-inp');
+  var emps=spMode==='ats'?atsEmps:coopEmps;
+  var emp=emps[spIdx];
+  var ing=document.getElementById('spIng').value;
+  var usc=document.getElementById('spUsc').value;
+  var pausa=document.getElementById('spPausa').checked?parseFloat(document.getElementById('spPausaDur').value)||1:0;
+  var sg=spSigla!==null?spSigla:xSig((emp&&emp.sigla||[])[spDi]||'');
+  var disp=calcOreDisponibili(sg,ing,usc,pausa,null);
+  var tot=0;
+  inputs.forEach(function(inp){tot+=parseFloat(inp.value)||0;});
+  tot=Math.round(tot*10)/10;
+  document.getElementById('spCommTot').textContent=tot+'h';
+  document.getElementById('spCommDisp').textContent=disp+'h';
+  document.getElementById('spCommWarn').style.display=tot>disp+0.01?'':'none';
+  // Aggiorna barre
+  inputs.forEach(function(inp){
+    var code=inp.dataset.code;
+    var bar=document.getElementById('cbar_'+code);
+    if(bar){var pct=disp>0?Math.min(100,Math.round((parseFloat(inp.value)||0)/disp*100)):0;bar.style.width=pct+'%';}
+  });
+}
+
+function saveCommesse(){
+  var inputs=document.getElementById('spCommesseGrid').querySelectorAll('.comm-inp');
+  if(!inputs.length)return;
+  var emps=spMode==='ats'?atsEmps:coopEmps;
+  var emp=emps[spIdx]; if(!emp)return;
+  if(!emp.commesse)emp.commesse=[];
+  while(emp.commesse.length<=spDi)emp.commesse.push(null);
+  var vals={};
+  inputs.forEach(function(inp){
+    var v=parseFloat(inp.value)||0;
+    if(v>0)vals[inp.dataset.code]=v;
+  });
+  emp.commesse[spDi]=Object.keys(vals).length?vals:null;
+}
+
+function saveCommesseToSheet(mode, emp, di, fileId, sheetName, y, m){
+  if(!fileId||!emp||!emp.commesse||emp.commesse[di]===null)return Promise.resolve();
+  var commesse=getCommesse(emp.plant||'');
+  if(!commesse.length)return Promise.resolve();
+  var nome=emp.nom2||emp.nome||'';
+  var sap=emp.sap||emp.id||'';
+  var data=mode==='ats'?atsData:coopData;
+  var dates=data?data.dates:[];
+  var d=dates[di];if(!d)return Promise.resolve();
+  var tabName=(MESI[m-1]||m)+'_'+(mode==='ats'?'ATS':'Coop')+'_Commesse';
+  var vals=emp.commesse[di]||{};
+  // Build header row
+  var hdr=['Nominativo','SAP','Giorno'];
+  commesse.forEach(function(c){hdr.push(c.code);hdr.push(c.code+'_h');});
+  // Build data row
+  var row=[nome,sap,d.day];
+  commesse.forEach(function(c){row.push(vals[c.code]?'✓':'');row.push(vals[c.code]||'');});
+  // Find or create sheet, then append/update row
+  return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties')
+  .then(function(meta){
+    var sheets=meta.sheets||[];
+    var sh=sheets.find(function(s){return s.properties.title===tabName;});
+    if(sh){
+      // Sheet exists: read to find existing row for this employee+day, then update or append
+      return sheetsRead(fileId,tabName+'!A:C').then(function(rows){
+        var targetRow=null;
+        (rows||[]).forEach(function(r,ri){
+          if(ri===0)return; // skip header
+          if(String(r[0]||'').trim()===nome&&String(r[2]||'').trim()===String(d.day))targetRow=ri+1;
+        });
+        if(targetRow){
+          return sheetsBatchUpdate(fileId,[{range:tabName+'!A'+targetRow,values:[row]}]);
+        } else {
+          return sheetsAppend(fileId,tabName,row);
+        }
+      });
+    } else {
+      // Create sheet then write header + row
+      return createSheetTab(fileId,tabName).then(function(){
+        return sheetsBatchUpdate(fileId,[
+          {range:tabName+'!A1',values:[hdr]},
+          {range:tabName+'!A2',values:[row]}
+        ]);
+      });
+    }
+  }).catch(function(e){console.warn('[WMS] commesse sheet error:',e.message);});
+}
+
+function createSheetTab(fileId, title){
+  return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+':batchUpdate',{
+    method:'POST',
+    headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+    body:JSON.stringify({requests:[{addSheet:{properties:{title:title}}}]})
+  }).then(function(r){return r.json();});
+}
+
+function sheetsAppend(fileId, sheetName, row){
+  return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'/values/'+encodeURIComponent(sheetName)+'!A1:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS',{
+    method:'POST',
+    headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+    body:JSON.stringify({values:[row]})
+  }).then(function(r){return r.json();});
+}
+
 function puFillAllTags(){
   var tags={};
   (coopEmps||[]).forEach(function(e){if(e.resp&&e.resp.trim())tags[e.resp.trim()]=1;});
