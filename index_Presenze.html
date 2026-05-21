@@ -23,6 +23,22 @@
   --c-HP:#a855f7;--c-H104:#f59e0b;--c-104:#fb923c;--c-CP:#ec4899;
   --c-HPE:#14b8a6;--c-PE:#06b6d4;--c-SW:#84cc16;--c-Lutto:#94a3b8;--c-TFS:#38bdf8;
 }
+/* ── TEMA DIM (misto) ── */
+body.theme-dim{
+  --bg:#1e2433;--surface:#252d3d;--card:#2d3748;--border:#3d4f6b;
+  --text:#cbd5e1;--muted:#7a8fa8;--subtle:#94a3b8;
+  --blue-dim:#1e3a5f;--teal-dim:#0a3535;--amber-dim:#452a0a;--red-dim:#4a1414;
+}
+body.theme-dim .snav{background:#252d3d;border-bottom:1px solid #3d4f6b;}
+body.theme-dim .drawer{background:#252d3d;border-right:1px solid #3d4f6b;}
+body.theme-dim .mc{background:#252d3d;border:1px solid #3d4f6b;}
+body.theme-dim .mi{background:#2d3748;border-color:#3d4f6b;color:#cbd5e1;}
+body.theme-dim .tout{background:#252d3d;}
+body.theme-dim table{background:#252d3d;}
+body.theme-dim .sf{background:#2d3748 !important;}
+body.theme-dim .filters{background:#252d3d;border-bottom:1px solid #3d4f6b;}
+body.theme-dim .fc{background:#2d3748;border-color:#3d4f6b;color:#cbd5e1;}
+
 /* ── TEMA CHIARO ── */
 body.theme-light{
   --bg:#f1f5f9;--surface:#ffffff;--card:#f8fafc;--border:#e2e8f0;
@@ -188,8 +204,12 @@ tr.ats-sep td{height:6px;padding:0!important;background:rgba(20,184,166,.05);bor
 body.admin-mode td.editable:hover{outline:2px solid var(--teal);background:rgba(20,184,166,.08);cursor:cell;z-index:1}
 td.editing{padding:0!important}
 td.editing input{width:100%;height:100%;min-height:29px;background:var(--card);border:2px solid var(--teal);padding:2px;font-family:var(--ffc);font-size:12px;font-weight:700;color:var(--text);outline:none;text-align:center;text-transform:uppercase}
-.bdel{background:none;border:none;color:var(--border);cursor:pointer;font-size:12px;line-height:1;padding:2px 4px;border-radius:3px;transition:all .15s}
-body.admin-mode .bdel{color:var(--muted)}
+.bdel{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;line-height:1;padding:2px 4px;border-radius:3px;transition:all .15s;opacity:.5}
+body.admin-mode .bdel{color:var(--muted);opacity:.6}
+body.admin-mode .bdel:hover{opacity:1}
+body.theme-light .bdel{color:#64748b;opacity:.7}
+body.theme-light.admin-mode .bdel:hover{color:var(--red);opacity:1}
+body.theme-dim .bdel{color:#94a3b8;opacity:.7}
 body.admin-mode .bdel:hover{color:var(--red);background:rgba(239,68,68,.1)}
 tr.confirmed-row td{background:rgba(16,185,129,.10)!important;border-color:rgba(16,185,129,.25)!important;}
 tr.confirmed-row td.sf{background:rgba(16,185,129,.14)!important;}
@@ -932,6 +952,9 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
     <div style="display:flex;gap:8px">
       <label class="sc-item" style="cursor:pointer;gap:8px;padding:8px 14px;border:1px solid var(--border);border-radius:8px;flex:1;justify-content:center" id="cfgTemaScuro">
         <input type="radio" name="cfgTema" value="scuro" style="accent-color:var(--teal)"> 🌙 Scuro
+      </label>
+      <label class="sc-item" style="cursor:pointer;gap:8px;padding:8px 14px;border:1px solid var(--border);border-radius:8px;flex:1;justify-content:center" id="cfgTemaDim">
+        <input type="radio" name="cfgTema" value="dim" style="accent-color:var(--teal)"> 🌆 Dim
       </label>
       <label class="sc-item" style="cursor:pointer;gap:8px;padding:8px 14px;border:1px solid var(--border);border-radius:8px;flex:1;justify-content:center" id="cfgTemaChiaro">
         <input type="radio" name="cfgTema" value="chiaro" style="accent-color:var(--teal)"> ☀️ Chiaro
@@ -3758,8 +3781,9 @@ function lsDel(k){try{localStorage.removeItem('wms_'+k);}catch(e){}}
 
 // ── Config orario default ──
 function applyTheme(t){
+  document.body.classList.remove('theme-light','theme-dim');
   if(t==='chiaro') document.body.classList.add('theme-light');
-  else document.body.classList.remove('theme-light');
+  else if(t==='dim') document.body.classList.add('theme-dim');
 }
 function openConfig(){
   document.getElementById('cfgIng').value=wmsConfig.ingresso||'08:00';
