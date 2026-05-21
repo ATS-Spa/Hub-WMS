@@ -1843,25 +1843,31 @@ function cDelEmp(i){
 var cST=null;
 function cSave(){
   clearTimeout(cST);cST=setTimeout(function(){
-    if(!coopFileId||!coopData)return;
+    if(!coopData)return;
     toast('⏳ Salvo Coop su Sheets…','warn');
-    var data=[];
+    var byFile={};
     var DST=coopData.dayStart||3;
     var nd=coopData.dates.length;
     coopEmps.forEach(function(emp){
       if(!emp.sheetRows||emp._manual)return;
+      var fid=emp.sheetRows.fileId||coopFileId;
+      if(!fid)return;
+      if(!byFile[fid])byFile[fid]=[];
       for(var di=0;di<nd;di++){
         var col=DST+di;var colL=colToLetter(col);
         var sv=(emp.sigla||[])[di]||'';
         var iv=(emp.ingresso||[])[di]||'';
         var uv=(emp.uscita||[])[di]||'';
-        if(emp.sheetRows.n!==undefined) data.push({range:coopData.sheetName+'!'+colL+(emp.sheetRows.n+1),values:[[sv]]});
-        if(emp.sheetRows.i!==undefined) data.push({range:coopData.sheetName+'!'+colL+(emp.sheetRows.i+1),values:[[iv]]});
-        if(emp.sheetRows.u!==undefined) data.push({range:coopData.sheetName+'!'+colL+(emp.sheetRows.u+1),values:[[uv]]});
+        if(emp.sheetRows.n!==undefined) byFile[fid].push({range:coopData.sheetName+'!'+colL+(emp.sheetRows.n+1),values:[[sv]]});
+        if(emp.sheetRows.i!==undefined) byFile[fid].push({range:coopData.sheetName+'!'+colL+(emp.sheetRows.i+1),values:[[iv]]});
+        if(emp.sheetRows.u!==undefined) byFile[fid].push({range:coopData.sheetName+'!'+colL+(emp.sheetRows.u+1),values:[[uv]]});
       }
     });
-    if(!data.length){toast('—');return;}
-    sheetsBatchUpdate(coopFileId,data)
+    var fileIds=Object.keys(byFile);
+    if(!fileIds.length){toast('—');return;}
+    Promise.all(fileIds.map(function(fid){
+      return sheetsBatchUpdate(fid,byFile[fid]);
+    }))
     .then(function(){toast('✓ Coop salvato');lastRefreshTimeCoop=new Date();})
     .catch(function(e){toast('✗ '+e.message,'err');});
   },700);
@@ -2119,24 +2125,32 @@ function aDel(i){
 
 var aST=null;
 function aSave(){
-  if(!atsFileId||!atsData)return;
+  if(!atsData)return;
   clearTimeout(aST);aST=setTimeout(function(){
     toast('⏳ Salvo ATS su Sheets…','warn');
-    var data=[];var DST=atsData.dayStart||3;var nd=atsData.dates.length;
+    // Raggruppa per fileId (ogni dipendente porta il suo fileId in sheetRows)
+    var byFile={};
+    var DST=atsData.dayStart||3;var nd=atsData.dates.length;
     atsEmps.forEach(function(emp){
       if(!emp.sheetRows||emp._manual)return;
+      var fid=emp.sheetRows.fileId||atsFileId;
+      if(!fid)return;
+      if(!byFile[fid])byFile[fid]=[];
       for(var di=0;di<nd;di++){
         var col=DST+di;var colL=colToLetter(col);
         var sv=(emp.sigla||[])[di]||'';
         var iv=(emp.ingresso||[])[di]||'';
         var uv=(emp.uscita||[])[di]||'';
-        if(emp.sheetRows.n!==undefined) data.push({range:atsData.sheetName+'!'+colL+(emp.sheetRows.n+1),values:[[sv]]});
-        if(emp.sheetRows.i!==undefined) data.push({range:atsData.sheetName+'!'+colL+(emp.sheetRows.i+1),values:[[iv]]});
-        if(emp.sheetRows.u!==undefined) data.push({range:atsData.sheetName+'!'+colL+(emp.sheetRows.u+1),values:[[uv]]});
+        if(emp.sheetRows.n!==undefined) byFile[fid].push({range:atsData.sheetName+'!'+colL+(emp.sheetRows.n+1),values:[[sv]]});
+        if(emp.sheetRows.i!==undefined) byFile[fid].push({range:atsData.sheetName+'!'+colL+(emp.sheetRows.i+1),values:[[iv]]});
+        if(emp.sheetRows.u!==undefined) byFile[fid].push({range:atsData.sheetName+'!'+colL+(emp.sheetRows.u+1),values:[[uv]]});
       }
     });
-    if(!data.length){toast('—');return;}
-    sheetsBatchUpdate(atsFileId,data)
+    var fileIds=Object.keys(byFile);
+    if(!fileIds.length){toast('—');return;}
+    Promise.all(fileIds.map(function(fid){
+      return sheetsBatchUpdate(fid,byFile[fid]);
+    }))
     .then(function(){toast('✓ ATS salvato');lastRefreshTimeAts=new Date();})
     .catch(function(e){toast('✗ '+e.message,'err');});
   },800);
@@ -2431,8 +2445,12 @@ function parseSheetValues(values,year,month,fileId,sheetName,secType){
         resp:globalResp,plant:plantVal,
         sigla:sig,ingresso:ing,uscita:usc,
         pausa:Array(nd).fill(null),
-        // ── FIX 3: salviamo fileId e sheetName dentro sheetRows ──
-        sheetRows:{n:r,i:r+1,u:r+2,fileId:fileId,sheetName:sheetName}
+        sheetRows:{
+          n:r,
+          i:hasI?r+1:undefined,
+          u:hasU?(hasI?r+2:r+1):undefined,
+          fileId:fileId,sheetName:sheetName
+        }
       };
       emps.push(emp);
       r+=(hasI&&hasU?3:hasI?2:1);
