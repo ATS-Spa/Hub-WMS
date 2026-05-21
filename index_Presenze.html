@@ -2579,6 +2579,15 @@ function parseSheetValues(values,year,month,fileId,sheetName,secType){
   }
 
   var globalResp=String((values[0]||[])[0]||'').trim().replace(/^resp\.?\s*/i,'').trim();
+  // Plant: 1) nome file, 2) C2, 3) nome sheet
+  var globalPlant='';
+  if(fileId){
+    var _ff=allFiles&&allFiles.find(function(f){return f.id===fileId;});
+    if(_ff){var _pf=parseFileName(_ff.name);if(_pf)globalPlant=_pf.plant;}
+  }
+  if(!globalPlant){var _pf2=parseFileName(sheetName);if(_pf2)globalPlant=_pf2.plant;}
+  if(!globalPlant){globalPlant=String((values[1]||[])[2]||'').trim().toUpperCase();}
+  console.log('[WMS] globalPlant=',globalPlant,'fileId=',fileId,'sheetName=',sheetName);
   var emps=[],r=0;
   while(r<values.length){
     var row=values[r]||[];
@@ -2605,13 +2614,7 @@ function parseSheetValues(values,year,month,fileId,sheetName,secType){
       }
       var confCol=DST+nd;
       var confVal=String(row[confCol]||'').trim().toUpperCase();
-      // Fallback: se plant non è in colonna, prendilo dal nome file
-      var effectivePlant=plantVal||((parseFileName(sheetName)||parseFileName((fileId||'')))&&(parseFileName(sheetName)||{}).plant)||'';
-      // Prova anche dal nome del file cercato in allFiles
-      if(!effectivePlant&&fileId){
-        var ff=allFiles&&allFiles.find(function(f){return f.id===fileId;});
-        if(ff){var pf=parseFileName(ff.name);if(pf)effectivePlant=pf.plant;}
-      }
+      var effectivePlant=plantVal||globalPlant;
       var emp={
         nome:nomeVal,nom2:nomeVal,id:sapVal,sap:sapVal,
         resp:globalResp,plant:effectivePlant,
