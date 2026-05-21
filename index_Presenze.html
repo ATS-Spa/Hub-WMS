@@ -3131,6 +3131,16 @@ function calcOreDisponibili(sigla, ing, usc, pausa, qty){
   return Math.round(eff*10)/10;
 }
 
+function getCommDisp(){
+  var emps=spMode==='ats'?atsEmps:coopEmps;
+  var emp=emps[spIdx];
+  var sg=spSigla!==null?spSigla:xSig((emp&&emp.sigla||[])[spDi]||'');
+  var ing=document.getElementById('spIng').value;
+  var usc=document.getElementById('spUsc').value;
+  var pausa=document.getElementById('spPausa').checked?parseFloat(document.getElementById('spPausaDur').value)||1:0;
+  return calcOreDisponibili(sg,ing,usc,pausa,null);
+}
+
 function renderCommesseGrid(){
   var wrap=document.getElementById('spCommesseWrap');
   var grid=document.getElementById('spCommesseGrid');
@@ -3142,65 +3152,102 @@ function renderCommesseGrid(){
   if(SIGLE_COMMESSE.indexOf(sigBase)===-1){wrap.style.display='none';return;}
   var commesse=getCommesse(emp.plant||'');
   if(!commesse.length){wrap.style.display='none';return;}
-  var ing=document.getElementById('spIng').value;
-  var usc=document.getElementById('spUsc').value;
-  var pausa=document.getElementById('spPausa').checked?parseFloat(document.getElementById('spPausaDur').value)||1:0;
-  var disp=calcOreDisponibili(sg,ing,usc,pausa,null);
-  document.getElementById('spCommDisp').textContent=disp+'h';
-  // Leggi valori esistenti
+  var disp=getCommDisp();
   var existing=(emp.commesse&&emp.commesse[spDi])||{};
   grid.innerHTML='';
-  var tot=0;
   commesse.forEach(function(c){
-    var val=existing[c.code]||0;
-    tot+=val;
+    var savedH=existing[c.code]; // undefined=non attiva, 0=resto, >0=ore fisse
+    var isOn=savedH!==undefined;
+    var isResto=isOn&&savedH===0;
+    var h=savedH&&savedH>0?savedH:'';
     var row=document.createElement('div');row.className='comm-row';
-    var pct=disp>0?Math.min(100,Math.round(val/disp*100)):0;
-    row.innerHTML='<span class="comm-label">'+esc(c.code)+'</span>'
-      +'<input class="comm-inp" type="number" min="0" max="24" step="0.5" value="'+val+'" data-code="'+esc(c.code)+'" oninput="updateCommTot()">'
-      +'<span style="font-size:11px;color:var(--muted);min-width:22px">h</span>'
-      +'<div class="comm-bar"><div class="comm-bar-fill" id="cbar_'+esc(c.code)+'" style="width:'+pct+'%"></div></div>';
+    row.innerHTML=
+      '<input type="checkbox" class="conf-cb comm-check" data-code="'+esc(c.code)+'" '+(isOn?'checked':'')+' onchange="updateCommTot()">'
+      +'<span class="comm-label" style="'+(isOn?'color:var(--text)':'color:var(--muted)')+'">'+esc(c.code)+'</span>'
+      +'<input class="comm-inp" type="number" min="0" max="24" step="0.5" placeholder="resto" value="'+h+'" data-code="'+esc(c.code)+'" '
+        +(isOn?'':'disabled')+' style="'+(isOn?'':'opacity:.35')+'" oninput="updateCommTot()">'
+      +'<span style="font-size:11px;color:var(--muted);min-width:20px">'+(isOn&&!isResto?'h':'')+'</span>'
+      +'<div class="comm-bar"><div class="comm-bar-fill" id="cbar_'+esc(c.code)+'" style="width:0%"></div></div>';
     grid.appendChild(row);
+    // Gestione checkbox: abilita/disabilita input
+    var cb=row.querySelector('.comm-check');
+    var inp=row.querySelector('.comm-inp');
+    var lbl=row.querySelector('.comm-label');
+    cb.addEventListener('change',function(){
+      inp.disabled=!cb.checked;
+      inp.style.opacity=cb.checked?'1':'0.35';
+      lbl.style.color=cb.checked?'var(--text)':'var(--muted)';
+      if(!cb.checked){inp.value='';}
+      updateCommTot();
+    });
   });
-  document.getElementById('spCommTot').textContent=Math.round(tot*10)/10+'h';
-  document.getElementById('spCommWarn').style.display=tot>disp+0.01?'':'none';
+  updateCommTot();
   wrap.style.display='';
 }
 
 function updateCommTot(){
-  var inputs=document.getElementById('spCommesseGrid').querySelectorAll('.comm-inp');
-  var emps=spMode==='ats'?atsEmps:coopEmps;
-  var emp=emps[spIdx];
-  var ing=document.getElementById('spIng').value;
-  var usc=document.getElementById('spUsc').value;
-  var pausa=document.getElementById('spPausa').checked?parseFloat(document.getElementById('spPausaDur').value)||1:0;
-  var sg=spSigla!==null?spSigla:xSig((emp&&emp.sigla||[])[spDi]||'');
-  var disp=calcOreDisponibili(sg,ing,usc,pausa,null);
-  var tot=0;
-  inputs.forEach(function(inp){tot+=parseFloat(inp.value)||0;});
-  tot=Math.round(tot*10)/10;
-  document.getElementById('spCommTot').textContent=tot+'h';
+  var grid=document.getElementById('spCommesseGrid');
+  var rows=grid.querySelectorAll('.comm-row');
+  var disp=getCommDisp();
+  // Calcola ore fisse (quelle con valore > 0)
+  var fisse=0;
+  var restoCount=0;
+  rows.forEach(function(row){
+    var cb=row.querySelector('.comm-check');
+    var inp=row.querySelector('.comm-inp');
+    if(!cb||!cb.checked)return;
+    var v=parseFloat(inp.value);
+    if(v>0) fisse+=v;
+    else restoCount++;
+  });
+  var restoH=restoCount>0?Math.max(0,Math.round((disp-fisse)*10/restoCount)/10):0;
+  var tot=fisse+restoH*restoCount;
+  document.getElementById('spCommTot').textContent=Math.round(tot*10)/10+'h';
   document.getElementById('spCommDisp').textContent=disp+'h';
-  document.getElementById('spCommWarn').style.display=tot>disp+0.01?'':'none';
-  // Aggiorna barre
-  inputs.forEach(function(inp){
-    var code=inp.dataset.code;
-    var bar=document.getElementById('cbar_'+code);
-    if(bar){var pct=disp>0?Math.min(100,Math.round((parseFloat(inp.value)||0)/disp*100)):0;bar.style.width=pct+'%';}
+  document.getElementById('spCommWarn').style.display=fisse>disp+0.01?'':'none';
+  // Aggiorna barre e hint resto
+  rows.forEach(function(row){
+    var cb=row.querySelector('.comm-check');
+    var inp=row.querySelector('.comm-inp');
+    var unit=row.querySelectorAll('span')[2];
+    var bar=row.querySelector('.comm-bar-fill');
+    if(!cb||!bar)return;
+    if(!cb.checked){bar.style.width='0%';return;}
+    var v=parseFloat(inp.value);
+    var actual=v>0?v:restoH;
+    var pct=disp>0?Math.min(100,Math.round(actual/disp*100)):0;
+    bar.style.width=pct+'%';
+    if(unit){unit.textContent=(v>0?'h':'→'+restoH+'h');}
   });
 }
 
 function saveCommesse(){
-  var inputs=document.getElementById('spCommesseGrid').querySelectorAll('.comm-inp');
-  if(!inputs.length)return;
+  var grid=document.getElementById('spCommesseGrid');
+  var rows=grid.querySelectorAll('.comm-row');
+  if(!rows.length)return;
   var emps=spMode==='ats'?atsEmps:coopEmps;
   var emp=emps[spIdx]; if(!emp)return;
   if(!emp.commesse)emp.commesse=[];
   while(emp.commesse.length<=spDi)emp.commesse.push(null);
+  // Calcola ore resto
+  var disp=getCommDisp();
+  var fisse=0,restoCount=0;
+  rows.forEach(function(row){
+    var cb=row.querySelector('.comm-check');
+    var inp=row.querySelector('.comm-inp');
+    if(!cb||!cb.checked)return;
+    var v=parseFloat(inp.value);
+    if(v>0)fisse+=v; else restoCount++;
+  });
+  var restoH=restoCount>0?Math.max(0,Math.round((disp-fisse)*10/restoCount)/10):0;
   var vals={};
-  inputs.forEach(function(inp){
-    var v=parseFloat(inp.value)||0;
-    if(v>0)vals[inp.dataset.code]=v;
+  rows.forEach(function(row){
+    var cb=row.querySelector('.comm-check');
+    var inp=row.querySelector('.comm-inp');
+    if(!cb||!cb.checked)return;
+    var v=parseFloat(inp.value);
+    var actual=v>0?v:restoH;
+    if(actual>0)vals[inp.dataset.code]=actual;
   });
   emp.commesse[spDi]=Object.keys(vals).length?vals:null;
 }
