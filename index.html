@@ -322,17 +322,39 @@
 
   /* ══ MOBILE HUB ══ */
   @media (max-width: 768px) {
-    html, body { overflow: auto; }
-    .main { position: relative; inset: auto; }
+    html, body { overflow: hidden; height: 100%; }
 
-    /* Drawer invariato, si apre sopra */
+    /* .main resta fixed — gli iframe collassano a 0 se diventa relative */
+    .main { position: fixed; inset: 0; }
+
+    /* Drawer invariato */
     .drawer { width: 280px; }
+
+    /* Iframe attivo: full screen fixed sopra tutto */
+    .app-frame.active {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+    }
+    .frame-wrap.active {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+    }
+    .frame-wrap.active .app-frame {
+      position: absolute;
+      inset: 0;
+    }
 
     /* Mostra overlay desktop-only su mobile */
     .desktop-only-overlay { display: flex; }
 
     /* Home: scroll normale */
-    #homeScreen { overflow-y: auto; min-height: 100svh; padding-bottom: 24px; }
+    #homeScreen { overflow-y: auto; height: 100vh; padding-bottom: 24px; }
 
     /* Card home: 1 colonna */
     .app-grid { grid-template-columns: 1fr !important; max-width: 420px; margin: 0 auto; }
