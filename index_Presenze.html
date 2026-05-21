@@ -23,6 +23,30 @@
   --c-HP:#a855f7;--c-H104:#f59e0b;--c-104:#fb923c;--c-CP:#ec4899;
   --c-HPE:#14b8a6;--c-PE:#06b6d4;--c-SW:#84cc16;--c-Lutto:#94a3b8;--c-TFS:#38bdf8;
 }
+/* ── TEMA CHIARO ── */
+body.theme-light{
+  --bg:#f1f5f9;--surface:#ffffff;--card:#f8fafc;--border:#e2e8f0;
+  --text:#1e293b;--muted:#94a3b8;--subtle:#64748b;
+  --blue-dim:#dbeafe;--teal-dim:#ccfbf1;--amber-dim:#fef3c7;--red-dim:#fee2e2;
+}
+body.theme-light .snav{background:#ffffff;border-bottom:1px solid #e2e8f0;}
+body.theme-light .snb{color:#64748b;}
+body.theme-light .snb.on{color:#1e293b;}
+body.theme-light .drawer{background:#ffffff;border-right:1px solid #e2e8f0;}
+body.theme-light .mo{background:rgba(0,0,0,.25);}
+body.theme-light .mc{background:#ffffff;border:1px solid #e2e8f0;box-shadow:0 20px 60px rgba(0,0,0,.15);}
+body.theme-light .mi{background:#f8fafc;border-color:#e2e8f0;color:#1e293b;}
+body.theme-light .tout{background:#ffffff;}
+body.theme-light table{background:#ffffff;}
+body.theme-light .sf{background:#f8fafc !important;}
+body.theme-light td.dc.emp{color:#cbd5e1;}
+body.theme-light .sbar{background:#f8fafc;}
+body.theme-light .stat{background:#ffffff;border-color:#e2e8f0;}
+body.theme-light .filters{background:#ffffff;border-bottom:1px solid #e2e8f0;}
+body.theme-light .fc{background:#f8fafc;border-color:#e2e8f0;color:#1e293b;}
+body.theme-light .ba{border-color:#e2e8f0;color:#64748b;}
+body.theme-light .ba:hover{border-color:#94a3b8;color:#1e293b;}
+body.theme-light #appShell{background:var(--bg);}
 *{box-sizing:border-box;margin:0;padding:0}html,body{height:100%}
 body{background:var(--bg);color:var(--text);font-family:var(--ff);font-size:14px;overflow:hidden}
 
@@ -903,6 +927,17 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
     <div class="fg" style="flex:1"><div class="fl">Ingresso</div><input class="mi" id="cfgIng" type="time"></div>
     <div class="fg" style="flex:1"><div class="fl">Uscita</div><input class="mi" id="cfgUsc" type="time"></div>
   </div>
+  <div class="fg" style="margin-top:4px">
+    <div class="fl">Tema</div>
+    <div style="display:flex;gap:8px">
+      <label class="sc-item" style="cursor:pointer;gap:8px;padding:8px 14px;border:1px solid var(--border);border-radius:8px;flex:1;justify-content:center" id="cfgTemaScuro">
+        <input type="radio" name="cfgTema" value="scuro" style="accent-color:var(--teal)"> 🌙 Scuro
+      </label>
+      <label class="sc-item" style="cursor:pointer;gap:8px;padding:8px 14px;border:1px solid var(--border);border-radius:8px;flex:1;justify-content:center" id="cfgTemaChiaro">
+        <input type="radio" name="cfgTema" value="chiaro" style="accent-color:var(--teal)"> ☀️ Chiaro
+      </label>
+    </div>
+  </div>
   <div style="font-size:11px;color:var(--muted);background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px 12px" id="cfgPreview">—</div>
   <div class="mbtns">
     <button class="mbtn cancel" onclick="mClose('moConfig')">Annulla</button>
@@ -1146,7 +1181,7 @@ var oreVisible=false, coopOreVisible=false;
 
 // ── Config orario utente (salvata su Drive per cartella) ──
 var USER_CONFIG_FOLDER = '1LGoR9SKDthz1tUDLxbZhClqA-xhkjoNY';
-var wmsConfig = {ingresso:'08:00', uscita:'18:00'};
+var wmsConfig = {ingresso:'08:00', uscita:'18:00', tema:'scuro'};
 var wmsConfigFileId = null;
 
 function userConfigFname(email){
@@ -1165,6 +1200,8 @@ function loadUserConfig(){
         .then(function(cfg){
           if(cfg.ingresso) wmsConfig.ingresso=cfg.ingresso;
           if(cfg.uscita)   wmsConfig.uscita=cfg.uscita;
+          if(cfg.tema)     wmsConfig.tema=cfg.tema;
+          applyTheme(wmsConfig.tema||'scuro');
         });
     }).catch(function(){});
 }
@@ -3684,9 +3721,15 @@ function lsG(k){try{var s=localStorage.getItem('wms_'+k);return s?JSON.parse(s):
 function lsDel(k){try{localStorage.removeItem('wms_'+k);}catch(e){}}
 
 // ── Config orario default ──
+function applyTheme(t){
+  if(t==='chiaro') document.body.classList.add('theme-light');
+  else document.body.classList.remove('theme-light');
+}
 function openConfig(){
   document.getElementById('cfgIng').value=wmsConfig.ingresso||'08:00';
   document.getElementById('cfgUsc').value=wmsConfig.uscita||'18:00';
+  var radios=document.querySelectorAll('input[name="cfgTema"]');
+  radios.forEach(function(r){r.checked=(r.value===(wmsConfig.tema||'scuro'));});
   cfgUpdatePreview();
   document.getElementById('cfgIng').oninput=cfgUpdatePreview;
   document.getElementById('cfgUsc').oninput=cfgUpdatePreview;
@@ -3704,11 +3747,14 @@ function cfgSave(){
   var ing=document.getElementById('cfgIng').value;
   var usc=document.getElementById('cfgUsc').value;
   if(!ing||!usc){toast('Inserisci ingresso e uscita','warn');return;}
-  wmsConfig.ingresso=ing; wmsConfig.uscita=usc;
+  var temaEl=document.querySelector('input[name="cfgTema"]:checked');
+  var tema=temaEl?temaEl.value:'scuro';
+  wmsConfig.ingresso=ing; wmsConfig.uscita=usc; wmsConfig.tema=tema;
+  applyTheme(tema);
   mClose('moConfig');
   toast('⏳ Salvo config su Drive…','warn');
   saveUserConfig()
-    .then(function(){toast('✓ Config salvata: '+ing+' – '+usc);})
+    .then(function(){toast('✓ Config salvata: '+ing+' – '+usc+' · tema '+tema);})
     .catch(function(e){toast('✗ Errore salvataggio config','err');console.error(e);});
 }
 
