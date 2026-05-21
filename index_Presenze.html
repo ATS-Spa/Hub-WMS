@@ -180,8 +180,10 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
 #moNota .mc{width:360px;}
 .comm-row{display:flex;align-items:center;gap:8px;}
 .comm-label{font-family:var(--ffc);font-size:12px;font-weight:700;min-width:60px;color:var(--subtle);}
-.comm-inp{width:70px;padding:5px 8px;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--ffm);font-size:13px;text-align:center;}
+.comm-inp{width:70px;padding:5px 8px;background:var(--card);border:1px solid var(--border);border-radius:6px;color:var(--text);font-family:var(--ffm);font-size:13px;text-align:center;transition:border-color .15s,background .15s;}
 .comm-inp:focus{outline:none;border-color:var(--teal);}
+.comm-inp.is-resto{border-color:rgba(245,158,11,.6);background:rgba(245,158,11,.07);color:var(--amber);}
+.comm-inp.is-resto::placeholder{color:var(--amber);opacity:.8;font-weight:700;}
 .comm-bar{flex:1;height:6px;background:var(--border);border-radius:3px;overflow:hidden;}
 .comm-bar-fill{height:100%;background:var(--teal);border-radius:3px;transition:width .2s;}
 #notaText{width:100%;min-height:80px;resize:vertical;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--ffc);font-size:13px;padding:10px 12px;box-sizing:border-box;}
@@ -3160,11 +3162,12 @@ function renderCommesseGrid(){
     var isOn=savedH!==undefined;
     var isResto=isOn&&savedH===0;
     var h=savedH&&savedH>0?savedH:'';
+    var initResto=isOn&&!(savedH&&savedH>0);
     var row=document.createElement('div');row.className='comm-row';
     row.innerHTML=
       '<input type="checkbox" class="conf-cb comm-check" data-code="'+esc(c.code)+'" '+(isOn?'checked':'')+' onchange="updateCommTot()">'
       +'<span class="comm-label" style="'+(isOn?'color:var(--text)':'color:var(--muted)')+'">'+esc(c.code)+'</span>'
-      +'<input class="comm-inp" type="number" min="0" max="24" step="0.5" placeholder="resto" value="'+h+'" data-code="'+esc(c.code)+'" '
+      +'<input class="comm-inp'+(initResto?' is-resto':'')+'" type="number" min="0" max="24" step="0.5" placeholder="resto" value="'+h+'" data-code="'+esc(c.code)+'" '
         +(isOn?'':'disabled')+' style="'+(isOn?'':'opacity:.35')+'" oninput="updateCommTot()">'
       +'<span style="font-size:11px;color:var(--muted);min-width:20px">'+(isOn&&!isResto?'h':'')+'</span>'
       +'<div class="comm-bar"><div class="comm-bar-fill" id="cbar_'+esc(c.code)+'" style="width:0%"></div></div>';
@@ -3177,7 +3180,8 @@ function renderCommesseGrid(){
       inp.disabled=!cb.checked;
       inp.style.opacity=cb.checked?'1':'0.35';
       lbl.style.color=cb.checked?'var(--text)':'var(--muted)';
-      if(!cb.checked){inp.value='';}
+      if(!cb.checked){inp.value='';inp.classList.remove('is-resto');}
+      else{inp.classList.add('is-resto');} // empty = resto by default
       updateCommTot();
     });
   });
@@ -3212,11 +3216,12 @@ function updateCommTot(){
     var unit=row.querySelectorAll('span')[2];
     var bar=row.querySelector('.comm-bar-fill');
     if(!cb||!bar)return;
-    if(!cb.checked){bar.style.width='0%';return;}
+    if(!cb.checked){bar.style.width='0%';if(inp)inp.classList.remove('is-resto');return;}
     var v=parseFloat(inp.value);
     var actual=v>0?v:restoH;
     var pct=disp>0?Math.min(100,Math.round(actual/disp*100)):0;
     bar.style.width=pct+'%';
+    if(inp){inp.classList.toggle('is-resto',!(v>0));}
     if(unit){unit.textContent=(v>0?'h':'→'+restoH+'h');}
   });
 }
@@ -3275,17 +3280,21 @@ function saveCommesseToSheet(mode, emp, di, fileId, sheetName, y, m){
     var sheets=meta.sheets||[];
     var sh=sheets.find(function(s){return s.properties.title===tabName;});
     if(sh){
-      // Sheet exists: read to find existing row for this employee+day, then update or append
+      // Sheet exists: always refresh header + find/update row
       return sheetsRead(fileId,tabName+'!A:C').then(function(rows){
         var targetRow=null;
         (rows||[]).forEach(function(r,ri){
           if(ri===0)return; // skip header
           if(String(r[0]||'').trim()===nome&&String(r[2]||'').trim()===String(d.day))targetRow=ri+1;
         });
+        var ops=[{range:tabName+'!A1',values:[hdr]}]; // aggiorna sempre header
         if(targetRow){
-          return sheetsBatchUpdate(fileId,[{range:tabName+'!A'+targetRow,values:[row]}]);
+          ops.push({range:tabName+'!A'+targetRow,values:[row]});
+          return sheetsBatchUpdate(fileId,ops);
         } else {
-          return sheetsAppend(fileId,tabName,row);
+          return sheetsBatchUpdate(fileId,ops).then(function(){
+            return sheetsAppend(fileId,tabName,row);
+          });
         }
       });
     } else {
