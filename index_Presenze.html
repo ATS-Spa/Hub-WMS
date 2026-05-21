@@ -2605,9 +2605,16 @@ function parseSheetValues(values,year,month,fileId,sheetName,secType){
       }
       var confCol=DST+nd;
       var confVal=String(row[confCol]||'').trim().toUpperCase();
+      // Fallback: se plant non è in colonna, prendilo dal nome file
+      var effectivePlant=plantVal||((parseFileName(sheetName)||parseFileName((fileId||'')))&&(parseFileName(sheetName)||{}).plant)||'';
+      // Prova anche dal nome del file cercato in allFiles
+      if(!effectivePlant&&fileId){
+        var ff=allFiles&&allFiles.find(function(f){return f.id===fileId;});
+        if(ff){var pf=parseFileName(ff.name);if(pf)effectivePlant=pf.plant;}
+      }
       var emp={
         nome:nomeVal,nom2:nomeVal,id:sapVal,sap:sapVal,
-        resp:globalResp,plant:plantVal,
+        resp:globalResp,plant:effectivePlant,
         sigla:sig,ingresso:ing,uscita:usc,
         pausa:Array(nd).fill(null),
         notes:Array(nd).fill(''),
