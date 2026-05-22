@@ -602,6 +602,35 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
     color:var(--text);
     flex:1;
   }
+  /* Sottotitolo plant · resp · sap */
+  .mob-card-sub{
+    display:flex;
+    align-items:center;
+    gap:4px;
+    flex-wrap:wrap;
+    font-size:11px;
+    padding-bottom:4px;
+    border-bottom:1px solid var(--border);
+  }
+  .mob-sub-plant{color:var(--blue);font-family:var(--ffc);font-weight:700;}
+  .mob-sub-resp{color:var(--muted);}
+  .mob-sub-sap{color:var(--muted);font-family:var(--ffm);}
+  .mob-sub-dot{color:var(--border);padding:0 2px;}
+  /* Checkbox conferma in card */
+  .mob-card-conf{
+    display:flex;
+    align-items:center;
+    padding-top:4px;
+    border-top:1px solid var(--border);
+  }
+  .mob-conf-label{
+    display:flex;
+    align-items:center;
+    gap:6px;
+    font-size:12px;
+    color:var(--subtle);
+    cursor:pointer;
+  }
   .mob-card-sap{
     font-family:var(--ffm);
     font-size:10px;
@@ -1871,15 +1900,6 @@ function renderSection(sec, emps, data, opts){
   });
   h+='</tbody></table></div>';
   setEl(opts.contentId,h);
-  // Fix mobile: forza reflow per aggiornare il viewport
-  if(typeof window!=='undefined'&&window.innerWidth<=768){
-    var _el=document.getElementById(opts.contentId);
-    if(_el){var _sec=_el.closest('.sec');if(_sec&&_sec.classList.contains('on')){
-      var _s=_el.closest('.scroll');if(_s)_s.scrollTop=0;
-      _sec.style.display='none';_sec.offsetHeight;_sec.style.display='';
-    }}
-  }
-
   if(!opts.totVisible){
     setTimeout(function(){document.querySelectorAll('.'+totClass+',.'+totTdClass).forEach(function(el){el.style.display='none';});},10);
   }
@@ -1903,14 +1923,26 @@ function toggleEmpOreGeneric(empId){
 function toggleEmpOre(empId){toggleEmpOreGeneric(empId);}
 function toggleCoopEmpOre(empId){toggleEmpOreGeneric(empId);}
 
-function toggleOreRows(){
+function rebuildMobCardsAll(){
+  if(window.innerWidth>768) return;
+  ['cContent','aContent'].forEach(function(cid){
+    var container=document.getElementById(cid);if(!container)return;
+    var tout=container.querySelector('.tout');if(!tout)return;
+    var tbl=tout.querySelector('table');if(!tbl)return;
+    var old=tout.querySelector('.mob-cards');if(old)old.remove();
+    // Use the IIFE buildMobCards via a custom event
+    var ev=new CustomEvent('wms-rebuild-cards',{detail:{cid:cid}});
+    document.dispatchEvent(ev);
+  });
+}
+function toggleOreRows(){rebuildMobCardsAll();
   oreVisible=!oreVisible;
   document.querySelectorAll('#aContent tr.ats-ore').forEach(function(tr){tr.classList.toggle('hidden',!oreVisible);});
   var btn=document.getElementById('oreToggleBtn');
   if(btn){btn.textContent=(oreVisible?'▾':'▸')+' ORD/STR';btn.style.background=oreVisible?'rgba(20,184,166,.2)':'rgba(20,184,166,.07)';}
   saveUiState();
 }
-function toggleCoopOreRows(){
+function toggleCoopOreRows(){rebuildMobCardsAll();
   coopOreVisible=!coopOreVisible;
   document.querySelectorAll('#cContent tr.ats-ore').forEach(function(tr){tr.classList.toggle('hidden',!coopOreVisible);});
   var btn=document.getElementById('coopOreToggleBtn');
@@ -3999,56 +4031,83 @@ function cfgSave(){
     var rows = tableEl.querySelectorAll('tbody tr');
     if(!rows.length) return null;
 
-    // Recupera intestazioni giorni dall'header
+    // Controlla se ORD/STR è attivo (bottone con ▾)
+    var oreOn = (document.getElementById('oreToggleBtn') && document.getElementById('oreToggleBtn').textContent.indexOf('▾')!==-1)
+             || (document.getElementById('coopOreToggleBtn') && document.getElementById('coopOreToggleBtn').textContent.indexOf('▾')!==-1);
+
+    // Recupera intestazioni giorni
     var thDays = tableEl.querySelectorAll('thead th.dh');
     var dayLabels = [];
     thDays.forEach(function(th){
       var dn = th.querySelector('.dn');
-      var dw = th.querySelector('.dw');
       dayLabels.push({
         n: dn ? dn.textContent.trim() : '',
-        w: dw ? dw.textContent.trim() : '',
         isWe: th.classList.contains('we'),
         isToday: th.classList.contains('today'),
         isHoliday: th.classList.contains('holiday')
       });
     });
 
+    // Raggruppa righe per dipendente (SIG + IN + OUT in blocchi da 3)
+    var empBlocks = [];
+    var cur = null;
     rows.forEach(function(tr){
-      // Salta separatori e righe ore
-      if(tr.classList.contains('ats-sep')) return;
-      if(tr.classList.contains('ats-ore')) return;
+      if(tr.classList.contains('ats-sep')){cur=null;return;}
+      var ca2 = tr.querySelector('td.ca2');
+      var tipo = ca2 ? ca2.textContent.trim() : '';
+      if(tipo==='SIG'){
+        cur={sigRow:tr,inRow:null,outRow:null};
+        empBlocks.push(cur);
+      } else if(tipo==='IN'&&cur){
+        cur.inRow=tr;
+      } else if(tipo==='OUT'&&cur){
+        cur.outRow=tr;
+      }
+    });
 
+    empBlocks.forEach(function(blk){
+      var tr = blk.sigRow;
       var card = document.createElement('div');
       card.className = 'mob-card';
+      if(tr.classList.contains('confirmed-row')) card.classList.add('confirmed-row');
 
-      // Header card: nome + SAP + plant
+      // ── HEADER: nome | plant | resp | #sap ──
       var ca0 = tr.querySelector('td.ca0');
       var ca1 = tr.querySelector('td.ca1');
-      var ca2 = tr.querySelector('td.ca2');
+      // Estrai plant, resp, sap dal ca1 (contiene div figli)
+      var nameDiv = ca1 ? ca1.querySelector('div:first-child') : null;
+      var plantDiv = ca1 ? ca1.querySelector('div[style*="blue"]') : null;
+      var respDiv = ca1 ? ca1.querySelector('div[style*="muted"]') : null;
+      var sapDiv = ca1 ? ca1.querySelector('div[style*="ffm"]') : null;
+
       var header = document.createElement('div');
       header.className = 'mob-card-header';
 
+      // Nome
       var nameEl = document.createElement('div');
       nameEl.className = 'mob-card-name';
-      nameEl.textContent = ca1 ? ca1.textContent.trim() : '';
+      nameEl.textContent = nameDiv ? nameDiv.textContent.trim() : (ca1 ? ca1.textContent.trim() : '');
       header.appendChild(nameEl);
 
+      // Numero dipendente
       if(ca0){
-        var sapEl = document.createElement('div');
-        sapEl.className = 'mob-card-sap';
-        sapEl.textContent = ca0.textContent.trim();
-        header.appendChild(sapEl);
-      }
-      if(ca2){
-        var plantEl = document.createElement('div');
-        plantEl.className = 'mob-card-plant';
-        plantEl.textContent = ca2.textContent.trim();
-        header.appendChild(plantEl);
+        var numEl = document.createElement('div');
+        numEl.className = 'mob-card-sap';
+        numEl.textContent = '#'+ca0.textContent.trim();
+        header.appendChild(numEl);
       }
       card.appendChild(header);
 
-      // Riga giorni scrollabile
+      // ── SOTTOTITOLO: plant · resp · sap ──
+      var sub = document.createElement('div');
+      sub.className = 'mob-card-sub';
+      var parts = [];
+      if(plantDiv) parts.push('<span class="mob-sub-plant">'+plantDiv.textContent.trim()+'</span>');
+      if(respDiv) parts.push('<span class="mob-sub-resp">'+respDiv.textContent.trim()+'</span>');
+      if(sapDiv) parts.push('<span class="mob-sub-sap">'+sapDiv.textContent.trim()+'</span>');
+      if(parts.length){sub.innerHTML=parts.join('<span class="mob-sub-dot">·</span>');card.appendChild(sub);}
+
+      // ── RIGA GIORNI ──
       var dayCells = tr.querySelectorAll('td.dc');
       if(dayCells.length && dayLabels.length){
         var daysRow = document.createElement('div');
@@ -4071,39 +4130,67 @@ function cfgSave(){
           if(info.isHoliday) val.classList.add('holiday');
           if(txt && txt !== '·') val.classList.add('has-val');
           val.textContent = (txt && txt !== '·') ? txt : '';
-          // Copia colore da classe sigla
           var sigClass = Array.from(td.classList).find(function(c){return c.startsWith('s-');});
-          if(sigClass) val.style.color = getComputedStyle(document.documentElement).getPropertyValue('--c-'+sigClass.replace('s-','')) || '';
-          // Copia onclick dalla td originale — mantiene picker e nota
+          if(sigClass) val.style.color = getComputedStyle(document.documentElement).getPropertyValue('--c-'+sigClass.replace('s-',''))||'';
           if(td.onclick) val.onclick = td.onclick;
           else if(td.getAttribute('onclick')) val.setAttribute('onclick', td.getAttribute('onclick'));
-          if(td.onclick || td.getAttribute('onclick')){
-            val.style.cursor = 'pointer';
-            val.classList.add('mob-day-clickable');
-          }
+          if(td.onclick || td.getAttribute('onclick')){val.style.cursor='pointer';val.classList.add('mob-day-clickable');}
           dayWrap.appendChild(val);
           daysRow.appendChild(dayWrap);
         });
         card.appendChild(daysRow);
       }
 
-      // Totali
+      // ── SIGLE (nascoste, visibili solo se ORD/STR attivo) ──
+      var sigleRow = tr.querySelector('tr.ats-ore, .ore-row');
+      // Cerca le sigle nella tabella originale — riga con classe ats-ore
+      var oreRowEl = null;
+      var nxt = tr.nextElementSibling;
+      while(nxt && !nxt.classList.contains('an') && !nxt.classList.contains('ats-sep')){
+        if(nxt.classList.contains('ats-ore')){oreRowEl=nxt;break;}
+        nxt=nxt.nextElementSibling;
+      }
+      if(oreRowEl && oreOn){
+        var oreClone = document.createElement('div');
+        oreClone.className = 'mob-card-ore';
+        oreClone.innerHTML = oreRowEl.innerHTML;
+        card.appendChild(oreClone);
+      }
+
+      // ── TOTALI ──
       var totCells = tr.querySelectorAll('td.tot');
       if(totCells.length){
         var totsEl = document.createElement('div');
         totsEl.className = 'mob-card-totals';
-        // Cerca le intestazioni totali
         var totHeaders = tableEl.querySelectorAll('thead th.tot, thead th[class*="tot"]');
         totCells.forEach(function(td, i){
           var v = td.textContent.trim();
-          if(!v || v==='0' || v==='0.0') return;
+          if(!v || v==='0' || v==='0.0' || v==='—') return;
+          // Nascondi STR se è 0 o dash
+          var lbl = totHeaders[i] ? totHeaders[i].textContent.trim() : ('T'+(i+1));
+          if(lbl==='STR' && (!v||v==='—')) return;
           var chip = document.createElement('div');
           chip.className = 'mob-tot-chip';
-          var lbl = totHeaders[i] ? totHeaders[i].textContent.trim() : ('T'+(i+1));
           chip.innerHTML = lbl+' <span>'+v+'</span>';
           totsEl.appendChild(chip);
         });
         if(totsEl.children.length) card.appendChild(totsEl);
+      }
+
+      // ── CHECKBOX CONFERMA (se presente) ──
+      var confCb = tr.querySelector('input.conf-cb');
+      if(confCb){
+        var confRow = document.createElement('div');
+        confRow.className = 'mob-card-conf';
+        var cbClone = confCb.cloneNode(true);
+        cbClone.onchange = confCb.onchange;
+        if(confCb.getAttribute('onchange')) cbClone.setAttribute('onchange', confCb.getAttribute('onchange'));
+        var confLbl = document.createElement('label');
+        confLbl.className = 'mob-conf-label';
+        confLbl.appendChild(cbClone);
+        confLbl.appendChild(document.createTextNode(' Confermato'));
+        confRow.appendChild(confLbl);
+        card.appendChild(confRow);
       }
 
       wrap.appendChild(card);
@@ -4144,6 +4231,18 @@ function cfgSave(){
   function init(){
     wrapFilters();
     hookTableRender();
+    // Rebuilda cards quando ORD/STR cambia
+    document.addEventListener('wms-rebuild-cards', function(e){
+      if(!MOBILE()) return;
+      var cid=e.detail&&e.detail.cid;
+      var container=cid?document.getElementById(cid):null;
+      if(!container) return;
+      var tout=container.querySelector('.tout');if(!tout)return;
+      var tbl=tout.querySelector('table');if(!tbl)return;
+      var old=tout.querySelector('.mob-cards');if(old)old.remove();
+      var cards=buildMobCards(tbl);
+      if(cards)tout.appendChild(cards);
+    });
   }
 
   if(document.readyState === 'loading'){
