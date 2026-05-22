@@ -1961,7 +1961,7 @@ function coopLoad(){
     var isXlsx=/\.xlsx$/i.test(f.name);
     return (isXlsx
       ? downloadFile(f.id).then(function(b){return parseSheetBlob(b,y,m,f.id,sheetName,'coop');})
-      : sheetsRead(f.id,sheetName+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,y,m,f.id,sheetName,'coop');}))
+      : sheetsRead(f.id,sheetName+'!A1:AQ300').catch(function(){return sheetsRead(f.id,sheetName+'!A1:AF200');}).then(function(vals){return parseSheetValues(vals,y,m,f.id,sheetName,'coop');}))
     .catch(function(e){console.warn('[WMS] coopLoad skip '+f.name+': '+e.message);return null;});
   });
   Promise.all(promises).then(function(results){
@@ -2683,7 +2683,7 @@ function startAutoRefresh(){
     }
     if(coopFileId&&coopData){
       var y=parseInt(document.getElementById('cYear').value),m=parseInt(document.getElementById('cMonth').value);
-      sheetsRead(coopFileId,coopData.sheetName+'!A1:AQ300').then(function(vals){
+      sheetsRead(coopFileId,coopData.sheetName+'!A1:AQ300').catch(function(){return sheetsRead(coopFileId,coopData.sheetName+'!A1:AF200');}).then(function(vals){
         return parseSheetValues(vals,y,m,coopFileId,coopData.sheetName,'coop');
       }).then(function(d){
         d.employees.forEach(function(ne){
