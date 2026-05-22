@@ -1033,7 +1033,7 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
         <input type="radio" name="cfgTema" value="chiaro" style="accent-color:var(--teal)"> ☀️ Chiaro
       </label>
       <label class="sc-item" style="cursor:pointer;gap:6px;padding:7px 8px;border:1px solid var(--border);border-radius:8px;justify-content:center;font-size:12px">
-        <input type="radio" name="cfgTema" value="sap" style="accent-color:var(--teal)"> 🔵 SAPB
+        <input type="radio" name="cfgTema" value="sap" style="accent-color:var(--teal)"> 🔵 SAP
       </label>
       <label class="sc-item" style="cursor:pointer;gap:6px;padding:7px 8px;border:1px solid var(--border);border-radius:8px;justify-content:center;font-size:12px">
         <input type="radio" name="cfgTema" value="grafite" style="accent-color:var(--teal)"> 🩶 Grafite
@@ -1657,6 +1657,7 @@ function atsOnFilesChange(){}
 // ═══════════════════════════════════════════════════════════
 var curSec='coop';
 function switchSec(s){
+  console.log('[WMS-DBG] switchSec: '+s);
   curSec=s;
   ['coop','ats','file','perm'].forEach(function(x){
     var nb=document.getElementById('sn'+x.charAt(0).toUpperCase()+x.slice(1));
@@ -1728,6 +1729,7 @@ function disAdm(){
 //  SHARED RENDER ENGINE
 // ═══════════════════════════════════════════════════════════
 function renderSection(sec, emps, data, opts){
+  console.log('[WMS-DBG] renderSection: sec='+sec+' emps='+emps.length+' contentId='+opts.contentId);
   var isAts=sec==='ats';
   var y=parseInt(document.getElementById(isAts?'aYear':'cYear').value);
   var m=parseInt(document.getElementById(isAts?'aMonth':'cMonth').value);
@@ -1867,6 +1869,7 @@ function renderSection(sec, emps, data, opts){
     h+='</tr>';
   });
   h+='</tbody></table></div>';
+  console.log('[WMS-DBG] renderSection: setEl '+opts.contentId+' len='+h.length);
   setEl(opts.contentId,h);
 
   if(!opts.totVisible){
@@ -2297,7 +2300,8 @@ function atsLoad(){
 function atsRefresh(){atsData=null;atsFileId=null;atsLoad();}
 
 function atsRender(){
-  if(!atsEmps.length&&!atsData)return;
+  console.log('[WMS-DBG] atsRender: start, emps='+atsEmps.length);
+  if(!atsEmps.length&&!atsData){console.log('[WMS-DBG] atsRender: SKIP no data');return;}
   var q=(document.getElementById('aSearch').value||'').toLowerCase().trim();
   var emps=atsEmps.filter(function(e){return !q||e.nome.toLowerCase().indexOf(q)!==-1||(e.id||'').toLowerCase().indexOf(q)!==-1;});
   renderSection('ats',emps,atsData,{
