@@ -230,14 +230,13 @@ select.fc option{background:var(--card)}
 .leg-toggle:hover{background:rgba(20,184,166,.18)}
 
 /* ── SCROLL ── */
-.scroll{flex:1;overflow-y:auto;overflow-x:auto;padding:14px 24px 28px;min-height:0}
+.scroll{flex:1;overflow:auto;padding:14px 24px 28px;min-height:0}
 
 /* ── TABLE ── */
-.tout{border-radius:10px;border:1px solid var(--border);background:var(--surface);margin-top:8px;animation:fadeIn .22s ease;}
-.tout-scroll{min-width:100%;}
+.tout{border-radius:10px;border:1px solid var(--border);background:var(--surface);overflow-x:auto;margin-top:8px;animation:fadeIn .22s ease}
 .tout table{border-collapse:collapse;white-space:nowrap;width:max-content;min-width:100%}
 .sf{position:sticky;z-index:3;background:var(--card)}
-thead th{position:sticky;top:0;z-index:4;box-shadow:0 2px 4px rgba(0,0,0,.4);background:var(--card);border-bottom:2px solid var(--border);padding:6px 10px;font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--subtle);border-right:1px solid var(--border)}
+thead th{position:sticky;top:0;z-index:4;background:var(--card);border-bottom:2px solid var(--border);padding:6px 10px;font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--subtle);border-right:1px solid var(--border)}
 thead th.sf{z-index:6}
 thead th:last-child{border-right:none}
 tbody tr{border-bottom:1px solid rgba(36,48,72,.5);transition:background .1s}
@@ -1034,7 +1033,7 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
         <input type="radio" name="cfgTema" value="chiaro" style="accent-color:var(--teal)"> ☀️ Chiaro
       </label>
       <label class="sc-item" style="cursor:pointer;gap:6px;padding:7px 8px;border:1px solid var(--border);border-radius:8px;justify-content:center;font-size:12px">
-        <input type="radio" name="cfgTema" value="sap" style="accent-color:var(--teal)"> 🔵 SAP
+        <input type="radio" name="cfgTema" value="sap" style="accent-color:var(--teal)"> 🔵 SAPB
       </label>
       <label class="sc-item" style="cursor:pointer;gap:6px;padding:7px 8px;border:1px solid var(--border);border-radius:8px;justify-content:center;font-size:12px">
         <input type="radio" name="cfgTema" value="grafite" style="accent-color:var(--teal)"> 🩶 Grafite
@@ -1772,7 +1771,7 @@ function renderSection(sec, emps, data, opts){
   var totTdClass=isAts?'ats-tot-td':'coop-tot-td';
   var oreHidden=!opts.oreVisible;
 
-  var h='<div class="tout"><div class="tout-scroll"><table><thead><tr>';
+  var h='<div class="tout"><table><thead><tr>';
   h+='<th class="sf ca0" style="z-index:7;font-size:10px">#</th>';
   h+='<th class="sf ca1" style="z-index:7">Dipendente</th>';
   h+='<th class="sf ca2" style="z-index:7">T</th>';
@@ -1867,7 +1866,7 @@ function renderSection(sec, emps, data, opts){
     if(adminMode)h+='<td></td>';
     h+='</tr>';
   });
-  h+='</tbody></table></div></div>';
+  h+='</tbody></table></div>';
   setEl(opts.contentId,h);
 
   if(!opts.totVisible){
@@ -1925,10 +1924,7 @@ function toggleCoopTotCols(){
 // ═══════════════════════════════════════════════════════════
 //  COOP — LOAD
 // ═══════════════════════════════════════════════════════════
-var _loadingCoop=false;
 function coopLoad(){
-  if(_loadingCoop)return;
-  _loadingCoop=true;
   var resp=document.getElementById('cResp').value;
   var plant=document.getElementById('cPlant').value;
   var y=parseInt(document.getElementById('cYear').value);
@@ -1968,13 +1964,12 @@ function coopLoad(){
     coopFileId=files.length===1?files[0].id:null;
     coopData=merged;coopEmps=merged.employees;
     // Carica note dalle celle
-    _loadingCoop=false;
-    coopRender();
+    loadNotesForEmps(coopEmps,coopFileId||merged.fileId,merged.sheetName,merged.dayStart||3,merged.nd||merged.dates.length)
+    .then(function(){coopRender();});
     ['cRef','cExp','cPrt','cBulkBtn'].forEach(function(id){document.getElementById(id).disabled=false;});
     document.getElementById('cInfo').textContent=MESI[m-1]+' '+y+' · '+merged.employees.length+' dip.'+(files.length>1?' ('+files.length+' file)':'');
     lastRefreshTimeCoop=new Date();updateRefreshBadges();
   }).catch(function(e){
-    _loadingCoop=false;
     setEl('cContent','<div class="state"><div class="state-ico">⚠️</div><div class="state-title">Errore lettura</div><div style="white-space:pre-line;max-width:420px">'+esc(e.message)+'</div></div>');
   });
 }
@@ -2244,10 +2239,7 @@ function coopPrint(){
 // ═══════════════════════════════════════════════════════════
 //  ATS — LOAD
 // ═══════════════════════════════════════════════════════════
-var _loadingAts=false;
 function atsLoad(){
-  if(_loadingAts)return;
-  _loadingAts=true;
   var resp=document.getElementById('aResp').value;
   var plant=document.getElementById('aPlant').value;
   var y=parseInt(document.getElementById('aYear').value);
@@ -2272,22 +2264,33 @@ function atsLoad(){
       : sheetsRead(f.id,sheetName+'!A1:AF200').then(function(vals){return parseSheetValues(vals,y,m,f.id,sheetName,'ats');}))
     .catch(function(e){console.warn('[WMS] atsLoad skip '+f.name+': '+e.message);return null;});
   });
+  console.log('[WMS-DBG] atsLoad: avvio Promise.all su '+files.length+' file');
   Promise.all(promises).then(function(results){
+    console.log('[WMS-DBG] atsLoad: Promise.all completato');
     var merged=null;
     results.forEach(function(d){if(!d)return;if(!merged){merged=d;return;}merged.employees=merged.employees.concat(d.employees);});
     if(!merged){
       setEl('aContent','<div class="state"><div class="state-ico">⚠️</div><div class="state-title">Nessun dato ATS</div><div style="max-width:420px;color:var(--muted)">Foglio atteso: <strong>'+sheetName+'</strong></div></div>');
       return;
     }
+    console.log('[WMS-DBG] atsLoad: dati parsati, '+merged.employees.length+' dipendenti');
     atsFileId=files.length===1?files[0].id:null;
     atsData=merged;atsEmps=merged.employees;
-    _loadingAts=false;
-    atsRender();
+    console.log('[WMS-DBG] atsLoad: avvio loadNotesForEmps');
+    loadNotesForEmps(atsEmps,atsFileId||merged.fileId,merged.sheetName,merged.dayStart||3,merged.nd||merged.dates.length)
+    .then(function(){
+      console.log('[WMS-DBG] atsLoad: loadNotes completato, avvio atsRender');
+      atsRender();
+    }).catch(function(e){
+      console.warn('[WMS-DBG] atsLoad: loadNotes ERRORE: '+e.message+' — renderizzo comunque');
+      atsRender();
+    });
     ['aRef','aExp','aPrt','aBulkBtn'].forEach(function(id){document.getElementById(id).disabled=false;});
     document.getElementById('aInfo').textContent=MESI[m-1]+' '+y+' · '+merged.employees.length+' dip.'+(files.length>1?' ('+files.length+' file)':'');
     lastRefreshTimeAts=new Date();updateRefreshBadges();
     startAutoRefresh();
   }).catch(function(e){
+    console.error('[WMS-DBG] atsLoad: ERRORE GENERALE: '+e.message);
     setEl('aContent','<div class="state"><div class="state-ico">⚠️</div><div class="state-title">Errore lettura ATS</div><div style="white-space:pre-line;max-width:420px">'+esc(e.message)+'</div></div>');
   });
 }
@@ -3450,8 +3453,10 @@ function saveCommesseToSheet(mode, emp, di, fileId, sheetName, y, m){
   var row=[nome,sap,d.day];
   commesse.forEach(function(c){row.push(vals[c.code]?'✓':'');row.push(vals[c.code]||'');});
   // Find or create sheet, then append/update row
+  console.log('[WMS-DBG] loadNotes: chiamata sheets.properties');
   return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties')
   .then(function(meta){
+    console.log('[WMS-DBG] loadNotes: sheets.properties OK');
     var sheets=meta.sheets||[];
     var sh=sheets.find(function(s){return s.properties.title===tabName;});
     if(sh){
@@ -3753,24 +3758,6 @@ function openNota(mode,ri,di){
   var emps=mode==='coop'?coopEmps:atsEmps;
   var data=mode==='coop'?coopData:atsData;
   var emp=emps[ri];if(!emp)return;
-  // Carica le note di questo dipendente se non ancora caricate
-  if(!emp._notesLoaded&&emp.sheetRows&&emp.sheetRows.fileId){
-    var fid=emp.sheetRows.fileId;
-    var sname=emp.sheetRows.sheetName;
-    var dst=(data&&data.dayStart)||3;
-    var nd=(data&&data.dates&&data.dates.length)||31;
-    emp._notesLoaded=true; // evita ricaricamenti multipli
-    loadNotesForEmps([emp],fid,sname,dst,nd)
-    .then(function(){if(notaRi===ri&&notaMode===mode)_openNotaModal(mode,ri,di);})
-    .catch(function(){_openNotaModal(mode,ri,di);});
-    return; // aspetta il caricamento note
-  }
-  _openNotaModal(mode,ri,di);
-}
-function _openNotaModal(mode,ri,di){
-  var emps=mode==='coop'?coopEmps:atsEmps;
-  var data=mode==='coop'?coopData:atsData;
-  var emp=emps[ri];if(!emp)return;
   var d=data&&data.dates&&data.dates[di];
   var dayLabel=d?(d.day+'/'+['Dom','Lun','Mar','Mer','Gio','Ven','Sab'][d.weekday]):'—';
   var nome=emp.nom2||emp.nome||'';
@@ -3845,8 +3832,8 @@ function saveConfermaToSheets(ri){
 }
 // CARICA NOTE DAL FOGLIO
 function loadNotesForEmps(emps, fileId, sheetName, dayStart, nd){
-  // Note sono opzionali — se fallisce non blocca il caricamento
-  if(!fileId||!emps.length)return Promise.resolve();
+  console.log('[WMS-DBG] loadNotes START fileId='+fileId+' emps='+emps.length);
+  if(!fileId||!emps.length){console.log('[WMS-DBG] loadNotes SKIP');return Promise.resolve();}
   var minRow=null,maxRow=null;
   emps.forEach(function(emp){
     if(!emp.sheetRows||emp.sheetRows.n===undefined)return;
@@ -3854,22 +3841,28 @@ function loadNotesForEmps(emps, fileId, sheetName, dayStart, nd){
     if(minRow===null||r<minRow)minRow=r;
     if(maxRow===null||r>maxRow)maxRow=r;
   });
-  if(minRow===null)return Promise.resolve();
+  if(minRow===null){console.log('[WMS-DBG] loadNotes SKIP no rows');return Promise.resolve();}
   var startCol=dayStart;var endCol=dayStart+nd;
-  var url='https://sheets.googleapis.com/v4/spreadsheets/'+fileId
-    +'?includeGridData=true'
-    +'&fields=sheets.data.rowData.values.note'
-    +'&ranges='+encodeURIComponent(sheetName+'!R'+(minRow+1)+'C'+(maxRow+1)+':R'+(maxRow+1)+'C'+endCol);
-  // Timeout di 5 secondi — se non risponde saltiamo le note
-  var timeout=new Promise(function(res){setTimeout(res,5000);});
-  return Promise.race([
-    gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId
+  console.log('[WMS-DBG] loadNotes: gFetch sheets.properties...');
+  // Timeout di 8 secondi per evitare loop infinito
+  var didTimeout=false;
+  var timeoutP=new Promise(function(resolve){
+    setTimeout(function(){didTimeout=true;console.warn('[WMS-DBG] loadNotes: TIMEOUT 8s');resolve();},8000);
+  });
+  var notesP=gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties')
+  .then(function(meta){
+    console.log('[WMS-DBG] loadNotes: sheets.properties OK');
+    var sh=(meta.sheets||[]).find(function(s){return s.properties.title===sheetName;});
+    if(!sh){console.warn('[WMS-DBG] loadNotes: sheet '+sheetName+' non trovato');return;}
+    console.log('[WMS-DBG] loadNotes: gFetch note cells rows '+minRow+'-'+maxRow+'...');
+    return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId
       +'?includeGridData=true'
       +'&fields=sheets.data.rowData.values.note'
       +'&ranges='+encodeURIComponent(sheetName+'!R'+(minRow+1)+'C'+(startCol+1)+':R'+(maxRow+1)+'C'+endCol))
     .then(function(data){
+      console.log('[WMS-DBG] loadNotes: note data OK');
       var rows=((data.sheets||[])[0]||{}).data;
-      if(!rows||!rows[0])return;
+      if(!rows||!rows[0]){console.log('[WMS-DBG] loadNotes: nessuna nota trovata');return;}
       var rowData=(rows[0].rowData)||[];
       emps.forEach(function(emp){
         if(!emp.sheetRows||emp.sheetRows.n===undefined)return;
@@ -3881,9 +3874,10 @@ function loadNotesForEmps(emps, fileId, sheetName, dayStart, nd){
           if(cell&&cell.note)emp.notes[ci]=cell.note;
         });
       });
-    }),
-    timeout
-  ]).catch(function(e){console.warn('[WMS] loadNotes skip:',e.message);});
+      console.log('[WMS-DBG] loadNotes: note applicate OK');
+    });
+  }).catch(function(e){console.warn('[WMS-DBG] loadNotes CATCH: '+e.message);});
+  return Promise.race([notesP,timeoutP]);
 }
 function mClose(id){document.getElementById(id).classList.add('hide');}
 function showConf(t,m,cb){document.getElementById('confTitle').textContent=t;document.getElementById('confMsg').textContent=m;confCb=cb;mOpen('moConf');}
