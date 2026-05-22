@@ -233,10 +233,10 @@ select.fc option{background:var(--card)}
 .scroll{flex:1;overflow:auto;padding:14px 24px 28px;min-height:0}
 
 /* ── TABLE ── */
-.tout{border-radius:10px;border:1px solid var(--border);background:var(--surface);overflow-x:auto;margin-top:8px;animation:fadeIn .22s ease}
+.tout{border-radius:10px;border:1px solid var(--border);background:var(--surface);overflow-x:auto;margin-top:8px;animation:fadeIn .22s ease;position:relative;}
 .tout table{border-collapse:collapse;white-space:nowrap;width:max-content;min-width:100%}
 .sf{position:sticky;z-index:3;background:var(--card)}
-thead th{position:sticky;top:0;z-index:4;background:var(--card);border-bottom:2px solid var(--border);padding:6px 10px;font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--subtle);border-right:1px solid var(--border)}
+thead th{position:sticky;top:0;z-index:4;box-shadow:0 1px 0 var(--border);background:var(--card);border-bottom:2px solid var(--border);padding:6px 10px;font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--subtle);border-right:1px solid var(--border)}
 thead th.sf{z-index:6}
 thead th:last-child{border-right:none}
 tbody tr{border-bottom:1px solid rgba(36,48,72,.5);transition:background .1s}
@@ -1924,7 +1924,10 @@ function toggleCoopTotCols(){
 // ═══════════════════════════════════════════════════════════
 //  COOP — LOAD
 // ═══════════════════════════════════════════════════════════
+var _loadingCoop=false;
 function coopLoad(){
+  if(_loadingCoop)return;
+  _loadingCoop=true;
   var resp=document.getElementById('cResp').value;
   var plant=document.getElementById('cPlant').value;
   var y=parseInt(document.getElementById('cYear').value);
@@ -1965,11 +1968,13 @@ function coopLoad(){
     coopData=merged;coopEmps=merged.employees;
     // Carica note dalle celle
     loadNotesForEmps(coopEmps,coopFileId||merged.fileId,merged.sheetName,merged.dayStart||3,merged.nd||merged.dates.length)
-    .then(function(){coopRender();});
+    .then(function(){_loadingCoop=false;coopRender();})
+    .catch(function(){_loadingCoop=false;coopRender();});
     ['cRef','cExp','cPrt','cBulkBtn'].forEach(function(id){document.getElementById(id).disabled=false;});
     document.getElementById('cInfo').textContent=MESI[m-1]+' '+y+' · '+merged.employees.length+' dip.'+(files.length>1?' ('+files.length+' file)':'');
     lastRefreshTimeCoop=new Date();updateRefreshBadges();
   }).catch(function(e){
+    _loadingCoop=false;
     setEl('cContent','<div class="state"><div class="state-ico">⚠️</div><div class="state-title">Errore lettura</div><div style="white-space:pre-line;max-width:420px">'+esc(e.message)+'</div></div>');
   });
 }
@@ -2239,7 +2244,10 @@ function coopPrint(){
 // ═══════════════════════════════════════════════════════════
 //  ATS — LOAD
 // ═══════════════════════════════════════════════════════════
+var _loadingAts=false;
 function atsLoad(){
+  if(_loadingAts)return;
+  _loadingAts=true;
   var resp=document.getElementById('aResp').value;
   var plant=document.getElementById('aPlant').value;
   var y=parseInt(document.getElementById('aYear').value);
@@ -2274,7 +2282,8 @@ function atsLoad(){
     atsFileId=files.length===1?files[0].id:null;
     atsData=merged;atsEmps=merged.employees;
     loadNotesForEmps(atsEmps,atsFileId||merged.fileId,merged.sheetName,merged.dayStart||3,merged.nd||merged.dates.length)
-    .then(function(){atsRender();});
+    .then(function(){_loadingAts=false;atsRender();})
+    .catch(function(){_loadingAts=false;atsRender();});
     ['aRef','aExp','aPrt','aBulkBtn'].forEach(function(id){document.getElementById(id).disabled=false;});
     document.getElementById('aInfo').textContent=MESI[m-1]+' '+y+' · '+merged.employees.length+' dip.'+(files.length>1?' ('+files.length+' file)':'');
     lastRefreshTimeAts=new Date();updateRefreshBadges();
@@ -3836,7 +3845,8 @@ function loadNotesForEmps(emps, fileId, sheetName, dayStart, nd){
     if(minRow===null)return;
     var startCol=dayStart;var endCol=dayStart+nd;
     return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId
-      +'?fields=sheets.data.rowData.values.note'
+      +'?includeGridData=true'
+      +'&fields=sheets.data.rowData.values.note'
       +'&ranges='+encodeURIComponent(sheetName+'!R'+(minRow+1)+'C'+(startCol+1)+':R'+(maxRow+1)+'C'+endCol))
     .then(function(data){
       var rows=((data.sheets||[])[0]||{}).data;
