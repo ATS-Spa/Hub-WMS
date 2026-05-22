@@ -233,7 +233,8 @@ select.fc option{background:var(--card)}
 .scroll{flex:1;overflow:auto;padding:14px 24px 28px;min-height:0}
 
 /* ── TABLE ── */
-.tout{border-radius:10px;border:1px solid var(--border);background:var(--surface);overflow-x:auto;margin-top:8px;animation:fadeIn .22s ease;position:relative;}
+.tout{border-radius:10px;border:1px solid var(--border);background:var(--surface);overflow:hidden;margin-top:8px;animation:fadeIn .22s ease;}
+.tout-scroll{overflow-x:auto;}
 .tout table{border-collapse:collapse;white-space:nowrap;width:max-content;min-width:100%}
 .sf{position:sticky;z-index:3;background:var(--card)}
 thead th{position:sticky;top:0;z-index:4;box-shadow:0 1px 0 var(--border);background:var(--card);border-bottom:2px solid var(--border);padding:6px 10px;font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--subtle);border-right:1px solid var(--border)}
@@ -1033,7 +1034,7 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
         <input type="radio" name="cfgTema" value="chiaro" style="accent-color:var(--teal)"> ☀️ Chiaro
       </label>
       <label class="sc-item" style="cursor:pointer;gap:6px;padding:7px 8px;border:1px solid var(--border);border-radius:8px;justify-content:center;font-size:12px">
-        <input type="radio" name="cfgTema" value="sap" style="accent-color:var(--teal)"> 🔵 SAPB
+        <input type="radio" name="cfgTema" value="sap" style="accent-color:var(--teal)"> 🔵 SAP
       </label>
       <label class="sc-item" style="cursor:pointer;gap:6px;padding:7px 8px;border:1px solid var(--border);border-radius:8px;justify-content:center;font-size:12px">
         <input type="radio" name="cfgTema" value="grafite" style="accent-color:var(--teal)"> 🩶 Grafite
@@ -1771,7 +1772,7 @@ function renderSection(sec, emps, data, opts){
   var totTdClass=isAts?'ats-tot-td':'coop-tot-td';
   var oreHidden=!opts.oreVisible;
 
-  var h='<div class="tout"><table><thead><tr>';
+  var h='<div class="tout"><div class="tout-scroll"><table><thead><tr>';
   h+='<th class="sf ca0" style="z-index:7;font-size:10px">#</th>';
   h+='<th class="sf ca1" style="z-index:7">Dipendente</th>';
   h+='<th class="sf ca2" style="z-index:7">T</th>';
@@ -1866,7 +1867,7 @@ function renderSection(sec, emps, data, opts){
     if(adminMode)h+='<td></td>';
     h+='</tr>';
   });
-  h+='</tbody></table></div>';
+  h+='</tbody></table></div></div>';
   setEl(opts.contentId,h);
 
   if(!opts.totVisible){
@@ -3828,23 +3829,25 @@ function saveConfermaToSheets(ri){
 }
 // CARICA NOTE DAL FOGLIO
 function loadNotesForEmps(emps, fileId, sheetName, dayStart, nd){
+  // Note sono opzionali — se fallisce non blocca il caricamento
   if(!fileId||!emps.length)return Promise.resolve();
-  return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties')
-  .then(function(meta){
-    var sh=(meta.sheets||[]).find(function(s){return s.properties.title===sheetName;});
-    if(!sh)return;
-    var sheetId=sh.properties.sheetId;
-    // Calcola range che copre tutte le righe sigla degli employee
-    var minRow=null,maxRow=null;
-    emps.forEach(function(emp){
-      if(!emp.sheetRows||emp.sheetRows.n===undefined)return;
-      var r=emp.sheetRows.n;
-      if(minRow===null||r<minRow)minRow=r;
-      if(maxRow===null||r>maxRow)maxRow=r;
-    });
-    if(minRow===null)return;
-    var startCol=dayStart;var endCol=dayStart+nd;
-    return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId
+  var minRow=null,maxRow=null;
+  emps.forEach(function(emp){
+    if(!emp.sheetRows||emp.sheetRows.n===undefined)return;
+    var r=emp.sheetRows.n;
+    if(minRow===null||r<minRow)minRow=r;
+    if(maxRow===null||r>maxRow)maxRow=r;
+  });
+  if(minRow===null)return Promise.resolve();
+  var startCol=dayStart;var endCol=dayStart+nd;
+  var url='https://sheets.googleapis.com/v4/spreadsheets/'+fileId
+    +'?includeGridData=true'
+    +'&fields=sheets.data.rowData.values.note'
+    +'&ranges='+encodeURIComponent(sheetName+'!R'+(minRow+1)+'C'+(maxRow+1)+':R'+(maxRow+1)+'C'+endCol);
+  // Timeout di 5 secondi — se non risponde saltiamo le note
+  var timeout=new Promise(function(res){setTimeout(res,5000);});
+  return Promise.race([
+    gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId
       +'?includeGridData=true'
       +'&fields=sheets.data.rowData.values.note'
       +'&ranges='+encodeURIComponent(sheetName+'!R'+(minRow+1)+'C'+(startCol+1)+':R'+(maxRow+1)+'C'+endCol))
@@ -3862,8 +3865,9 @@ function loadNotesForEmps(emps, fileId, sheetName, dayStart, nd){
           if(cell&&cell.note)emp.notes[ci]=cell.note;
         });
       });
-    });
-  }).catch(function(e){console.warn('[WMS] loadNotes error:',e.message);});
+    }),
+    timeout
+  ]).catch(function(e){console.warn('[WMS] loadNotes skip:',e.message);});
 }
 function mClose(id){document.getElementById(id).classList.add('hide');}
 function showConf(t,m,cb){document.getElementById('confTitle').textContent=t;document.getElementById('confMsg').textContent=m;confCb=cb;mOpen('moConf');}
