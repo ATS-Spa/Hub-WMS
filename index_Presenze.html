@@ -1871,6 +1871,9 @@ function renderSection(sec, emps, data, opts){
   h+='</tbody></table></div>';
   console.log('[WMS-DBG] renderSection: setEl '+opts.contentId+' len='+h.length);
   setEl(opts.contentId,h);
+  // Forza scroll in cima dopo render (fix mobile)
+  var _sc=document.getElementById(opts.contentId);
+  if(_sc){var _p=_sc.closest('.scroll');if(_p){_p.scrollTop=0;console.log('[WMS-DBG] renderSection: scrollTop reset');}}  
 
   if(!opts.totVisible){
     setTimeout(function(){document.querySelectorAll('.'+totClass+',.'+totTdClass).forEach(function(el){el.style.display='none';});},10);
