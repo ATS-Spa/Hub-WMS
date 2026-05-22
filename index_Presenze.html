@@ -289,7 +289,7 @@ td.has-note{position:relative;}
 .conf-cb{width:16px;height:16px;cursor:pointer;accent-color:var(--green);}
 .conf-th{min-width:72px;text-align:center;background:var(--card);color:var(--green);position:sticky;top:0;z-index:4;border-right:1px solid var(--border);font-family:var(--ffc);font-size:11px;padding:4px 3px;}
 body.readonly-mode .bdel{display:none!important;}
-/* admin button always visible - readonly hides via JS if needed */
+body.readonly-mode .btn-top#btnAdmin{display:none!important;}
 body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important;}
 #moNota .mc{width:360px;}
 .comm-row{display:flex;align-items:center;gap:8px;}
@@ -425,7 +425,9 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
   .tdiv{display:none}
   /* Nascondi badge permesso e pulsante Admin dalla topbar su mobile — sono nel drawer */
   .pbadge{display:none}
-  .btn-top:not([onclick*="signOut"]){display:none}
+  /* btn-top: nascondi Config su mobile, mostra Admin e Esci */
+  .btn-top#btnConfig{display:none}
+  .btn-top:not([onclick*="signOut"]):not(#btnAdmin):not(#btnConfig){display:none}
   /* Nome utente compatto */
   .ubadge span#uName{display:none}
   .uav-fb,.uav{width:28px;height:28px}
@@ -566,35 +568,115 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
     flex:none;
   }
 
-  /* ── TABELLA su mobile: scroll orizzontale nativo ── */
+  /* ── TABELLA → CARD MOBILE ── */
+  /* Wrapper esterno */
   .tout{
     border-radius:0;
     border-left:none;border-right:none;
+    overflow:visible;
     margin-top:0;
   }
-
-  /* ── Sezioni: scroll normale con tabella orizzontale ── */
-  .sec{
-    display:none;
+  /* Nascondi la tabella classica su mobile */
+  .tout table{display:none}
+  /* Card list generata da JS via classe .mob-cards */
+  .mob-cards{display:flex;flex-direction:column;gap:6px;padding:8px 12px}
+  .mob-card{
+    background:var(--surface);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:10px 12px;
+    display:flex;
     flex-direction:column;
-    overflow:hidden;
-    min-height:0;
+    gap:6px;
+    animation:fadeIn .18s ease;
   }
-  .sec.on{display:flex}
-  .scroll{
+  .mob-card-header{
+    display:flex;
+    align-items:center;
+    gap:8px;
+  }
+  .mob-card-name{
+    font-family:var(--ffc);
+    font-size:15px;
+    font-weight:700;
+    color:var(--text);
     flex:1;
-    overflow-y:auto;
-    overflow-x:hidden;
-    -webkit-overflow-scrolling:touch;
-    padding:8px 0 80px;
   }
-  .tout-scroll{
+  .mob-card-sap{
+    font-family:var(--ffm);
+    font-size:10px;
+    color:var(--muted);
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:10px;
+    padding:2px 7px;
+  }
+  .mob-card-plant{
+    font-family:var(--ffc);
+    font-size:10px;
+    font-weight:700;
+    color:var(--blue);
+    background:rgba(59,130,246,.08);
+    border:1px solid rgba(59,130,246,.2);
+    border-radius:10px;
+    padding:2px 7px;
+  }
+  /* Riga giorni scrollabile */
+  .mob-card-days{
+    display:flex;
+    gap:3px;
     overflow-x:auto;
-    -webkit-overflow-scrolling:touch;
+    padding-bottom:4px;
+    scrollbar-width:none;
   }
-  /* Celle più grandi per touch */
-  td.dc{min-width:36px;padding:6px 4px;font-size:12px;}
-  .sf.ca1{min-width:100px;max-width:120px;}
+  .mob-card-days::-webkit-scrollbar{display:none}
+  .mob-day{
+    display:flex;
+    flex-direction:column;
+    align-items:center;
+    min-width:32px;
+    gap:2px;
+    flex-shrink:0;
+  }
+  .mob-day-label{
+    font-size:8px;
+    color:var(--muted);
+    font-family:var(--ffm);
+  }
+  .mob-day-val.mob-day-clickable:active{opacity:.6;transform:scale(.92);}
+  .mob-day-val{
+    font-family:var(--ffc);
+    font-size:11px;
+    font-weight:700;
+    width:30px;height:30px;
+    display:flex;align-items:center;justify-content:center;
+    border-radius:5px;
+    background:var(--card);
+    color:var(--muted);
+  }
+  .mob-day-val.we{background:rgba(36,48,72,.4);color:var(--border)}
+  .mob-day-val.today{background:rgba(20,184,166,.15);color:var(--teal);box-shadow:0 0 0 1.5px rgba(20,184,166,.4)}
+  .mob-day-val.holiday{background:rgba(239,68,68,.1);color:var(--red)}
+  .mob-day-val.has-val{background:rgba(255,255,255,.05)}
+  /* Totali */
+  .mob-card-totals{
+    display:flex;
+    gap:6px;
+    flex-wrap:wrap;
+    padding-top:4px;
+    border-top:1px solid var(--border);
+  }
+  .mob-tot-chip{
+    font-family:var(--ffm);
+    font-size:10px;
+    background:var(--card);
+    border:1px solid var(--border);
+    border-radius:6px;
+    padding:3px 8px;
+    color:var(--subtle);
+    display:flex;gap:4px;align-items:center;
+  }
+  .mob-tot-chip span{color:var(--text);font-weight:600}
 
   /* ── MODAL full-screen su mobile ── */
   .mo{align-items:flex-end}
@@ -1578,7 +1660,6 @@ function atsOnFilesChange(){}
 // ═══════════════════════════════════════════════════════════
 var curSec='coop';
 function switchSec(s){
-  console.log('[WMS-DBG] switchSec: '+s);
   curSec=s;
   ['coop','ats','file','perm'].forEach(function(x){
     var nb=document.getElementById('sn'+x.charAt(0).toUpperCase()+x.slice(1));
@@ -1650,7 +1731,6 @@ function disAdm(){
 //  SHARED RENDER ENGINE
 // ═══════════════════════════════════════════════════════════
 function renderSection(sec, emps, data, opts){
-  console.log('[WMS-DBG] renderSection: sec='+sec+' emps='+emps.length+' contentId='+opts.contentId);
   var isAts=sec==='ats';
   var y=parseInt(document.getElementById(isAts?'aYear':'cYear').value);
   var m=parseInt(document.getElementById(isAts?'aMonth':'cMonth').value);
@@ -1790,22 +1870,14 @@ function renderSection(sec, emps, data, opts){
     h+='</tr>';
   });
   h+='</tbody></table></div>';
-  console.log('[WMS-DBG] renderSection: setEl '+opts.contentId+' len='+h.length);
   setEl(opts.contentId,h);
-  // Fix mobile: forza visibilità sezione e scroll in cima
-  var _el=document.getElementById(opts.contentId);
-  if(_el){
-    // Risali al .sec e assicurati che sia on
-    var _sec=_el.closest('.sec');
-    if(_sec&&_sec.classList.contains('on')){
-      var _scroll=_el.closest('.scroll');
-      if(_scroll){_scroll.scrollTop=0;}
-      // Forza reflow su mobile
-      _sec.style.display='none';
-      _sec.offsetHeight; // trigger reflow
-      _sec.style.display='';
-      console.log('[WMS-DBG] renderSection: scrollTop reset + reflow');
-    }
+  // Fix mobile: forza reflow per aggiornare il viewport
+  if(typeof window!=='undefined'&&window.innerWidth<=768){
+    var _el=document.getElementById(opts.contentId);
+    if(_el){var _sec=_el.closest('.sec');if(_sec&&_sec.classList.contains('on')){
+      var _s=_el.closest('.scroll');if(_s)_s.scrollTop=0;
+      _sec.style.display='none';_sec.offsetHeight;_sec.style.display='';
+    }}
   }
 
   if(!opts.totVisible){
@@ -2203,41 +2275,29 @@ function atsLoad(){
       : sheetsRead(f.id,sheetName+'!A1:AF200').then(function(vals){return parseSheetValues(vals,y,m,f.id,sheetName,'ats');}))
     .catch(function(e){console.warn('[WMS] atsLoad skip '+f.name+': '+e.message);return null;});
   });
-  console.log('[WMS-DBG] atsLoad: avvio Promise.all su '+files.length+' file');
   Promise.all(promises).then(function(results){
-    console.log('[WMS-DBG] atsLoad: Promise.all completato');
     var merged=null;
     results.forEach(function(d){if(!d)return;if(!merged){merged=d;return;}merged.employees=merged.employees.concat(d.employees);});
     if(!merged){
       setEl('aContent','<div class="state"><div class="state-ico">⚠️</div><div class="state-title">Nessun dato ATS</div><div style="max-width:420px;color:var(--muted)">Foglio atteso: <strong>'+sheetName+'</strong></div></div>');
       return;
     }
-    console.log('[WMS-DBG] atsLoad: dati parsati, '+merged.employees.length+' dipendenti');
     atsFileId=files.length===1?files[0].id:null;
     atsData=merged;atsEmps=merged.employees;
-    console.log('[WMS-DBG] atsLoad: avvio loadNotesForEmps');
     loadNotesForEmps(atsEmps,atsFileId||merged.fileId,merged.sheetName,merged.dayStart||3,merged.nd||merged.dates.length)
-    .then(function(){
-      console.log('[WMS-DBG] atsLoad: loadNotes completato, avvio atsRender');
-      atsRender();
-    }).catch(function(e){
-      console.warn('[WMS-DBG] atsLoad: loadNotes ERRORE: '+e.message+' — renderizzo comunque');
-      atsRender();
-    });
+    .then(function(){atsRender();});
     ['aRef','aExp','aPrt','aBulkBtn'].forEach(function(id){document.getElementById(id).disabled=false;});
     document.getElementById('aInfo').textContent=MESI[m-1]+' '+y+' · '+merged.employees.length+' dip.'+(files.length>1?' ('+files.length+' file)':'');
     lastRefreshTimeAts=new Date();updateRefreshBadges();
     startAutoRefresh();
   }).catch(function(e){
-    console.error('[WMS-DBG] atsLoad: ERRORE GENERALE: '+e.message);
     setEl('aContent','<div class="state"><div class="state-ico">⚠️</div><div class="state-title">Errore lettura ATS</div><div style="white-space:pre-line;max-width:420px">'+esc(e.message)+'</div></div>');
   });
 }
 function atsRefresh(){atsData=null;atsFileId=null;atsLoad();}
 
 function atsRender(){
-  console.log('[WMS-DBG] atsRender: start, emps='+atsEmps.length);
-  if(!atsEmps.length&&!atsData){console.log('[WMS-DBG] atsRender: SKIP no data');return;}
+  if(!atsEmps.length&&!atsData)return;
   var q=(document.getElementById('aSearch').value||'').toLowerCase().trim();
   var emps=atsEmps.filter(function(e){return !q||e.nome.toLowerCase().indexOf(q)!==-1||(e.id||'').toLowerCase().indexOf(q)!==-1;});
   renderSection('ats',emps,atsData,{
@@ -3393,10 +3453,8 @@ function saveCommesseToSheet(mode, emp, di, fileId, sheetName, y, m){
   var row=[nome,sap,d.day];
   commesse.forEach(function(c){row.push(vals[c.code]?'✓':'');row.push(vals[c.code]||'');});
   // Find or create sheet, then append/update row
-  console.log('[WMS-DBG] loadNotes: chiamata sheets.properties');
   return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties')
   .then(function(meta){
-    console.log('[WMS-DBG] loadNotes: sheets.properties OK');
     var sheets=meta.sheets||[];
     var sh=sheets.find(function(s){return s.properties.title===tabName;});
     if(sh){
@@ -3772,37 +3830,28 @@ function saveConfermaToSheets(ri){
 }
 // CARICA NOTE DAL FOGLIO
 function loadNotesForEmps(emps, fileId, sheetName, dayStart, nd){
-  console.log('[WMS-DBG] loadNotes START fileId='+fileId+' emps='+emps.length);
-  if(!fileId||!emps.length){console.log('[WMS-DBG] loadNotes SKIP');return Promise.resolve();}
-  var minRow=null,maxRow=null;
-  emps.forEach(function(emp){
-    if(!emp.sheetRows||emp.sheetRows.n===undefined)return;
-    var r=emp.sheetRows.n;
-    if(minRow===null||r<minRow)minRow=r;
-    if(maxRow===null||r>maxRow)maxRow=r;
-  });
-  if(minRow===null){console.log('[WMS-DBG] loadNotes SKIP no rows');return Promise.resolve();}
-  var startCol=dayStart;var endCol=dayStart+nd;
-  console.log('[WMS-DBG] loadNotes: gFetch sheets.properties...');
-  // Timeout di 8 secondi per evitare loop infinito
-  var didTimeout=false;
-  var timeoutP=new Promise(function(resolve){
-    setTimeout(function(){didTimeout=true;console.warn('[WMS-DBG] loadNotes: TIMEOUT 8s');resolve();},8000);
-  });
-  var notesP=gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties')
+  if(!fileId||!emps.length)return Promise.resolve();
+  return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties')
   .then(function(meta){
-    console.log('[WMS-DBG] loadNotes: sheets.properties OK');
     var sh=(meta.sheets||[]).find(function(s){return s.properties.title===sheetName;});
-    if(!sh){console.warn('[WMS-DBG] loadNotes: sheet '+sheetName+' non trovato');return;}
-    console.log('[WMS-DBG] loadNotes: gFetch note cells rows '+minRow+'-'+maxRow+'...');
+    if(!sh)return;
+    var sheetId=sh.properties.sheetId;
+    // Calcola range che copre tutte le righe sigla degli employee
+    var minRow=null,maxRow=null;
+    emps.forEach(function(emp){
+      if(!emp.sheetRows||emp.sheetRows.n===undefined)return;
+      var r=emp.sheetRows.n;
+      if(minRow===null||r<minRow)minRow=r;
+      if(maxRow===null||r>maxRow)maxRow=r;
+    });
+    if(minRow===null)return;
+    var startCol=dayStart;var endCol=dayStart+nd;
     return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId
-      +'?includeGridData=true'
-      +'&fields=sheets.data.rowData.values.note'
+      +'?fields=sheets.data.rowData.values.note'
       +'&ranges='+encodeURIComponent(sheetName+'!R'+(minRow+1)+'C'+(startCol+1)+':R'+(maxRow+1)+'C'+endCol))
     .then(function(data){
-      console.log('[WMS-DBG] loadNotes: note data OK');
       var rows=((data.sheets||[])[0]||{}).data;
-      if(!rows||!rows[0]){console.log('[WMS-DBG] loadNotes: nessuna nota trovata');return;}
+      if(!rows||!rows[0])return;
       var rowData=(rows[0].rowData)||[];
       emps.forEach(function(emp){
         if(!emp.sheetRows||emp.sheetRows.n===undefined)return;
@@ -3814,10 +3863,8 @@ function loadNotesForEmps(emps, fileId, sheetName, dayStart, nd){
           if(cell&&cell.note)emp.notes[ci]=cell.note;
         });
       });
-      console.log('[WMS-DBG] loadNotes: note applicate OK');
     });
-  }).catch(function(e){console.warn('[WMS-DBG] loadNotes CATCH: '+e.message);});
-  return Promise.race([notesP,timeoutP]);
+  }).catch(function(e){console.warn('[WMS] loadNotes error:',e.message);});
 }
 function mClose(id){document.getElementById(id).classList.add('hide');}
 function showConf(t,m,cb){document.getElementById('confTitle').textContent=t;document.getElementById('confMsg').textContent=m;confCb=cb;mOpen('moConf');}
@@ -3871,6 +3918,228 @@ function cfgSave(){
     .then(function(){toast('✓ Config salvata: '+ing+' – '+usc+' · tema '+tema);})
     .catch(function(e){toast('✗ Errore salvataggio config','err');console.error(e);});
 }
+
+/* ═══════════════════════════════════════
+   MOBILE RESPONSIVE — accordion filtri + card view
+   ═══════════════════════════════════════ */
+(function(){
+  var MOBILE = function(){ return window.innerWidth <= 768; };
+
+  /* ── Accordion filtri ──────────────────────────────────── */
+  function wrapFilters(){
+    if(!MOBILE()) return;
+    document.querySelectorAll('.filters').forEach(function(flt){
+      if(flt.dataset.mobWrapped) return;
+      flt.dataset.mobWrapped = '1';
+
+      // Raccoglie tutti i figli originali
+      var children = Array.from(flt.childNodes);
+
+      // Quickrow: btn Carica + mese + anno (sempre visibili)
+      var quickrow = document.createElement('div');
+      quickrow.className = 'filter-quickrow';
+
+      // Body espandibile
+      var body = document.createElement('div');
+      body.className = 'filter-body';
+
+      // Toggle button
+      var togBtn = document.createElement('button');
+      togBtn.className = 'filter-toggle-btn';
+      togBtn.innerHTML = '⚙';
+      togBtn.setAttribute('type','button');
+      togBtn.onclick = function(){
+        body.classList.toggle('open');
+        togBtn.classList.toggle('open');
+      };
+
+      // Distingui elementi da mettere in quickrow vs body
+      children.forEach(function(node){
+        if(node.nodeType !== 1){ return; } // skip text nodes
+        var el = node;
+        var isLoad = el.id && (el.id==='cLoad'||el.id==='aLoad');
+        var isMonthYear = el.querySelector&&(el.querySelector('#cMonth,#aMonth,#cYear,#aYear'));
+        if(isLoad || isMonthYear){
+          quickrow.appendChild(el);
+        } else {
+          body.appendChild(el);
+        }
+      });
+
+      // Ricostituisci
+      flt.appendChild(quickrow);
+      quickrow.appendChild(togBtn);
+      flt.appendChild(body);
+    });
+  }
+
+  /* ── Card view per tabella presenze ───────────────────── */
+  function buildMobCards(tableEl){
+    if(!tableEl) return null;
+    var wrap = document.createElement('div');
+    wrap.className = 'mob-cards';
+
+    var rows = tableEl.querySelectorAll('tbody tr');
+    if(!rows.length) return null;
+
+    // Recupera intestazioni giorni dall'header
+    var thDays = tableEl.querySelectorAll('thead th.dh');
+    var dayLabels = [];
+    thDays.forEach(function(th){
+      var dn = th.querySelector('.dn');
+      var dw = th.querySelector('.dw');
+      dayLabels.push({
+        n: dn ? dn.textContent.trim() : '',
+        w: dw ? dw.textContent.trim() : '',
+        isWe: th.classList.contains('we'),
+        isToday: th.classList.contains('today'),
+        isHoliday: th.classList.contains('holiday')
+      });
+    });
+
+    rows.forEach(function(tr){
+      // Salta separatori e righe ore
+      if(tr.classList.contains('ats-sep')) return;
+      if(tr.classList.contains('ats-ore')) return;
+
+      var card = document.createElement('div');
+      card.className = 'mob-card';
+
+      // Header card: nome + SAP + plant
+      var ca0 = tr.querySelector('td.ca0');
+      var ca1 = tr.querySelector('td.ca1');
+      var ca2 = tr.querySelector('td.ca2');
+      var header = document.createElement('div');
+      header.className = 'mob-card-header';
+
+      var nameEl = document.createElement('div');
+      nameEl.className = 'mob-card-name';
+      nameEl.textContent = ca1 ? ca1.textContent.trim() : '';
+      header.appendChild(nameEl);
+
+      if(ca0){
+        var sapEl = document.createElement('div');
+        sapEl.className = 'mob-card-sap';
+        sapEl.textContent = ca0.textContent.trim();
+        header.appendChild(sapEl);
+      }
+      if(ca2){
+        var plantEl = document.createElement('div');
+        plantEl.className = 'mob-card-plant';
+        plantEl.textContent = ca2.textContent.trim();
+        header.appendChild(plantEl);
+      }
+      card.appendChild(header);
+
+      // Riga giorni scrollabile
+      var dayCells = tr.querySelectorAll('td.dc');
+      if(dayCells.length && dayLabels.length){
+        var daysRow = document.createElement('div');
+        daysRow.className = 'mob-card-days';
+        dayCells.forEach(function(td, i){
+          var info = dayLabels[i] || {};
+          var dayWrap = document.createElement('div');
+          dayWrap.className = 'mob-day';
+
+          var lbl = document.createElement('div');
+          lbl.className = 'mob-day-label';
+          lbl.textContent = info.n || (i+1);
+          dayWrap.appendChild(lbl);
+
+          var val = document.createElement('div');
+          val.className = 'mob-day-val';
+          var txt = td.textContent.trim();
+          if(info.isWe) val.classList.add('we');
+          if(info.isToday) val.classList.add('today');
+          if(info.isHoliday) val.classList.add('holiday');
+          if(txt && txt !== '·') val.classList.add('has-val');
+          val.textContent = (txt && txt !== '·') ? txt : '';
+          // Copia colore da classe sigla
+          var sigClass = Array.from(td.classList).find(function(c){return c.startsWith('s-');});
+          if(sigClass) val.style.color = getComputedStyle(document.documentElement).getPropertyValue('--c-'+sigClass.replace('s-','')) || '';
+          // Copia onclick dalla td originale — mantiene picker e nota
+          if(td.onclick) val.onclick = td.onclick;
+          else if(td.getAttribute('onclick')) val.setAttribute('onclick', td.getAttribute('onclick'));
+          if(td.onclick || td.getAttribute('onclick')){
+            val.style.cursor = 'pointer';
+            val.classList.add('mob-day-clickable');
+          }
+          dayWrap.appendChild(val);
+          daysRow.appendChild(dayWrap);
+        });
+        card.appendChild(daysRow);
+      }
+
+      // Totali
+      var totCells = tr.querySelectorAll('td.tot');
+      if(totCells.length){
+        var totsEl = document.createElement('div');
+        totsEl.className = 'mob-card-totals';
+        // Cerca le intestazioni totali
+        var totHeaders = tableEl.querySelectorAll('thead th.tot, thead th[class*="tot"]');
+        totCells.forEach(function(td, i){
+          var v = td.textContent.trim();
+          if(!v || v==='0' || v==='0.0') return;
+          var chip = document.createElement('div');
+          chip.className = 'mob-tot-chip';
+          var lbl = totHeaders[i] ? totHeaders[i].textContent.trim() : ('T'+(i+1));
+          chip.innerHTML = lbl+' <span>'+v+'</span>';
+          totsEl.appendChild(chip);
+        });
+        if(totsEl.children.length) card.appendChild(totsEl);
+      }
+
+      wrap.appendChild(card);
+    });
+
+    return wrap;
+  }
+
+  /* Osserva modifiche al DOM per intercettare le tabelle quando vengono renderizzate */
+  function hookTableRender(){
+    ['cContent','aContent'].forEach(function(cid){
+      var container = document.getElementById(cid);
+      if(!container) return;
+      var _busy = false;
+      var obs = new MutationObserver(function(){
+        if(!MOBILE()) return;
+        if(_busy) return;
+        var tout = container.querySelector('.tout');
+        if(!tout) return;
+        var tbl = tout.querySelector('table');
+        if(!tbl) return;
+        _busy = true;
+        obs.disconnect();
+        var old = tout.querySelector('.mob-cards');
+        if(old) old.remove();
+        var cards = buildMobCards(tbl);
+        if(cards) tout.appendChild(cards);
+        setTimeout(function(){
+          _busy = false;
+          obs.observe(container, {childList:true, subtree:true});
+        }, 200);
+      });
+      obs.observe(container, {childList:true, subtree:true});
+    });
+  }
+
+  /* Init */
+  function init(){
+    wrapFilters();
+    hookTableRender();
+  }
+
+  if(document.readyState === 'loading'){
+    document.addEventListener('DOMContentLoaded', init);
+  } else {
+    init();
+  }
+
+  // Re-wrap se schermo cambia da desktop a mobile
+  window.addEventListener('resize', function(){
+    if(MOBILE()) wrapFilters();
+  });
+})();
 </script>
 </body>
 </html>
