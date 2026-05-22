@@ -1957,25 +1957,19 @@ function coopLoad(){
   }
   var sheetName=MESI[m-1]+'_Coop';
   setEl('cContent',spinH('Lettura '+files.length+' file…'));
-  var promises=files.map(function(f){
-    var isXlsx=/\.xlsx$/i.test(f.name);
-    return (isXlsx
-      ? downloadFile(f.id).then(function(b){return parseSheetBlob(b,y,m,f.id,sheetName,'coop');})
-      : (function(fid,sn){
-          // Prova range grande, se fallisce usa range medio, se fallisce usa range minimo
-          return sheetsRead(fid,sn+'!A1:AQ300')
-            .catch(function(){return sheetsRead(fid,sn+'!A1:AF200');})
-            .catch(function(){return sheetsRead(fid,sn+'!A1:Z200');})
-            .catch(function(e){
-              // Ultimo tentativo: leggi solo A1 per verificare che il foglio esiste
-              return sheetsRead(fid,sn+'!A1:A1').then(function(){
-                throw new Error('Foglio '+sn+' trovato ma range non leggibile: '+e.message);
-              });
-            });
-        })(f.id,sheetName).then(function(vals){return parseSheetValues(vals,y,m,f.id,sheetName,'coop');}))
-    .catch(function(e){console.warn('[WMS] coopLoad skip '+f.name+': '+e.message);return null;});
-  });
-  Promise.all(promises).then(function(results){
+  // Esecuzione sequenziale per evitare rate limiting su mobile
+  var results=[];
+  var seqPromise=files.reduce(function(chain,f){
+    return chain.then(function(){
+      var isXlsx=/\.xlsx$/i.test(f.name);
+      return (isXlsx
+        ? downloadFile(f.id).then(function(b){return parseSheetBlob(b,y,m,f.id,sheetName,'coop');})
+        : sheetsRead(f.id,sheetName+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,y,m,f.id,sheetName,'coop');}))
+      .catch(function(e){console.warn('[WMS] coopLoad skip '+f.name+': '+e.message);return null;})
+      .then(function(r){results.push(r);});
+    });
+  },Promise.resolve());
+  seqPromise.then(function(){
     var merged=null;
     results.forEach(function(d){if(!d)return;if(!merged){merged=d;return;}merged.employees=merged.employees.concat(d.employees);});
     if(!merged){
@@ -3722,10 +3716,27 @@ function bulkConfirm(){
 // ═══════════════════════════════════════════════════════════
 function listFiles(q){return gFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name,mimeType)&pageSize=200').then(function(r){return r.files||[];});}
 function downloadFile(id){return fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){if(!r.ok)throw new Error('Download fallito: '+r.status);return r.blob();});}
-function gFetch(url){if(!TOKEN)return Promise.reject(new Error('No token'));return fetch(url,{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){return r.json();});}
+function gFetch(url){
+  if(!TOKEN)return Promise.reject(new Error('No token'));
+  return fetch(url,{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){
+    if(!r.ok){
+      return r.json().then(function(e){
+        var msg=(e.error&&e.error.message)||r.statusText;
+        console.error('[WMS] gFetch '+r.status+' '+url.substring(0,80)+' ERR:'+msg);
+        throw new Error(msg);
+      });
+    }
+    return r.json();
+  });
+}
 function sheetsRead(spreadsheetId,range){
-  return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+spreadsheetId+'/values/'+encodeURIComponent(range)+'?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING').then(function(r){
-    if(r.error)throw new Error('Sheets API: '+r.error.message+'\nRange: '+range);
+  // Wrap sheet name in single quotes to handle underscores and special chars
+  var safeRange=range.replace(/^([^!]+)!/,function(m,sn){
+    if(sn.charAt(0)!=="'") return "'"+sn+"'!";
+    return m;
+  });
+  return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+spreadsheetId+'/values/'+encodeURIComponent(safeRange)+'?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING').then(function(r){
+    if(r.error)throw new Error('Sheets API: '+r.error.message+'\nRange: '+safeRange);
     return r.values||[];
   });
 }
