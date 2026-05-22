@@ -1871,9 +1871,21 @@ function renderSection(sec, emps, data, opts){
   h+='</tbody></table></div>';
   console.log('[WMS-DBG] renderSection: setEl '+opts.contentId+' len='+h.length);
   setEl(opts.contentId,h);
-  // Forza scroll in cima dopo render (fix mobile)
-  var _sc=document.getElementById(opts.contentId);
-  if(_sc){var _p=_sc.closest('.scroll');if(_p){_p.scrollTop=0;console.log('[WMS-DBG] renderSection: scrollTop reset');}}  
+  // Fix mobile: forza visibilità sezione e scroll in cima
+  var _el=document.getElementById(opts.contentId);
+  if(_el){
+    // Risali al .sec e assicurati che sia on
+    var _sec=_el.closest('.sec');
+    if(_sec&&_sec.classList.contains('on')){
+      var _scroll=_el.closest('.scroll');
+      if(_scroll){_scroll.scrollTop=0;}
+      // Forza reflow su mobile
+      _sec.style.display='none';
+      _sec.offsetHeight; // trigger reflow
+      _sec.style.display='';
+      console.log('[WMS-DBG] renderSection: scrollTop reset + reflow');
+    }
+  }
 
   if(!opts.totVisible){
     setTimeout(function(){document.querySelectorAll('.'+totClass+',.'+totTdClass).forEach(function(el){el.style.display='none';});},10);
@@ -4113,17 +4125,26 @@ function cfgSave(){
     ['cContent','aContent'].forEach(function(cid){
       var container = document.getElementById(cid);
       if(!container) return;
+      var _busy = false;
       var obs = new MutationObserver(function(){
         if(!MOBILE()) return;
+        if(_busy) return; // evita loop
         var tout = container.querySelector('.tout');
         if(!tout) return;
-        // Rimuovi cards precedenti
-        var old = tout.querySelector('.mob-cards');
-        if(old) old.remove();
+        // Se le mob-cards sono già presenti e aggiornate, non rifare
         var tbl = tout.querySelector('table');
         if(!tbl) return;
+        _busy = true;
+        obs.disconnect(); // sospendi observer durante la modifica
+        var old = tout.querySelector('.mob-cards');
+        if(old) old.remove();
         var cards = buildMobCards(tbl);
         if(cards) tout.appendChild(cards);
+        // Riattiva observer dopo la modifica
+        setTimeout(function(){
+          _busy = false;
+          obs.observe(container, {childList:true, subtree:true});
+        }, 100);
       });
       obs.observe(container, {childList:true, subtree:true});
     });
