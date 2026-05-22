@@ -289,7 +289,7 @@ td.has-note{position:relative;}
 .conf-cb{width:16px;height:16px;cursor:pointer;accent-color:var(--green);}
 .conf-th{min-width:72px;text-align:center;background:var(--card);color:var(--green);position:sticky;top:0;z-index:4;border-right:1px solid var(--border);font-family:var(--ffc);font-size:11px;padding:4px 3px;}
 body.readonly-mode .bdel{display:none!important;}
-body.readonly-mode .btn-top#btnAdmin{display:none!important;}
+/* admin button always visible - readonly hides via JS if needed */
 body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important;}
 #moNota .mc{width:360px;}
 .comm-row{display:flex;align-items:center;gap:8px;}
@@ -566,114 +566,35 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
     flex:none;
   }
 
-  /* ── TABELLA → CARD MOBILE ── */
-  /* Wrapper esterno */
+  /* ── TABELLA su mobile: scroll orizzontale nativo ── */
   .tout{
     border-radius:0;
     border-left:none;border-right:none;
-    overflow:visible;
     margin-top:0;
   }
-  /* Nascondi la tabella classica su mobile */
-  .tout table{display:none}
-  /* Card list generata da JS via classe .mob-cards */
-  .mob-cards{display:flex;flex-direction:column;gap:6px;padding:8px 12px}
-  .mob-card{
-    background:var(--surface);
-    border:1px solid var(--border);
-    border-radius:10px;
-    padding:10px 12px;
-    display:flex;
+
+  /* ── Sezioni: scroll normale con tabella orizzontale ── */
+  .sec{
+    display:none;
     flex-direction:column;
-    gap:6px;
-    animation:fadeIn .18s ease;
+    overflow:hidden;
+    min-height:0;
   }
-  .mob-card-header{
-    display:flex;
-    align-items:center;
-    gap:8px;
-  }
-  .mob-card-name{
-    font-family:var(--ffc);
-    font-size:15px;
-    font-weight:700;
-    color:var(--text);
+  .sec.on{display:flex}
+  .scroll{
     flex:1;
+    overflow-y:auto;
+    overflow-x:hidden;
+    -webkit-overflow-scrolling:touch;
+    padding:8px 0 80px;
   }
-  .mob-card-sap{
-    font-family:var(--ffm);
-    font-size:10px;
-    color:var(--muted);
-    background:var(--card);
-    border:1px solid var(--border);
-    border-radius:10px;
-    padding:2px 7px;
-  }
-  .mob-card-plant{
-    font-family:var(--ffc);
-    font-size:10px;
-    font-weight:700;
-    color:var(--blue);
-    background:rgba(59,130,246,.08);
-    border:1px solid rgba(59,130,246,.2);
-    border-radius:10px;
-    padding:2px 7px;
-  }
-  /* Riga giorni scrollabile */
-  .mob-card-days{
-    display:flex;
-    gap:3px;
+  .tout-scroll{
     overflow-x:auto;
-    padding-bottom:4px;
-    scrollbar-width:none;
+    -webkit-overflow-scrolling:touch;
   }
-  .mob-card-days::-webkit-scrollbar{display:none}
-  .mob-day{
-    display:flex;
-    flex-direction:column;
-    align-items:center;
-    min-width:28px;
-    gap:1px;
-    flex-shrink:0;
-  }
-  .mob-day-label{
-    font-size:8px;
-    color:var(--muted);
-    font-family:var(--ffm);
-  }
-  .mob-day-val{
-    font-family:var(--ffc);
-    font-size:11px;
-    font-weight:700;
-    width:26px;height:26px;
-    display:flex;align-items:center;justify-content:center;
-    border-radius:5px;
-    background:var(--card);
-    color:var(--muted);
-  }
-  .mob-day-val.we{background:rgba(36,48,72,.4);color:var(--border)}
-  .mob-day-val.today{background:rgba(20,184,166,.15);color:var(--teal);box-shadow:0 0 0 1.5px rgba(20,184,166,.4)}
-  .mob-day-val.holiday{background:rgba(239,68,68,.1);color:var(--red)}
-  .mob-day-val.has-val{background:rgba(255,255,255,.05)}
-  /* Totali */
-  .mob-card-totals{
-    display:flex;
-    gap:6px;
-    flex-wrap:wrap;
-    padding-top:4px;
-    border-top:1px solid var(--border);
-  }
-  .mob-tot-chip{
-    font-family:var(--ffm);
-    font-size:10px;
-    background:var(--card);
-    border:1px solid var(--border);
-    border-radius:6px;
-    padding:3px 8px;
-    color:var(--subtle);
-    display:flex;gap:4px;align-items:center;
-  }
-  .mob-tot-chip span{color:var(--text);font-weight:600}
+  /* Celle più grandi per touch */
+  td.dc{min-width:36px;padding:6px 4px;font-size:12px;}
+  .sf.ca1{min-width:100px;max-width:120px;}
 
   /* ── MODAL full-screen su mobile ── */
   .mo{align-items:flex-end}
@@ -3950,223 +3871,6 @@ function cfgSave(){
     .then(function(){toast('✓ Config salvata: '+ing+' – '+usc+' · tema '+tema);})
     .catch(function(e){toast('✗ Errore salvataggio config','err');console.error(e);});
 }
-
-/* ═══════════════════════════════════════
-   MOBILE RESPONSIVE — accordion filtri + card view
-   ═══════════════════════════════════════ */
-(function(){
-  var MOBILE = function(){ return window.innerWidth <= 768; };
-
-  /* ── Accordion filtri ──────────────────────────────────── */
-  function wrapFilters(){
-    if(!MOBILE()) return;
-    document.querySelectorAll('.filters').forEach(function(flt){
-      if(flt.dataset.mobWrapped) return;
-      flt.dataset.mobWrapped = '1';
-
-      // Raccoglie tutti i figli originali
-      var children = Array.from(flt.childNodes);
-
-      // Quickrow: btn Carica + mese + anno (sempre visibili)
-      var quickrow = document.createElement('div');
-      quickrow.className = 'filter-quickrow';
-
-      // Body espandibile
-      var body = document.createElement('div');
-      body.className = 'filter-body';
-
-      // Toggle button
-      var togBtn = document.createElement('button');
-      togBtn.className = 'filter-toggle-btn';
-      togBtn.innerHTML = '⚙';
-      togBtn.setAttribute('type','button');
-      togBtn.onclick = function(){
-        body.classList.toggle('open');
-        togBtn.classList.toggle('open');
-      };
-
-      // Distingui elementi da mettere in quickrow vs body
-      children.forEach(function(node){
-        if(node.nodeType !== 1){ return; } // skip text nodes
-        var el = node;
-        var isLoad = el.id && (el.id==='cLoad'||el.id==='aLoad');
-        var isMonthYear = el.querySelector&&(el.querySelector('#cMonth,#aMonth,#cYear,#aYear'));
-        if(isLoad || isMonthYear){
-          quickrow.appendChild(el);
-        } else {
-          body.appendChild(el);
-        }
-      });
-
-      // Ricostituisci
-      flt.appendChild(quickrow);
-      quickrow.appendChild(togBtn);
-      flt.appendChild(body);
-    });
-  }
-
-  /* ── Card view per tabella presenze ───────────────────── */
-  function buildMobCards(tableEl){
-    if(!tableEl) return null;
-    var wrap = document.createElement('div');
-    wrap.className = 'mob-cards';
-
-    var rows = tableEl.querySelectorAll('tbody tr');
-    if(!rows.length) return null;
-
-    // Recupera intestazioni giorni dall'header
-    var thDays = tableEl.querySelectorAll('thead th.dh');
-    var dayLabels = [];
-    thDays.forEach(function(th){
-      var dn = th.querySelector('.dn');
-      var dw = th.querySelector('.dw');
-      dayLabels.push({
-        n: dn ? dn.textContent.trim() : '',
-        w: dw ? dw.textContent.trim() : '',
-        isWe: th.classList.contains('we'),
-        isToday: th.classList.contains('today'),
-        isHoliday: th.classList.contains('holiday')
-      });
-    });
-
-    rows.forEach(function(tr){
-      // Salta separatori e righe ore
-      if(tr.classList.contains('ats-sep')) return;
-      if(tr.classList.contains('ats-ore')) return;
-
-      var card = document.createElement('div');
-      card.className = 'mob-card';
-
-      // Header card: nome + SAP + plant
-      var ca0 = tr.querySelector('td.ca0');
-      var ca1 = tr.querySelector('td.ca1');
-      var ca2 = tr.querySelector('td.ca2');
-      var header = document.createElement('div');
-      header.className = 'mob-card-header';
-
-      var nameEl = document.createElement('div');
-      nameEl.className = 'mob-card-name';
-      nameEl.textContent = ca1 ? ca1.textContent.trim() : '';
-      header.appendChild(nameEl);
-
-      if(ca0){
-        var sapEl = document.createElement('div');
-        sapEl.className = 'mob-card-sap';
-        sapEl.textContent = ca0.textContent.trim();
-        header.appendChild(sapEl);
-      }
-      if(ca2){
-        var plantEl = document.createElement('div');
-        plantEl.className = 'mob-card-plant';
-        plantEl.textContent = ca2.textContent.trim();
-        header.appendChild(plantEl);
-      }
-      card.appendChild(header);
-
-      // Riga giorni scrollabile
-      var dayCells = tr.querySelectorAll('td.dc');
-      if(dayCells.length && dayLabels.length){
-        var daysRow = document.createElement('div');
-        daysRow.className = 'mob-card-days';
-        dayCells.forEach(function(td, i){
-          var info = dayLabels[i] || {};
-          var dayWrap = document.createElement('div');
-          dayWrap.className = 'mob-day';
-
-          var lbl = document.createElement('div');
-          lbl.className = 'mob-day-label';
-          lbl.textContent = info.n || (i+1);
-          dayWrap.appendChild(lbl);
-
-          var val = document.createElement('div');
-          val.className = 'mob-day-val';
-          var txt = td.textContent.trim();
-          if(info.isWe) val.classList.add('we');
-          if(info.isToday) val.classList.add('today');
-          if(info.isHoliday) val.classList.add('holiday');
-          if(txt) val.classList.add('has-val');
-          val.textContent = txt || '';
-          // Copia colore da classe sigla
-          var sigClass = Array.from(td.classList).find(function(c){return c.startsWith('s-');});
-          if(sigClass) val.style.color = getComputedStyle(document.documentElement).getPropertyValue('--c-'+sigClass.replace('s-','')) || '';
-          dayWrap.appendChild(val);
-          daysRow.appendChild(dayWrap);
-        });
-        card.appendChild(daysRow);
-      }
-
-      // Totali
-      var totCells = tr.querySelectorAll('td.tot');
-      if(totCells.length){
-        var totsEl = document.createElement('div');
-        totsEl.className = 'mob-card-totals';
-        // Cerca le intestazioni totali
-        var totHeaders = tableEl.querySelectorAll('thead th.tot, thead th[class*="tot"]');
-        totCells.forEach(function(td, i){
-          var v = td.textContent.trim();
-          if(!v || v==='0' || v==='0.0') return;
-          var chip = document.createElement('div');
-          chip.className = 'mob-tot-chip';
-          var lbl = totHeaders[i] ? totHeaders[i].textContent.trim() : ('T'+(i+1));
-          chip.innerHTML = lbl+' <span>'+v+'</span>';
-          totsEl.appendChild(chip);
-        });
-        if(totsEl.children.length) card.appendChild(totsEl);
-      }
-
-      wrap.appendChild(card);
-    });
-
-    return wrap;
-  }
-
-  /* Osserva modifiche al DOM per intercettare le tabelle quando vengono renderizzate */
-  function hookTableRender(){
-    ['cContent','aContent'].forEach(function(cid){
-      var container = document.getElementById(cid);
-      if(!container) return;
-      var _busy = false;
-      var obs = new MutationObserver(function(){
-        if(!MOBILE()) return;
-        if(_busy) return; // evita loop
-        var tout = container.querySelector('.tout');
-        if(!tout) return;
-        // Se le mob-cards sono già presenti e aggiornate, non rifare
-        var tbl = tout.querySelector('table');
-        if(!tbl) return;
-        _busy = true;
-        obs.disconnect(); // sospendi observer durante la modifica
-        var old = tout.querySelector('.mob-cards');
-        if(old) old.remove();
-        var cards = buildMobCards(tbl);
-        if(cards) tout.appendChild(cards);
-        // Riattiva observer dopo la modifica
-        setTimeout(function(){
-          _busy = false;
-          obs.observe(container, {childList:true, subtree:true});
-        }, 100);
-      });
-      obs.observe(container, {childList:true, subtree:true});
-    });
-  }
-
-  /* Init */
-  function init(){
-    wrapFilters();
-    hookTableRender();
-  }
-
-  if(document.readyState === 'loading'){
-    document.addEventListener('DOMContentLoaded', init);
-  } else {
-    init();
-  }
-
-  // Re-wrap se schermo cambia da desktop a mobile
-  window.addEventListener('resize', function(){
-    if(MOBILE()) wrapFilters();
-  });
-})();
 </script>
 </body>
 </html>
