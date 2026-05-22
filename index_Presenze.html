@@ -4237,21 +4237,7 @@ function cfgSave(){
         }
       }
 
-      // ── SIGLE (nascoste, visibili solo se ORD/STR attivo) ──
-      var sigleRow = tr.querySelector('tr.ats-ore, .ore-row');
-      // Cerca le sigle nella tabella originale — riga con classe ats-ore
-      var oreRowEl = null;
-      var nxt = tr.nextElementSibling;
-      while(nxt && !nxt.classList.contains('an') && !nxt.classList.contains('ats-sep')){
-        if(nxt.classList.contains('ats-ore')){oreRowEl=nxt;break;}
-        nxt=nxt.nextElementSibling;
-      }
-      if(oreRowEl && oreOn){
-        var oreClone = document.createElement('div');
-        oreClone.className = 'mob-card-ore';
-        oreClone.innerHTML = oreRowEl.innerHTML;
-        card.appendChild(oreClone);
-      }
+      // Ore row rimossa — i totali sono nelle chip
 
       // ── TOTALI (chip puliti) ──
       var totCells = tr.querySelectorAll('td.tot');
