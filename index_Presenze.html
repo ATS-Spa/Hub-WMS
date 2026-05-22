@@ -656,15 +656,48 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
     border-radius:10px;
     padding:2px 7px;
   }
+  /* Layout giorni: colonna etichette fissa + scroll orizzontale */
+  .mob-card-days-wrap{
+    display:flex;
+    gap:0;
+    overflow:hidden;
+  }
+  .mob-days-labels{
+    display:flex;
+    flex-direction:column;
+    gap:3px;
+    flex-shrink:0;
+    padding-right:6px;
+    border-right:1px solid var(--border);
+    margin-right:6px;
+  }
+  .mob-day-type-label{
+    height:30px;
+    display:flex;
+    align-items:center;
+    font-size:9px;
+    font-family:var(--ffc);
+    font-weight:700;
+    color:var(--muted);
+    letter-spacing:.5px;
+  }
   /* Riga giorni scrollabile */
   .mob-card-days{
     display:flex;
     gap:3px;
     overflow-x:auto;
     padding-bottom:4px;
+    flex:1;
     scrollbar-width:none;
+    -webkit-overflow-scrolling:touch;
   }
   .mob-card-days::-webkit-scrollbar{display:none}
+  /* Cella orario IN/OUT */
+  .mob-day-time{
+    font-size:8px !important;
+    height:30px;
+    color:var(--muted);
+  }
   .mob-day{
     display:flex;
     flex-direction:column;
@@ -683,7 +716,7 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
     font-family:var(--ffc);
     font-size:11px;
     font-weight:700;
-    width:30px;height:30px;
+    width:30px;height:30px;min-height:30px;
     display:flex;align-items:center;justify-content:center;
     border-radius:5px;
     background:var(--card);
@@ -4113,26 +4146,51 @@ function cfgSave(){
       if(sapDiv) parts.push('<span class="mob-sub-sap">'+sapDiv.textContent.trim()+'</span>');
       if(parts.length){sub.innerHTML=parts.join('<span class="mob-sub-dot">·</span>');card.appendChild(sub);}
 
-      // ── RIGA GIORNI ──
+      // ── RIGA GIORNI + IN + OUT ──
       var dayCells = tr.querySelectorAll('td.dc');
+      // Recupera celle IN e OUT dai blocchi successivi
+      var inCells = blk.inRow ? blk.inRow.querySelectorAll('td.dc') : [];
+      var outCells = blk.outRow ? blk.outRow.querySelectorAll('td.dc') : [];
+
       if(dayCells.length && dayLabels.length){
-        var daysRow = document.createElement('div');
-        daysRow.className = 'mob-card-days';
+        var daysWrap = document.createElement('div');
+        daysWrap.className = 'mob-card-days-wrap';
+
+        // Colonna etichette fissa a sinistra
+        var labelsCol = document.createElement('div');
+        labelsCol.className = 'mob-days-labels';
+        ['','IN','OUT'].forEach(function(t){
+          var el = document.createElement('div');
+          el.className = 'mob-day-type-label';
+          el.textContent = t;
+          labelsCol.appendChild(el);
+        });
+        daysWrap.appendChild(labelsCol);
+
+        // Area scrollabile con giorni
+        var daysScroll = document.createElement('div');
+        daysScroll.className = 'mob-card-days';
+        var todayIdx = -1;
+
         dayCells.forEach(function(td, i){
           var info = dayLabels[i] || {};
           var dayWrap = document.createElement('div');
           dayWrap.className = 'mob-day';
 
+          // Numero giorno
           var lbl = document.createElement('div');
           lbl.className = 'mob-day-label';
           lbl.textContent = info.n || (i+1);
+          if(info.isWe) lbl.style.color='var(--border)';
+          if(info.isToday) lbl.style.color='var(--teal)';
           dayWrap.appendChild(lbl);
 
+          // Sigla
           var val = document.createElement('div');
           val.className = 'mob-day-val';
           var txt = td.textContent.trim();
           if(info.isWe) val.classList.add('we');
-          if(info.isToday) val.classList.add('today');
+          if(info.isToday){val.classList.add('today');todayIdx=i;}
           if(info.isHoliday) val.classList.add('holiday');
           if(txt && txt !== '·') val.classList.add('has-val');
           val.textContent = (txt && txt !== '·') ? txt : '';
@@ -4142,9 +4200,41 @@ function cfgSave(){
           else if(td.getAttribute('onclick')) val.setAttribute('onclick', td.getAttribute('onclick'));
           if(td.onclick || td.getAttribute('onclick')){val.style.cursor='pointer';val.classList.add('mob-day-clickable');}
           dayWrap.appendChild(val);
-          daysRow.appendChild(dayWrap);
+
+          // Ingresso
+          var inTd = inCells[i];
+          var inVal = document.createElement('div');
+          inVal.className = 'mob-day-val mob-day-time';
+          var inTxt = inTd ? inTd.textContent.trim() : '';
+          inVal.textContent = (inTxt && inTxt !== '·') ? inTxt : '';
+          if(info.isWe) inVal.classList.add('we');
+          dayWrap.appendChild(inVal);
+
+          // Uscita
+          var outTd = outCells[i];
+          var outVal = document.createElement('div');
+          outVal.className = 'mob-day-val mob-day-time';
+          var outTxt = outTd ? outTd.textContent.trim() : '';
+          outVal.textContent = (outTxt && outTxt !== '·') ? outTxt : '';
+          if(info.isWe) outVal.classList.add('we');
+          dayWrap.appendChild(outVal);
+
+          daysScroll.appendChild(dayWrap);
         });
-        card.appendChild(daysRow);
+
+        daysWrap.appendChild(daysScroll);
+        card.appendChild(daysWrap);
+
+        // Auto-scroll al giorno corrente
+        if(todayIdx > 0){
+          setTimeout(function(){
+            var dayW = daysScroll.querySelector('.mob-day');
+            if(dayW){
+              var w = dayW.offsetWidth + 3;
+              daysScroll.scrollLeft = Math.max(0, (todayIdx - 2) * w);
+            }
+          }, 50);
+        }
       }
 
       // ── SIGLE (nascoste, visibili solo se ORD/STR attivo) ──
@@ -4163,7 +4253,7 @@ function cfgSave(){
         card.appendChild(oreClone);
       }
 
-      // ── TOTALI ──
+      // ── TOTALI (chip puliti) ──
       var totCells = tr.querySelectorAll('td.tot');
       if(totCells.length){
         var totsEl = document.createElement('div');
@@ -4171,13 +4261,15 @@ function cfgSave(){
         var totHeaders = tableEl.querySelectorAll('thead th.tot, thead th[class*="tot"]');
         totCells.forEach(function(td, i){
           var v = td.textContent.trim();
-          if(!v || v==='0' || v==='0.0' || v==='—') return;
-          // Nascondi STR se è 0 o dash
-          var lbl = totHeaders[i] ? totHeaders[i].textContent.trim() : ('T'+(i+1));
-          if(lbl==='STR' && (!v||v==='—')) return;
+          if(!v || v==='0' || v==='0.0' || v==='—' || v==='') return;
+          var lbl = totHeaders[i] ? totHeaders[i].textContent.trim() : '';
+          if(!lbl) return;
+          // Colori per tipo
+          var color = lbl==='ORD'?'var(--green)':lbl==='STR'?'var(--amber)':lbl==='FEST'?'var(--red)':'var(--subtle)';
           var chip = document.createElement('div');
           chip.className = 'mob-tot-chip';
-          chip.innerHTML = lbl+' <span>'+v+'</span>';
+          chip.style.borderColor = color.replace('var(','').replace(')','');
+          chip.innerHTML = '<span style="color:'+color+';font-weight:700">'+lbl+'</span> <span style="color:var(--text)">'+v+'</span>';
           totsEl.appendChild(chip);
         });
         if(totsEl.children.length) card.appendChild(totsEl);
