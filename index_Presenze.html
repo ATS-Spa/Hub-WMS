@@ -3890,6 +3890,7 @@ function notaSave(clear){
 function toggleConferma(ri,cb){
   var emp=coopEmps[ri];if(!emp)return;
   emp.confermato=cb.checked;
+  // Aggiorna tabella desktop
   var row=document.getElementById('emprow_'+ri);
   if(row){
     var nx=row;
@@ -3899,6 +3900,21 @@ function toggleConferma(ri,cb){
       else nx.classList.remove('confirmed-row');
       nx=nx.nextElementSibling;
     }
+  }
+  // Aggiorna card mobile
+  var mobCard=cb.closest('.mob-card');
+  if(mobCard){
+    if(emp.confermato) mobCard.classList.add('confirmed-row');
+    else mobCard.classList.remove('confirmed-row');
+    // Aggiorna testo e colore label conferma
+    var confTxt=mobCard.querySelector('.mob-conf-label span');
+    var confRow=mobCard.querySelector('.mob-card-conf');
+    if(confTxt){
+      confTxt.textContent=emp.confermato?'✓ Confermato':'Conferma';
+      confTxt.style.fontWeight=emp.confermato?'700':'400';
+      confTxt.style.color=emp.confermato?'var(--green)':'var(--muted)';
+    }
+    if(confRow) confRow.classList.toggle('is-confirmed',emp.confermato);
   }
   saveConfermaToSheets(ri);
 }
