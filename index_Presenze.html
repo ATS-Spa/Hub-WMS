@@ -626,10 +626,16 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
   .mob-conf-label{
     display:flex;
     align-items:center;
-    gap:6px;
-    font-size:12px;
-    color:var(--subtle);
+    gap:8px;
+    font-size:13px;
     cursor:pointer;
+    padding:2px 0;
+  }
+  .mob-card-conf.is-confirmed{
+    background:rgba(16,185,129,.08);
+    border-radius:6px;
+    padding:4px 8px;
+    margin:-4px -8px;
   }
   .mob-card-sap{
     font-family:var(--ffm);
@@ -4177,18 +4183,32 @@ function cfgSave(){
         if(totsEl.children.length) card.appendChild(totsEl);
       }
 
-      // ── CHECKBOX CONFERMA (se presente) ──
+      // ── CHECKBOX CONFERMA (solo Coop) ──
       var confCb = tr.querySelector('input.conf-cb');
       if(confCb){
+        var ri = confCb.getAttribute('onchange') ? confCb.getAttribute('onchange').match(/\d+/) : null;
+        var riNum = ri ? parseInt(ri[0]) : -1;
+        var isChecked = confCb.checked;
         var confRow = document.createElement('div');
-        confRow.className = 'mob-card-conf';
-        var cbClone = confCb.cloneNode(true);
-        cbClone.onchange = confCb.onchange;
-        if(confCb.getAttribute('onchange')) cbClone.setAttribute('onchange', confCb.getAttribute('onchange'));
+        confRow.className = 'mob-card-conf' + (isChecked ? ' is-confirmed' : '');
         var confLbl = document.createElement('label');
         confLbl.className = 'mob-conf-label';
-        confLbl.appendChild(cbClone);
-        confLbl.appendChild(document.createTextNode(' Confermato'));
+        var cbNew = document.createElement('input');
+        cbNew.type = 'checkbox';
+        cbNew.className = 'conf-cb';
+        cbNew.checked = isChecked;
+        cbNew.style.width = '18px';
+        cbNew.style.height = '18px';
+        if(riNum >= 0){
+          cbNew.onchange = (function(r){ return function(){ toggleConferma(r, this); confRow.classList.toggle('is-confirmed', this.checked); }; })(riNum);
+        }
+        var confTxt = document.createElement('span');
+        confTxt.textContent = isChecked ? '✓ Confermato' : 'Conferma';
+        confTxt.style.fontWeight = isChecked ? '700' : '400';
+        confTxt.style.color = isChecked ? 'var(--green)' : 'var(--muted)';
+        cbNew.addEventListener('change', function(){ confTxt.textContent = this.checked ? '✓ Confermato' : 'Conferma'; confTxt.style.fontWeight = this.checked ? '700' : '400'; confTxt.style.color = this.checked ? 'var(--green)' : 'var(--muted)'; });
+        confLbl.appendChild(cbNew);
+        confLbl.appendChild(confTxt);
         confRow.appendChild(confLbl);
         card.appendChild(confRow);
       }
