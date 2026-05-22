@@ -1957,19 +1957,14 @@ function coopLoad(){
   }
   var sheetName=MESI[m-1]+'_Coop';
   setEl('cContent',spinH('Lettura '+files.length+' file…'));
-  // Esecuzione sequenziale per evitare rate limiting su mobile
-  var results=[];
-  var seqPromise=files.reduce(function(chain,f){
-    return chain.then(function(){
-      var isXlsx=/\.xlsx$/i.test(f.name);
-      return (isXlsx
-        ? downloadFile(f.id).then(function(b){return parseSheetBlob(b,y,m,f.id,sheetName,'coop');})
-        : sheetsRead(f.id,sheetName+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,y,m,f.id,sheetName,'coop');}))
-      .catch(function(e){console.warn('[WMS] coopLoad skip '+f.name+': '+e.message);return null;})
-      .then(function(r){results.push(r);});
-    });
-  },Promise.resolve());
-  seqPromise.then(function(){
+  var promises=files.map(function(f){
+    var isXlsx=/\.xlsx$/i.test(f.name);
+    return (isXlsx
+      ? downloadFile(f.id).then(function(b){return parseSheetBlob(b,y,m,f.id,sheetName,'coop');})
+      : sheetsRead(f.id,sheetName+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,y,m,f.id,sheetName,'coop');}))
+    .catch(function(e){console.warn('[WMS] coopLoad skip '+f.name+': '+e.message);return null;});
+  });
+  Promise.all(promises).then(function(results){
     var merged=null;
     results.forEach(function(d){if(!d)return;if(!merged){merged=d;return;}merged.employees=merged.employees.concat(d.employees);});
     if(!merged){
