@@ -4187,7 +4187,13 @@ function cfgSave(){
       // Trova il vero ri dall'onchange della checkbox
       var _confCbTmp=tr.querySelector('input.conf-cb');
       if(_confCbTmp){var _riM=(_confCbTmp.getAttribute('onchange')||'').match(/\d+/);if(_riM)card.dataset.ri=_riM[0];}
-      if(tr.classList.contains('confirmed-row')) card.classList.add('confirmed-row');
+      // Legge stato confermato direttamente da coopEmps (non dalla classe CSS che può essere stale)
+      var _riForConf=-1;
+      var _confCbCheck=tr.querySelector('input.conf-cb');
+      if(_confCbCheck){var _riMC=(_confCbCheck.getAttribute('onchange')||'').match(/\d+/);if(_riMC)_riForConf=parseInt(_riMC[0]);}
+      var _empConf=_riForConf>=0&&coopEmps[_riForConf]?coopEmps[_riForConf]:null;
+      var _isConfirmed=_empConf?!!_empConf.confermato:tr.classList.contains('confirmed-row');
+      if(_isConfirmed) card.classList.add('confirmed-row');
 
       // ── HEADER: nome | plant | resp | #sap ──
       var ca0 = tr.querySelector('td.ca0');
@@ -4346,7 +4352,7 @@ function cfgSave(){
       if(confCb){
         var ri = confCb.getAttribute('onchange') ? confCb.getAttribute('onchange').match(/\d+/) : null;
         var riNum = ri ? parseInt(ri[0]) : -1;
-        var isChecked = confCb.checked;
+        var isChecked = _empConf?!!_empConf.confermato:confCb.checked;
         var confRow = document.createElement('div');
         confRow.className = 'mob-card-conf' + (isChecked ? ' is-confirmed' : '');
         var confLbl = document.createElement('label');
