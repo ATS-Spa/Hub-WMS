@@ -3949,7 +3949,16 @@ function notaSave(clear){
 // CONFERMA DIPENDENTE
 function toggleConferma(ri,cb,mobCardEl){
   var emp=coopEmps[ri];if(!emp)return;
-  emp.confermato=cb.checked;
+  var nuovoStato=cb.checked;
+  var nome=emp.nom2||emp.nome||'';
+  var msg=nuovoStato
+    ?'Confermare le presenze mensili di '+nome+'?'
+    :'Annullare la conferma delle presenze di '+nome+'?';
+  // Ripristina checkbox visivamente in attesa conferma
+  cb.checked=!nuovoStato;
+  showConf(nuovoStato?'✅ Conferma Presenze':'↩ Annulla Conferma', msg, function(){
+    cb.checked=nuovoStato;
+    emp.confermato=nuovoStato;
   // Aggiorna tabella desktop
   var row=document.getElementById('emprow_'+ri);
   if(row){
@@ -3975,7 +3984,8 @@ function toggleConferma(ri,cb,mobCardEl){
     }
     if(confRow) confRow.classList.toggle('is-confirmed',emp.confermato);
   });
-  saveConfermaToSheets(ri);
+    saveConfermaToSheets(ri);
+  });
 }
 function saveConfermaToSheets(ri){
   var emp=coopEmps[ri];if(!emp||!emp.sheetRows)return;
