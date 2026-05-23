@@ -3947,7 +3947,7 @@ function notaSave(clear){
   }).catch(function(e){toast('✗ '+e.message,'err');});
 }
 // CONFERMA DIPENDENTE
-function toggleConferma(ri,cb){
+function toggleConferma(ri,cb,mobCardEl){
   var emp=coopEmps[ri];if(!emp)return;
   emp.confermato=cb.checked;
   // Aggiorna tabella desktop
@@ -3961,8 +3961,9 @@ function toggleConferma(ri,cb){
       nx=nx.nextElementSibling;
     }
   }
-  // Aggiorna card mobile — cerca per data-ri attribute
-  document.querySelectorAll('.mob-card[data-ri="'+ri+'"]').forEach(function(mobCard){
+  // Aggiorna card mobile — usa elemento passato direttamente se disponibile
+  var cards=mobCardEl?[mobCardEl]:Array.from(document.querySelectorAll('.mob-card[data-ri="'+ri+'"]'));
+  cards.forEach(function(mobCard){
     if(emp.confermato) mobCard.classList.add('confirmed-row');
     else mobCard.classList.remove('confirmed-row');
     var confTxt=mobCard.querySelector('.mob-conf-label span');
@@ -4357,7 +4358,10 @@ function cfgSave(){
         cbNew.style.width = '18px';
         cbNew.style.height = '18px';
         if(riNum >= 0){
-          cbNew.onchange = (function(r){ return function(){ toggleConferma(r, this); confRow.classList.toggle('is-confirmed', this.checked); }; })(riNum);
+          cbNew.onchange = (function(r,crd,cRow){ return function(){
+            toggleConferma(r, this, crd);
+            cRow.classList.toggle('is-confirmed', this.checked);
+          }; })(riNum, card, confRow);
         }
         var confTxt = document.createElement('span');
         confTxt.textContent = isChecked ? '✓ Confermato' : 'Conferma';
