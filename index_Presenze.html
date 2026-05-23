@@ -1541,7 +1541,7 @@ function syncImpDipDest(){}
 function buildLegend(){
   var b=document.getElementById('atsLeg');
   b.innerHTML='<span class="leg-toggle" onclick="toggleLegend()" id="legToggleBtn">⊟ Sigle</span>';
-  SIGLE.forEach(function(s){var e=document.createElement('span');e.className='leg';e.title=s.label;e.style.cssText='color:'+s.color+';background:'+s.bg+';border:1px solid '+s.border;e.innerHTML=s.code+'<small>'+s.label+'</small>';b.appendChild(e);});
+  SIGLE.filter(function(s){return ATS_EXCL_CODES.indexOf(s.code)===-1;}).forEach(function(s){var e=document.createElement('span');e.className='leg';e.title=s.label;e.style.cssText='color:'+s.color+';background:'+s.bg+';border:1px solid '+s.border;e.innerHTML=s.code+'<small>'+s.label+'</small>';b.appendChild(e);});
   // ── FIX 1: leggenda Coop mostra solo le sigle Coop ──
   var cb=document.getElementById('coopLeg');
   cb.innerHTML='<span class="leg-toggle" onclick="toggleCoopLegend()" id="coopLegToggleBtn">⊟ Sigle</span>';
