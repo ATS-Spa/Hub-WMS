@@ -1360,8 +1360,8 @@ var SIGLE = [
 var SM={};SIGLE.forEach(function(s){SM[s.code]=s;});
 
 // ── FIX 1: Sigle disponibili in Coop (modifica qui per aggiungere/rimuovere) ──
-var COOP_SIGLE_CODES = ['X'];
-var ATS_EXCL_CODES = ['1/2F'];
+var COOP_SIGLE_CODES = ['X','PLT'];
+var ATS_EXCL_CODES = ['1/2F','PLT']; // PLT solo Coop
 // Le sigle ATS escludono 1/2F (rimossa dall'array SIGLE)
 
 var SIGLE_NO_ORARIO=['F','M','CP','104','PE','Lutto'];
@@ -3961,12 +3961,10 @@ function toggleConferma(ri,cb){
       nx=nx.nextElementSibling;
     }
   }
-  // Aggiorna card mobile
-  var mobCard=cb.closest('.mob-card');
-  if(mobCard){
+  // Aggiorna card mobile — cerca per data-ri attribute
+  document.querySelectorAll('.mob-card[data-ri="'+ri+'"]').forEach(function(mobCard){
     if(emp.confermato) mobCard.classList.add('confirmed-row');
     else mobCard.classList.remove('confirmed-row');
-    // Aggiorna testo e colore label conferma
     var confTxt=mobCard.querySelector('.mob-conf-label span');
     var confRow=mobCard.querySelector('.mob-card-conf');
     if(confTxt){
@@ -3975,7 +3973,7 @@ function toggleConferma(ri,cb){
       confTxt.style.color=emp.confermato?'var(--green)':'var(--muted)';
     }
     if(confRow) confRow.classList.toggle('is-confirmed',emp.confermato);
-  }
+  });
   saveConfermaToSheets(ri);
 }
 function saveConfermaToSheets(ri){
@@ -4184,6 +4182,10 @@ function cfgSave(){
       var tr = blk.sigRow;
       var card = document.createElement('div');
       card.className = 'mob-card';
+      card.dataset.ri = String(empBlocks.indexOf(blk));
+      // Trova il vero ri dall'onchange della checkbox
+      var _confCbTmp=tr.querySelector('input.conf-cb');
+      if(_confCbTmp){var _riM=(_confCbTmp.getAttribute('onchange')||'').match(/\d+/);if(_riM)card.dataset.ri=_riM[0];}
       if(tr.classList.contains('confirmed-row')) card.classList.add('confirmed-row');
 
       // ── HEADER: nome | plant | resp | #sap ──
@@ -4235,10 +4237,11 @@ function cfgSave(){
         // Colonna etichette fissa a sinistra
         var labelsCol = document.createElement('div');
         labelsCol.className = 'mob-days-labels';
-        ['','IN','OUT'].forEach(function(t){
+        [{t:'SIG',c:'var(--blue)'},{t:'IN',c:'var(--green)'},{t:'OUT',c:'var(--red)'}].forEach(function(item){
           var el = document.createElement('div');
           el.className = 'mob-day-type-label';
-          el.textContent = t;
+          el.textContent = item.t;
+          el.style.color = item.c;
           labelsCol.appendChild(el);
         });
         daysWrap.appendChild(labelsCol);
