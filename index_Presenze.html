@@ -21,7 +21,7 @@
   --ff:'IBM Plex Sans',sans-serif;--ffm:'IBM Plex Mono',monospace;--ffc:'Barlow Condensed',sans-serif;
   --c-X:#10b981;--c-F:#3b82f6;--c-hF:#60a5fa;--c-M:#ef4444;
   --c-HP:#a855f7;--c-H104:#f59e0b;--c-104:#fb923c;--c-CP:#ec4899;
-  --c-HPE:#14b8a6;--c-PE:#06b6d4;--c-SW:#84cc16;--c-Lutto:#94a3b8;--c-TFS:#38bdf8;
+  --c-HPE:#14b8a6;--c-PE:#06b6d4;--c-SW:#84cc16;--c-Lutto:#94a3b8;--c-TFS:#38bdf8;--c-PLT:#fbbf24;
 }
 /* ── TEMA DIM (misto) ── */
 body.theme-dim{
@@ -1174,21 +1174,44 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
   <div class="sgrid" id="spGrid"></div>
   <div class="qty-row" id="spQty" style="display:none"><label>Quantità:</label><input class="mi" id="spQtyV" type="number" min="0.5" max="8" step="0.5" value="1" style="width:75px"></div>
   <div id="spOrariWrap" style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
-    <div style="display:flex;gap:10px">
-      <div class="fg" style="flex:1"><div class="fl">Ingresso</div><input class="mi" id="spIng" type="time" value="08:00" oninput="spCalcLive()"></div>
-      <div class="fg" style="flex:1"><div class="fl">Uscita</div><input class="mi" id="spUsc" type="time" value="18:00" oninput="spCalcLive()"></div>
+    <!-- Campi standard Ingresso/Uscita -->
+    <div id="spStdOrari" style="display:flex;flex-direction:column;gap:10px">
+      <div style="display:flex;gap:10px">
+        <div class="fg" style="flex:1"><div class="fl">Ingresso</div><input class="mi" id="spIng" type="time" value="08:00" oninput="spCalcLive()"></div>
+        <div class="fg" style="flex:1"><div class="fl">Uscita</div><input class="mi" id="spUsc" type="time" value="18:00" oninput="spCalcLive()"></div>
+      </div>
+      <div style="display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:10px 14px">
+        <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;flex:1">
+          <input type="checkbox" id="spPausa" checked style="accent-color:var(--teal);width:15px;height:15px;cursor:pointer" onchange="spCalcLive()">
+          Pausa pranzo
+        </label>
+        <select class="mi" id="spPausaDur" style="width:100px;padding:6px 10px" onchange="spCalcLive()">
+          <option value="0.5">30 min</option>
+          <option value="1" selected>1 ora</option>
+          <option value="1.5">1h 30min</option>
+          <option value="2">2 ore</option>
+        </select>
+      </div>
     </div>
-    <div style="display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:10px 14px">
-      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;flex:1">
-        <input type="checkbox" id="spPausa" checked style="accent-color:var(--teal);width:15px;height:15px;cursor:pointer" onchange="spCalcLive()">
-        Pausa pranzo
-      </label>
-      <select class="mi" id="spPausaDur" style="width:100px;padding:6px 10px" onchange="spCalcLive()">
-        <option value="0.5">30 min</option>
-        <option value="1" selected>1 ora</option>
-        <option value="1.5">1h 30min</option>
-        <option value="2">2 ore</option>
-      </select>
+    <!-- Campi cottimo QTA/ORE (solo per sigle cottimo come PLT) -->
+    <div id="spCottimoOrari" style="display:none;flex-direction:column;gap:10px">
+      <div style="display:flex;gap:10px">
+        <div class="fg" style="flex:1">
+          <div class="fl">📦 Quantità (es. PLT)</div>
+          <input class="mi" id="spQta" type="number" min="0" step="1" placeholder="0" style="text-align:center" oninput="spCottimoLive()">
+        </div>
+        <div class="fg" style="flex:1">
+          <div class="fl">⏱ Ore lavorate</div>
+          <input class="mi" id="spOreC" type="time" placeholder="08:00" oninput="spCottimoLive()">
+        </div>
+      </div>
+      <div id="spCottimoBox" style="background:linear-gradient(135deg,rgba(251,191,36,.08),rgba(251,146,60,.06));border:1px solid rgba(251,191,36,.25);border-radius:8px;padding:10px 14px;font-family:var(--ffm);font-size:12px;display:none">
+        <span style="color:var(--amber);font-family:var(--ffc);font-size:10px;font-weight:700;letter-spacing:1px">COTTIMO</span>
+        <div style="display:flex;gap:16px;margin-top:6px">
+          <div><span style="color:var(--muted);font-size:11px">Quantità</span><br><span id="spCottimoQta" style="font-size:18px;color:var(--amber)">—</span></div>
+          <div><span style="color:var(--muted);font-size:11px">Ore</span><br><span id="spCottimoOre" style="font-size:18px;color:var(--teal)">—</span></div>
+        </div>
+      </div>
     </div>
     <div id="spCalcBox" style="background:linear-gradient(135deg,rgba(20,184,166,.08),rgba(59,130,246,.06));border:1px solid rgba(20,184,166,.25);border-radius:8px;padding:12px 16px;font-family:var(--ffm);font-size:12px;display:none">
       <div style="font-family:var(--ffc);font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--muted);margin-bottom:8px">CALCOLO ORE</div>
@@ -1332,6 +1355,7 @@ var SIGLE = [
   {code:'SW',   label:'Smartworking',     cls:'s-SW',   color:'var(--c-SW)',   bg:'rgba(132,204,22,.12)', border:'rgba(132,204,22,.35)'},
   {code:'Lutto',label:'Lutto',            cls:'s-Lutto',color:'var(--c-Lutto)',bg:'rgba(148,163,184,.12)',border:'rgba(148,163,184,.35)'},
   {code:'TFS',  label:'Trasferta F.Sede', cls:'s-TFS',  color:'var(--c-TFS)',  bg:'rgba(56,189,248,.12)', border:'rgba(56,189,248,.35)'},
+  {code:'PLT',  label:'Pallet (Cottimo)',  cls:'s-PLT',  color:'var(--c-PLT)',   bg:'rgba(251,191,36,.12)', border:'rgba(251,191,36,.35)', cottimo:true},
 ];
 var SM={};SIGLE.forEach(function(s){SM[s.code]=s;});
 
@@ -1341,6 +1365,7 @@ var ATS_EXCL_CODES = ['1/2F'];
 // Le sigle ATS escludono 1/2F (rimossa dall'array SIGLE)
 
 var SIGLE_NO_ORARIO=['F','M','CP','104','PE','Lutto'];
+var SIGLE_COTTIMO=['PLT']; // sigle a cottimo: IN=quantità, OUT=ore
 
 // ═══════════════════════════════════════════════════════════
 //  STATE
@@ -2244,7 +2269,7 @@ function coopExport(){
   XLSX.utils.book_append_sheet(wb,coopSheet,mName+'_Coop');
   // Report con sole sigle attive in Coop
   var COOP_REP=[
-    {l:'P',k:'X'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},{l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'H.FEST',k:'fest'}
+    {l:'P',k:'X'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},{l:'PLT',k:'PLT'},{l:'PLT.ORE',k:'PLT_ore'},{l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'H.FEST',k:'fest'}
   ];
   var repHdr=['SAP','Nominativo','Resp.','Plant'].concat(COOP_REP.map(function(c){return c.l;}));
   var repRows=[repHdr];
@@ -2622,9 +2647,12 @@ function openPickerGeneric(mode,ri,di){
       g.querySelectorAll('.sopt').forEach(function(x){x.classList.remove('sel');x.style.borderColor='';});
       el.classList.add('sel');el.style.borderColor=s.border;spSigla=s.code;
       document.getElementById('spQty').style.display=s.hasQty?'flex':'none';
-      var showOr=SIGLE_NO_ORARIO.indexOf(s.code)===-1;
-      document.getElementById('spOrariWrap').style.display=showOr?'':'none';
-      spCalcLive();
+      var isCottimo=SIGLE_COTTIMO.indexOf(s.code)!==-1;
+      var showOr=SIGLE_NO_ORARIO.indexOf(s.code)===-1&&!isCottimo;
+      document.getElementById('spOrariWrap').style.display=showOr||isCottimo?'':'none';
+      document.getElementById('spStdOrari').style.display=showOr?'':'none';
+      document.getElementById('spCottimoOrari').style.display=isCottimo?'flex':'none';
+      if(isCottimo){spCottimoLive();}else{spCalcLive();}
       renderCommesseGrid();
     });
     g.appendChild(el);
@@ -2635,9 +2663,18 @@ function openPickerGeneric(mode,ri,di){
   g.appendChild(clr);
   document.getElementById('spQty').style.display='none';
   var showOrInit=cs?SIGLE_NO_ORARIO.indexOf(xSig(cs))===-1:true;
-  document.getElementById('spOrariWrap').style.display=showOrInit?'':'none';
+  var isCottimoInit=cs?SIGLE_COTTIMO.indexOf(xSig(cs))!==-1:false;
+  var showOrInit2=showOrInit&&!isCottimoInit;
+  document.getElementById('spOrariWrap').style.display=(showOrInit2||isCottimoInit)?'':'none';
+  document.getElementById('spStdOrari').style.display=showOrInit2?'':'none';
+  document.getElementById('spCottimoOrari').style.display=isCottimoInit?'flex':'none';
   document.getElementById('spCalcBox').style.display='none';
-  if(cs)spCalcLive();
+  // Carica valori cottimo se presenti
+  if(isCottimoInit){
+    document.getElementById('spQta').value=(emp.ingresso||[])[di]||'';
+    document.getElementById('spOreC').value=(emp.uscita||[])[di]||'';
+    spCottimoLive();
+  } else if(cs) spCalcLive();
   renderCommesseGrid();
   document.getElementById('spConfirmBtn').onclick=spConfirm;
   // Mostra pulsante Nota se c'è già una nota sulla cella
@@ -2651,6 +2688,18 @@ function openPickerGeneric(mode,ri,di){
 function spOpenNota(){
   mClose('moSigla');
   openNota(spMode,spIdx,spDi);
+}
+function spCottimoLive(){
+  var qta=document.getElementById('spQta').value;
+  var ore=document.getElementById('spOreC').value;
+  var box=document.getElementById('spCottimoBox');
+  if(qta||ore){
+    box.style.display='';
+    document.getElementById('spCottimoQta').textContent=qta?qta+' pz':'—';
+    document.getElementById('spCottimoOre').textContent=ore||'—';
+  } else {
+    box.style.display='none';
+  }
 }
 function spCalcLive(){renderCommesseGrid();
 
@@ -2684,7 +2733,12 @@ function spConfirm(){
   var fv=spSigla;
   if(spSigla&&SM[spSigla]&&SM[spSigla].hasQty){var qty=parseFloat(document.getElementById('spQtyV').value)||1;if(qty!==1)fv=qty+spSigla;}
   emp.sigla[spDi]=fv;
-  if(spSigla&&spSigla!==''&&SIGLE_NO_ORARIO.indexOf(spSigla)===-1){
+  if(spSigla&&SIGLE_COTTIMO.indexOf(spSigla)!==-1){
+    // Cottimo: IN=quantità, OUT=ore
+    emp.ingresso[spDi]=document.getElementById('spQta').value||'';
+    emp.uscita[spDi]=document.getElementById('spOreC').value||'';
+    emp.pausa[spDi]=0;
+  } else if(spSigla&&spSigla!==''&&SIGLE_NO_ORARIO.indexOf(spSigla)===-1){
     emp.ingresso[spDi]=document.getElementById('spIng').value||'';
     emp.uscita[spDi]=document.getElementById('spUsc').value||'';
     var hasPausa=document.getElementById('spPausa').checked;
@@ -3239,13 +3293,19 @@ function timeToMin(t){if(!t)return 0;var p=t.split(':');return parseInt(p[0]||0)
 function fmtOre(h){if(!h)return '';var i=Math.floor(h),f=h-i;return i+(f===0.5?'.5':f>0?'.'+Math.round(f*10):'');}
 
 function calcTots(sig,ingresso,uscita,pause,dates,month,year){
-  var r={X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,ord:0,str:0,fest:0};
+  var r={X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,PLT:0,PLT_ore:0,ord:0,str:0,fest:0};
   (sig||[]).forEach(function(v,di){
     if(!v)return;
     var sg=xSig(v);
     var qty=parseFloat((String(v).match(/^[\d.]+/)||['1'])[0])||1;
     if(r.hasOwnProperty(sg)) r[sg]+=qty;
-    if(sg==='X'||sg==='SW'||sg==='TFS'){
+    if(sg==='PLT'){
+      // Cottimo: IN=quantità, OUT=ore
+      var qta=parseFloat((ingresso||[])[di])||0;
+      var oreStr=(uscita||[])[di]||'';
+      r.PLT+=qta;
+      if(oreStr){var om=oreStr.match(/^(\d+):(\d+)/);if(om)r.PLT_ore+=parseInt(om[1])+(parseInt(om[2])/60);}
+    } else if(sg==='X'||sg==='SW'||sg==='TFS'){
       var ing=(ingresso||[])[di]||'',usc2=(uscita||[])[di]||'';
       var ps=(pause||[])[di];var ph=(ps===undefined||ps===null)?1:parseFloat(ps);
       var d=dates&&dates[di];
