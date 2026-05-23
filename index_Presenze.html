@@ -787,7 +787,7 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
 <div id="loginScreen">
   <div class="lcard">
     <div class="llogo"><span class="c1">WMS</span> <span class="c2">·</span> <span class="c3">Presenze</span></div>
-    <div class="lchip">📋 Cooperativa &amp; ATS · Gestione Mensile</div>
+    <div class="lchip">📋 Cooperativa &amp; Dipendenti · Gestione Mensile</div>
     <p class="ldesc">Accedi con Google per visualizzare e gestire i fogli presenze. L'accesso ai dati è regolato dal profilo assegnato.</p>
     <button class="btn-google" onclick="signIn()">
       <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
@@ -823,7 +823,7 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
 
   <nav class="snav">
     <button class="snb on coop" id="snCoop" onclick="switchSec('coop')"><span class="sndot coop"></span>Cooperativa</button>
-    <button class="snb ats" id="snAts" onclick="switchSec('ats')"><span class="sndot ats"></span>ATS</button>
+    <button class="snb ats" id="snAts" onclick="switchSec('ats')"><span class="sndot ats"></span>Dipendenti</button>
     <button class="snb file" id="snFile" onclick="switchSec('file')" style="display:none"><span class="sndot file"></span>File Import</button>
     <button class="snb perm" id="snPerm" onclick="switchSec('perm')" style="display:none"><span class="sndot perm"></span>Permessi</button>
   </nav>
@@ -973,9 +973,9 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
               <select id="impDipDestMonth" class="fc" style="min-width:120px"></select></div>
             <div class="fg"><div class="fl">Sezione</div>
               <select id="impDipDestSec" class="fc">
-                <option value="both">Coop + ATS</option>
+                <option value="both">Coop + Dipendenti</option>
                 <option value="coop">Solo Cooperativa</option>
-                <option value="ats">Solo ATS</option>
+                <option value="ats">Solo Dipendenti</option>
               </select></div>
           </div>
           <div class="file-actions">
@@ -1292,7 +1292,7 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
     <div class="fg"><div class="fl">Sezioni accessibili</div>
       <div class="sec-checks">
         <label class="sc-item"><input type="checkbox" id="puSecCoop" checked> Cooperativa</label>
-        <label class="sc-item"><input type="checkbox" id="puSecAts" checked> ATS</label>
+        <label class="sc-item"><input type="checkbox" id="puSecAts" checked> Dipendenti</label>
       </div>
     </div>
     <div class="fg">
@@ -2204,7 +2204,7 @@ function buildLegendSheet(sec){
     ?SIGLE.filter(function(s){return COOP_SIGLE_CODES.indexOf(s.code)!==-1;})
     :SIGLE;
   var rows=[
-    ['Legenda Sigle Presenze — '+(sec==='coop'?'Cooperativa':'ATS')],
+    ['Legenda Sigle Presenze — '+(sec==='coop'?'Cooperativa':'Dipendenti')],
     [],
     ['Sigla','Descrizione','Note']
   ];
@@ -2375,7 +2375,7 @@ function atsLoad(){
     var merged=null;
     results.forEach(function(d){if(!d)return;if(!merged){merged=d;return;}merged.employees=merged.employees.concat(d.employees);});
     if(!merged){
-      setEl('aContent','<div class="state"><div class="state-ico">⚠️</div><div class="state-title">Nessun dato ATS</div><div style="max-width:420px;color:var(--muted)">Foglio atteso: <strong>'+sheetName+'</strong></div></div>');
+      setEl('aContent','<div class="state"><div class="state-ico">⚠️</div><div class="state-title">Nessun dato Dipendenti</div><div style="max-width:420px;color:var(--muted)">Foglio atteso: <strong>'+sheetName+'</strong></div></div>');
       return;
     }
     atsFileId=files.length===1?files[0].id:null;
@@ -2387,7 +2387,7 @@ function atsLoad(){
     lastRefreshTimeAts=new Date();updateRefreshBadges();
     startAutoRefresh();
   }).catch(function(e){
-    setEl('aContent','<div class="state"><div class="state-ico">⚠️</div><div class="state-title">Errore lettura ATS</div><div style="white-space:pre-line;max-width:420px">'+esc(e.message)+'</div></div>');
+    setEl('aContent','<div class="state"><div class="state-ico">⚠️</div><div class="state-title">Errore lettura Dipendenti</div><div style="white-space:pre-line;max-width:420px">'+esc(e.message)+'</div></div>');
   });
 }
 function atsRefresh(){atsData=null;atsFileId=null;atsLoad();}
@@ -2411,7 +2411,7 @@ function openAddEmp(){
   document.getElementById('aeNome').value='';document.getElementById('aeId').value='';
   document.getElementById('aeResp').value='';document.getElementById('aePlant').value='';
   document.getElementById('aeErr').classList.remove('show');
-  document.getElementById('aeTitle').textContent='➕ Nuovo Dipendente ATS';
+  document.getElementById('aeTitle').textContent='➕ Nuovo Dipendente';
   mOpen('moAddEmp');
   document.getElementById('aeAddConfirmBtn').onclick=aeConfirm;
   setTimeout(function(){document.getElementById('aeNome').focus();},120);
@@ -2490,7 +2490,7 @@ var aST=null;
 function aSave(){
   if(!atsData)return;
   clearTimeout(aST);aST=setTimeout(function(){
-    toast('⏳ Salvo ATS su Sheets…','warn');
+    toast('⏳ Salvo Dipendenti su Sheets…','warn');
     var byFile={};var DST=atsData.dayStart||3;var nd=atsData.dates.length;
     atsEmps.forEach(function(emp){
       if(!emp.sheetRows||emp._manual)return;
@@ -2506,7 +2506,7 @@ function aSave(){
     });
     var fids=Object.keys(byFile);if(!fids.length){toast('—');return;}
     Promise.all(fids.map(function(fid){return sheetsBatchUpdate(fid,byFile[fid]);}))
-    .then(function(){toast('✓ ATS salvato');lastRefreshTimeAts=new Date();})
+    .then(function(){toast('✓ Dipendenti salvato');lastRefreshTimeAts=new Date();})
     .catch(function(e){toast('✗ '+e.message,'err');});
   },800);
 }
@@ -2526,8 +2526,8 @@ function atsExport(){
   });
   var atsSheet=XLSX.utils.aoa_to_sheet(calRows);
   applyHolidayStyles(atsSheet,dates,parseInt(m),parseInt(y),calRows.length);
-  XLSX.utils.book_append_sheet(wb,atsSheet,mName+'_ATS');
-  // Report con tutte le sigle ATS
+  XLSX.utils.book_append_sheet(wb,atsSheet,mName+'_Dipendenti');
+  // Report con tutte le sigle Dipendenti
   var ATS_REP=[
     {l:'P',k:'X'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},
     {l:'H104',k:'H104'},{l:'104',k:'104'},{l:'CP',k:'CP'},{l:'HPE',k:'HPE'},{l:'PE',k:'PE'},
@@ -2583,14 +2583,14 @@ function atsExport(){
   }
   XLSX.utils.book_append_sheet(wb,buildLegendSheet('ats'),'Legenda');
   XLSX.writeFile(wb,'Presenze_ATS_'+y+('0'+m).slice(-2)+'.xlsx',{cellStyles:true});
-  toast('✓ Export ATS scaricato');
+  toast('✓ Export Dipendenti scaricato');
 }
 function atsPrint(){
   if(!atsEmps.length)return;
   var y=document.getElementById('aYear').value,m=document.getElementById('aMonth').value;
   var dates=atsData?atsData.dates:getDates(parseInt(y),parseInt(m));
   var h='<style>body{font-family:Arial;font-size:8px}table{border-collapse:collapse;white-space:nowrap}th{background:#dde3ef;border:1px solid #aaa;padding:2px 4px;font-size:7px;text-align:center}td{border:1px solid #ddd;padding:2px 3px;text-align:center}.nc{text-align:left}.we{background:#f0f0f0;color:#aaa}h2{font-size:12px}</style>';
-  h+='<h2>ATS · '+MESI[m-1]+' '+y+'</h2><table><thead><tr><th>Dipendente</th><th>ID</th><th>T</th>';
+  h+='<h2>Dipendenti · '+MESI[m-1]+' '+y+'</h2><table><thead><tr><th>Dipendente</th><th>ID</th><th>T</th>';
   dates.forEach(function(d){h+='<th'+(d.weekday===0||d.weekday===6?' class="we"':'')+'>'+d.day+'</th>';});
   h+='<th>ORD</th><th>STR</th></tr></thead><tbody>';
   atsEmps.forEach(function(e){
@@ -3084,7 +3084,7 @@ function nfdSave(){
 
 
 function buildAndCreateSpreadsheet(fname,resp,plant,y,m,mName,dates,extraEmps){
-  var h0=['Resp. '+resp,'Dipendenti ATS','Plant','Data'];
+  var h0=['Resp. '+resp,'Dipendenti','Plant','Data'];
   var h1=['ExtEmpN_SAP','Nominativo','Plant '+plant,mName.substring(0,3).toLowerCase()+'-'+String(y).slice(2)];
   dates.forEach(function(d){h0.push(d.day);h1.push(GGS[d.weekday]);});
 
@@ -3111,7 +3111,7 @@ function buildAndCreateSpreadsheet(fname,resp,plant,y,m,mName,dates,extraEmps){
     headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
     body:JSON.stringify({
       properties:{title:fname},
-      sheets:[{properties:{title:mName+'_Coop'}},{properties:{title:mName+'_ATS'}},{properties:{title:'Leggenda'}}]
+      sheets:[{properties:{title:mName+'_Coop'}},{properties:{title:mName+'_Dipendenti'}},{properties:{title:'Leggenda'}}]
     })
   }).then(function(r){return r.json();}).then(function(ss){
     var ssId=ss.spreadsheetId;if(!ssId)throw new Error('Errore creazione');
@@ -3221,7 +3221,7 @@ function impDipConfirm(){
   }
   var sheetsToWrite=[];
   if(sheetsCoop)sheetsToWrite.push(mName+'_Coop');
-  if(sheetsAts)sheetsToWrite.push(mName+'_ATS');
+  if(sheetsAts)sheetsToWrite.push(mName+'_Dipendenti');
   var readOps=sheetsToWrite.map(function(sn){return sheetsRead(existing.id,sn+'!A1:A500').then(function(vals){return{sn:sn,nextRow:vals.length+1};}).catch(function(){return{sn:sn,nextRow:3};});});
   Promise.all(readOps).then(function(infos){
     var data=[];
@@ -3253,7 +3253,7 @@ function downloadTemplate(){
   var mName=MESI[m-1];
   var fname=resp+'_'+plant+'_'+y+('0'+m).slice(-2);
 
-  var h0=['Resp. '+resp,'Dipendenti ATS','Plant','Data'];
+  var h0=['Resp. '+resp,'Dipendenti','Plant','Data'];
   var h1=['ExtEmpN_SAP','Nominativo','Plant '+plant,mName.substring(0,3).toLowerCase()+'-'+String(y).slice(2)];
   dates.forEach(function(d){h0.push(d.day);h1.push(GGS[d.weekday]);});
 
@@ -3270,7 +3270,7 @@ function downloadTemplate(){
   var sampleEmps=[{sap:'001',nome:'Dipendente 1'},{sap:'002',nome:'Dipendente 2'}];
   var wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(buildSheet(sampleEmps)),mName+'_Coop');
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(buildSheet(sampleEmps)),mName+'_ATS');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(buildSheet(sampleEmps)),mName+'_Dipendenti');
   var legRows=[['SIGLA','DESCRIZIONE']];SIGLE.forEach(function(s){legRows.push([s.code,s.label]);});
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(legRows),'Leggenda');
   XLSX.writeFile(wb,fname+'_template.xlsx');
@@ -3356,7 +3356,7 @@ function renderPermPanel(){
   h+='<div class="perm-section"><div class="perm-section-header"><div class="perm-section-title">🌐 Default</div></div><div class="perm-section-body">';
   var def=permConfig.default||{};var dsecs=def.sections||[];
   h+='<div style="font-size:13px;color:var(--subtle);margin-bottom:10px">Accesso per chi non è in lista: '+(dsecs.length?dsecs.map(function(s){return '<strong style="color:var(--teal)">'+s+'</strong>';}).join(', '):'<strong style="color:var(--red)">Negato</strong>')+'</div>';
-  h+='<div style="display:flex;gap:10px"><label class="sc-item"><input type="checkbox" id="defCoop"'+(dsecs.indexOf('coop')!==-1?' checked':'')+' onchange="updateDefault()"> Cooperativa</label><label class="sc-item"><input type="checkbox" id="defAts"'+(dsecs.indexOf('ats')!==-1?' checked':'')+' onchange="updateDefault()"> ATS</label></div></div></div>';
+  h+='<div style="display:flex;gap:10px"><label class="sc-item"><input type="checkbox" id="defCoop"'+(dsecs.indexOf('coop')!==-1?' checked':'')+' onchange="updateDefault()"> Cooperativa</label><label class="sc-item"><input type="checkbox" id="defAts"'+(dsecs.indexOf('ats')!==-1?' checked':'')+' onchange="updateDefault()"> Dipendenti</label></div></div></div>';
   // Sezione Commesse
   var commesse=permConfig.commesse||[];
   h+='<div class="perm-section"><div class="perm-section-header"><div class="perm-section-title">🏭 Commesse per Plant</div><button class="ba bteal" style="padding:6px 12px;font-size:12px" onclick="openCommessaEdit(null)">＋ Nuova</button></div><div class="perm-section-body">';
