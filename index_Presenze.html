@@ -3959,31 +3959,37 @@ function toggleConferma(ri,cb,mobCardEl){
   showConf(nuovoStato?'✅ Conferma Presenze':'↩ Annulla Conferma', msg, function(){
     cb.checked=nuovoStato;
     emp.confermato=nuovoStato;
-  // Aggiorna tabella desktop
-  var row=document.getElementById('emprow_'+ri);
-  if(row){
-    var nx=row;
-    for(var i=0;i<4;i++){
-      if(!nx||nx.classList.contains('ats-sep'))break;
-      if(emp.confermato)nx.classList.add('confirmed-row');
-      else nx.classList.remove('confirmed-row');
-      nx=nx.nextElementSibling;
+    // Aggiorna tabella desktop
+    var row=document.getElementById('emprow_'+ri);
+    if(row){
+      var nx=row;
+      for(var i=0;i<4;i++){
+        if(!nx||nx.classList.contains('ats-sep'))break;
+        if(emp.confermato)nx.classList.add('confirmed-row');
+        else nx.classList.remove('confirmed-row');
+        nx=nx.nextElementSibling;
+      }
     }
-  }
-  // Aggiorna card mobile — usa elemento passato direttamente se disponibile
-  var cards=mobCardEl?[mobCardEl]:Array.from(document.querySelectorAll('.mob-card[data-ri="'+ri+'"]'));
-  cards.forEach(function(mobCard){
-    if(emp.confermato) mobCard.classList.add('confirmed-row');
-    else mobCard.classList.remove('confirmed-row');
-    var confTxt=mobCard.querySelector('.mob-conf-label span');
-    var confRow=mobCard.querySelector('.mob-card-conf');
-    if(confTxt){
-      confTxt.textContent=emp.confermato?'✓ Confermato':'Conferma';
-      confTxt.style.fontWeight=emp.confermato?'700':'400';
-      confTxt.style.color=emp.confermato?'var(--green)':'var(--muted)';
-    }
-    if(confRow) confRow.classList.toggle('is-confirmed',emp.confermato);
-  });
+    // Aggiorna card mobile — forza dopo timeout per battere il MutationObserver
+    setTimeout(function(){
+      var cards=Array.from(document.querySelectorAll('.mob-card[data-ri="'+ri+'"]'));
+      // Se non trova per data-ri, cerca per posizione nel wrap
+      if(!cards.length&&mobCardEl) cards=[mobCardEl];
+      cards.forEach(function(mobCard){
+        if(emp.confermato) mobCard.classList.add('confirmed-row');
+        else mobCard.classList.remove('confirmed-row');
+        var confTxt=mobCard.querySelector('.mob-conf-label span');
+        var confRow=mobCard.querySelector('.mob-card-conf');
+        var confCbEl=mobCard.querySelector('input.conf-cb');
+        if(confCbEl) confCbEl.checked=emp.confermato;
+        if(confTxt){
+          confTxt.textContent=emp.confermato?'✓ Confermato':'Conferma';
+          confTxt.style.fontWeight=emp.confermato?'700':'400';
+          confTxt.style.color=emp.confermato?'var(--green)':'var(--muted)';
+        }
+        if(confRow) confRow.classList.toggle('is-confirmed',emp.confermato);
+      });
+    }, 250);
     saveConfermaToSheets(ri);
   });
 }
