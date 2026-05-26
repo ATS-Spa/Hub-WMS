@@ -875,6 +875,22 @@ body.theme-light .gantt-table th.gh-perm-res{background:#e2e8f0}
   .ferie-mobile-list{display:flex;flex-direction:column;gap:10px}
   .ferie-mob-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
   .ferie-mob-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .ferie-mob-ins-btn{padding:7px 16px;background:rgba(59,130,246,.15);border:1px solid rgba(59,130,246,.4);border-radius:20px;color:var(--blue);font-size:12px;font-weight:700;font-family:var(--ffc);cursor:pointer;letter-spacing:.3px;white-space:nowrap}
+  .ferie-mob-ins-btn:active{opacity:.7;transform:scale(.96)}
+  /* Celle calendario mese */
+  .mese-cell{aspect-ratio:1;border-radius:8px;display:flex;flex-direction:column;align-items:center;justify-content:center;font-size:11px;font-weight:700;font-family:var(--ffc);cursor:pointer;border:1px solid rgba(36,48,72,.4);transition:transform .1s,opacity .1s;position:relative;min-height:40px}
+  .mese-cell:active{transform:scale(.92);opacity:.7}
+  .mese-cell.we{background:rgba(36,48,72,.4);cursor:default;color:var(--muted)}
+  .mese-cell.hol{background:rgba(239,68,68,.1);cursor:default;color:var(--red)}
+  .mese-cell.empty{background:transparent;border-color:transparent;cursor:default}
+  .mese-cell.today{box-shadow:0 0 0 2px var(--teal)}
+  .mese-cell .mc-day{font-size:13px;font-weight:800;line-height:1.2}
+  .mese-cell .mc-sig{font-size:9px;font-weight:800;letter-spacing:.2px;line-height:1.1}
+  .mese-cell.gc-F{background:rgba(59,130,246,.35);color:#fff;border-color:rgba(59,130,246,.5)}
+  .mese-cell.gc-HP{background:rgba(168,85,247,.35);color:#fff;border-color:rgba(168,85,247,.5)}
+  .mese-cell.gc-M{background:rgba(239,68,68,.3);color:#fff;border-color:rgba(239,68,68,.5)}
+  .mese-cell.gc-X{background:rgba(16,185,129,.2);color:var(--green)}
+  .mese-cell.gc-other{background:rgba(255,255,255,.06);color:var(--subtle)}
   .ferie-mob-nome{font-size:14px;font-weight:700;color:var(--text)}
   .ferie-mob-sap{font-size:10px;font-family:var(--ffm);color:var(--muted)}
   .ferie-mob-badges{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
@@ -1344,7 +1360,30 @@ body.theme-light .gantt-table th.gh-perm-res{background:#e2e8f0}
   <div class="mbtns"><button class="mbtn cancel" onclick="mClose('moBulk')">Annulla</button><button class="mbtn ok" id="bulkConfirmBtn" onclick="bulkConfirm()">Imposta a Tutti</button></div>
 </div></div>
 
-<div id="moMassivo" class="mo hide"><div class="mc" style="width:520px">
+<div id="moMeseDip" class="mo hide"><div class="mc" style="width:380px;max-width:98vw">
+  <div class="mt" id="meseDipTitle">Calendario</div>
+  <div class="ms" id="meseDipSub" style="margin-top:0;font-size:12px;color:var(--subtle)"></div>
+  <div style="display:flex;gap:8px;margin-bottom:10px">
+    <span class="ferie-mob-badge f" id="meseDipResF" style="flex:1;justify-content:center;display:flex"></span>
+    <span class="ferie-mob-badge hp" id="meseDipResHP" style="flex:1;justify-content:center;display:flex"></span>
+  </div>
+  <!-- Griglia 7 colonne -->
+  <div style="display:grid;grid-template-columns:repeat(7,1fr);gap:2px;margin-bottom:6px">
+    <div style="text-align:center;font-size:9px;font-family:var(--ffc);font-weight:800;color:var(--muted);padding:2px">dom</div>
+    <div style="text-align:center;font-size:9px;font-family:var(--ffc);font-weight:800;color:var(--muted);padding:2px">lun</div>
+    <div style="text-align:center;font-size:9px;font-family:var(--ffc);font-weight:800;color:var(--muted);padding:2px">mar</div>
+    <div style="text-align:center;font-size:9px;font-family:var(--ffc);font-weight:800;color:var(--muted);padding:2px">mer</div>
+    <div style="text-align:center;font-size:9px;font-family:var(--ffc);font-weight:800;color:var(--muted);padding:2px">gio</div>
+    <div style="text-align:center;font-size:9px;font-family:var(--ffc);font-weight:800;color:var(--muted);padding:2px">ven</div>
+    <div style="text-align:center;font-size:9px;font-family:var(--ffc);font-weight:800;color:var(--muted);padding:2px">sab</div>
+  </div>
+  <div id="meseDipGrid" style="display:grid;grid-template-columns:repeat(7,1fr);gap:3px;margin-bottom:8px"></div>
+  <div class="mbtns" style="margin-top:4px">
+    <button class="mbtn cancel" onclick="mClose('moMeseDip')">Chiudi</button>
+  </div>
+</div></div>
+
+
   <div class="mt">📅 Inserimento Massivo</div>
   <div class="ms" id="massSub">Imposta una sigla su un range di date per un singolo dipendente</div>
   <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px">
@@ -5110,25 +5149,29 @@ function renderGantt(dipList,year,mDa,mA){
       }
     }
     var hasSomething=Object.keys(mesiF).length||Object.keys(mesiHP).length;
+    var safeSap=dip.sap.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
     mob+='<div class="ferie-mob-card">';
+    // Header: nome + pulsante inserisci
     mob+='<div class="ferie-mob-card-header">';
     mob+='<div><div class="ferie-mob-nome">'+esc(dip.nome)+'</div><div class="ferie-mob-sap">SAP '+esc(dip.sap)+'</div></div>';
+    if(adminMode) mob+='<button class="ferie-mob-ins-btn" onclick="mobMassivoForDip(\''+safeSap+'\')">＋ Inserisci</button>';
     mob+='</div>';
+    // Badges residuo
     mob+='<div class="ferie-mob-badges">';
-    mob+='<span class="ferie-mob-badge f'+(res.ferie<0?' over':res.ferie<=5?' warn':'')+'">\uD83C\uDFD6 F: '+res.ferie+'/'+res.ferieTot+'</span>';
-    mob+='<span class="ferie-mob-badge hp'+(res.permessi<0?' over':res.permessi<=4?' warn':'')+'">\u23F1 HP: '+res.permessi+'h/'+res.permTot+'h</span>';
+    mob+='<span class="ferie-mob-badge f'+(res.ferie<0?' over':res.ferie<=5?' warn':'')+'" title="Ferie godute: '+res.ferieGodute+'">🏖 F: '+res.ferie+'/'+res.ferieTot+'</span>';
+    mob+='<span class="ferie-mob-badge hp'+(res.permessi<0?' over':res.permessi<=4?' warn':'')+'" title="Permessi goduti: '+res.permGodute+'h">⏱ HP: '+res.permessi+'h/'+res.permTot+'h</span>';
     mob+='</div>';
+    // Pillole mesi con assenze
     if(hasSomething){
       mob+='<div class="ferie-mob-mesi">';
       for(var mi5=mDa;mi5<=mA;mi5++){
         if(!mesiF[mi5]&&!mesiHP[mi5])continue;
-        var cls=mesiF[mi5]?'has-f':'has-hp';
-        var safeSap=dip.sap.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
-        mob+='<span class="ferie-mob-mese '+cls+'" onclick="ganttMonthClick(\''+safeSap+'\','+mi5+','+year+')">'+MESI[mi5-1].substring(0,3)+(mesiF[mi5]?' F':'')+(mesiHP[mi5]?' HP':'')+'</span>';
+        var cls2=mesiF[mi5]?'has-f':'has-hp';
+        mob+='<span class="ferie-mob-mese '+cls2+'" onclick="ganttMonthClick(\''+safeSap+'\','+mi5+','+year+')">'+MESI[mi5-1].substring(0,3)+(mesiF[mi5]?' F':'')+(mesiHP[mi5]?' HP':'')+'</span>';
       }
       mob+='</div>';
     } else {
-      mob+='<div style="font-size:11px;color:var(--muted)">Nessuna assenza nel periodo</div>';
+      mob+='<div style="font-size:11px;color:var(--muted);margin-top:2px">Nessuna assenza nel periodo</div>';
     }
     mob+='</div>';
   });
@@ -5201,6 +5244,21 @@ function ferieExport(){
   toast('\u2713 Excel esportato');
 }
 
+// Apre Inserimento Massivo dal Piano Ferie mobile pre-selezionando il dipendente
+function mobMassivoForDip(sap){
+  openMassivo('ferie');
+  // Dopo che il modal è aperto, pre-seleziona il dipendente
+  setTimeout(function(){
+    var sel=document.getElementById('massDip');
+    if(!sel)return;
+    for(var i=0;i<sel.options.length;i++){
+      if(String(sel.options[i].value||'').trim()===String(sap||'').trim()){
+        sel.selectedIndex=i;massUpdateInfo();break;
+      }
+    }
+  },50);
+}
+
 function ganttToggleCol(col){
   if(col==='sap')    wmsConfig.ganttShowSap   =(wmsConfig.ganttShowSap   !==false)?false:true;
   if(col==='fres')   wmsConfig.ganttShowFres  =(wmsConfig.ganttShowFres  !==false)?false:true;
@@ -5209,11 +5267,95 @@ function ganttToggleCol(col){
   ferieRenderOnly();
 }
 
+var meseDipSap=null, meseDipMese=null, meseDipAnno=null;
+
 function ganttMonthClick(sap,mese,year){
-  // Apre il picker per il primo giorno lavorativo del mese (mobile shortcut)
-  var dates=getDates(year,mese);
-  var firstLav=dates.find(function(d){var wd=d.weekday;return wd!==0&&wd!==6&&!isHoliday(d.day,mese,year);});
-  if(firstLav)ganttCellClick(sap,mese,firstLav.day);
+  meseDipSap=sap; meseDipMese=mese; meseDipAnno=year;
+  var dip=ferieDipList.find(function(d){return String(d.sap||'').trim()===String(sap).trim();});
+  var nome=dip?dip.nome:sap;
+  var res=calcResiduo(sap);
+
+  document.getElementById('meseDipTitle').textContent=MESI[mese-1]+' '+year+' — '+nome;
+  document.getElementById('meseDipSub').textContent='SAP '+sap;
+  document.getElementById('meseDipResF').textContent='🏖 F: '+res.ferie+'/'+res.ferieTot;
+  document.getElementById('meseDipResHP').textContent='⏱ HP: '+res.permessi+'h/'+res.permTot+'h';
+
+  meseDipRenderGrid(sap,mese,year);
+  mOpen('moMeseDip');
+}
+
+function meseDipRenderGrid(sap,mese,year){
+  var grid=document.getElementById('meseDipGrid');
+  grid.innerHTML='';
+  var nd=new Date(year,mese,0).getDate();
+  var firstWd=new Date(year,mese-1,1).getDay(); // 0=dom
+  var today=new Date();
+
+  // Mappa date → sigla da ferieData
+  var ferieSet={},permSet={},sigleMap={};
+  if(ferieData){
+    var dr=ferieData.dipendenti.find(function(x){return String(x.sap||'').trim()===String(sap).trim();});
+    if(dr){
+      (dr.ferie_godute||[]).forEach(function(g){
+        if(parseInt(g.data.split('-')[1])===mese&&parseInt(g.data.split('-')[0])===year)
+          ferieSet[parseInt(g.data.split('-')[2])]=true;
+      });
+      (dr.permessi_goduti||[]).forEach(function(g){
+        if(parseInt(g.data.split('-')[1])===mese&&parseInt(g.data.split('-')[0])===year)
+          permSet[parseInt(g.data.split('-')[2])]=g.ore;
+      });
+    }
+  }
+  // Se il mese ATS è caricato e coincide, usa i dati reali delle sigle
+  var useAts=atsData&&atsEmps.length&&
+    parseInt(document.getElementById('aYear').value)===year&&
+    parseInt(document.getElementById('aMonth').value)===mese;
+  var atsEmp=useAts?atsEmps.find(function(e){return String(e.id||e.sap||'').trim()===String(sap).trim();}):null;
+
+  // Celle vuote per allineare al giorno della settimana
+  for(var i=0;i<firstWd;i++){
+    var empty=document.createElement('div');empty.className='mese-cell empty';grid.appendChild(empty);
+  }
+
+  for(var d=1;d<=nd;d++){
+    var wd=new Date(year,mese-1,d).getDay();
+    var isWe=wd===0||wd===6;
+    var isHol=isHoliday(d,mese,year);
+    var isToday=today.getFullYear()===year&&today.getMonth()+1===mese&&today.getDate()===d;
+
+    var sig='';
+    if(atsEmp&&atsData.dates){
+      var di=atsData.dates.findIndex(function(dt){return dt.day===d;});
+      if(di>=0) sig=xSig((atsEmp.sigla||[])[di]||'');
+    } else {
+      if(ferieSet[d]) sig='F';
+      else if(permSet[d]!==undefined) sig='HP';
+    }
+
+    var cell=document.createElement('div');
+    var cls='mese-cell';
+    if(isWe) cls+=' we';
+    else if(isHol) cls+=' hol';
+    else if(sig==='F') cls+=' gc-F';
+    else if(sig==='HP') cls+=' gc-HP';
+    else if(sig==='M') cls+=' gc-M';
+    else if(sig==='X') cls+=' gc-X';
+    else if(sig&&sig!=='') cls+=' gc-other';
+    if(isToday) cls+=' today';
+    cell.className=cls;
+    cell.innerHTML='<span class="mc-day">'+d+'</span>'+(sig?'<span class="mc-sig">'+sig+'</span>':'');
+
+    // Click → apre picker se admin e giorno lavorativo
+    if(!isWe&&!isHol&&adminMode){
+      (function(day){
+        cell.addEventListener('click',function(){
+          mClose('moMeseDip');
+          setTimeout(function(){ganttCellClick(sap,mese,day);},150);
+        });
+      })(d);
+    }
+    grid.appendChild(cell);
+  }
 }
 
 function ganttCellClick(sap,mese,giorno){
