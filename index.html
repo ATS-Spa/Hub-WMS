@@ -549,7 +549,7 @@
     document.getElementById('welcome').classList.remove('hidden');
     setActiveNav('home');
     currentApp = null;
-    sessionStorage.removeItem('wms_lastApp');
+    localStorage.removeItem('wms_lastApp');
   }
 
   function openApp(app) {
@@ -582,15 +582,23 @@
     }
 
     currentApp = app;
-    sessionStorage.setItem('wms_lastApp', app);
+    localStorage.setItem('wms_lastApp', app);
   }
 
-  // Ripristina ultima app aperta
-  const lastApp = sessionStorage.getItem('wms_lastApp');
-  if (lastApp && frames[lastApp]) {
-    openApp(lastApp);
-  } else {
+  // Ripristina ultima app aperta solo se siamo nella stessa sessione browser.
+  // sessionStorage viene svuotato alla chiusura del browser (a differenza di localStorage),
+  // quindi se 'wms_session_active' non c'è significa apertura fresca → home.
+  if (!sessionStorage.getItem('wms_session_active')) {
+    sessionStorage.setItem('wms_session_active', '1');
+    localStorage.removeItem('wms_lastApp');
     setActiveNav('home');
+  } else {
+    const lastApp = localStorage.getItem('wms_lastApp');
+    if (lastApp && frames[lastApp]) {
+      openApp(lastApp);
+    } else {
+      setActiveNav('home');
+    }
   }
 
   // Shortcuts
