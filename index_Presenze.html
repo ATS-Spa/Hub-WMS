@@ -2368,7 +2368,7 @@ function atsLoad(){
     var isXlsx=/\.xlsx$/i.test(f.name);
     return (isXlsx
       ? downloadFile(f.id).then(function(b){return parseSheetBlob(b,y,m,f.id,sheetName,'ats');})
-      : sheetsRead(f.id,sheetName+'!A1:AF200').then(function(vals){return parseSheetValues(vals,y,m,f.id,sheetName,'ats');}))
+      : sheetsRead(f.id,sheetName+'!A1:AQ200').then(function(vals){return parseSheetValues(vals,y,m,f.id,sheetName,'ats');}))
     .catch(function(e){console.warn('[WMS] atsLoad skip '+f.name+': '+e.message);return null;});
   });
   Promise.all(promises).then(function(results){
