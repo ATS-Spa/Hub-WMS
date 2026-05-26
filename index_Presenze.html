@@ -3223,12 +3223,29 @@ function buildAndCreateSpreadsheet(fname,resp,plant,y,m,mName,dates,extraEmps){
   }).then(function(ssId){
     toast('✅ Spreadsheet creato: '+fname);
     loadAllFiles();
-    // Se arrivano dipendenti dall'import non serve il modal manuale
+    // Se c'è un'apertura picker in sospeso dal Piano Ferie, eseguila
+    if(window._pendingGanttOpen&&window._pendingGanttOpen.fname===fname){
+      var pg=window._pendingGanttOpen;window._pendingGanttOpen=null;
+      var sname=pg.mName+'_ATS';
+      setTimeout(function(){
+        sheetsRead(ssId,sname+'!A1:AQ300').then(function(vals){
+          return parseSheetValues(vals,pg.year,pg.mese,ssId,sname,'ats');
+        }).then(function(d){
+          atsData=d;atsEmps=d.employees;atsFileId=ssId;
+          document.getElementById('aYear').value=String(pg.year);
+          document.getElementById('aMonth').value=String(pg.mese);
+          var ei=atsEmps.findIndex(function(e){return String(e.id||e.sap||'').trim()===String(pg.sap).trim();});
+          if(ei>=0)openPickerGeneric('ats',ei,pg.di);
+          else toast('File creato. Apri il mese dalla tab Dipendenti per inserire la sigla.');
+        }).catch(function(){toast('File creato. Apri il mese dalla tab Dipendenti per inserire la sigla.');});
+      },1500); // attende che Drive indicizzi il file
+      return;
+    }
+    // Altrimenti flusso normale
     if(extraEmps&&extraEmps.length){
       if(confirm('"'+fname+'" creato su Drive con '+extraEmps.length+' dipendenti.\nAprirlo in Google Sheets?'))
         window.open('https://docs.google.com/spreadsheets/d/'+ssId+'/edit','_blank');
     }else{
-      // Apri modal per inserimento dipendenti
       nfdOpen(ssId,fname,resp,plant,y,m,mName,dates);
     }
   }).catch(function(e){toast('✗ '+e.message,'err');});
@@ -4516,40 +4533,64 @@ function ganttCellClick(sap,mese,giorno){
   var year=parseInt(document.getElementById('fAnno').value)||new Date().getFullYear();
   var di=giorno-1;
 
+  // Dipendente dalla lista caricata
+  var dip=ferieDipList.find(function(d){return String(d.sap||'').trim()===String(sap).trim();});
+  if(!dip){toast('Dipendente non trovato','warn');return;}
+
   var doOpen=function(){
     var ei=atsEmps.findIndex(function(e){return String(e.id||e.sap||'').trim()===String(sap).trim();});
     if(ei<0){toast('Dipendente non trovato nel mese caricato','warn');return;}
-    spMode='ats';spIdx=ei;spDi=di;
     openPickerGeneric('ats',ei,di);
   };
 
-  // Se il mese ATS corrispondente è già caricato, apri direttamente
+  var loadAndOpen=function(fileId,sname){
+    var isXlsx=/\.xlsx$/i.test((allFiles.find(function(f){return f.id===fileId;})||{}).name||'');
+    (isXlsx?downloadFile(fileId).then(function(b){return parseSheetBlob(b,year,mese,fileId,sname,'ats');}):sheetsRead(fileId,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,year,mese,fileId,sname,'ats');}))
+    .then(function(d){
+      atsData=d;atsEmps=d.employees;atsFileId=fileId;
+      document.getElementById('aYear').value=String(year);
+      document.getElementById('aMonth').value=String(mese);
+      doOpen();
+    }).catch(function(e){toast('Errore caricamento: '+(e.message||e),'warn');});
+  };
+
+  // Se il mese ATS è già caricato, apri direttamente
   if(atsData&&atsEmps.length){
     var curY=parseInt(document.getElementById('aYear').value);
     var curM=parseInt(document.getElementById('aMonth').value);
     if(curY===year&&curM===mese){doOpen();return;}
   }
 
-  // Altrimenti carica il mese in background senza cambiare tab
-  toast('Caricamento mese '+MESI[mese-1]+'…');
-  var resp=document.getElementById('fResp2').value;
-  var plant=document.getElementById('fPlant2').value;
-  var files=allFiles.filter(function(f){
-    var p=parseFileName(f.name);
-    return p&&p.year===year&&p.month===mese
-      &&(!resp||p.resp.toLowerCase()===resp.toLowerCase())
-      &&(!plant||p.plant.toLowerCase()===plant.toLowerCase());
-  });
-  if(!files.length){toast('File del mese non trovato su Drive','warn');return;}
-  var f=files[0];var p=parseFileName(f.name);var sname=MESI[p.month-1]+'_ATS';
-  var isXlsx=/\.xlsx$/i.test(f.name);
-  (isXlsx?downloadFile(f.id).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');}):sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
-  .then(function(d){
-    atsData=d;atsEmps=d.employees;atsFileId=f.id;
-    document.getElementById('aYear').value=String(year);
-    document.getElementById('aMonth').value=String(mese);
-    doOpen();
-  }).catch(function(e){toast('Errore caricamento: '+(e.message||e),'warn');});
+  // Cerca il file per questo mese
+  var resp=dip.resp;var plant=dip.plant;
+  var mm=('0'+mese).slice(-2);
+  var fname=resp+'_'+plant+'_'+year+mm;
+  var existing=allFiles.find(function(f){var n=f.name.replace(/\.xlsx$/i,'');return n.toLowerCase()===fname.toLowerCase();});
+
+  if(existing){
+    // File esiste → carica e apri picker
+    toast('Caricamento '+MESI[mese-1]+'…');
+    loadAndOpen(existing.id, MESI[mese-1]+'_ATS');
+    return;
+  }
+
+  // File non esiste → chiedi conferma creazione
+  showConf(
+    '📅 File mese mancante',
+    'Il file "'+fname+'" non esiste su Drive.\nCrearlo ora con il dipendente '+dip.nome+'?',
+    function(){
+      toast('⏳ Creazione '+fname+'…','warn');
+      var dates=getDates(year,mese);
+      var mName=MESI[mese-1];
+      var extraEmps=[{sap:dip.sap,nome:dip.nome,plant:plant,resp:resp}];
+      // Crea il file e dopo il caricamento apre il picker
+      var origToast=window._afterCreate;
+      // Hook: dopo buildAndCreateSpreadsheet → loadAllFiles → poi carichiamo e apriamo
+      var _origLoadAll=loadAllFiles;
+      window._pendingGanttOpen={sap:sap,year:year,mese:mese,di:di,fname:fname,mName:mName};
+      buildAndCreateSpreadsheet(fname,resp,plant,year,mese,mName,dates,extraEmps);
+    }
+  );
 }
 
 
