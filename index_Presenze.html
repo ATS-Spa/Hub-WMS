@@ -5123,7 +5123,8 @@ function renderGantt(dipList,year,mDa,mA){
       for(var mi5=mDa;mi5<=mA;mi5++){
         if(!mesiF[mi5]&&!mesiHP[mi5])continue;
         var cls=mesiF[mi5]?'has-f':'has-hp';
-        mob+='<span class="ferie-mob-mese '+cls+'" onclick="ganttMonthClick(''+dip.sap.replace(/'/g,"\'")+'','+mi5+','+year+')">'+MESI[mi5-1].substring(0,3)+(mesiF[mi5]?' F':'')+(mesiHP[mi5]?' HP':'')+'</span>';
+        var safeSap=dip.sap.replace(/\\/g,'\\\\').replace(/'/g,"\\'");
+        mob+='<span class="ferie-mob-mese '+cls+'" onclick="ganttMonthClick(\''+safeSap+'\','+mi5+','+year+')">'+MESI[mi5-1].substring(0,3)+(mesiF[mi5]?' F':'')+(mesiHP[mi5]?' HP':'')+'</span>';
       }
       mob+='</div>';
     } else {
