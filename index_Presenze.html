@@ -929,6 +929,7 @@ body.theme-light .gantt-table th.gh-perm-res{background:#e2e8f0}
       <button class="ba bghost" id="cRef" onclick="coopRefresh()" disabled>↻ Aggiorna</button>
       <button class="ba bghost te" id="cAddBtn" onclick="openAddCoopEmp()">＋ Dipendente</button>
       <button class="ba bghost" id="cBulkBtn" onclick="openBulkPresenza('coop')" disabled style="border-color:rgba(16,185,129,.4);color:var(--green)">✔ Presenza a Tutti</button>
+      <button class="ba bghost" id="cMassBtn" onclick="openMassivo('coop')" disabled style="border-color:rgba(59,130,246,.4);color:var(--blue)">📅 Inserimento Massivo</button>
       <button class="ba bghost am" id="cExp" onclick="coopExport()" disabled>⬇ Excel</button>
       <button class="ba bghost pu" id="cPrt" onclick="coopPrint()" disabled>🖨 Stampa</button>
       <button class="ore-toggle" id="coopOreToggleBtn" onclick="toggleCoopOreRows()">▸ ORD/STR</button>
@@ -958,6 +959,7 @@ body.theme-light .gantt-table th.gh-perm-res{background:#e2e8f0}
       <button class="ba bghost" id="aRef" onclick="atsRefresh()" disabled>↻ Aggiorna</button>
       <button class="ba bghost te" id="aAddBtn" onclick="openAddEmp()">＋ Dipendente</button>
       <button class="ba bghost" id="aBulkBtn" onclick="openBulkPresenza('ats')" disabled style="border-color:rgba(16,185,129,.4);color:var(--green)">✔ Presenza a Tutti</button>
+      <button class="ba bghost" id="aMassBtn" onclick="openMassivo('ats')" disabled style="border-color:rgba(59,130,246,.4);color:var(--blue)">📅 Inserimento Massivo</button>
       <button class="ba bghost am" id="aExp" onclick="atsExport()" disabled>⬇ Excel</button>
       <button class="ba bghost pu" id="aPrt" onclick="atsPrint()" disabled>🖨 Stampa</button>
       <button class="ore-toggle" id="oreToggleBtn" onclick="toggleOreRows()">▸ ORD/STR</button>
@@ -1113,6 +1115,7 @@ body.theme-light .gantt-table th.gh-perm-res{background:#e2e8f0}
       <button class="ba bteal" onclick="ferieLoad()">↓ Carica</button>
       <button class="ba bghost" onclick="ferieRicalcola()" id="fRicalcBtn" disabled title="Ricalcola residui leggendo tutti i mesi da Drive">↻ Ricalcola</button>
       <button class="ba bghost am" onclick="ferieExport()" id="fExpBtn" disabled>⬇ Excel</button>
+      <button class="ba bghost" onclick="openMassivo('ferie')" id="fMassBtn" disabled style="border-color:rgba(59,130,246,.4);color:var(--blue)">📅 Inserimento Massivo</button>
       <div class="finfo" id="ferieInfo">Seleziona filtri e premi Carica</div>
     </div>
     <div class="gantt-wrap" id="ferieContent">
@@ -1276,7 +1279,44 @@ body.theme-light .gantt-table th.gh-perm-res{background:#e2e8f0}
   <div class="mbtns"><button class="mbtn cancel" onclick="mClose('moBulk')">Annulla</button><button class="mbtn ok" id="bulkConfirmBtn" onclick="bulkConfirm()">Imposta a Tutti</button></div>
 </div></div>
 
-<div id="moSigla" class="mo hide"><div class="mc" style="width:460px">
+<div id="moMassivo" class="mo hide"><div class="mc" style="width:520px">
+  <div class="mt">📅 Inserimento Massivo</div>
+  <div class="ms" id="massSub">Imposta una sigla su un range di date per un singolo dipendente</div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px">
+    <div class="fg" style="flex:2;min-width:180px"><div class="fl">Dipendente</div>
+      <select class="mi" id="massDip" onchange="massUpdateInfo()" style="width:100%;padding:7px 10px"></select></div>
+  </div>
+  <div style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:4px">
+    <div class="fg" style="flex:1"><div class="fl">Dal</div><input class="mi" id="massDal" type="date" oninput="massUpdateInfo()"></div>
+    <div class="fg" style="flex:1"><div class="fl">Al</div><input class="mi" id="massAl" type="date" oninput="massUpdateInfo()"></div>
+  </div>
+  <div style="font-size:11px;color:var(--muted);margin-bottom:2px;font-family:var(--ffc);font-weight:700;letter-spacing:.5px">SIGLA</div>
+  <div class="sgrid" id="massGrid"></div>
+  <div class="qty-row" id="massQty" style="display:none"><label>Quantità (ore):</label><input class="mi" id="massQtyV" type="number" min="0.5" max="8" step="0.5" value="1" style="width:75px" oninput="massUpdateInfo()"></div>
+  <div id="massOrariWrap" style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+    <div style="display:flex;gap:10px">
+      <div class="fg" style="flex:1"><div class="fl">Ingresso</div><input class="mi" id="massIng" type="time" value="08:00" oninput="massCalcLive()"></div>
+      <div class="fg" style="flex:1"><div class="fl">Uscita</div><input class="mi" id="massUsc" type="time" value="18:00" oninput="massCalcLive()"></div>
+    </div>
+    <div style="display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:10px 14px">
+      <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;flex:1">
+        <input type="checkbox" id="massPausa" checked style="accent-color:var(--teal);width:15px;height:15px;cursor:pointer" onchange="massCalcLive()">
+        Pausa pranzo
+      </label>
+      <select class="mi" id="massPausaDur" style="width:100px;padding:6px 10px" onchange="massCalcLive()">
+        <option value="0.5">30 min</option>
+        <option value="1" selected>1 ora</option>
+        <option value="1.5">1h 30min</option>
+        <option value="2">2 ore</option>
+      </select>
+    </div>
+  </div>
+  <div id="massInfo" style="font-size:12px;color:var(--subtle);background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-top:6px;display:none;line-height:1.7"></div>
+  <div id="massWarn" style="font-size:11px;color:var(--amber);background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:6px;padding:8px 12px;margin-top:4px;display:none"></div>
+  <div class="mbtns"><button class="mbtn cancel" onclick="mClose('moMassivo')">Annulla</button><button class="mbtn ok" id="massConfirmBtn" onclick="massConfirm()">✓ Inserisci</button></div>
+</div></div>
+
+
   <div class="mt" id="spTitle">Imposta Presenza</div>
   <div class="ms" id="spSub"></div>
   <div class="sgrid" id="spGrid"></div>
@@ -2203,7 +2243,7 @@ function coopLoad(){
     // Carica note dalle celle
     loadNotesForEmps(coopEmps,coopFileId||merged.fileId,merged.sheetName,merged.dayStart||3,merged.nd||merged.dates.length)
     .then(function(){coopRender();});
-    ['cRef','cExp','cPrt','cBulkBtn'].forEach(function(id){document.getElementById(id).disabled=false;});
+    ['cRef','cExp','cPrt','cBulkBtn','cMassBtn'].forEach(function(id){document.getElementById(id).disabled=false;});
     document.getElementById('cInfo').textContent=MESI[m-1]+' '+y+' · '+merged.employees.length+' dip.'+(files.length>1?' ('+files.length+' file)':'');
     lastRefreshTimeCoop=new Date();updateRefreshBadges();
   }).catch(function(e){
@@ -2512,7 +2552,7 @@ function atsLoad(){
     atsData=merged;atsEmps=merged.employees;
     loadNotesForEmps(atsEmps,atsFileId||merged.fileId,merged.sheetName,merged.dayStart||3,merged.nd||merged.dates.length)
     .then(function(){atsRender();});
-    ['aRef','aExp','aPrt','aBulkBtn'].forEach(function(id){document.getElementById(id).disabled=false;});
+    ['aRef','aExp','aPrt','aBulkBtn','aMassBtn'].forEach(function(id){document.getElementById(id).disabled=false;});
     document.getElementById('aInfo').textContent=MESI[m-1]+' '+y+' · '+merged.employees.length+' dip.'+(files.length>1?' ('+files.length+' file)':'');
     lastRefreshTimeAts=new Date();updateRefreshBadges();
     startAutoRefresh();
@@ -4045,8 +4085,327 @@ function bulkConfirm(){
 }
 
 // ═══════════════════════════════════════════════════════════
-//  DRIVE / SHEETS API
+//  INSERIMENTO MASSIVO
 // ═══════════════════════════════════════════════════════════
+var massMode='ats', massSigla=null;
+
+function openMassivo(mode){
+  if(!adminMode){toast('Attiva la modalità Admin prima','warn');return;}
+  massMode=mode;massSigla=null;
+
+  var emps=mode==='ferie'?ferieDipList:(mode==='ats'?atsEmps:coopEmps);
+  if(!emps||!emps.length){toast('Carica prima i dati','warn');return;}
+
+  // Popola select dipendenti
+  var sel=document.getElementById('massDip');
+  sel.innerHTML='<option value="">— Seleziona dipendente —</option>';
+  emps.forEach(function(e,i){
+    var o=document.createElement('option');
+    var sap=e.sap||e.id||'';
+    var nome=e.nom2||e.nome||'';
+    o.value=mode==='ferie'?sap:String(i);
+    o.textContent=nome+(sap?' ('+sap+')':'');
+    sel.appendChild(o);
+  });
+
+  // Range date: usa anno/mese corrente del tab attivo
+  var y,m;
+  if(mode==='ferie'){
+    y=parseInt(document.getElementById('fAnno').value)||new Date().getFullYear();
+    m=new Date().getMonth()+1;
+  } else {
+    y=parseInt(document.getElementById(mode==='ats'?'aYear':'cYear').value);
+    m=parseInt(document.getElementById(mode==='ats'?'aMonth':'cMonth').value);
+  }
+  var mm=('0'+m).slice(-2);
+  var lastDay=new Date(y,m,0).getDate();
+  var today=new Date();
+  var defDay=(today.getFullYear()===y&&today.getMonth()+1===m)?today.getDate():1;
+  document.getElementById('massDal').value=y+'-'+mm+'-'+('0'+defDay).slice(-2);
+  document.getElementById('massAl').value=y+'-'+mm+'-'+('0'+lastDay).slice(-2);
+  // Rimuovi vincoli min/max per permettere range multi-mese
+  document.getElementById('massDal').min='';document.getElementById('massDal').max='';
+  document.getElementById('massAl').min='';document.getElementById('massAl').max='';
+
+  document.getElementById('massSub').textContent=
+    mode==='ferie'?'Inserimento massivo dal Piano Ferie':
+    mode==='ats'?'Inserimento massivo — Dipendenti ATS':
+    'Inserimento massivo — Cooperativa';
+
+  document.getElementById('massIng').value=wmsConfig.ingresso||'08:00';
+  document.getElementById('massUsc').value=wmsConfig.uscita||'18:00';
+  document.getElementById('massPausa').checked=true;
+  document.getElementById('massPausaDur').value='1';
+  document.getElementById('massQty').style.display='none';
+  document.getElementById('massOrariWrap').style.display='';
+  document.getElementById('massInfo').style.display='none';
+  document.getElementById('massWarn').style.display='none';
+
+  // Griglia sigle
+  var g=document.getElementById('massGrid');g.innerHTML='';
+  var siglaList=mode==='coop'
+    ?SIGLE.filter(function(s){return COOP_SIGLE_CODES.indexOf(s.code)!==-1;})
+    :SIGLE;
+  siglaList.forEach(function(s){
+    var el=document.createElement('div');el.className='sopt';
+    el.style.cssText='color:'+s.color;
+    el.innerHTML='<span class="sc">'+s.code+'</span><span class="sd">'+s.label+'</span>';
+    el.addEventListener('click',function(){
+      g.querySelectorAll('.sopt').forEach(function(x){x.classList.remove('sel');x.style.borderColor='';});
+      el.classList.add('sel');el.style.borderColor=s.border;massSigla=s.code;
+      document.getElementById('massQty').style.display=s.hasQty?'flex':'none';
+      var showOr=SIGLE_NO_ORARIO.indexOf(s.code)===-1&&SIGLE_COTTIMO.indexOf(s.code)===-1;
+      document.getElementById('massOrariWrap').style.display=showOr?'':'none';
+      massCalcLive();massUpdateInfo();
+    });
+    g.appendChild(el);
+  });
+  // Aggiungi cancella
+  var clr=document.createElement('div');clr.className='sopt clear';
+  clr.innerHTML='<span class="sc">✕</span><span class="sd">Cancella</span>';
+  clr.addEventListener('click',function(){
+    g.querySelectorAll('.sopt').forEach(function(x){x.classList.remove('sel');x.style.borderColor='';});
+    clr.classList.add('sel');massSigla='';
+    document.getElementById('massQty').style.display='none';
+    document.getElementById('massOrariWrap').style.display='none';
+    massUpdateInfo();
+  });
+  g.appendChild(clr);
+
+  mOpen('moMassivo');
+}
+
+function massCalcLive(){
+  if(!massSigla||SIGLE_NO_ORARIO.indexOf(massSigla)!==-1){return;}
+  massUpdateInfo();
+}
+
+function massUpdateInfo(){
+  var dal=document.getElementById('massDal').value;
+  var al=document.getElementById('massAl').value;
+  var info=document.getElementById('massInfo');
+  var warn=document.getElementById('massWarn');
+  info.style.display='none';warn.style.display='none';
+  if(!dal||!al||massSigla===null){return;}
+  if(al<dal){warn.style.display='';warn.textContent='⚠ La data "Al" è precedente alla data "Dal"';return;}
+
+  // Conta giorni lavorativi nel range
+  var d1=new Date(dal),d2=new Date(al);
+  var giorni=0,feriali=0,weekend=0,festivi=0;
+  for(var d=new Date(d1);d<=d2;d.setDate(d.getDate()+1)){
+    giorni++;
+    var wd=d.getDay();
+    if(wd===0||wd===6){weekend++;}
+    else if(isHoliday(d.getDate(),d.getMonth()+1,d.getFullYear())){festivi++;}
+    else{feriali++;}
+  }
+
+  var dipSel=document.getElementById('massDip').value;
+  var nomeDip=dipSel?document.getElementById('massDip').options[document.getElementById('massDip').selectedIndex].text:'nessuno selezionato';
+  var sigLabel=massSigla===''?'Cancella':((SM[massSigla]&&SM[massSigla].label)||massSigla);
+
+  info.style.display='';
+  info.innerHTML=
+    '<strong>Dipendente:</strong> '+esc(nomeDip)+'<br>'+
+    '<strong>Sigla:</strong> <span style="color:var(--blue);font-weight:700">'+esc(sigLabel)+'</span><br>'+
+    '<strong>Range:</strong> '+dal.split('-').reverse().join('/')+'  →  '+al.split('-').reverse().join('/')+'<br>'+
+    '<strong>Giorni totali:</strong> '+giorni+
+    ' &nbsp;·&nbsp; <span style="color:var(--green)">Feriali: '+feriali+'</span>'+
+    (weekend?' &nbsp;·&nbsp; <span style="color:var(--muted)">Weekend: '+weekend+'</span>':'')+
+    (festivi?' &nbsp;·&nbsp; <span style="color:var(--red)">Festivi: '+festivi+'</span>':'');
+
+  if(massSigla==='F'){
+    info.innerHTML+='<br><span style="font-size:11px;color:var(--teal)">ℹ Solo i giorni feriali ('+feriali+') verranno conteggiati nel residuo ferie.</span>';
+  }
+}
+
+function massConfirm(){
+  if(!massSigla&&massSigla!==''){toast('Seleziona una sigla','warn');return;}
+  var dipSel=document.getElementById('massDip').value;
+  if(!dipSel){toast('Seleziona un dipendente','warn');return;}
+  var dal=document.getElementById('massDal').value;
+  var al=document.getElementById('massAl').value;
+  if(!dal||!al){toast('Inserisci il range di date','warn');return;}
+  if(al<dal){toast('La data "Al" è precedente alla data "Dal"','warn');return;}
+
+  var ing=document.getElementById('massIng').value;
+  var usc=document.getElementById('massUsc').value;
+  var hasPausa=document.getElementById('massPausa').checked;
+  var pausaH=hasPausa?parseFloat(document.getElementById('massPausaDur').value)||1:0;
+  var showOr=massSigla!==''&&SIGLE_NO_ORARIO.indexOf(massSigla)===-1&&SIGLE_COTTIMO.indexOf(massSigla)===-1;
+  var qty=parseFloat(document.getElementById('massQtyV').value)||1;
+  var fv=massSigla;
+  if(massSigla&&SM[massSigla]&&SM[massSigla].hasQty&&qty!==1)fv=qty+massSigla;
+
+  var d1=new Date(dal),d2=new Date(al);
+  var totSet=0;
+
+  if(massMode==='ferie'){
+    // Dal Piano Ferie: serve caricare i mesi necessari e scrivere su Drive
+    var dip=ferieDipList.find(function(x){return String(x.sap||'').trim()===String(dipSel).trim();});
+    if(!dip){toast('Dipendente non trovato','warn');return;}
+    mClose('moMassivo');
+    toast('⏳ Inserimento massivo in corso…','warn');
+    massivoFerieRange(dip,d1,d2,fv,ing,usc,showOr,pausaH,qty);
+    return;
+  }
+
+  // Modalità ATS o Coop — solo mese corrente caricato
+  var emps=massMode==='ats'?atsEmps:coopEmps;
+  var data=massMode==='ats'?atsData:coopData;
+  if(!data){toast('Nessun dato caricato','err');return;}
+  var ei=parseInt(dipSel);
+  var emp=emps[ei];if(!emp){toast('Dipendente non trovato','err');return;}
+  var dates=data.dates;
+  var nd=dates.length;
+  ['sigla','ingresso','uscita'].forEach(function(f){if(!emp[f]||emp[f].length<nd)emp[f]=(emp[f]||[]).concat(Array(nd).fill('')).slice(0,nd);});
+  if(!emp.pausa||emp.pausa.length<nd)emp.pausa=(emp.pausa||[]).concat(Array(nd).fill(null)).slice(0,nd);
+  var y=parseInt(document.getElementById(massMode==='ats'?'aYear':'cYear').value);
+  var m=parseInt(document.getElementById(massMode==='ats'?'aMonth':'cMonth').value);
+
+  dates.forEach(function(dt,di){
+    var dateObj=new Date(y,m-1,dt.day);
+    if(dateObj<d1||dateObj>d2)return;
+    var wd=dt.weekday;var isWe=wd===0||wd===6;var isHol=isHoliday(dt.day,m,y);
+    if(massSigla!==''&&(isWe||isHol))return; // salta weekend/festivi salvo cancellazione
+    var old=(emp.sigla||[])[di]||'';
+    emp.sigla[di]=fv;
+    if(showOr){emp.ingresso[di]=ing;emp.uscita[di]=usc;emp.pausa[di]=pausaH;}
+    else{emp.ingresso[di]='';emp.uscita[di]='';emp.pausa[di]=null;}
+    updateFerieResiduo(emp,di,fv,old,y,m);
+    totSet++;
+  });
+
+  mClose('moMassivo');
+  if(massMode==='ats'){atsRender();aSave();}else{coopRender();cSave();}
+  if(curSec==='ferie')setTimeout(ferieRenderOnly,200);
+  toast('✓ Inserite '+totSet+' giornate per '+esc(emp.nome));
+}
+
+// Gestione range multi-mese dal Piano Ferie
+function massivoFerieRange(dip,d1,d2,fv,ing,usc,showOr,pausaH,qty){
+  // Raccoglie tutti i mesi nel range
+  var mesi=[];
+  var cur=new Date(d1.getFullYear(),d1.getMonth(),1);
+  var fine=new Date(d2.getFullYear(),d2.getMonth(),1);
+  while(cur<=fine){
+    mesi.push({y:cur.getFullYear(),m:cur.getMonth()+1});
+    cur.setMonth(cur.getMonth()+1);
+  }
+  var totSet=0;
+  var promises=mesi.map(function(ym){
+    var y=ym.y,m=ym.m;
+    var mm=('0'+m).slice(-2);
+    var fname=dip.resp+'_'+dip.plant+'_'+y+mm;
+    var existing=allFiles.find(function(f){var n=f.name.replace(/\.xlsx$/i,'');return n.toLowerCase()===fname.toLowerCase();});
+    if(!existing){
+      // Mese non esiste: crealo con solo questo dipendente
+      return massivoCreateAndWrite(dip,y,m,fname,d1,d2,fv,ing,usc,showOr,pausaH).then(function(n){totSet+=n;});
+    }
+    // Mese esiste: carica, modifica, salva
+    var sname=MESI[m-1]+'_ATS';
+    return sheetsRead(existing.id,sname+'!A1:AQ300').then(function(vals){
+      return parseSheetValues(vals,y,m,existing.id,sname,'ats');
+    }).then(function(data){
+      var emp=data.employees.find(function(e){return String(e.id||e.sap||'').trim()===String(dip.sap).trim();});
+      if(!emp){
+        // Dipendente non ancora nel file: aggiungilo
+        return massivoAddEmpToFile(existing.id,sname,dip,y,m,data,d1,d2,fv,ing,usc,showOr,pausaH).then(function(n){totSet+=n;});
+      }
+      var dates=data.dates;var nd=dates.length;
+      ['sigla','ingresso','uscita'].forEach(function(f){if(!emp[f]||emp[f].length<nd)emp[f]=(emp[f]||[]).concat(Array(nd).fill('')).slice(0,nd);});
+      if(!emp.pausa||emp.pausa.length<nd)emp.pausa=(emp.pausa||[]).concat(Array(nd).fill(null)).slice(0,nd);
+      var updates=[];var DST=data.dayStart||3;
+      dates.forEach(function(dt,di){
+        var dateObj=new Date(y,m-1,dt.day);
+        if(dateObj<d1||dateObj>d2)return;
+        var wd=dt.weekday;if((wd===0||wd===6)||isHoliday(dt.day,m,y))return;
+        var old=(emp.sigla||[])[di]||'';
+        emp.sigla[di]=fv;
+        if(showOr){emp.ingresso[di]=ing;emp.uscita[di]=usc;emp.pausa[di]=pausaH;}
+        else{emp.ingresso[di]='';emp.uscita[di]='';emp.pausa[di]=null;}
+        updateFerieResiduo(emp,di,fv,old,y,m);
+        totSet++;
+        var col=colToLetter(DST+di);
+        if(emp.sheetRows&&emp.sheetRows.n!==undefined)updates.push({range:sname+'!'+col+(emp.sheetRows.n+1),values:[[fv]]});
+        if(showOr){
+          if(emp.sheetRows&&emp.sheetRows.i!==undefined)updates.push({range:sname+'!'+col+(emp.sheetRows.i+1),values:[[ing]]});
+          if(emp.sheetRows&&emp.sheetRows.u!==undefined)updates.push({range:sname+'!'+col+(emp.sheetRows.u+1),values:[[usc]]});
+        }
+      });
+      if(!updates.length)return Promise.resolve();
+      return sheetsBatchUpdate(existing.id,updates);
+    }).catch(function(e){console.warn('[WMS] massivo skip mese '+y+'/'+m,e.message);});
+  });
+
+  Promise.all(promises).then(function(){
+    loadAllFiles();
+    setTimeout(ferieRenderOnly,300);
+    toast('✓ Inserite '+totSet+' giornate per '+esc(dip.nome));
+  }).catch(function(e){toast('✗ Errore: '+(e.message||e),'err');});
+}
+
+function massivoCreateAndWrite(dip,y,m,fname,d1,d2,fv,ing,usc,showOr,pausaH){
+  var mName=MESI[m-1];var dates=getDates(y,m);
+  var h0=['Resp. '+dip.resp,'Dipendenti','Plant','Data'];
+  var h1=['ExtEmpN_SAP','Nominativo','Plant '+dip.plant,mName.substring(0,3).toLowerCase()+'-'+String(y).slice(2)];
+  dates.forEach(function(d){h0.push(d.day);h1.push(GGS[d.weekday]);});
+  var sigRow=[dip.sap,dip.nome,'Sigla'];var ingRow=[dip.sap,dip.nome,'Ingresso'];var uscRow=[dip.sap,dip.nome,'Uscita'];
+  dates.forEach(function(dt,di){
+    var dateObj=new Date(y,m-1,dt.day);
+    var wd=dt.weekday;var inRange=dateObj>=d1&&dateObj<=d2&&wd!==0&&wd!==6&&!isHoliday(dt.day,m,y);
+    sigRow.push(inRange?fv:'');
+    ingRow.push(inRange&&showOr?ing:'');
+    uscRow.push(inRange&&showOr?usc:'');
+  });
+  var n=sigRow.filter(function(v,i){return i>3&&v!=='';}).length;
+  var legRows=[['SIGLA','DESCRIZIONE','NOTE']];SIGLE.forEach(function(s){legRows.push([s.code,s.label,s.hasQty?'Es. 1'+s.code:'']);});
+  return fetch('https://sheets.googleapis.com/v4/spreadsheets',{
+    method:'POST',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+    body:JSON.stringify({properties:{title:fname},sheets:[{properties:{title:mName+'_Coop'}},{properties:{title:mName+'_ATS'}},{properties:{title:'Leggenda'}}]})
+  }).then(function(r){return r.json();}).then(function(ss){
+    var ssId=ss.spreadsheetId;if(!ssId)throw new Error('Errore creazione '+fname);
+    return fetch('https://www.googleapis.com/drive/v3/files/'+ssId+'?addParents='+FOLDER_ID+'&removeParents=root&fields=id',{
+      method:'PATCH',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},body:JSON.stringify({})
+    }).then(function(){return ssId;});
+  }).then(function(ssId){
+    return sheetsBatchUpdate(ssId,[
+      {range:mName+'_Coop!A1',values:[h0,h1]},
+      {range:mName+'_ATS!A1',values:[h0,h1,sigRow,ingRow,uscRow,[]]},
+      {range:'Leggenda!A1',values:legRows}
+    ]).then(function(){
+      // Aggiorna ferieResiduo per le date scritte
+      dates.forEach(function(dt,di){
+        var dateObj=new Date(y,m-1,dt.day);
+        var wd=dt.weekday;if(dateObj<d1||dateObj>d2||wd===0||wd===6||isHoliday(dt.day,m,y))return;
+        updateFerieResiduo({sap:dip.sap,nome:dip.nome,resp:dip.resp,plant:dip.plant,sigla:sigRow.slice(4)},di,fv,'',y,m);
+      });
+      return n;
+    });
+  });
+}
+
+function massivoAddEmpToFile(fileId,sname,dip,y,m,data,d1,d2,fv,ing,usc,showOr,pausaH){
+  var dates=data.dates;
+  var lastRow=(data.employees.length?data.employees[data.employees.length-1]:null);
+  var startRow=lastRow?(Math.max(lastRow.sheetRows&&lastRow.sheetRows.u||0,lastRow.sheetRows&&lastRow.sheetRows.n||0)+3):4;
+  var DST=data.dayStart||3;
+  var sigRow=[dip.sap,dip.nome,'Sigla'];var ingRow=[dip.sap,dip.nome,'Ingresso'];var uscRow=[dip.sap,dip.nome,'Uscita'];
+  var n=0;
+  dates.forEach(function(dt,di){
+    var dateObj=new Date(y,m-1,dt.day);
+    var wd=dt.weekday;var inRange=dateObj>=d1&&dateObj<=d2&&wd!==0&&wd!==6&&!isHoliday(dt.day,m,y);
+    sigRow.push(inRange?fv:'');ingRow.push(inRange&&showOr?ing:'');uscRow.push(inRange&&showOr?usc:'');
+    if(inRange){updateFerieResiduo({sap:dip.sap,nome:dip.nome,resp:dip.resp,plant:dip.plant},di,fv,'',y,m);n++;}
+  });
+  return sheetsBatchUpdate(fileId,[
+    {range:sname+'!A'+startRow,values:[sigRow]},
+    {range:sname+'!A'+(startRow+1),values:[ingRow]},
+    {range:sname+'!A'+(startRow+2),values:[uscRow]}
+  ]).then(function(){return n;});
+}
+
+
 function listFiles(q){return gFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name,mimeType)&pageSize=200').then(function(r){return r.files||[];});}
 function downloadFile(id){return fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){if(!r.ok)throw new Error('Download fallito: '+r.status);return r.blob();});}
 function gFetch(url){
@@ -4397,6 +4756,7 @@ function ferieLoad(){
       renderGantt(ferieDipList,year,mDa,mA);
       document.getElementById('fRicalcBtn').disabled=false;
       document.getElementById('fExpBtn').disabled=false;
+      document.getElementById('fMassBtn').disabled=false;
     });
   }).catch(function(e){
     document.getElementById('ferieContent').innerHTML='<div class="state"><div class="state-ico">\u26a0\ufe0f</div><div class="state-title">Errore</div><div style="font-size:12px;color:var(--muted)">'+String(e.message||e)+'</div></div>';
