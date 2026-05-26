@@ -779,31 +779,42 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
 /* ── PIANO FERIE ── */
 .gantt-wrap{padding:16px 24px 28px;overflow:auto;flex:1}
 .gantt-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
-.gantt-table{border-collapse:collapse;white-space:nowrap;font-size:12px;width:100%}
-.gantt-table th{background:var(--card);border:1px solid var(--border);padding:4px 6px;font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.3px;color:var(--subtle);text-align:center;position:sticky;top:0;z-index:5}
-.gantt-table th.gh-nome{text-align:left;min-width:160px;left:0;z-index:6}
-.gantt-table th.gh-sap{min-width:60px;left:160px;z-index:6}
-.gantt-table th.gh-ferie-res{min-width:70px;background:rgba(59,130,246,.1);color:var(--blue)}
-.gantt-table th.gh-perm-res{min-width:70px;background:rgba(168,85,247,.1);color:var(--purple)}
-.gantt-table td{border:1px solid rgba(36,48,72,.4);padding:0;height:28px}
-.gantt-table td.gd-nome{font-size:12px;font-weight:600;padding:0 8px;position:sticky;left:0;background:var(--surface);z-index:2;min-width:160px;max-width:160px;overflow:hidden;text-overflow:ellipsis}
-.gantt-table td.gd-sap{font-family:var(--ffm);font-size:10px;color:var(--muted);padding:0 6px;text-align:center;position:sticky;left:160px;background:var(--surface);z-index:2}
-.gantt-table td.gd-ferie-res{text-align:center;font-family:var(--ffm);font-size:12px;font-weight:700;background:rgba(59,130,246,.06)}
-.gantt-table td.gd-perm-res{text-align:center;font-family:var(--ffm);font-size:12px;font-weight:700;background:rgba(168,85,247,.06)}
+.gantt-table{border-collapse:collapse;white-space:nowrap;font-size:12px}
+.gantt-table th{background:var(--card);border:1px solid var(--border);padding:5px 6px;font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.3px;color:var(--subtle);text-align:center;position:sticky;top:0;z-index:5}
+.gantt-table th.gh-nome{text-align:left;min-width:160px;left:0;z-index:7;background:var(--card)}
+.gantt-table th.gh-sap{min-width:60px;left:160px;z-index:7;background:var(--card)}
+.gantt-table th.gh-ferie-res{min-width:56px;background:rgba(59,130,246,.12);color:var(--blue);position:sticky;left:220px;z-index:7}
+.gantt-table th.gh-perm-res{min-width:56px;background:rgba(168,85,247,.12);color:var(--purple);position:sticky;left:276px;z-index:7}
+.gantt-table td{border:1px solid rgba(36,48,72,.3);padding:0;height:30px}
+.gantt-table td.gd-nome{font-size:12px;font-weight:600;padding:0 8px;position:sticky;left:0;background:var(--surface);z-index:3;min-width:160px;max-width:160px;overflow:hidden;text-overflow:ellipsis}
+.gantt-table td.gd-sap{font-family:var(--ffm);font-size:10px;color:var(--muted);padding:0 6px;text-align:center;position:sticky;left:160px;background:var(--surface);z-index:3}
+.gantt-table td.gd-ferie-res{text-align:center;font-family:var(--ffm);font-size:12px;font-weight:700;background:rgba(59,130,246,.06);position:sticky;left:220px;z-index:3}
+.gantt-table td.gd-perm-res{text-align:center;font-family:var(--ffm);font-size:12px;font-weight:700;background:rgba(168,85,247,.06);position:sticky;left:276px;z-index:3}
 .gantt-table td.gd-ferie-res.warn{color:var(--amber)}
 .gantt-table td.gd-ferie-res.over{color:var(--red)}
 .gantt-table td.gd-perm-res.warn{color:var(--amber)}
 .gantt-table td.gd-perm-res.over{color:var(--red)}
-.gantt-cell{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:700;font-family:var(--ffc);letter-spacing:.3px;cursor:default}
-.gantt-cell.gc-we{background:rgba(36,48,72,.35)}
-.gantt-cell.gc-hol{background:rgba(239,68,68,.08)}
-.gantt-cell.gc-F{background:rgba(59,130,246,.25);color:var(--blue)}
-.gantt-cell.gc-HP{background:rgba(168,85,247,.25);color:var(--purple)}
-.gantt-cell.gc-M{background:rgba(239,68,68,.18);color:var(--red)}
-.gantt-month-hdr{background:var(--card);text-align:center;font-family:var(--ffc);font-size:11px;font-weight:700;color:var(--subtle);letter-spacing:.5px;border:1px solid var(--border);padding:3px 0}
-.gantt-month-hdr.gm-cur{color:var(--teal);background:rgba(20,184,166,.08)}
+/* colori alternati mesi */
+.gantt-table th.gm-odd,.gantt-table td.gd-odd{background-color:rgba(20,184,166,.04)}
+.gantt-table th.gm-even,.gantt-table td.gd-even{background-color:rgba(59,130,246,.04)}
+.gantt-table th.gm-cur-hdr{background:rgba(20,184,166,.15)!important;color:var(--teal)!important}
+/* intestazione giorni */
+.gh-day{min-width:22px;max-width:22px;padding:3px 1px!important;font-size:11px!important;font-weight:800!important;line-height:1.3;color:var(--subtle)}
+.gh-day.we{color:var(--muted)!important;font-weight:400!important}
+.gh-day.hol{color:var(--red)!important;font-weight:400!important}
+.gh-month-label{font-size:11px!important;font-weight:800!important;letter-spacing:.5px;padding:4px 2px!important}
+.gantt-cell{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:9px;font-weight:800;font-family:var(--ffc);letter-spacing:.3px;cursor:pointer;transition:filter .1s}
+.gantt-cell:hover{filter:brightness(1.3)}
+.gantt-cell.gc-we{background:rgba(36,48,72,.4);cursor:default}
+.gantt-cell.gc-hol{background:rgba(239,68,68,.1);cursor:default}
+.gantt-cell.gc-F{background:rgba(59,130,246,.3);color:var(--blue)}
+.gantt-cell.gc-HP{background:rgba(168,85,247,.3);color:var(--purple)}
+.gantt-cell.gc-M{background:rgba(239,68,68,.2);color:var(--red)}
+.gantt-cell.gc-SW{background:rgba(132,204,22,.2);color:var(--lime)}
+.gantt-cell.gc-X{background:rgba(16,185,129,.12);color:var(--green)}
+.gantt-month-hdr{font-family:var(--ffc);font-size:11px;font-weight:800;letter-spacing:.5px}
 .gantt-spinner{display:flex;align-items:center;justify-content:center;gap:12px;padding:48px;color:var(--muted);font-size:13px}
-.ferie-legend{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
+.ferie-legend{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
 .ferie-leg-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--subtle);font-family:var(--ffc);font-weight:700}
 .ferie-leg-dot{width:12px;height:12px;border-radius:3px}
 /* contratti nel pannello permessi */
@@ -1057,14 +1068,20 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
   <div class="sec" id="secFerie">
     <div class="filters">
       <div class="fg"><div class="fl">Responsabile</div>
-        <select id="fResp2" class="fc" style="min-width:160px" onchange="ferieLoad()"><option value="">— Tutti —</option></select></div>
+        <select id="fResp2" class="fc" style="min-width:160px" onchange="ferieOnFilterChange()"><option value="">— Tutti —</option></select></div>
       <div class="fg"><div class="fl">Plant</div>
-        <select id="fPlant2" class="fc" style="min-width:95px" onchange="ferieLoad()"><option value="">— Tutti —</option></select></div>
+        <select id="fPlant2" class="fc" style="min-width:95px" onchange="ferieOnFilterChange()"><option value="">— Tutti —</option></select></div>
       <div class="fg"><div class="fl">Anno</div>
-        <select id="fAnno" class="fc" style="min-width:85px" onchange="ferieLoad()"></select></div>
+        <select id="fAnno" class="fc" style="min-width:85px" onchange="ferieOnFilterChange()"></select></div>
+      <div class="fg"><div class="fl">Da mese</div>
+        <select id="fMeseDa" class="fc" style="min-width:110px" onchange="ferieRenderOnly()"><option value="1">Gennaio</option><option value="2">Febbraio</option><option value="3">Marzo</option><option value="4">Aprile</option><option value="5">Maggio</option><option value="6">Giugno</option><option value="7">Luglio</option><option value="8">Agosto</option><option value="9">Settembre</option><option value="10">Ottobre</option><option value="11">Novembre</option><option value="12">Dicembre</option></select></div>
+      <div class="fg"><div class="fl">A mese</div>
+        <select id="fMeseA" class="fc" style="min-width:110px" onchange="ferieRenderOnly()"><option value="1">Gennaio</option><option value="2">Febbraio</option><option value="3">Marzo</option><option value="4">Aprile</option><option value="5">Maggio</option><option value="6">Giugno</option><option value="7">Luglio</option><option value="8">Agosto</option><option value="9">Settembre</option><option value="10">Ottobre</option><option value="11">Novembre</option><option value="12">Dicembre</option></select></div>
+      <div class="fg"><div class="fl">Dipendente</div>
+        <select id="fDip" class="fc" style="min-width:170px" onchange="ferieRenderOnly()"><option value="">— Tutti —</option></select></div>
       <button class="ba bteal" onclick="ferieLoad()">↓ Carica</button>
       <button class="ba bghost" onclick="ferieRicalcola()" id="fRicalcBtn" disabled title="Ricalcola residui leggendo tutti i mesi da Drive">↻ Ricalcola</button>
-      <div class="finfo" id="ferieInfo">Seleziona responsabile/plant → Carica</div>
+      <div class="finfo" id="ferieInfo">Seleziona filtri e premi Carica</div>
     </div>
     <div class="gantt-wrap" id="ferieContent">
       <div class="state"><div class="state-ico">🏖️</div><div class="state-title">Seleziona filtri e premi Carica</div></div>
@@ -4197,362 +4214,246 @@ function lsDel(k){try{localStorage.removeItem('wms_'+k);}catch(e){}}
 // ═══════════════════════════════════════════════════════════
 //  PIANO FERIE
 // ═══════════════════════════════════════════════════════════
-var ferieData=null;      // dati residuo caricati da Drive
-var ferieFileId=null;    // id file residuo su Drive
-var ferieYear=null;      // anno corrente caricato
+var ferieData=null;
+var ferieFileId=null;
+var ferieYear=null;
+var ferieDipList=[];
 
-function ferieResiduoFname(year){
-  return 'residuo_ats_'+year+'.json';
-}
+function ferieResiduoFname(year){ return 'residuo_ats_'+year+'.json'; }
 
-// Carica (o crea) il file residuo da Drive
 function loadFerieResiduo(year){
   var fname=ferieResiduoFname(year);
   return listFiles('"'+FOLDER_ID+'" in parents and name="'+fname+'" and trashed=false')
     .then(function(files){
       if(!files.length){ferieFileId=null;ferieData={anno:year,dipendenti:[]};return ferieData;}
       ferieFileId=files[0].id;
-      return fetch('https://www.googleapis.com/drive/v3/files/'+ferieFileId+'?alt=media',
-        {headers:{Authorization:'Bearer '+TOKEN}})
-        .then(function(r){return r.json();})
-        .then(function(d){ferieData=d;return d;});
+      return fetch('https://www.googleapis.com/drive/v3/files/'+ferieFileId+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}})
+        .then(function(r){return r.json();}).then(function(d){ferieData=d;return d;});
     });
 }
 
-// Salva il file residuo su Drive
 function saveFerieResiduo(){
   if(!ferieData)return Promise.resolve();
   var fname=ferieResiduoFname(ferieData.anno);
   var json=JSON.stringify(ferieData,null,2);
   var blob=new Blob([json],{type:'application/json'});
   var bnd='ferie_'+Date.now(),enc=new TextEncoder();
-  var meta=ferieFileId
-    ?JSON.stringify({name:fname})
-    :JSON.stringify({name:fname,parents:[FOLDER_ID]});
+  var meta=ferieFileId?JSON.stringify({name:fname}):JSON.stringify({name:fname,parents:[FOLDER_ID]});
   var pre='--'+bnd+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+meta+'\r\n--'+bnd+'\r\nContent-Type: application/json\r\n\r\n';
   var post='\r\n--'+bnd+'--';
   var method=ferieFileId?'PATCH':'POST';
-  var url=ferieFileId
-    ?'https://www.googleapis.com/upload/drive/v3/files/'+ferieFileId+'?uploadType=multipart'
-    :'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+  var url=ferieFileId?'https://www.googleapis.com/upload/drive/v3/files/'+ferieFileId+'?uploadType=multipart':'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
   return blob.arrayBuffer().then(function(buf){
     var ab=enc.encode(pre),bb=new Uint8Array(buf),cb=enc.encode(post);
     var body=new Uint8Array(ab.length+bb.length+cb.length);body.set(ab);body.set(bb,ab.length);body.set(cb,ab.length+bb.length);
     return fetch(url,{method:method,headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'multipart/related; boundary='+bnd},body:body});
-  }).then(function(r){return r.json();})
-    .then(function(d){if(d.id)ferieFileId=d.id;});
+  }).then(function(r){return r.json();}).then(function(d){if(d.id)ferieFileId=d.id;});
 }
 
-// Trova o crea il record dipendente nel file residuo
 function getFerieDip(sap,nome,resp,plant){
   if(!ferieData)return null;
   var found=ferieData.dipendenti.find(function(d){return String(d.sap||'').trim()===String(sap||'').trim();});
-  if(!found){
-    found={sap:sap,nome:nome,resp:resp,plant:plant,ferie_godute:[],permessi_goduti:[]};
-    ferieData.dipendenti.push(found);
-  }
+  if(!found){found={sap:sap,nome:nome,resp:resp,plant:plant,ferie_godute:[],permessi_goduti:[]};ferieData.dipendenti.push(found);}
   return found;
 }
 
-// Calcola residuo per un dipendente
 function calcResiduo(sap){
   var contratto=getContratto(sap);
-  if(!ferieData)return{ferie:contratto.ferie_giorni,permessi:contratto.permessi_ore};
+  if(!ferieData)return{ferie:contratto.ferie_giorni,permessi:contratto.permessi_ore,ferieGodute:0,permGodute:0,ferieTot:contratto.ferie_giorni,permTot:contratto.permessi_ore};
   var dip=ferieData.dipendenti.find(function(d){return String(d.sap||'').trim()===String(sap||'').trim();});
   var ferieGodute=dip?(dip.ferie_godute||[]).length:0;
   var permGodute=dip?(dip.permessi_goduti||[]).reduce(function(a,p){return a+(p.ore||0);},0):0;
-  return{
-    ferie:contratto.ferie_giorni-ferieGodute,
-    permessi:Math.round((contratto.permessi_ore-permGodute)*10)/10,
-    ferieGodute:ferieGodute,
-    permGodute:Math.round(permGodute*10)/10,
-    ferieTot:contratto.ferie_giorni,
-    permTot:contratto.permessi_ore
-  };
+  return{ferie:contratto.ferie_giorni-ferieGodute,permessi:Math.round((contratto.permessi_ore-permGodute)*10)/10,ferieGodute:ferieGodute,permGodute:Math.round(permGodute*10)/10,ferieTot:contratto.ferie_giorni,permTot:contratto.permessi_ore};
 }
 
-// Aggiorna il residuo quando si modifica una sigla (chiamato da spConfirm)
 function updateFerieResiduo(emp,di,nuovaSigla,vecchiaSigla,anno,mese){
-  if(!emp||!emp.sap)return;
-  // Solo ATS
-  if(spMode!=='ats')return;
-  // Data del giorno
-  var data=atsData&&atsData.dates&&atsData.dates[di];
-  if(!data)return;
+  if(!emp||!emp.sap||spMode!=='ats')return;
+  var data=atsData&&atsData.dates&&atsData.dates[di];if(!data)return;
   var dateStr=anno+'-'+('0'+mese).slice(-2)+'-'+('0'+data.day).slice(-2);
-
-  var nuovaCodice=xSig(nuovaSigla||'');
-  var vecchiaCodice=xSig(vecchiaSigla||'');
-
-  // Carica residuo se non ancora caricato per questo anno
+  var nuovaCodice=xSig(nuovaSigla||'');var vecchiaCodice=xSig(vecchiaSigla||'');
   var doUpdate=function(){
-    var dip=getFerieDip(emp.sap,emp.nome,emp.resp,emp.plant);
-    if(!dip)return;
-
-    // Rimuovi eventuale registrazione precedente per questa data
-    if(vecchiaCodice==='F'){
-      dip.ferie_godute=dip.ferie_godute.filter(function(g){return g.data!==dateStr;});
-    } else if(vecchiaCodice==='HP'){
-      dip.permessi_goduti=dip.permessi_goduti.filter(function(g){return g.data!==dateStr;});
-    }
-
-    // Aggiungi nuova registrazione
+    var dip=getFerieDip(emp.sap,emp.nome,emp.resp,emp.plant);if(!dip)return;
+    if(vecchiaCodice==='F')dip.ferie_godute=dip.ferie_godute.filter(function(g){return g.data!==dateStr;});
+    else if(vecchiaCodice==='HP')dip.permessi_goduti=dip.permessi_goduti.filter(function(g){return g.data!==dateStr;});
     if(nuovaCodice==='F'){
-      // Conta solo se giorno lavorativo (non weekend, non festivo)
       var wd=new Date(anno,mese-1,data.day).getDay();
-      var isWe=wd===0||wd===6;
-      var isHol=isHoliday(data.day,mese,anno);
-      if(!isWe&&!isHol){
-        dip.ferie_godute.push({data:dateStr});
-      }
+      if(wd!==0&&wd!==6&&!isHoliday(data.day,mese,anno))dip.ferie_godute.push({data:dateStr});
     } else if(nuovaCodice==='HP'){
       var qtyH=parseFloat((String(nuovaSigla||'').match(/^[\d.]*/)||['1'])[0])||1;
       dip.permessi_goduti.push({data:dateStr,ore:qtyH});
     }
-
-    saveFerieResiduo().catch(function(e){console.warn('[WMS] saveFerieResiduo error:',e.message);});
+    saveFerieResiduo().catch(function(e){console.warn('[WMS] saveFerieResiduo:',e.message);});
   };
-
-  if(!ferieData||ferieYear!==anno){
-    ferieYear=anno;
-    loadFerieResiduo(anno).then(doUpdate).catch(function(){ferieData={anno:anno,dipendenti:[]};doUpdate();});
-  } else {
-    doUpdate();
-  }
+  if(!ferieData||ferieYear!==anno){ferieYear=anno;loadFerieResiduo(anno).then(doUpdate).catch(function(){ferieData={anno:anno,dipendenti:[]};doUpdate();});}
+  else doUpdate();
 }
 
-// Carica e renderizza il Gantt
+function ferieSyncFilters(){
+  var r2=document.getElementById('fResp2'),p2=document.getElementById('fPlant2');
+  var r1=document.getElementById('aResp'),p1=document.getElementById('aPlant');
+  if(r1&&r2)Array.from(r1.options).forEach(function(o){if(o.value&&!r2.querySelector('option[value="'+o.value.replace(/"/g,'&quot;')+'"]')){var no=document.createElement('option');no.value=o.value;no.textContent=o.textContent;r2.appendChild(no);}});
+  if(p1&&p2)Array.from(p1.options).forEach(function(o){if(o.value&&!p2.querySelector('option[value="'+o.value.replace(/"/g,'&quot;')+'"]')){var no=document.createElement('option');no.value=o.value;no.textContent=o.textContent;p2.appendChild(no);}});
+  var fa=document.getElementById('fAnno');if(fa&&!fa.value){fa.value=String(new Date().getFullYear());}
+  var fd=document.getElementById('fMeseDa'),fa2=document.getElementById('fMeseA');
+  if(fd&&!fd._init){fd.value='1';fd._init=true;}
+  if(fa2&&!fa2._init){fa2.value='12';fa2._init=true;}
+}
+
+function ferieOnFilterChange(){ferieSyncFilters();ferieLoad();}
+
+function ferieRenderOnly(){
+  if(!ferieDipList.length)return;
+  var year=parseInt(document.getElementById('fAnno').value)||new Date().getFullYear();
+  var mDa=parseInt(document.getElementById('fMeseDa').value)||1;
+  var mA=parseInt(document.getElementById('fMeseA').value)||12;
+  if(mA<mDa){document.getElementById('fMeseA').value=String(mDa);mA=mDa;}
+  var dipSel=document.getElementById('fDip').value;
+  var list=dipSel?ferieDipList.filter(function(d){return d.sap===dipSel;}):ferieDipList;
+  renderGantt(list,year,mDa,mA);
+}
+
 function ferieLoad(){
+  ferieSyncFilters();
   var resp=document.getElementById('fResp2').value;
   var plant=document.getElementById('fPlant2').value;
-  var year=parseInt(document.getElementById('fAnno').value);
-  if(!year){toast('Seleziona un anno','warn');return;}
+  var year=parseInt(document.getElementById('fAnno').value)||new Date().getFullYear();
   ferieYear=year;
-
-  // Popola i select se vuoti (sincronia con ATS)
-  var r2=document.getElementById('fResp2');
-  if(r2.options.length<=1){
-    var r1=document.getElementById('aResp');
-    Array.from(r1.options).forEach(function(o){
-      if(o.value&&!r2.querySelector('option[value="'+o.value+'"]')){
-        var no=document.createElement('option');no.value=o.value;no.textContent=o.textContent;r2.appendChild(no);
-      }
-    });
-  }
-  var p2=document.getElementById('fPlant2');
-  if(p2.options.length<=1){
-    var p1=document.getElementById('aPlant');
-    Array.from(p1.options).forEach(function(o){
-      if(o.value&&!p2.querySelector('option[value="'+o.value+'"]')){
-        var no=document.createElement('option');no.value=o.value;no.textContent=o.textContent;p2.appendChild(no);
-      }
-    });
-  }
-
-  document.getElementById('ferieContent').innerHTML='<div class="gantt-spinner"><div class="spinner"></div>Caricamento residui…</div>';
+  document.getElementById('ferieContent').innerHTML='<div class="gantt-spinner"><div class="spinner"></div>Caricamento\u2026</div>';
   document.getElementById('fRicalcBtn').disabled=true;
-
   loadFerieResiduo(year).then(function(){
-    // Carica tutti i dipendenti ATS del responsabile/plant per l'anno
     var files=allFiles.filter(function(f){
       var p=parseFileName(f.name);
-      return p&&p.year===year
-        &&(!resp||p.resp.toLowerCase()===resp.toLowerCase())
-        &&(!plant||p.plant.toLowerCase()===plant.toLowerCase());
+      return p&&p.year===year&&(!resp||p.resp.toLowerCase()===resp.toLowerCase())&&(!plant||p.plant.toLowerCase()===plant.toLowerCase());
     });
     if(!files.length){
-      document.getElementById('ferieContent').innerHTML='<div class="state"><div class="state-ico">📂</div><div class="state-title">Nessun file trovato per i filtri selezionati</div></div>';
-      document.getElementById('fRicalcBtn').disabled=false;
-      return;
+      document.getElementById('ferieContent').innerHTML='<div class="state"><div class="state-ico">\ud83d\udcc2</div><div class="state-title">Nessun file trovato</div></div>';
+      document.getElementById('fRicalcBtn').disabled=false;return;
     }
-    // Raccoglie lista dipendenti unica da tutti i file dell'anno (leggo solo il primo mese disponibile per avere l'anagrafica)
     var firstFiles={};
-    files.forEach(function(f){
-      var p=parseFileName(f.name);
-      var key=(p.resp+'_'+p.plant).toLowerCase();
-      if(!firstFiles[key]||p.month<firstFiles[key].month)firstFiles[key]={f:f,month:p.month};
-    });
-    var dipList=[];
+    files.forEach(function(f){var p=parseFileName(f.name);var key=(p.resp+'_'+p.plant).toLowerCase();if(!firstFiles[key]||p.month<firstFiles[key].month)firstFiles[key]={f:f,p:p};});
+    ferieDipList=[];
     var promises=Object.values(firstFiles).map(function(item){
-      var f=item.f;
-      var p=parseFileName(f.name);
-      var sname=MESI[p.month-1]+'_ATS';
-      var isXlsx=/\.xlsx$/i.test(f.name);
-      return (isXlsx
-        ?downloadFile(f.id).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');})
-        :sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
-      .then(function(d){
-        d.employees.forEach(function(e){
-          if(!dipList.find(function(x){return x.sap===e.id;})){
-            dipList.push({sap:e.id||e.sap||'',nome:e.nome,resp:d.globalResp||p.resp,plant:e.plant||p.plant});
-          }
-        });
-      }).catch(function(){});
+      var f=item.f;var p=item.p;var sname=MESI[p.month-1]+'_ATS';var isXlsx=/\.xlsx$/i.test(f.name);
+      return (isXlsx?downloadFile(f.id).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');}):sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
+      .then(function(d){d.employees.forEach(function(e){var sap=e.id||e.sap||'';if(!ferieDipList.find(function(x){return x.sap===sap;}))ferieDipList.push({sap:sap,nome:e.nome,resp:d.globalResp||p.resp,plant:e.plant||p.plant});});}).catch(function(){});
     });
     Promise.all(promises).then(function(){
-      renderGantt(dipList,year,resp,plant);
+      ferieDipList.sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'');});
+      var sel=document.getElementById('fDip');
+      sel.innerHTML='<option value="">\u2014 Tutti \u2014</option>';
+      ferieDipList.forEach(function(d){var o=document.createElement('option');o.value=d.sap;o.textContent=d.nome+(d.sap?' ('+d.sap+')':'');sel.appendChild(o);});
+      var mDa=parseInt(document.getElementById('fMeseDa').value)||1;
+      var mA=parseInt(document.getElementById('fMeseA').value)||12;
+      renderGantt(ferieDipList,year,mDa,mA);
       document.getElementById('fRicalcBtn').disabled=false;
     });
   }).catch(function(e){
-    document.getElementById('ferieContent').innerHTML='<div class="state"><div class="state-ico">⚠️</div><div class="state-title">Errore caricamento</div><div>'+esc(e.message)+'</div></div>';
+    document.getElementById('ferieContent').innerHTML='<div class="state"><div class="state-ico">\u26a0\ufe0f</div><div class="state-title">Errore</div><div style="font-size:12px;color:var(--muted)">'+String(e.message||e)+'</div></div>';
+    document.getElementById('fRicalcBtn').disabled=false;
   });
 }
 
-// Ricalcola residui leggendo tutti i mesi da Drive
 function ferieRicalcola(){
-  var resp=document.getElementById('fResp2').value;
-  var plant=document.getElementById('fPlant2').value;
-  var year=parseInt(document.getElementById('fAnno').value);
-  if(!year||!ferieData){toast('Prima premi Carica','warn');return;}
-
-  document.getElementById('ferieContent').innerHTML='<div class="gantt-spinner"><div class="spinner"></div>Ricalcolo da tutti i mesi…</div>';
+  var resp=document.getElementById('fResp2').value,plant=document.getElementById('fPlant2').value;
+  var year=parseInt(document.getElementById('fAnno').value)||new Date().getFullYear();
+  if(!ferieData){toast('Prima premi Carica','warn');return;}
+  document.getElementById('ferieContent').innerHTML='<div class="gantt-spinner"><div class="spinner"></div>Ricalcolo\u2026</div>';
   document.getElementById('fRicalcBtn').disabled=true;
-
-  var files=allFiles.filter(function(f){
-    var p=parseFileName(f.name);
-    return p&&p.year===year
-      &&(!resp||p.resp.toLowerCase()===resp.toLowerCase())
-      &&(!plant||p.plant.toLowerCase()===plant.toLowerCase());
-  });
-
-  // Azzera i dati del residuo per i dipendenti di questi file
+  var files=allFiles.filter(function(f){var p=parseFileName(f.name);return p&&p.year===year&&(!resp||p.resp.toLowerCase()===resp.toLowerCase())&&(!plant||p.plant.toLowerCase()===plant.toLowerCase());});
   var resetSaps={};
-
   var promises=files.map(function(f){
-    var p=parseFileName(f.name);
-    var sname=MESI[p.month-1]+'_ATS';
-    var isXlsx=/\.xlsx$/i.test(f.name);
-    return (isXlsx
-      ?downloadFile(f.id).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');})
-      :sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
+    var p=parseFileName(f.name);var sname=MESI[p.month-1]+'_ATS';var isXlsx=/\.xlsx$/i.test(f.name);
+    return (isXlsx?downloadFile(f.id).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');}):sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
     .then(function(d){
       d.employees.forEach(function(emp){
         var sap=emp.id||emp.sap||'';
-        if(!resetSaps[sap]){
-          resetSaps[sap]=true;
-          var dip=getFerieDip(sap,emp.nome,d.globalResp||p.resp,emp.plant||p.plant);
-          dip.ferie_godute=[];dip.permessi_goduti=[];
-        }
+        if(!resetSaps[sap]){resetSaps[sap]=true;var dip=getFerieDip(sap,emp.nome,d.globalResp||p.resp,emp.plant||p.plant);dip.ferie_godute=[];dip.permessi_goduti=[];}
         var dip=getFerieDip(sap,emp.nome,d.globalResp||p.resp,emp.plant||p.plant);
         (emp.sigla||[]).forEach(function(sig,di){
-          if(!sig)return;
-          var code=xSig(sig);
-          var date=d.dates&&d.dates[di];if(!date)return;
+          if(!sig)return;var code=xSig(sig);var date=d.dates&&d.dates[di];if(!date)return;
           var wd=new Date(p.year,p.month-1,date.day).getDay();
-          var isWe=wd===0||wd===6;
-          var isHol=isHoliday(date.day,p.month,p.year);
           var dateStr=p.year+'-'+('0'+p.month).slice(-2)+'-'+('0'+date.day).slice(-2);
-          if(code==='F'&&!isWe&&!isHol){
-            if(!dip.ferie_godute.find(function(g){return g.data===dateStr;}))
-              dip.ferie_godute.push({data:dateStr});
-          } else if(code==='HP'){
-            if(!dip.permessi_goduti.find(function(g){return g.data===dateStr;})){
-              var qtyH=parseFloat((String(sig||'').match(/^[\d.]*/)||['1'])[0])||1;
-              dip.permessi_goduti.push({data:dateStr,ore:qtyH});
-            }
-          }
+          if(code==='F'&&wd!==0&&wd!==6&&!isHoliday(date.day,p.month,p.year)){if(!dip.ferie_godute.find(function(g){return g.data===dateStr;}))dip.ferie_godute.push({data:dateStr});}
+          else if(code==='HP'){if(!dip.permessi_goduti.find(function(g){return g.data===dateStr;})){var qtyH=parseFloat((String(sig).match(/^[\d.]*/)||['1'])[0])||1;dip.permessi_goduti.push({data:dateStr,ore:qtyH});}}
         });
       });
     }).catch(function(e){console.warn('[WMS] ricalcola skip:',e.message);});
   });
-
-  Promise.all(promises).then(function(){
-    return saveFerieResiduo();
-  }).then(function(){
-    toast('✅ Ricalcolo completato');
-    ferieLoad();
-  }).catch(function(e){toast('✗ Errore ricalcolo: '+e.message,'err');document.getElementById('fRicalcBtn').disabled=false;});
+  Promise.all(promises).then(function(){return saveFerieResiduo();}).then(function(){toast('\u2705 Ricalcolo completato');ferieLoad();}).catch(function(e){toast('\u2717 Errore: '+e.message,'err');document.getElementById('fRicalcBtn').disabled=false;});
 }
 
-// Renderizza il Gantt annuale
-function renderGantt(dipList,year,resp,plant){
-  if(!dipList.length){
-    document.getElementById('ferieContent').innerHTML='<div class="state"><div class="state-ico">👥</div><div class="state-title">Nessun dipendente trovato</div></div>';
-    return;
-  }
-  var curMonth=new Date().getMonth()+1;
-  var curYear=new Date().getFullYear();
-
-  // Legenda
+function renderGantt(dipList,year,mDa,mA){
+  if(!dipList.length){document.getElementById('ferieContent').innerHTML='<div class="state"><div class="state-ico">\ud83d\udc65</div><div class="state-title">Nessun dipendente trovato</div></div>';return;}
   var leg='<div class="ferie-legend">';
-  leg+='<span class="ferie-leg-item"><span class="ferie-leg-dot" style="background:rgba(59,130,246,.35)"></span>Ferie (F)</span>';
-  leg+='<span class="ferie-leg-item"><span class="ferie-leg-dot" style="background:rgba(168,85,247,.35)"></span>Permesso (HP)</span>';
-  leg+='<span class="ferie-leg-item"><span class="ferie-leg-dot" style="background:rgba(239,68,68,.18)"></span>Malattia (M)</span>';
-  leg+='<span class="ferie-leg-item"><span class="ferie-leg-dot" style="background:rgba(36,48,72,.35)"></span>Weekend/Festivo</span>';
+  [['rgba(59,130,246,.35)','Ferie (F)'],['rgba(168,85,247,.35)','Permesso (HP)'],['rgba(239,68,68,.2)','Malattia (M)'],['rgba(132,204,22,.2)','Smartworking (SW)'],['rgba(36,48,72,.5)','Weekend/Festivo']].forEach(function(x){
+    leg+='<span class="ferie-leg-item"><span class="ferie-leg-dot" style="background:'+x[0]+'"></span>'+x[1]+'</span>';
+  });
   leg+='</div>';
-
-  // Intestazione mesi
-  var h='<div style="overflow:auto"><table class="gantt-table"><thead>';
-  // Riga mesi
-  h+='<tr><th class="gh-nome" rowspan="2">Dipendente</th><th class="gh-sap" rowspan="2">SAP</th><th class="gh-ferie-res" rowspan="2">F res.</th><th class="gh-perm-res" rowspan="2">HP res.</th>';
-  for(var mi=1;mi<=12;mi++){
-    var nd=new Date(year,mi,0).getDate();
-    var isCur=mi===curMonth&&year===curYear;
-    h+='<th class="gantt-month-hdr'+(isCur?' gm-cur':'')+'" colspan="'+nd+'">'+MESI[mi-1].substring(0,3).toUpperCase()+'</th>';
+  var h='<div style="overflow:auto"><table class="gantt-table"><thead><tr>';
+  h+='<th class="gh-nome" rowspan="2">Dipendente</th><th class="gh-sap" rowspan="2">SAP</th><th class="gh-ferie-res" rowspan="2" title="Ferie residue">F res.</th><th class="gh-perm-res" rowspan="2" title="Permessi residui">HP res.</th>';
+  for(var mi=mDa;mi<=mA;mi++){
+    var nd=new Date(year,mi,0).getDate();var mIdx=(mi-1)%2;
+    var mcls='gh-month-label gm-'+(mIdx===0?'odd':'even');
+    h+='<th class="gantt-month-hdr '+mcls+'" colspan="'+nd+'">'+MESI[mi-1].substring(0,3).toUpperCase()+'</th>';
   }
-  h+='</tr>';
-  // Riga giorni
-  h+='<tr>';
-  for(var mi2=1;mi2<=12;mi2++){
-    var nd2=new Date(year,mi2,0).getDate();
+  h+='</tr><tr>';
+  for(var mi2=mDa;mi2<=mA;mi2++){
+    var nd2=new Date(year,mi2,0).getDate();var mIdx2=(mi2-1)%2;var mbg2='gm-'+(mIdx2===0?'odd':'even');
     for(var d=1;d<=nd2;d++){
-      var wd=new Date(year,mi2-1,d).getDay();
-      var isWe=wd===0||wd===6;
-      var isHol=isHoliday(d,mi2,year);
-      h+='<th class="dh'+(isWe?' we':'')+(isHol?' holiday':'')+'" style="min-width:18px;max-width:18px;padding:1px;font-size:8px">'+(isWe||isHol?'':d)+'</th>';
+      var wd=new Date(year,mi2-1,d).getDay();var isWe=wd===0||wd===6;var isHol=isHoliday(d,mi2,year);
+      h+='<th class="gh-day '+mbg2+(isWe?' we':'')+(isHol?' hol':'')+'">'+d+'</th>';
     }
   }
   h+='</tr></thead><tbody>';
-
-  // Costruisce mappa dateStr→sigla per ogni dipendente dal file residuo
-  // Ma i dati giornalieri vengono dall'array ferie_godute/permessi_goduti
-  // Per la visualizzazione colore usiamo il file residuo
-
   dipList.forEach(function(dip){
     var res=calcResiduo(dip.sap);
-    var ferieWarn=res.ferie<=5&&res.ferie>0;
-    var ferieOver=res.ferie<0;
-    var permWarn=res.permessi<=4&&res.permessi>0;
-    var permOver=res.permessi<0;
-
-    // Mappa data→tipo da file residuo
     var ferieSet={},permSet={};
     if(ferieData){
       var dRecord=ferieData.dipendenti.find(function(x){return String(x.sap||'').trim()===String(dip.sap||'').trim();});
-      if(dRecord){
-        (dRecord.ferie_godute||[]).forEach(function(g){ferieSet[g.data]=true;});
-        (dRecord.permessi_goduti||[]).forEach(function(g){permSet[g.data]=g.ore;});
-      }
+      if(dRecord){(dRecord.ferie_godute||[]).forEach(function(g){ferieSet[g.data]=true;});(dRecord.permessi_goduti||[]).forEach(function(g){permSet[g.data]=g.ore;});}
     }
-
     h+='<tr>';
     h+='<td class="gd-nome" title="'+esc(dip.nome)+'">'+esc(dip.nome)+'</td>';
     h+='<td class="gd-sap">'+esc(dip.sap)+'</td>';
-    h+='<td class="gd-ferie-res'+(ferieOver?' over':ferieWarn?' warn':'')+'">'+res.ferie+'</td>';
-    h+='<td class="gd-perm-res'+(permOver?' over':permWarn?' warn':'')+'">'+res.permessi+'h</td>';
-
-    for(var mi3=1;mi3<=12;mi3++){
-      var nd3=new Date(year,mi3,0).getDate();
+    h+='<td class="gd-ferie-res'+(res.ferie<0?' over':res.ferie<=5?' warn':'')+'" title="'+res.ferieGodute+'/'+res.ferieTot+'">'+res.ferie+'</td>';
+    h+='<td class="gd-perm-res'+(res.permessi<0?' over':res.permessi<=4?' warn':'')+'" title="'+res.permGodute+'/'+res.permTot+'h">'+res.permessi+'h</td>';
+    for(var mi3=mDa;mi3<=mA;mi3++){
+      var nd3=new Date(year,mi3,0).getDate();var mIdx3=(mi3-1)%2;var mbg3='gd-'+(mIdx3===0?'odd':'even');
       for(var d2=1;d2<=nd3;d2++){
-        var wd2=new Date(year,mi3-1,d2).getDay();
-        var isWe2=wd2===0||wd2===6;
-        var isHol2=isHoliday(d2,mi3,year);
+        var wd2=new Date(year,mi3-1,d2).getDay();var isWe2=wd2===0||wd2===6;var isHol2=isHoliday(d2,mi3,year);
         var dateKey=year+'-'+('0'+mi3).slice(-2)+'-'+('0'+d2).slice(-2);
-        var cls='gantt-cell';
-        var txt='';
+        var cls='gantt-cell';var txt='';
         if(isWe2||isHol2){cls+=' gc-we';}
         else if(ferieSet[dateKey]){cls+=' gc-F';txt='F';}
         else if(permSet[dateKey]!==undefined){cls+=' gc-HP';txt='P';}
-        h+='<td><div class="'+cls+'">'+txt+'</div></td>';
+        var clickAttr='';
+        if(!isWe2&&!isHol2){var _sap=dip.sap.replace(/\\/g,'\\\\').replace(/'/g,"\\'");clickAttr=' onclick="ganttCellClick(\''+_sap+'\','+mi3+','+d2+')"';}
+        h+='<td class="'+mbg3+'"><div class="'+cls+'"'+clickAttr+'>'+txt+'</div></td>';
       }
     }
     h+='</tr>';
   });
-
   h+='</tbody></table></div>';
   document.getElementById('ferieContent').innerHTML=leg+h;
-  document.getElementById('ferieInfo').textContent=dipList.length+' dipendenti · '+year;
+  document.getElementById('ferieInfo').textContent=dipList.length+' dipendenti \u00b7 '+MESI[mDa-1]+' \u2013 '+MESI[mA-1]+' '+year;
 }
+
+function ganttCellClick(sap,mese,giorno){
+  var year=parseInt(document.getElementById('fAnno').value)||new Date().getFullYear();
+  if(atsData&&atsEmps.length){
+    var curY=parseInt(document.getElementById('aYear').value);
+    var curM=parseInt(document.getElementById('aMonth').value);
+    if(curY===year&&curM===mese){
+      var ei=atsEmps.findIndex(function(e){return String(e.id||e.sap||'').trim()===String(sap).trim();});
+      if(ei>=0){switchSec('ats');setTimeout(function(){openSiglaPicker(ei,mese-1,'ats');},100);return;}
+    }
+  }
+  document.getElementById('aYear').value=String(year);
+  document.getElementById('aMonth').value=String(mese);
+  switchSec('ats');
+  toast('Imposta il mese e premi Carica, poi modifica il dipendente');
+}
+
 
 // ── Config orario default ──
 function applyTheme(t){
