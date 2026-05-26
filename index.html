@@ -549,7 +549,7 @@
     document.getElementById('welcome').classList.remove('hidden');
     setActiveNav('home');
     currentApp = null;
-    localStorage.removeItem('wms_lastApp');
+    sessionStorage.removeItem('wms_lastApp');
   }
 
   function openApp(app) {
@@ -582,11 +582,11 @@
     }
 
     currentApp = app;
-    localStorage.setItem('wms_lastApp', app);
+    sessionStorage.setItem('wms_lastApp', app);
   }
 
   // Ripristina ultima app aperta
-  const lastApp = localStorage.getItem('wms_lastApp');
+  const lastApp = sessionStorage.getItem('wms_lastApp');
   if (lastApp && frames[lastApp]) {
     openApp(lastApp);
   } else {
