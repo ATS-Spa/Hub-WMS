@@ -833,9 +833,14 @@ body.theme-light .gantt-table th.gh-perm-res{background:#e2e8f0}
 .gantt-table th.gm-even,.gantt-table td.gd-even{background-color:rgba(59,130,246,.04)}
 .gantt-table th.gm-cur-hdr{background:rgba(20,184,166,.15)!important;color:var(--teal)!important}
 /* intestazione giorni */
-.gh-day{min-width:22px;max-width:22px;padding:3px 1px!important;font-size:11px!important;font-weight:800!important;line-height:1.3;color:var(--subtle)}
-.gh-day.we{color:var(--muted)!important;font-weight:400!important}
-.gh-day.hol{color:var(--red)!important;font-weight:400!important}
+.gh-day{min-width:22px;max-width:22px;padding:2px 1px!important;font-size:10px!important;font-weight:800!important;line-height:1.2;color:var(--subtle);vertical-align:bottom}
+.gh-day .dn{display:block;font-size:12px;font-weight:800;line-height:1.3}
+.gh-day .dw{display:block;font-size:8px;font-weight:600;letter-spacing:.2px;color:var(--muted);line-height:1.2}
+.gh-day.we .dn{color:var(--muted)}.gh-day.we .dw{color:var(--border)}
+.gh-day.hol .dn{color:var(--red)}.gh-day.hol .dw{color:rgba(239,68,68,.6)}
+/* toggle attivo/inattivo */
+.gantt-col-hidden{display:none!important}
+.tog-off{opacity:.4}
 .gh-month-label{font-size:11px!important;font-weight:800!important;letter-spacing:.5px;padding:4px 2px!important}
 .gantt-cell{width:100%;height:100%;display:flex;align-items:center;justify-content:center;font-size:10px;font-weight:800;font-family:var(--ffc);letter-spacing:.3px;cursor:pointer;transition:filter .1s}
 .gantt-cell:hover{filter:brightness(1.4)}
@@ -1150,6 +1155,11 @@ body.theme-light .gantt-table th.gh-perm-res{background:#e2e8f0}
       <button class="ba bghost am" onclick="ferieExport()" id="fExpBtn" disabled>⬇ Excel</button>
       <button class="ba bghost" onclick="openMassivo('ferie')" id="fMassBtn" disabled style="border-color:rgba(59,130,246,.4);color:var(--blue)">📅 Inserimento Massivo</button>
       <div class="finfo" id="ferieInfo">Seleziona filtri e premi Carica</div>
+      <div style="display:flex;gap:6px;margin-left:auto;align-items:center" id="ganttColToggles" style="display:none">
+        <button class="ba bghost" id="togSap" onclick="ganttToggleCol('sap')" style="padding:4px 10px;font-size:11px;font-family:var(--ffc);font-weight:700">SAP</button>
+        <button class="ba bghost" id="togFres" onclick="ganttToggleCol('fres')" style="padding:4px 10px;font-size:11px;font-family:var(--ffc);font-weight:700;color:var(--blue)">F.Res</button>
+        <button class="ba bghost" id="togHpres" onclick="ganttToggleCol('hpres')" style="padding:4px 10px;font-size:11px;font-family:var(--ffc);font-weight:700;color:var(--purple)">HP.Res</button>
+      </div>
     </div>
     <div class="gantt-wrap" id="ferieContent">
       <div class="state"><div class="state-ico">🏖️</div><div class="state-title">Seleziona filtri e premi Carica</div></div>
@@ -1608,6 +1618,9 @@ function loadUserConfig(){
           if(cfg.ingresso) wmsConfig.ingresso=cfg.ingresso;
           if(cfg.uscita)   wmsConfig.uscita=cfg.uscita;
           if(cfg.tema)     wmsConfig.tema=cfg.tema;
+          if(cfg.ganttShowSap!==undefined) wmsConfig.ganttShowSap=cfg.ganttShowSap;
+          if(cfg.ganttShowFres!==undefined) wmsConfig.ganttShowFres=cfg.ganttShowFres;
+          if(cfg.ganttShowHpres!==undefined) wmsConfig.ganttShowHpres=cfg.ganttShowHpres;
           applyTheme(wmsConfig.tema||'scuro');
         });
     }).catch(function(){});
@@ -5021,19 +5034,36 @@ function renderGantt(dipList,year,mDa,mA){
     leg+='<span class="ferie-leg-item"><span class="ferie-leg-dot" style="background:'+x[0]+'"></span>'+x[1]+'</span>';
   });
   leg+='</div>';
+  var showSap=wmsConfig.ganttShowSap!==false;
+  var showFres=wmsConfig.ganttShowFres!==false;
+  var showHpres=wmsConfig.ganttShowHpres!==false;
+  // Aggiorna stato bottoni toggle
+  var tSap=document.getElementById('togSap');
+  var tFres=document.getElementById('togFres');
+  var tHpres=document.getElementById('togHpres');
+  if(tSap){tSap.classList.toggle('tog-off',!showSap);}
+  if(tFres){tFres.classList.toggle('tog-off',!showFres);}
+  if(tHpres){tHpres.classList.toggle('tog-off',!showHpres);}
+  document.getElementById('ganttColToggles').style.display='flex';
+  // Calcola colspan corretto per header mesi (esclude colonne nascoste)
+  var fixedCols=1+(showSap?1:0)+(showFres?1:0)+(showHpres?1:0); // nome + opzionali
   var h='<div style="overflow:auto"><table class="gantt-table"><thead><tr>';
-  h+='<th class="gh-nome" rowspan="2">Dipendente</th><th class="gh-sap" rowspan="2">SAP</th><th class="gh-ferie-res" rowspan="2" title="Ferie residue">F res.</th><th class="gh-perm-res" rowspan="2" title="Permessi residui">HP res.</th>';
+  h+='<th class="gh-nome" rowspan="2">Dipendente</th>';
+  if(showSap) h+='<th class="gh-sap" rowspan="2">SAP</th>';
+  if(showFres) h+='<th class="gh-ferie-res" rowspan="2" title="Ferie residue">F res.</th>';
+  if(showHpres) h+='<th class="gh-perm-res" rowspan="2" title="Permessi residui">HP res.</th>';
   for(var mi=mDa;mi<=mA;mi++){
     var nd=new Date(year,mi,0).getDate();var mIdx=(mi-1)%2;
     var mcls='gh-month-label gm-'+(mIdx===0?'odd':'even');
-    h+='<th class="gantt-month-hdr '+mcls+'" colspan="'+nd+'">'+MESI[mi-1].substring(0,3).toUpperCase()+'</th>';
+    h+='<th class="gantt-month-hdr '+mcls+'" colspan="'+nd+'">'+MESI[mi-1].substring(0,3).toUpperCase()+' '+year+'</th>';
   }
   h+='</tr><tr>';
   for(var mi2=mDa;mi2<=mA;mi2++){
     var nd2=new Date(year,mi2,0).getDate();var mIdx2=(mi2-1)%2;var mbg2='gm-'+(mIdx2===0?'odd':'even');
     for(var d=1;d<=nd2;d++){
       var wd=new Date(year,mi2-1,d).getDay();var isWe=wd===0||wd===6;var isHol=isHoliday(d,mi2,year);
-      h+='<th class="gh-day '+mbg2+(isWe?' we':'')+(isHol?' hol':'')+'">'+d+'</th>';
+      var dayName=GGS[wd];
+      h+='<th class="gh-day '+mbg2+(isWe?' we':'')+(isHol?' hol':'')+'"><span class="dn">'+d+'</span><span class="dw">'+dayName+'</span></th>';
     }
   }
   h+='</tr></thead><tbody>';
@@ -5046,9 +5076,9 @@ function renderGantt(dipList,year,mDa,mA){
     }
     h+='<tr>';
     h+='<td class="gd-nome" title="'+esc(dip.nome)+'">'+esc(dip.nome)+'</td>';
-    h+='<td class="gd-sap">'+esc(dip.sap)+'</td>';
-    h+='<td class="gd-ferie-res'+(res.ferie<0?' over':res.ferie<=5?' warn':'')+'" title="'+res.ferieGodute+'/'+res.ferieTot+'">'+res.ferie+'</td>';
-    h+='<td class="gd-perm-res'+(res.permessi<0?' over':res.permessi<=4?' warn':'')+'" title="'+res.permGodute+'/'+res.permTot+'h">'+res.permessi+'h</td>';
+    if(showSap) h+='<td class="gd-sap">'+esc(dip.sap)+'</td>';
+    if(showFres) h+='<td class="gd-ferie-res'+(res.ferie<0?' over':res.ferie<=5?' warn':'')+'" title="'+res.ferieGodute+'/'+res.ferieTot+'">'+res.ferie+'</td>';
+    if(showHpres) h+='<td class="gd-perm-res'+(res.permessi<0?' over':res.permessi<=4?' warn':'')+'" title="'+res.permGodute+'/'+res.permTot+'h">'+res.permessi+'h</td>';
     for(var mi3=mDa;mi3<=mA;mi3++){
       var nd3=new Date(year,mi3,0).getDate();var mIdx3=(mi3-1)%2;var mbg3='gd-'+(mIdx3===0?'odd':'even');
       for(var d2=1;d2<=nd3;d2++){
@@ -5168,6 +5198,14 @@ function ferieExport(){
 
   XLSX.writeFile(WB,'PianoFerie_'+year+'_'+MESI[mDa-1]+'-'+MESI[mA-1]+'.xlsx');
   toast('\u2713 Excel esportato');
+}
+
+function ganttToggleCol(col){
+  if(col==='sap')    wmsConfig.ganttShowSap   =(wmsConfig.ganttShowSap   !==false)?false:true;
+  if(col==='fres')   wmsConfig.ganttShowFres  =(wmsConfig.ganttShowFres  !==false)?false:true;
+  if(col==='hpres')  wmsConfig.ganttShowHpres =(wmsConfig.ganttShowHpres !==false)?false:true;
+  saveUserConfig().catch(function(){});
+  ferieRenderOnly();
 }
 
 function ganttMonthClick(sap,mese,year){
