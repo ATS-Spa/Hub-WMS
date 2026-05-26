@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WMS · Presenze</title>
+<meta name="wms-version" content="v2.6 · 2026-05-26 · Piano Ferie + Inserimento Massivo + Genera Anno">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -861,6 +862,38 @@ body.theme-light .gantt-table th.gh-perm-res{background:#e2e8f0}
   .mob-day-val{width:22px;height:22px;font-size:10px}
   .mob-card-name{font-size:14px}
 }
+/* ── PIANO FERIE MOBILE ── */
+@media (max-width:768px){
+  /* Nascondi il Gantt su mobile */
+  .gantt-wrap .gantt-table-wrap{display:none}
+  /* Mostra vista card */
+  .ferie-mobile-list{display:flex;flex-direction:column;gap:10px}
+  .ferie-mob-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
+  .ferie-mob-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
+  .ferie-mob-nome{font-size:14px;font-weight:700;color:var(--text)}
+  .ferie-mob-sap{font-size:10px;font-family:var(--ffm);color:var(--muted)}
+  .ferie-mob-badges{display:flex;gap:6px;margin-bottom:8px;flex-wrap:wrap}
+  .ferie-mob-badge{padding:3px 10px;border-radius:20px;font-size:11px;font-weight:700;font-family:var(--ffc)}
+  .ferie-mob-badge.f{background:rgba(59,130,246,.2);color:var(--blue);border:1px solid rgba(59,130,246,.3)}
+  .ferie-mob-badge.hp{background:rgba(168,85,247,.2);color:var(--purple);border:1px solid rgba(168,85,247,.3)}
+  .ferie-mob-badge.warn{color:var(--amber)!important;border-color:rgba(245,158,11,.3)!important}
+  .ferie-mob-badge.over{color:var(--red)!important;border-color:rgba(239,68,68,.3)!important}
+  /* Mini calendario mese per mese */
+  .ferie-mob-mesi{display:flex;flex-wrap:wrap;gap:4px}
+  .ferie-mob-mese{font-size:10px;font-family:var(--ffc);font-weight:700;color:var(--muted);
+    background:var(--surface);border:1px solid var(--border);border-radius:6px;
+    padding:3px 7px;letter-spacing:.3px}
+  .ferie-mob-mese.has-f{background:rgba(59,130,246,.15);color:var(--blue);border-color:rgba(59,130,246,.3)}
+  .ferie-mob-mese.has-hp{background:rgba(168,85,247,.15);color:var(--purple);border-color:rgba(168,85,247,.3)}
+  /* Filtri: stack verticale */
+  #secFerie .filters{flex-direction:column;gap:8px}
+  #secFerie .filters .fg{width:100%}
+  #secFerie .filters select,#secFerie .filters .fc{width:100%}
+  /* Nascondi barra legenda Gantt */
+  .ferie-legend{display:none}
+  /* Gantt wrap: scroll orizzontale con avviso */
+  .gantt-wrap{padding:8px 12px 16px}
+}
 </style>
 </head>
 <body>
@@ -1141,7 +1174,29 @@ body.theme-light .gantt-table th.gh-perm-res{background:#e2e8f0}
 
 <!-- ══ MODALI ══ -->
 
-<div id="moAdmin" class="mo hide"><div class="mc" style="width:340px">
+<div id="moGeneraAnno" class="mo hide"><div class="mc" style="width:600px;max-height:85vh;display:flex;flex-direction:column">
+  <div class="mt">🗂️ Genera File Anno Completo</div>
+  <div class="ms" id="genSub">Analisi in corso…</div>
+  <div id="genPlanWrap" style="flex:1;overflow-y:auto;margin:8px 0;display:none">
+    <div style="font-size:11px;font-weight:700;letter-spacing:1px;color:var(--muted);text-transform:uppercase;margin-bottom:8px">Piano di creazione</div>
+    <div id="genPlan" style="font-size:12px;line-height:1.8"></div>
+  </div>
+  <div id="genLogWrap" style="flex:1;overflow-y:auto;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:12px;margin:8px 0;font-family:var(--ffm);font-size:11px;line-height:1.8;display:none;max-height:320px">
+    <div id="genLog"></div>
+  </div>
+  <div id="genProgress" style="display:none;margin-bottom:8px">
+    <div style="height:6px;background:var(--border);border-radius:3px;overflow:hidden">
+      <div id="genBar" style="height:100%;background:var(--teal);width:0%;transition:width .3s;border-radius:3px"></div>
+    </div>
+    <div id="genProgressTxt" style="font-size:11px;color:var(--muted);margin-top:4px;text-align:center"></div>
+  </div>
+  <div class="mbtns">
+    <button class="mbtn cancel" id="genCancelBtn" onclick="mClose('moGeneraAnno')">Annulla</button>
+    <button class="mbtn ok" id="genStartBtn" onclick="generaAnnoStart()">▶ Crea file mancanti</button>
+  </div>
+</div></div>
+
+
   <div class="mt">🔐 Modalità Admin</div>
   <div class="ms">Password per abilitare modifiche presenze</div>
   <input type="text" style="display:none" aria-hidden="true">
@@ -3577,6 +3632,26 @@ function renderPermPanel(){
   h+='<button class="ba bghost te" style="padding:6px 12px;font-size:12px" onclick="addContr()">＋ Aggiungi</button>';
   h+='</div>';
   h+='</div></div>';
+  // ── Sezione Genera Anno ──
+  var now=new Date().getFullYear();
+  h+='<div class="perm-section"><div class="perm-section-header"><div class="perm-section-title">🗂️ Genera File Anno Completo</div></div><div class="perm-section-body">';
+  h+='<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.7">Scansiona tutti i responsabile/plant presenti su Drive per l\'anno selezionato. Per ciascuno, usa il file del mese di riferimento (o il primo disponibile) come template e crea i mesi mancanti azzerate sigle e orari.</div>';
+  h+='<div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">';
+  h+='<div class="fg"><div class="fl">Anno target</div><select class="mi fc" id="genAnno" style="width:100px;padding:7px 10px">';
+  for(var gy=now+1;gy>=now-2;gy--)h+='<option value="'+gy+'"'+(gy===now?' selected':'')+'>'+gy+'</option>';
+  h+='</select></div>';
+  h+='<div class="fg"><div class="fl">Mese riferimento preferito</div><select class="mi fc" id="genMeseRif" style="width:130px;padding:7px 10px">';
+  MESI.forEach(function(mn,i){h+='<option value="'+(i+1)+'"'+(i+4===new Date().getMonth()?' selected':'')+'>'+mn+'</option>';});
+  h+='</select></div>';
+  h+='<div class="fg"><div class="fl">Da mese</div><select class="mi fc" id="genDa" style="width:115px;padding:7px 10px">';
+  MESI.forEach(function(mn,i){h+='<option value="'+(i+1)+'"'+(i===0?' selected':'')+'>'+mn+'</option>';});
+  h+='</select></div>';
+  h+='<div class="fg"><div class="fl">A mese</div><select class="mi fc" id="genA" style="width:115px;padding:7px 10px">';
+  MESI.forEach(function(mn,i){h+='<option value="'+(i+1)+'"'+(i===11?' selected':'')+'>'+mn+'</option>';});
+  h+='</select></div>';
+  h+='<button class="ba bteal" style="padding:8px 18px" onclick="openGeneraAnno()">🗂️ Avvia</button>';
+  h+='</div>';
+  h+='</div></div>';
   document.getElementById('permPanel').innerHTML=h;
 }
 function updateDefault(){
@@ -4406,6 +4481,152 @@ function massivoAddEmpToFile(fileId,sname,dip,y,m,data,d1,d2,fv,ing,usc,showOr,p
 }
 
 
+// ═══════════════════════════════════════════════════════════
+//  GENERA FILE ANNO COMPLETO
+// ═══════════════════════════════════════════════════════════
+var _genPlan=[];
+var _genAbort=false;
+
+function openGeneraAnno(){
+  if(!adminMode){toast('Attiva la modalità Admin prima','warn');return;}
+  var anno=parseInt(document.getElementById('genAnno').value);
+  var meseRif=parseInt(document.getElementById('genMeseRif').value);
+  var da=parseInt(document.getElementById('genDa').value);
+  var a=parseInt(document.getElementById('genA').value);
+  if(a<da){toast('Range mesi non valido','warn');return;}
+  _genPlan=[];_genAbort=false;
+  document.getElementById('genSub').textContent='Analisi Drive in corso…';
+  document.getElementById('genPlanWrap').style.display='none';
+  document.getElementById('genLogWrap').style.display='none';
+  document.getElementById('genProgress').style.display='none';
+  document.getElementById('genStartBtn').style.display='';
+  document.getElementById('genStartBtn').disabled=true;
+  document.getElementById('genCancelBtn').textContent='Annulla';
+  mOpen('moGeneraAnno');
+  var parsed=allFiles.map(function(f){var p=parseFileName(f.name);return p?{p:p,f:f}:null;}).filter(Boolean);
+  var perKey={};
+  parsed.forEach(function(item){
+    if(item.p.year!==anno)return;
+    var key=item.p.resp+'|||'+item.p.plant;
+    if(!perKey[key])perKey[key]={resp:item.p.resp,plant:item.p.plant,files:[]};
+    perKey[key].files.push({month:item.p.month,file:item.f});
+  });
+  if(!Object.keys(perKey).length){
+    document.getElementById('genSub').textContent='Nessun file trovato per il '+anno+'. Impossibile procedere.';
+    return;
+  }
+  Object.keys(perKey).forEach(function(key){
+    var entry=perKey[key];
+    var mesiPresenti=entry.files.map(function(x){return x.month;});
+    var mesiDaCreare=[];
+    for(var m=da;m<=a;m++){if(mesiPresenti.indexOf(m)===-1)mesiDaCreare.push(m);}
+    if(!mesiDaCreare.length)return;
+    var sorted=entry.files.slice().sort(function(a,b){return a.month-b.month;});
+    var templateEntry=sorted.find(function(x){return x.month===meseRif;})||sorted[0];
+    _genPlan.push({resp:entry.resp,plant:entry.plant,templateFileId:templateEntry.file.id,templateFileName:templateEntry.file.name,templateMonth:templateEntry.month,mesiDaCreare:mesiDaCreare,anno:anno});
+  });
+  if(!_genPlan.length){
+    document.getElementById('genSub').textContent='\u2705 Tutti i mesi sono già presenti per tutti i responsabili del '+anno+'.';
+    return;
+  }
+  var totFile=_genPlan.reduce(function(s,x){return s+x.mesiDaCreare.length;},0);
+  document.getElementById('genSub').textContent='Trovati '+_genPlan.length+' responsabili · '+totFile+' file da creare';
+  var ph='';
+  _genPlan.forEach(function(item){
+    ph+='<div style="padding:6px 0;border-bottom:1px solid rgba(36,48,72,.4)">';
+    ph+='<span style="font-weight:700;color:var(--teal)">'+esc(item.resp)+' / '+esc(item.plant)+'</span>';
+    ph+=' <span style="font-size:10px;color:var(--muted)">template: '+esc(item.templateFileName)+'</span><br>';
+    ph+='<span style="font-size:11px;color:var(--subtle)">Crea: '+item.mesiDaCreare.map(function(m){return MESI[m-1];}).join(', ')+'</span></div>';
+  });
+  document.getElementById('genPlan').innerHTML=ph;
+  document.getElementById('genPlanWrap').style.display='';
+  document.getElementById('genStartBtn').disabled=false;
+}
+
+function genLog(msg,color){
+  var d=document.getElementById('genLog');
+  var line=document.createElement('div');line.style.color=color||'var(--subtle)';line.textContent=msg;
+  d.appendChild(line);d.scrollTop=d.scrollHeight;
+}
+
+async function generaAnnoStart(){
+  _genAbort=false;
+  document.getElementById('genStartBtn').style.display='none';
+  document.getElementById('genCancelBtn').textContent='Chiudi';
+  document.getElementById('genPlanWrap').style.display='none';
+  document.getElementById('genLogWrap').style.display='';
+  document.getElementById('genProgress').style.display='';
+  document.getElementById('genLog').innerHTML='';
+  var totFile=_genPlan.reduce(function(s,x){return s+x.mesiDaCreare.length;},0);
+  var done=0;
+  function setBar(n,tot){
+    document.getElementById('genBar').style.width=Math.round(n/tot*100)+'%';
+    document.getElementById('genProgressTxt').textContent=n+' / '+tot+' file';
+  }
+  setBar(0,totFile);
+  for(var pi=0;pi<_genPlan.length;pi++){
+    if(_genAbort)break;
+    var item=_genPlan[pi];
+    genLog('── '+item.resp+' / '+item.plant+' (template: '+MESI[item.templateMonth-1]+')');
+    var emps=[];
+    try{
+      var sname=MESI[item.templateMonth-1]+'_ATS';
+      var vals=await sheetsRead(item.templateFileId,sname+'!A1:AQ300');
+      var pd=await parseSheetValues(vals,item.anno,item.templateMonth,item.templateFileId,sname,'ats');
+      emps=pd.employees.map(function(e){return{sap:e.id||e.sap||'',nome:e.nome,plant:e.plant||item.plant};});
+      genLog('  ✓ Template letto: '+emps.length+' dipendenti','var(--green)');
+    }catch(e){
+      genLog('  ✗ Errore lettura template: '+e.message,'var(--red)');
+      done+=item.mesiDaCreare.length;setBar(done,totFile);continue;
+    }
+    for(var mi=0;mi<item.mesiDaCreare.length;mi++){
+      if(_genAbort)break;
+      var mese=item.mesiDaCreare[mi];
+      var mm=('0'+mese).slice(-2);
+      var fname=item.resp+'_'+item.plant+'_'+item.anno+mm;
+      genLog('  Crea '+fname+'…');
+      try{
+        await generaUnFile(fname,item.resp,item.plant,item.anno,mese,emps);
+        genLog('  ✓ '+fname+' creato','var(--green)');
+      }catch(e){genLog('  ✗ Errore: '+e.message,'var(--red)');}
+      done++;setBar(done,totFile);
+      await new Promise(function(r){setTimeout(r,500);});
+    }
+  }
+  if(_genAbort)genLog('\u26d4 Operazione interrotta','var(--amber)');
+  else genLog('\u2705 Completato! '+done+' file elaborati.','var(--teal)');
+  loadAllFiles();buildYears();
+}
+
+async function generaUnFile(fname,resp,plant,anno,mese,emps){
+  var mName=MESI[mese-1];var dates=getDates(anno,mese);
+  var h0=['Resp. '+resp,'Dipendenti','Plant','Data'];
+  var h1=['ExtEmpN_SAP','Nominativo','Plant '+plant,mName.substring(0,3).toLowerCase()+'-'+String(anno).slice(2)];
+  dates.forEach(function(d){h0.push(d.day);h1.push(GGS[d.weekday]);});
+  var atsRows=[h0,h1];
+  emps.forEach(function(emp){
+    var sig=[emp.sap,emp.nome,'Sigla'];dates.forEach(function(){sig.push('');});atsRows.push(sig);
+    var ing=[emp.sap,emp.nome,'Ingresso'];dates.forEach(function(){ing.push('');});atsRows.push(ing);
+    var usc=[emp.sap,emp.nome,'Uscita'];dates.forEach(function(){usc.push('');});atsRows.push(usc);
+    atsRows.push([]);
+  });
+  var legRows=[['SIGLA','DESCRIZIONE','NOTE']];
+  SIGLE.forEach(function(s){legRows.push([s.code,s.label,s.hasQty?'Es. 1'+s.code:'']);});
+  var ss=await fetch('https://sheets.googleapis.com/v4/spreadsheets',{
+    method:'POST',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+    body:JSON.stringify({properties:{title:fname},sheets:[{properties:{title:mName+'_Coop'}},{properties:{title:mName+'_ATS'}},{properties:{title:'Leggenda'}}]})
+  }).then(function(r){return r.json();});
+  if(!ss.spreadsheetId)throw new Error('Creazione fallita');
+  await fetch('https://www.googleapis.com/drive/v3/files/'+ss.spreadsheetId+'?addParents='+FOLDER_ID+'&removeParents=root&fields=id',{
+    method:'PATCH',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},body:JSON.stringify({})
+  });
+  await sheetsBatchUpdate(ss.spreadsheetId,[
+    {range:mName+'_Coop!A1',values:[h0,h1]},
+    {range:mName+'_ATS!A1',values:atsRows},
+    {range:'Leggenda!A1',values:legRows}
+  ]);
+}
+
 function listFiles(q){return gFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name,mimeType)&pageSize=200').then(function(r){return r.files||[];});}
 function downloadFile(id){return fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){if(!r.ok)throw new Error('Download fallito: '+r.status);return r.blob();});}
 function gFetch(url){
@@ -4845,7 +5066,44 @@ function renderGantt(dipList,year,mDa,mA){
     h+='</tr>';
   });
   h+='</tbody></table></div>';
-  document.getElementById('ferieContent').innerHTML=leg+h;
+
+  // Vista mobile card per dipendente
+  var mob='<div class="ferie-mobile-list">';
+  dipList.forEach(function(dip){
+    var res=calcResiduo(dip.sap);
+    var mesiF={},mesiHP={};
+    if(ferieData){
+      var dr2=ferieData.dipendenti.find(function(x){return String(x.sap||'').trim()===String(dip.sap||'').trim();});
+      if(dr2){
+        (dr2.ferie_godute||[]).forEach(function(g){var mi=parseInt(g.data.split('-')[1]);if(mi>=mDa&&mi<=mA)mesiF[mi]=true;});
+        (dr2.permessi_goduti||[]).forEach(function(g){var mi=parseInt(g.data.split('-')[1]);if(mi>=mDa&&mi<=mA)mesiHP[mi]=true;});
+      }
+    }
+    var hasSomething=Object.keys(mesiF).length||Object.keys(mesiHP).length;
+    mob+='<div class="ferie-mob-card">';
+    mob+='<div class="ferie-mob-card-header">';
+    mob+='<div><div class="ferie-mob-nome">'+esc(dip.nome)+'</div><div class="ferie-mob-sap">SAP '+esc(dip.sap)+'</div></div>';
+    mob+='</div>';
+    mob+='<div class="ferie-mob-badges">';
+    mob+='<span class="ferie-mob-badge f'+(res.ferie<0?' over':res.ferie<=5?' warn':'')+'">\uD83C\uDFD6 F: '+res.ferie+'/'+res.ferieTot+'</span>';
+    mob+='<span class="ferie-mob-badge hp'+(res.permessi<0?' over':res.permessi<=4?' warn':'')+'">\u23F1 HP: '+res.permessi+'h/'+res.permTot+'h</span>';
+    mob+='</div>';
+    if(hasSomething){
+      mob+='<div class="ferie-mob-mesi">';
+      for(var mi5=mDa;mi5<=mA;mi5++){
+        if(!mesiF[mi5]&&!mesiHP[mi5])continue;
+        var cls=mesiF[mi5]?'has-f':'has-hp';
+        mob+='<span class="ferie-mob-mese '+cls+'" onclick="ganttMonthClick(''+dip.sap.replace(/'/g,"\'")+'','+mi5+','+year+')">'+MESI[mi5-1].substring(0,3)+(mesiF[mi5]?' F':'')+(mesiHP[mi5]?' HP':'')+'</span>';
+      }
+      mob+='</div>';
+    } else {
+      mob+='<div style="font-size:11px;color:var(--muted)">Nessuna assenza nel periodo</div>';
+    }
+    mob+='</div>';
+  });
+  mob+='</div>';
+
+  document.getElementById('ferieContent').innerHTML='<div class="gantt-table-wrap">'+leg+h+'</div>'+mob;
   document.getElementById('ferieInfo').textContent=dipList.length+' dipendenti \u00b7 '+MESI[mDa-1]+' \u2013 '+MESI[mA-1]+' '+year;
 }
 
@@ -4910,6 +5168,13 @@ function ferieExport(){
 
   XLSX.writeFile(WB,'PianoFerie_'+year+'_'+MESI[mDa-1]+'-'+MESI[mA-1]+'.xlsx');
   toast('\u2713 Excel esportato');
+}
+
+function ganttMonthClick(sap,mese,year){
+  // Apre il picker per il primo giorno lavorativo del mese (mobile shortcut)
+  var dates=getDates(year,mese);
+  var firstLav=dates.find(function(d){var wd=d.weekday;return wd!==0&&wd!==6&&!isHoliday(d.day,mese,year);});
+  if(firstLav)ganttCellClick(sap,mese,firstLav.day);
 }
 
 function ganttCellClick(sap,mese,giorno){
