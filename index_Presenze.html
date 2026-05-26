@@ -1540,7 +1540,8 @@ function applyRestoredFilters(){
   if(window._restoreCPlant){var s=document.getElementById('cPlant');if(s)s.value=window._restoreCPlant;}
   if(window._restoreAResp){var s=document.getElementById('aResp');if(s)s.value=window._restoreAResp;}
   if(window._restoreAPlant){var s=document.getElementById('aPlant');if(s)s.value=window._restoreAPlant;}
-  if(window._restoreSec) switchSec(window._restoreSec);
+  // switchSec DOPO applyPerm, altrimenti snFerie è ancora display:none
+  if(window._restoreSec){var _sec=window._restoreSec;setTimeout(function(){switchSec(_sec);},0);}
   var b;
   b=document.getElementById('totToggleBtn');if(b)b.textContent=(totVisible?'⊟':'⊞')+' Totali';
   b=document.getElementById('coopTotToggleBtn');if(b)b.textContent=(coopTotVisible?'⊟':'⊞')+' Totali';
@@ -1724,6 +1725,7 @@ function applyPerm(){
     userTags=['*'];userSecs=['coop','ats','file'];isReadOnly=false;
     document.getElementById('permBadge').textContent='ADMIN';
     document.getElementById('permBadge').className='pbadge is-admin';
+    document.getElementById('snFerie').style.display='';
   } else if(uc){
     userTags=uc.tags||[];userSecs=uc.sections||[];isReadOnly=!uc.is_admin;
     document.getElementById('permBadge').textContent=userTags.length?userTags.join('·'):'DEFAULT';
