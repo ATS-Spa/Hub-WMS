@@ -504,6 +504,12 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
 .qty-row{display:flex;align-items:center;gap:8px;font-size:11px;color:var(--muted)}
 .sec-checks{display:flex;gap:10px;flex-wrap:wrap}
 .sc-item{display:flex;align-items:center;gap:6px;font-size:13px;cursor:pointer;user-select:none;padding:6px 12px;background:var(--card);border:1px solid var(--border);border-radius:6px;transition:all .15s}
+.tema-grid{display:grid;grid-template-columns:repeat(4,1fr);gap:6px;margin-top:4px}
+.tema-btn{display:flex;flex-direction:column;align-items:center;justify-content:center;gap:3px;padding:8px 4px;border:2px solid var(--border);border-radius:10px;cursor:pointer;font-size:11px;font-weight:700;font-family:var(--ffc);letter-spacing:.2px;color:var(--subtle);transition:border-color .15s,background .15s,color .15s;text-align:center;user-select:none}
+.tema-btn:hover{border-color:var(--teal);color:var(--text);background:rgba(20,184,166,.06)}
+.tema-btn input[type="radio"]{display:none}
+.tema-btn:has(input:checked){border-color:var(--teal)!important;color:var(--teal)!important;background:rgba(20,184,166,.12)!important;box-shadow:0 0 0 1px var(--teal)}
+.tema-btn span{font-size:11px}
 .sc-item:hover{border-color:var(--teal)}
 .sc-item input{accent-color:var(--teal);cursor:pointer}
 
@@ -1062,6 +1068,70 @@ body.theme-salvia .gantt-cell:not(.gc-we):not(.gc-hol):hover{background:rgba(26,
   /* Gantt wrap: scroll orizzontale con avviso */
   .gantt-wrap{padding:8px 12px 16px}
 }
+
+/* ── TEMA ROVERE (legno caldo) ── */
+body.theme-rovere{
+  --bg:#f2ebe0;--surface:#ebe2d4;--card:#e0d4c0;--border:#bfad95;
+  --blue:#5a6e9a;--blue-dim:#d0d8f0;
+  --teal:#5a7a5a;--teal-dim:#c8dcc8;
+  --green:#4a6e3a;--amber:#8a6a1a;--amber-dim:#f0e0a8;
+  --red:#8a3a2a;--red-dim:#f0c8b8;
+  --purple:#6a4a7a;--cyan:#3a6a7a;--sky:#3a5a8a;
+  --orange:#8a5a2a;--lime:#5a7a2a;--pink:#8a3a5a;
+  --text:#1e140a;--muted:#6a5a40;--subtle:#4a3a20;
+  --c-X:#4a6e3a;--c-F:#5a6e9a;--c-hF:#7a8eba;--c-M:#8a3a2a;
+  --c-HP:#6a4a7a;--c-H104:#8a6a1a;--c-104:#8a5a2a;--c-CP:#8a3a5a;
+  --c-HPE:#5a7a5a;--c-PE:#3a6a7a;--c-SW:#5a7a2a;--c-Lutto:#6a5a40;--c-TFS:#3a5a8a;--c-PLT:#8a6a1a;
+  --ferie-color:#8a3a5a;
+}
+body.theme-rovere .snav{background:#e0d4c0;border-bottom:1px solid #bfad95;}
+body.theme-rovere .snb{color:#6a5a40;}
+body.theme-rovere .snb.on{color:#1e140a;}
+body.theme-rovere .drawer{background:#e0d4c0;border-right:1px solid #bfad95;}
+body.theme-rovere .topbar{background:#ebe2d4;border-bottom:1px solid #bfad95;}
+body.theme-rovere .filters{background:#e0d4c0;border-bottom:1px solid #bfad95;}
+body.theme-rovere .sf{background:#d4c8b0!important;}
+body.theme-rovere .fc{background:#d4c8b0;border-color:#bfad95;color:#1e140a;}
+body.theme-rovere .mi{background:#d4c8b0;border-color:#bfad95;color:#1e140a;}
+body.theme-rovere .mi:focus{border-color:#5a7a5a;}
+body.theme-rovere .ba{border-color:#b0a080;color:#4a3a20;background:transparent;}
+body.theme-rovere .ba:hover{background:rgba(30,20,10,.08);}
+body.theme-rovere .bteal{background:var(--teal);border-color:var(--teal);color:#fff;}
+body.theme-rovere .sec{background:var(--bg);}
+body.theme-rovere .mo{background:rgba(30,20,10,.4);}
+body.theme-rovere .mc{background:#ebe2d4;border:1px solid #bfad95;box-shadow:0 20px 60px rgba(30,20,10,.2);}
+body.theme-rovere .mt{color:#1e140a;}
+body.theme-rovere .tout{background:#e0d4c0;border:1px solid #bfad95;}
+body.theme-rovere .dh{background:#d4c8b0;color:#4a3a20;}
+body.theme-rovere .dh.we{color:#b0a080;}
+body.theme-rovere .dc.we{background:rgba(30,20,10,.06);}
+body.theme-rovere .perm-section{background:#e0d4c0;border-color:#bfad95;}
+body.theme-rovere .perm-section-header{background:#d4c8b0;border-color:#bfad95;}
+body.theme-rovere input[type="checkbox"]{accent-color:var(--teal);}
+body.theme-rovere .pbadge{background:#5a7a5a;color:#fff;}
+body.theme-rovere .pbadge.is-super{background:#8a3a2a;}
+body.theme-rovere .pbadge.is-admin{background:#5a6e9a;}
+body.theme-rovere tbody tr:hover td{background:rgba(30,20,10,.06)!important;}
+body.theme-rovere tbody tr:hover td.gd-nome,
+body.theme-rovere tbody tr:hover td.gd-sap,
+body.theme-rovere tbody tr:hover td.gd-ferie-res,
+body.theme-rovere tbody tr:hover td.gd-perm-res{background:#d4c8b0!important;}
+body.theme-rovere .gantt-table thead{background:#e0d4c0!important;}
+body.theme-rovere .gantt-table thead th{background:#e0d4c0!important;}
+body.theme-rovere .gantt-table th{background:#e0d4c0;color:#4a3a20;border-color:#bfad95;}
+body.theme-rovere .gantt-table td{border-color:rgba(160,140,100,.35);}
+body.theme-rovere .gantt-table td.gd-nome,
+body.theme-rovere .gantt-table td.gd-sap,
+body.theme-rovere .gantt-table td.gd-ferie-res,
+body.theme-rovere .gantt-table td.gd-perm-res{background:#ebe2d4!important}
+body.theme-rovere .gantt-table th.gh-nome,
+body.theme-rovere .gantt-table th.gh-sap,
+body.theme-rovere .gantt-table th.gh-ferie-res,
+body.theme-rovere .gantt-table th.gh-perm-res{background:#e0d4c0}
+body.theme-rovere .gantt-cell.gc-we{background:rgba(30,20,10,.1);}
+body.theme-rovere .ferie-mob-card{background:#e0d4c0;border-color:#bfad95;}
+body.theme-rovere .mob-day-val{background:rgba(30,20,10,.05);}
+body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
 </style>
 </head>
 <body>
@@ -1433,30 +1503,15 @@ body.theme-salvia .gantt-cell:not(.gc-we):not(.gc-hol):hover{background:rgba(26,
   </div>
   <div class="fg" style="margin-top:4px">
     <div class="fl">Tema</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:6px">
-      <label class="sc-item" style="cursor:pointer;gap:6px;padding:7px 8px;border:1px solid var(--border);border-radius:8px;justify-content:center;font-size:12px">
-        <input type="radio" name="cfgTema" value="scuro" style="accent-color:var(--teal)"> 🌙 Scuro
-      </label>
-      <label class="sc-item" style="cursor:pointer;gap:6px;padding:7px 8px;border:1px solid var(--border);border-radius:8px;justify-content:center;font-size:12px">
-        
-      </label>
-      <label class="sc-item" style="cursor:pointer;gap:6px;padding:7px 8px;border:1px solid var(--border);border-radius:8px;justify-content:center;font-size:12px">
-        <input type="radio" name="cfgTema" value="chiaro" style="accent-color:var(--teal)"> ☀️ Chiaro
-      </label>
-      <label class="sc-item" style="cursor:pointer;gap:6px;padding:7px 8px;border:1px solid var(--border);border-radius:8px;justify-content:center;font-size:12px">
-        <input type="radio" name="cfgTema" value="avorio" style="accent-color:var(--teal)"> 🌿 Avorio
-        </label><label style="display:flex;align-items:center;gap:6px;cursor:pointer">
-        <input type="radio" name="cfgTema" value="sap" style="accent-color:var(--teal)"> 🔵 SAP
-      </label>
-      <label class="sc-item" style="cursor:pointer;gap:6px;padding:7px 8px;border:1px solid var(--border);border-radius:8px;justify-content:center;font-size:12px">
-        <input type="radio" name="cfgTema" value="grafite" style="accent-color:var(--teal)"> 🩶 Grafite
-      </label>
-      <label class="sc-item" style="cursor:pointer;gap:6px;padding:7px 8px;border:1px solid var(--border);border-radius:8px;justify-content:center;font-size:12px">
-        <input type="radio" name="cfgTema" value="oceano" style="accent-color:var(--teal)"> 🌊 Oceano
-      </label>
-      <label class="sc-item" style="cursor:pointer;gap:6px;padding:7px 8px;border:1px solid var(--border);border-radius:8px;justify-content:center;font-size:12px;grid-column:1/-1">
-        <input type="radio" name="cfgTema" value="salvia" style="accent-color:var(--teal)"> 🌿 Salvia
-      </label>
+    <div class="tema-grid">
+      <label class="tema-btn"><input type="radio" name="cfgTema" value="scuro"><span>🌙 Scuro</span></label>
+      <label class="tema-btn"><input type="radio" name="cfgTema" value="grafite"><span>🩶 Grafite</span></label>
+      <label class="tema-btn"><input type="radio" name="cfgTema" value="sap"><span>🔵 SAP</span></label>
+      <label class="tema-btn"><input type="radio" name="cfgTema" value="oceano"><span>🌊 Oceano</span></label>
+      <label class="tema-btn"><input type="radio" name="cfgTema" value="chiaro"><span>☀️ Chiaro</span></label>
+      <label class="tema-btn"><input type="radio" name="cfgTema" value="avorio"><span>🌿 Avorio</span></label>
+      <label class="tema-btn"><input type="radio" name="cfgTema" value="salvia"><span>🌱 Salvia</span></label>
+      <label class="tema-btn"><input type="radio" name="cfgTema" value="rovere"><span>🪵 Rovere</span></label>
     </div>
   </div>
   <div style="font-size:11px;color:var(--muted);background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px 12px" id="cfgPreview">—</div>
@@ -5780,12 +5835,13 @@ function ganttCellCreateFile(dip,year,mese,giorno,di){
 
 // ── Config orario default ──
 function applyTheme(t){
-  document.body.classList.remove('theme-light','theme-sap','theme-grafite','theme-salvia','theme-oceano','theme-avorio');
+  document.body.classList.remove('theme-light','theme-sap','theme-grafite','theme-salvia','theme-oceano','theme-avorio','theme-rovere');
   if(t==='chiaro')   document.body.classList.add('theme-light');
   else if(t==='dim') document.body.classList.add('theme-dim');
   else if(t==='sap')      document.body.classList.add('theme-sap');
   else if(t==='grafite')  document.body.classList.add('theme-grafite');
   else if(t==='salvia')   document.body.classList.add('theme-salvia');
+  else if(t==='rovere')   document.body.classList.add('theme-rovere');
   else if(t==='oceano')   document.body.classList.add('theme-oceano');
   else if(t==='avorio')   document.body.classList.add('theme-avorio');
   // default (scuro): nessuna classe aggiuntiva
