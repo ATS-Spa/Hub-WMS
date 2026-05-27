@@ -400,7 +400,7 @@ tr.ats-ore{transition:opacity .15s}
 tr.ats-ore.hidden{display:none}
 .ore-toggle{display:inline-flex;align-items:center;gap:4px;font-family:var(--ffc);font-size:10px;font-weight:700;letter-spacing:.5px;padding:2px 8px;border-radius:4px;cursor:pointer;background:rgba(20,184,166,.07);border:1px solid rgba(20,184,166,.2);color:var(--teal);transition:all .15s;user-select:none;white-space:nowrap;margin-top:3px}
 .ore-toggle:hover{background:rgba(20,184,166,.18)}
-tr.ats-sep td{height:6px;padding:0!important;background:rgba(20,184,166,.05);border-top:2px solid rgba(20,184,166,.2)!important;border-bottom:none!important}
+tr.ats-sep td{height:2px;padding:0!important;background:transparent;border-top:1px solid var(--border)!important;border-bottom:none!important}
 .refresh-badge{font-size:10px;font-family:var(--ffm);color:var(--muted);padding:3px 9px;background:var(--card);border:1px solid var(--border);border-radius:20px;white-space:nowrap}
 .refresh-badge.live{color:var(--green);border-color:rgba(16,185,129,.3);background:rgba(16,185,129,.06)}
 .refresh-badge .rdot{display:inline-block;width:5px;height:5px;border-radius:50%;background:var(--green);margin-right:4px;animation:pulse 2s infinite;vertical-align:middle}
@@ -2400,9 +2400,11 @@ function renderSection(sec, emps, data, opts){
         // Usa orari reali o default
         var i2=ing||wmsConfig.ingresso||'08:00';
         var u2=usc2||wmsConfig.uscita||'18:00';
-        var qty2=parseFloat(((emp.sigla||[])[di]||'1').match(/^[\d.]*/)[0])||1;
+        var sigRaw=(emp.sigla||[])[di]||'HP';
+        var qty2=parseFloat(sigRaw.match(/^[\d.]*/)[0])||1;
         var o2=calcOreGiorno(i2,u2,ph);
         var eff=Math.max(0,(o2.ord+o2.str)-qty2);
+        console.log('[WMS] HP oreGiorno di='+di,'sig='+sigRaw,'qty='+qty2,'ing='+i2,'usc='+u2,'ph='+ph,'o2=',o2,'eff='+eff);
         return{ord:eff,str:0,eff:eff};
       }
       return null;
