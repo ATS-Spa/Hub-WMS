@@ -927,7 +927,7 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
   #sigleFeriePanel{padding:8px 12px 10px}
   #sigleFerieGrid{gap:4px}
 }
-.gantt-wrap{padding:16px 0 0;overflow:hidden;flex:1;display:flex;flex-direction:column}
+.gantt-wrap{padding:0;overflow:hidden;flex:1;display:flex;flex-direction:column}
 .gantt-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 .gantt-table{border-collapse:collapse;white-space:nowrap;font-size:12px}
 .gantt-table th{background:var(--card);border:1px solid var(--border);padding:5px 6px;font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.3px;color:var(--subtle);text-align:center;position:sticky;top:0;z-index:5}
@@ -5598,25 +5598,25 @@ function renderGantt(dipList,year,mDa,mA){
 
   document.getElementById('ferieContent').innerHTML=leg+'<div class="gantt-table-wrap">'+h+'</div>'+mob;
   document.getElementById('ferieInfo').textContent=dipList.length+' dipendenti · '+MESI[mDa-1]+' – '+MESI[mA-1]+' '+year;
-  // Misura altezza prima riga thead e imposta CSS var per sticky corretto
-  // Prima imposta un valore sicuro di default, poi misura quello reale
+  // Misura altezza prima riga thead (la <tr> intera, non il singolo th)
+  // e imposta CSS var per posizionamento sticky corretto della seconda riga
   var ganttScroll=document.getElementById('ganttScroll');
   if(ganttScroll){
     ganttScroll.style.setProperty('--gantt-row1-h','34px');
   }
   function _fixGanttStickyRow(){
-    var firstRow=document.querySelector('#ganttScroll thead tr:first-child th');
-    if(firstRow){
-      var rh=firstRow.getBoundingClientRect().height;
+    // Misura la <tr> intera: è più affidabile del singolo th
+    var firstTr=document.querySelector('#ganttScroll thead tr:first-child');
+    if(firstTr){
+      var rh=firstTr.getBoundingClientRect().height;
       var scroll=document.getElementById('ganttScroll');
       if(scroll&&rh>0) scroll.style.setProperty('--gantt-row1-h',Math.round(rh)+'px');
     }
   }
-  // Doppio rAF garantisce che il browser abbia effettuato il layout completo
+  // Doppio rAF garantisce layout completo prima della misurazione
   requestAnimationFrame(function(){
     requestAnimationFrame(function(){
       _fixGanttStickyRow();
-      // Fallback con timeout per browser lenti o contenuto lazy
       setTimeout(_fixGanttStickyRow, 200);
     });
   });
