@@ -378,7 +378,7 @@ thead th:last-child{border-right:none}
 tr.emp-hdr td{background:var(--card);border-top:2px solid var(--border);border-bottom:2px solid var(--border);padding:6px 10px;font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--subtle);border-right:1px solid var(--border);box-shadow:0 2px 4px rgba(0,0,0,.15);text-align:center}
 tr.emp-hdr td.conf-th,tr.emp-hdr td:not(.ca0):not(.ca1):not(.ca2):not(.sf){position:static!important;top:auto!important}
 tr.emp-hdr td.ca1{text-align:left}
-tr.emp-hdr td.dh{padding:3px 2px;text-transform:none;letter-spacing:0;box-shadow:none;min-width:36px;max-width:36px}
+tr.emp-hdr td.dh{padding:3px 2px;text-transform:none;letter-spacing:0;box-shadow:none;min-width:38px;max-width:38px}
 tr.emp-hdr td.dh .dn{display:block;font-family:var(--ffm);font-size:12px;font-weight:600;color:var(--text);line-height:1.3}
 tr.emp-hdr td.dh .dw{display:block;font-size:8px;color:var(--muted);letter-spacing:.3px;line-height:1.1}
 tr.emp-hdr td.dh.we .dn{color:var(--muted)}
@@ -392,7 +392,7 @@ tbody tr{border-bottom:1px solid rgba(36,48,72,.5);transition:background .1s}
 tbody tr:hover{background:rgba(255,255,255,.018)}
 td{padding:5px 10px;border-right:1px solid rgba(36,48,72,.4);font-size:13px}
 td:last-child{border-right:none}
-th.dh{text-align:center;min-width:36px;max-width:36px;padding:3px 2px;position:sticky;top:0;z-index:4;background:var(--card)}
+th.dh{text-align:center;min-width:38px;max-width:38px;padding:3px 2px;position:sticky;top:0;z-index:4;background:var(--card)}
 th.dh .dn{font-family:var(--ffm);font-size:12px;font-weight:600;color:var(--text)}
 th.dh .dw{font-size:8px;color:var(--muted);letter-spacing:.3px}
 th.dh.we .dn{color:var(--muted)}th.dh.we .dw{color:var(--border)}
@@ -403,7 +403,7 @@ th.dh.holiday .dn{color:var(--red);font-weight:800}
 th.dh.holiday .dw{color:rgba(239,68,68,.7)}
 td.dc.holiday{background:rgba(239,68,68,.07);}
 td.dc.today{background:rgba(20,184,166,.06);box-shadow:inset 1.5px 0 0 rgba(20,184,166,.4),inset -1.5px 0 0 rgba(20,184,166,.4)}
-td.dc{text-align:center;min-width:36px;max-width:36px;padding:4px 2px;font-family:var(--ffc);font-size:13px;font-weight:700}
+td.dc{text-align:center;min-width:38px;max-width:38px;padding:4px 2px;font-family:var(--ffc);font-size:13px;font-weight:700}
 td.dc.we{background:rgba(36,48,72,.28)}td.dc.emp{color:rgba(36,48,72,.7)}
 td.tot{text-align:center;min-width:50px;font-family:var(--ffm);font-size:12px;font-weight:600;background:rgba(36,48,72,.18);padding:5px 8px}
 .s-X{color:var(--c-X)}.s-F{color:var(--c-F)}.s-hF{color:var(--c-hF)}.s-M{color:var(--c-M)}
@@ -1393,10 +1393,32 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
         </div>
       </div>
 
+      <div class="file-section">
+        <div class="file-section-hdr">
+          <div class="file-section-title">🗂️ Genera File Anno Completo</div>
+        </div>
+        <div class="file-section-body">
+          <p style="font-size:12px;color:var(--muted);margin-bottom:16px;line-height:1.7">
+            Scansiona tutti i responsabile/plant presenti su Drive per l'anno selezionato. Per ciascuno, usa il file del mese di riferimento (o il primo disponibile) come template e crea i mesi mancanti azzerando sigle e orari.
+          </p>
+          <div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">
+            <div class="fg"><div class="fl">Anno target</div>
+              <select class="mi fc" id="genAnno" style="width:100px;padding:7px 10px"></select></div>
+            <div class="fg"><div class="fl">Mese riferimento preferito</div>
+              <select class="mi fc" id="genMeseRif" style="width:130px;padding:7px 10px"></select></div>
+            <div class="fg"><div class="fl">Da mese</div>
+              <select class="mi fc" id="genDa" style="width:115px;padding:7px 10px"></select></div>
+            <div class="fg"><div class="fl">A mese</div>
+              <select class="mi fc" id="genA" style="width:115px;padding:7px 10px"></select></div>
+          </div>
+          <div class="file-actions">
+            <button class="ba bteal" style="padding:8px 18px" onclick="openGeneraAnno()">🗂️ Avvia</button>
+          </div>
+        </div>
+      </div>
+
     </div>
   </div>
-
-  <!-- ══ PIANO FERIE ══ -->
   <div class="sec" id="secFerie">
     <div class="filters">
       <div class="fg"><div class="fl">Responsabile</div>
@@ -2045,7 +2067,7 @@ function buildYears(){
   }
   var minY=years.length?Math.min.apply(null,years):now-3;
   var maxY=Math.max(now+1,years.length?Math.max.apply(null,years):now+1);
-  ['cYear','aYear','fYear','tplYear','impDipDestYear','fAnno'].forEach(function(id){
+  ['cYear','aYear','fYear','tplYear','impDipDestYear','fAnno','genAnno'].forEach(function(id){
     var s=document.getElementById(id);if(!s)return;
     var prev=s.value;s.innerHTML='';
     for(var y=maxY;y>=minY;y--){var o=document.createElement('option');o.value=y;o.textContent=y;if(y===now)o.selected=true;s.appendChild(o);}
@@ -2054,9 +2076,12 @@ function buildYears(){
 }
 function buildMonths(){
   var cur=new Date().getMonth()+1;
-  ['cMonth','aMonth','fMonth','tplMonth','impDipDestMonth'].forEach(function(id){
+  ['cMonth','aMonth','fMonth','tplMonth','impDipDestMonth','genMeseRif','genDa','genA'].forEach(function(id){
     var s=document.getElementById(id);if(!s)return;s.innerHTML='';
     MESI.forEach(function(n,i){var o=document.createElement('option');o.value=i+1;o.textContent=n;if(i+1===cur)o.selected=true;s.appendChild(o);});
+    // genA default Dicembre, genDa default Gennaio
+    if(id==='genA'){s.value=12;}
+    if(id==='genDa'){s.value=1;}
   });
 }
 function buildFileTabSelects(){}
@@ -4007,26 +4032,6 @@ function renderPermPanel(){
   h+='<input class="mi fc contratto-inp" id="newContrFerie" type="number" min="0" max="60" placeholder="Ferie gg" style="width:80px;padding:5px 8px">';
   h+='<input class="mi fc contratto-inp" id="newContrPerm" type="number" min="0" max="200" placeholder="Perm. h" style="width:80px;padding:5px 8px">';
   h+='<button class="ba bghost te" style="padding:6px 12px;font-size:12px" onclick="addContr()">＋ Aggiungi</button>';
-  h+='</div>';
-  h+='</div></div>';
-  // ── Sezione Genera Anno ──
-  var now=new Date().getFullYear();
-  h+='<div class="perm-section"><div class="perm-section-header"><div class="perm-section-title">🗂️ Genera File Anno Completo</div></div><div class="perm-section-body">';
-  h+='<div style="font-size:12px;color:var(--muted);margin-bottom:14px;line-height:1.7">Scansiona tutti i responsabile/plant presenti su Drive per l\'anno selezionato. Per ciascuno, usa il file del mese di riferimento (o il primo disponibile) come template e crea i mesi mancanti azzerate sigle e orari.</div>';
-  h+='<div style="display:flex;gap:12px;align-items:flex-end;flex-wrap:wrap;margin-bottom:12px">';
-  h+='<div class="fg"><div class="fl">Anno target</div><select class="mi fc" id="genAnno" style="width:100px;padding:7px 10px">';
-  for(var gy=now+1;gy>=now-2;gy--)h+='<option value="'+gy+'"'+(gy===now?' selected':'')+'>'+gy+'</option>';
-  h+='</select></div>';
-  h+='<div class="fg"><div class="fl">Mese riferimento preferito</div><select class="mi fc" id="genMeseRif" style="width:130px;padding:7px 10px">';
-  MESI.forEach(function(mn,i){h+='<option value="'+(i+1)+'"'+(i+4===new Date().getMonth()?' selected':'')+'>'+mn+'</option>';});
-  h+='</select></div>';
-  h+='<div class="fg"><div class="fl">Da mese</div><select class="mi fc" id="genDa" style="width:115px;padding:7px 10px">';
-  MESI.forEach(function(mn,i){h+='<option value="'+(i+1)+'"'+(i===0?' selected':'')+'>'+mn+'</option>';});
-  h+='</select></div>';
-  h+='<div class="fg"><div class="fl">A mese</div><select class="mi fc" id="genA" style="width:115px;padding:7px 10px">';
-  MESI.forEach(function(mn,i){h+='<option value="'+(i+1)+'"'+(i===11?' selected':'')+'>'+mn+'</option>';});
-  h+='</select></div>';
-  h+='<button class="ba bteal" style="padding:8px 18px" onclick="openGeneraAnno()">🗂️ Avvia</button>';
   h+='</div>';
   h+='</div></div>';
   document.getElementById('permPanel').innerHTML=h;
