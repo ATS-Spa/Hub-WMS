@@ -122,6 +122,30 @@ body.theme-light .snb.on{color:#1e293b;}
 body.theme-light .drawer{background:#ffffff;border-right:1px solid #e2e8f0;}
 body.theme-light .mo{background:rgba(0,0,0,.25);}
 body.theme-light .mc{background:#ffffff;border:1px solid #e2e8f0;box-shadow:0 20px 60px rgba(0,0,0,.15);}
+/* ── TEMA AVORIO (warm light) ── */
+body.theme-avorio{
+  --bg:#f5f0e8;--surface:#ede8df;--card:#e5dfd3;--border:#c9bfaf;
+  --blue:#3b6fa0;--blue-dim:#c5d8ef;
+  --teal:#2a7d5f;--teal-dim:#c0ddd3;
+  --green:#2d7a3a;--amber:#b5620a;--amber-dim:#f5dfc0;
+  --red:#b53030;--red-dim:#f0c8c8;
+  --purple:#6b4fa0;--cyan:#1a7a8a;--sky:#2060a0;
+  --orange:#b55a10;--lime:#4a7a1a;--pink:#a03060;
+  --text:#2c2418;--muted:#7a6a55;--subtle:#5a4e3e;
+  --c-X:#2d7a3a;--c-F:#3b6fa0;--c-hF:#5a8fbe;--c-M:#b53030;
+  --c-HP:#6b4fa0;--c-H104:#b5620a;--c-104:#b55a10;--c-CP:#a03060;
+  --c-HPE:#2a7d5f;--c-PE:#1a7a8a;--c-SW:#4a7a1a;--c-Lutto:#7a6a55;--c-TFS:#2060a0;--c-PLT:#b5620a;
+}
+body.theme-avorio .mo{background:rgba(44,36,24,.35);}
+body.theme-avorio .mc{background:#ede8df;border:1px solid #c9bfaf;box-shadow:0 20px 60px rgba(44,36,24,.2);}
+body.theme-avorio .gantt-table td.gd-nome,
+body.theme-avorio .gantt-table td.gd-sap,
+body.theme-avorio .gantt-table td.gd-ferie-res,
+body.theme-avorio .gantt-table td.gd-perm-res{background:#ede8df}
+body.theme-avorio .gantt-table th.gh-nome,
+body.theme-avorio .gantt-table th.gh-sap,
+body.theme-avorio .gantt-table th.gh-ferie-res,
+body.theme-avorio .gantt-table th.gh-perm-res{background:#e5dfd3}
 body.theme-light .mi{background:#f8fafc;border-color:#e2e8f0;color:#1e293b;}
 body.theme-light .tout{background:#ffffff;}
 body.theme-light table{background:#ffffff;}
@@ -1297,6 +1321,8 @@ body.theme-light .gantt-table th.gh-perm-res{background:#e2e8f0}
         <input type="radio" name="cfgTema" value="chiaro" style="accent-color:var(--teal)"> ☀️ Chiaro
       </label>
       <label class="sc-item" style="cursor:pointer;gap:6px;padding:7px 8px;border:1px solid var(--border);border-radius:8px;justify-content:center;font-size:12px">
+        <input type="radio" name="cfgTema" value="avorio" style="accent-color:var(--teal)"> 🌿 Avorio
+        </label><label style="display:flex;align-items:center;gap:6px;cursor:pointer">
         <input type="radio" name="cfgTema" value="sap" style="accent-color:var(--teal)"> 🔵 SAP
       </label>
       <label class="sc-item" style="cursor:pointer;gap:6px;padding:7px 8px;border:1px solid var(--border);border-radius:8px;justify-content:center;font-size:12px">
@@ -1556,6 +1582,7 @@ body.theme-light .gantt-table th.gh-perm-res{background:#e2e8f0}
     </div>
     <div class="fg">
       <label class="sc-item" style="width:fit-content"><input type="checkbox" id="puSecFile"> Accesso File Import</label>
+      <label class="sc-item" style="width:fit-content"><input type="checkbox" id="puSecFerie"> Piano Ferie</label>
       <label class="sc-item" style="width:fit-content"><input type="checkbox" id="puIsAdmin"> Admin (può modificare le presenze)</label>
     </div>
   </div>
@@ -1922,7 +1949,7 @@ function applyPerm(){
   var uc=null;
   Object.keys(permConfig.users||{}).forEach(function(k){if(k.toLowerCase()===em)uc=permConfig.users[k];});
   if(isSuperUser){
-    userTags=['*'];userSecs=['coop','ats','file'];
+    userTags=['*'];userSecs=['coop','ats','file','ferie'];
     document.getElementById('permBadge').textContent='SUPER';
     document.getElementById('permBadge').className='pbadge is-super';
     document.getElementById('snPerm').style.display='';
@@ -1934,7 +1961,7 @@ function applyPerm(){
     return;
   }
   if(isAdminUser){
-    userTags=['*'];userSecs=['coop','ats','file'];isReadOnly=false;
+    userTags=['*'];userSecs=['coop','ats','file','ferie'];isReadOnly=false;
     document.getElementById('permBadge').textContent='ADMIN';
     document.getElementById('permBadge').className='pbadge is-admin';
     document.getElementById('snFerie').style.display='';
@@ -1952,7 +1979,7 @@ function applyPerm(){
   document.getElementById('snCoop').style.display=userSecs.indexOf('coop')!==-1?'':'none';
   document.getElementById('snAts').style.display=userSecs.indexOf('ats')!==-1?'':'none';
   document.getElementById('snFile').style.display=userSecs.indexOf('file')!==-1?'':'none';
-  document.getElementById('snFerie').style.display=userSecs.indexOf('ats')!==-1?'':'none';
+  document.getElementById('snFerie').style.display=(userSecs.indexOf('ferie')!==-1||userSecs.indexOf('ats')!==-1)?'':'none';
   if(!userSecs.length){
     document.getElementById('appShell').style.display='none';
     document.getElementById('accessDenied').style.display='flex';
@@ -3665,7 +3692,7 @@ function renderPermPanel(){
   h+='<div class="perm-section"><div class="perm-section-header"><div class="perm-section-title">🌐 Default</div></div><div class="perm-section-body">';
   var def=permConfig.default||{};var dsecs=def.sections||[];
   h+='<div style="font-size:13px;color:var(--subtle);margin-bottom:10px">Accesso per chi non è in lista: '+(dsecs.length?dsecs.map(function(s){return '<strong style="color:var(--teal)">'+s+'</strong>';}).join(', '):'<strong style="color:var(--red)">Negato</strong>')+'</div>';
-  h+='<div style="display:flex;gap:10px"><label class="sc-item"><input type="checkbox" id="defCoop"'+(dsecs.indexOf('coop')!==-1?' checked':'')+' onchange="updateDefault()"> Cooperativa</label><label class="sc-item"><input type="checkbox" id="defAts"'+(dsecs.indexOf('ats')!==-1?' checked':'')+' onchange="updateDefault()"> Dipendenti</label></div></div></div>';
+  h+='<div style="display:flex;gap:10px;flex-wrap:wrap"><label class="sc-item"><input type="checkbox" id="defCoop"'+(dsecs.indexOf('coop')!==-1?' checked':'')+' onchange="updateDefault()"> Cooperativa</label><label class="sc-item"><input type="checkbox" id="defAts"'+(dsecs.indexOf('ats')!==-1?' checked':'')+' onchange="updateDefault()"> Dipendenti</label><label class="sc-item"><input type="checkbox" id="defFerie"'+(dsecs.indexOf('ferie')!==-1?' checked':'')+' onchange="updateDefault()"> Piano Ferie</label></div></div></div>';
   // Sezione Commesse
   var commesse=permConfig.commesse||[];
   h+='<div class="perm-section"><div class="perm-section-header"><div class="perm-section-title">🏭 Commesse per Plant</div><button class="ba bteal" style="padding:6px 12px;font-size:12px" onclick="openCommessaEdit(null)">＋ Nuova</button></div><div class="perm-section-body">';
@@ -3735,6 +3762,7 @@ function updateDefault(){
   var secs=[];
   if(document.getElementById('defCoop').checked)secs.push('coop');
   if(document.getElementById('defAts').checked)secs.push('ats');
+  if(document.getElementById('defFerie')&&document.getElementById('defFerie').checked)secs.push('ferie');
   if(!permConfig.default)permConfig.default={};permConfig.default.sections=secs;
 }
 // ── Contratti ATS ──
@@ -4072,8 +4100,8 @@ function openPermUser(email){
   document.getElementById('puTitle').textContent=email?'Modifica Utente':'Nuovo Utente';
   document.getElementById('puEmail').value=email||'';document.getElementById('puEmail').disabled=!!email;
   document.getElementById('puErr').classList.remove('show');
-  if(email&&permConfig.users&&permConfig.users[email]){var u=permConfig.users[email];document.getElementById('puTags').value=(u.tags||[]).join('\n');document.getElementById('puSecCoop').checked=(u.sections||[]).indexOf('coop')!==-1;document.getElementById('puSecAts').checked=(u.sections||[]).indexOf('ats')!==-1;document.getElementById('puSecFile').checked=(u.sections||[]).indexOf('file')!==-1||u.is_admin||false;document.getElementById('puIsAdmin').checked=u.is_admin||false;}
-  else{document.getElementById('puTags').value='';document.getElementById('puSecCoop').checked=true;document.getElementById('puSecAts').checked=true;document.getElementById('puSecFile').checked=false;document.getElementById('puIsAdmin').checked=false;}
+  if(email&&permConfig.users&&permConfig.users[email]){var u=permConfig.users[email];document.getElementById('puTags').value=(u.tags||[]).join('\n');document.getElementById('puSecCoop').checked=(u.sections||[]).indexOf('coop')!==-1;document.getElementById('puSecAts').checked=(u.sections||[]).indexOf('ats')!==-1;document.getElementById('puSecFile').checked=(u.sections||[]).indexOf('file')!==-1||u.is_admin||false;document.getElementById('puSecFerie').checked=(u.sections||[]).indexOf('ferie')!==-1||u.is_admin||false;document.getElementById('puIsAdmin').checked=u.is_admin||false;}
+  else{document.getElementById('puTags').value='';document.getElementById('puSecCoop').checked=true;document.getElementById('puSecAts').checked=true;document.getElementById('puSecFile').checked=false;document.getElementById('puSecFerie').checked=false;document.getElementById('puIsAdmin').checked=false;}
   mOpen('moPermUser');setTimeout(function(){if(!email)document.getElementById('puEmail').focus();},120);
 }
 function permUserConfirm(){
@@ -4084,6 +4112,7 @@ function permUserConfirm(){
   if(document.getElementById('puSecCoop').checked)secs.push('coop');
   if(document.getElementById('puSecAts').checked)secs.push('ats');
   if(document.getElementById('puSecFile').checked)secs.push('file');
+  if(document.getElementById('puSecFerie').checked)secs.push('ferie');
   if(!permConfig.users)permConfig.users={};
   permConfig.users[email]={tags:tags,sections:secs};
   if(document.getElementById('puIsAdmin').checked)permConfig.users[email].is_admin=true;
@@ -5657,6 +5686,7 @@ function applyTheme(t){
   else if(t==='grafite')  document.body.classList.add('theme-grafite');
   else if(t==='cacao')    document.body.classList.add('theme-cacao');
   else if(t==='oceano')   document.body.classList.add('theme-oceano');
+  else if(t==='avorio')   document.body.classList.add('theme-avorio');
   // default (scuro): nessuna classe aggiuntiva
 }
 function openConfig(){
