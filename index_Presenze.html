@@ -351,9 +351,9 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
 .icon-btn.del:hover{border-color:var(--red);color:var(--red)}
 
 /* ── MODAL ── */
-.mo{position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:1000;display:flex;align-items:center;justify-content:center;backdrop-filter:blur(6px)}
+.mo{position:fixed;inset:0;background:rgba(0,0,0,.82);z-index:9999;display:flex;align-items:center;justify-content:center;-webkit-overflow-scrolling:touch}
 .mo.hide{display:none}
-.mc{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:30px;display:flex;flex-direction:column;gap:15px;box-shadow:0 32px 80px rgba(0,0,0,.5);max-height:90vh;overflow-y:auto}
+.mc{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:24px;display:flex;flex-direction:column;gap:15px;box-shadow:0 32px 80px rgba(0,0,0,.5);max-height:90vh;overflow-y:auto;width:min(520px,94vw)}
 .mt{font-family:var(--ffc);font-size:19px;font-weight:700;letter-spacing:.5px}
 .ms{font-size:12px;color:var(--muted);margin-top:-8px;line-height:1.6}
 .mi{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px 13px;font-family:var(--ffm);font-size:13px;color:var(--text);outline:none;width:100%;transition:border-color .2s}
@@ -5155,25 +5155,23 @@ function renderGantt(dipList,year,mDa,mA){
     // Header: nome + pulsante inserisci
     mob+='<div class="ferie-mob-card-header">';
     mob+='<div><div class="ferie-mob-nome">'+esc(dip.nome)+'</div><div class="ferie-mob-sap">SAP '+esc(dip.sap)+'</div></div>';
-    if(adminMode) mob+='<button class="ferie-mob-ins-btn" onclick="mobMassivoForDip(\''+safeSap+'\')">＋ Inserisci</button>';
+    mob+='<button class="ferie-mob-ins-btn" onclick="mobMassivoForDip(\''+safeSap+'\')">＋ Inserisci</button>';
     mob+='</div>';
     // Badges residuo
     mob+='<div class="ferie-mob-badges">';
     mob+='<span class="ferie-mob-badge f'+(res.ferie<0?' over':res.ferie<=5?' warn':'')+'" title="Ferie godute: '+res.ferieGodute+'">🏖 F: '+res.ferie+'/'+res.ferieTot+'</span>';
     mob+='<span class="ferie-mob-badge hp'+(res.permessi<0?' over':res.permessi<=4?' warn':'')+'" title="Permessi goduti: '+res.permGodute+'h">⏱ HP: '+res.permessi+'h/'+res.permTot+'h</span>';
     mob+='</div>';
-    // Pillole mesi con assenze
-    if(hasSomething){
-      mob+='<div class="ferie-mob-mesi">';
-      for(var mi5=mDa;mi5<=mA;mi5++){
-        if(!mesiF[mi5]&&!mesiHP[mi5])continue;
-        var cls2=mesiF[mi5]?'has-f':'has-hp';
-        mob+='<span class="ferie-mob-mese '+cls2+'" onclick="ganttMonthClick(\''+safeSap+'\','+mi5+','+year+')">'+MESI[mi5-1].substring(0,3)+(mesiF[mi5]?' F':'')+(mesiHP[mi5]?' HP':'')+'</span>';
-      }
-      mob+='</div>';
-    } else {
-      mob+='<div style="font-size:11px;color:var(--muted);margin-top:2px">Nessuna assenza nel periodo</div>';
+    // Pillole mesi — sempre mostrate per poter accedere al calendario
+    mob+='<div class="ferie-mob-mesi">';
+    for(var mi5=mDa;mi5<=mA;mi5++){
+      var cls2=mesiF[mi5]?'has-f':mesiHP[mi5]?'has-hp':'';
+      var label=MESI[mi5-1].substring(0,3);
+      if(mesiF[mi5])label+=' F';
+      else if(mesiHP[mi5])label+=' HP';
+      mob+='<span class="ferie-mob-mese '+cls2+'" onclick="ganttMonthClick(\''+safeSap+'\','+mi5+','+year+')">'+label+'</span>';
     }
+    mob+='</div>';
     mob+='</div>';
   });
   mob+='</div>';
@@ -5247,6 +5245,7 @@ function ferieExport(){
 
 // Apre Inserimento Massivo dal Piano Ferie mobile pre-selezionando il dipendente
 function mobMassivoForDip(sap){
+  if(!adminMode){toast('Attiva la modalità Admin prima','warn');return;}
   openMassivo('ferie');
   // Dopo che il modal è aperto, pre-seleziona il dipendente
   setTimeout(function(){
