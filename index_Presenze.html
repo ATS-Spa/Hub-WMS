@@ -2094,6 +2094,10 @@ function adminConfirm(){
       var _sap=window._pendingMobSap;window._pendingMobSap=null;
       setTimeout(function(){mobMassivoForDip(_sap);},200);
     }
+    if(window._pendingMeseDip){
+      var _pd=window._pendingMeseDip;window._pendingMeseDip=null;
+      setTimeout(function(){ganttMonthClick(_pd.sap,_pd.mese,_pd.year);},200);
+    }
   }else{
     document.getElementById('adminErr').classList.add('show');
     document.getElementById('adminPw').focus();
@@ -4496,7 +4500,7 @@ function massivoFerieRange(dip,d1,d2,fv,ing,usc,showOr,pausaH,qty,nota){
         return sheetsBatchUpdate(existing.id,updates).then(function(){
           // Salva note su Sheets se presenti
           if(!nota)return;
-          return massivoSaveNote(existing.id,sname,emp,dates,d1,d2,DST,nota);
+          return massivoSaveNote(existing.id,sname,emp,dates,d1,d2,DST,nota,y,m);
         });
       }).catch(function(e){console.warn('[WMS] massivo skip mese '+y+'/'+m,e.message);});
     });
@@ -4520,7 +4524,7 @@ function massivoFerieRange(dip,d1,d2,fv,ing,usc,showOr,pausaH,qty,nota){
   }
 }
 
-function massivoSaveNote(fileId,sname,emp,dates,d1,d2,DST,nota){
+function massivoSaveNote(fileId,sname,emp,dates,d1,d2,DST,nota,y,m){
   if(!nota||!emp.sheetRows||emp.sheetRows.n===undefined)return Promise.resolve();
   return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties')
   .then(function(meta){
@@ -4529,10 +4533,10 @@ function massivoSaveNote(fileId,sname,emp,dates,d1,d2,DST,nota){
     var rowIdx=emp.sheetRows.n;
     var requests=[];
     dates.forEach(function(dt,di){
-      var dateObj=new Date(dt.year||new Date().getFullYear(),dt.month||0,dt.day);
-      // usa solo giorno/mese/anno dal contesto
+      var dateObj=new Date(y,m-1,dt.day);
+      if(dateObj<d1||dateObj>d2)return; // solo giorni nel range
       var wd=dt.weekday;
-      if((wd===0||wd===6))return;
+      if(wd===0||wd===6||isHoliday(dt.day,m,y))return; // salta weekend/festivi
       var col=DST+di;
       requests.push({updateCells:{
         range:{sheetId:sh.properties.sheetId,startRowIndex:rowIdx,endRowIndex:rowIdx+1,startColumnIndex:col,endColumnIndex:col+1},
@@ -4964,7 +4968,7 @@ function loadNotesForEmps(emps, fileId, sheetName, dayStart, nd){
 function mClose(id){document.getElementById(id).classList.add('hide');}
 function showConf(t,m,cb){document.getElementById('confTitle').textContent=t;document.getElementById('confMsg').textContent=m;confCb=cb;mOpen('moConf');}
 document.getElementById('confOk').addEventListener('click',function(){var cb=confCb;mClose('moConf');if(cb)cb();});
-function toast(msg,type){var t=document.getElementById('toast');t.textContent=msg;t.className='show '+(type||'');clearTimeout(toastT);toastT=setTimeout(function(){t.className='';},type==='warn'?90000:2600);}
+function toast(msg,type){var t=document.getElementById('toast');t.textContent=msg;t.className='show '+(type||'');clearTimeout(toastT);toastT=setTimeout(function(){t.className='';},type==='warn'?4000:2600);}
 function disBtn(ids){ids.forEach(function(id){var el=document.getElementById(id);if(el)el.disabled=true;});}
 function lsS(k,v){try{localStorage.setItem('wms_'+k,JSON.stringify(v));}catch(e){}}
 function lsG(k){try{var s=localStorage.getItem('wms_'+k);return s?JSON.parse(s):null;}catch(e){return null;}}
@@ -5335,9 +5339,9 @@ function ferieExport(){
 // Apre Inserimento Massivo dal Piano Ferie mobile pre-selezionando il dipendente
 function mobMassivoForDip(sap){
   if(!adminMode){
-    // Apri il modal admin senza toast ridondante
+    // Apri il modal admin e cancella eventuali toast pendenti
+    var t=document.getElementById('toast');if(t){t.className='';clearTimeout(toastT);}
     toggleAdmin();
-    // Dopo il login, ricorda il sap da aprire
     window._pendingMobSap=sap;
     return;
   }
@@ -5384,11 +5388,10 @@ function meseDipRenderGrid(sap,mese,year){
   var grid=document.getElementById('meseDipGrid');
   grid.innerHTML='';
   var nd=new Date(year,mese,0).getDate();
-  var firstWd=new Date(year,mese-1,1).getDay(); // 0=dom
+  var firstWd=new Date(year,mese-1,1).getDay();
   var today=new Date();
 
-  // Mappa date → sigla da ferieData
-  var ferieSet={},permSet={},sigleMap={};
+  var ferieSet={},permSet={},noteMap={};
   if(ferieData){
     var dr=ferieData.dipendenti.find(function(x){return String(x.sap||'').trim()===String(sap).trim();});
     if(dr){
@@ -5402,13 +5405,19 @@ function meseDipRenderGrid(sap,mese,year){
       });
     }
   }
-  // Se il mese ATS è caricato e coincide, usa i dati reali delle sigle
+
+  // Se il mese ATS è caricato e coincide, usa dati reali + note
   var useAts=atsData&&atsEmps.length&&
     parseInt(document.getElementById('aYear').value)===year&&
     parseInt(document.getElementById('aMonth').value)===mese;
   var atsEmp=useAts?atsEmps.find(function(e){return String(e.id||e.sap||'').trim()===String(sap).trim();}):null;
+  if(atsEmp){
+    (atsEmp.notes||[]).forEach(function(n,di){
+      if(n&&atsData.dates[di])noteMap[atsData.dates[di].day]=n;
+    });
+  }
 
-  // Celle vuote per allineare al giorno della settimana
+  // Celle vuote per allineare
   for(var i=0;i<firstWd;i++){
     var empty=document.createElement('div');empty.className='mese-cell empty';grid.appendChild(empty);
   }
@@ -5428,6 +5437,7 @@ function meseDipRenderGrid(sap,mese,year){
       else if(permSet[d]!==undefined) sig='HP';
     }
 
+    var hasNote=!!noteMap[d];
     var cell=document.createElement('div');
     var cls='mese-cell';
     if(isWe) cls+=' we';
@@ -5439,16 +5449,29 @@ function meseDipRenderGrid(sap,mese,year){
     else if(sig&&sig!=='') cls+=' gc-other';
     if(isToday) cls+=' today';
     cell.className=cls;
-    cell.innerHTML='<span class="mc-day">'+d+'</span>'+(sig?'<span class="mc-sig">'+sig+'</span>':'');
+    cell.innerHTML='<span class="mc-day">'+d+'</span>'+(sig?'<span class="mc-sig">'+sig+'</span>':'')+(hasNote?'<span style="position:absolute;top:2px;right:3px;font-size:7px;color:var(--amber)">●</span>':'');
+    if(hasNote) cell.style.position='relative';
 
-    // Click → apre picker se admin e giorno lavorativo
-    if(!isWe&&!isHol&&adminMode){
-      (function(day){
+    if(!isWe&&!isHol){
+      (function(day,noteTxt,sigla,diIdx){
         cell.addEventListener('click',function(){
+          if(!adminMode){
+            // Mostra feedback e apri modal admin
+            toast('Modalità Admin necessaria','warn');
+            mClose('moMeseDip');
+            setTimeout(function(){toggleAdmin();window._pendingMeseDip={sap:sap,mese:mese,year:year};},150);
+            return;
+          }
           mClose('moMeseDip');
           setTimeout(function(){ganttCellClick(sap,mese,day);},150);
         });
-      })(d);
+        // Long press per vedere nota (senza admin)
+        var pressTimer;
+        cell.addEventListener('touchstart',function(){pressTimer=setTimeout(function(){
+          if(noteTxt){toast('📝 '+noteTxt,'');} // mostra nota al long press
+        },600);},false);
+        cell.addEventListener('touchend',function(){clearTimeout(pressTimer);},false);
+      })(d, noteMap[d]||'', sig, d-1);
     }
     grid.appendChild(cell);
   }
