@@ -4329,7 +4329,8 @@ function massUpdateInfo(){
   if(al<dal){warn.style.display='';warn.textContent='⚠ La data "Al" è precedente alla data "Dal"';return;}
 
   // Conta giorni lavorativi nel range
-  var d1=new Date(dal),d2=new Date(al);
+  var _p1=dal.split('-'),_p2=al.split('-');
+  var d1=new Date(+_p1[0],+_p1[1]-1,+_p1[2]),d2=new Date(+_p2[0],+_p2[1]-1,+_p2[2]);
   var giorni=0,feriali=0,weekend=0,festivi=0;
   for(var d=new Date(d1);d<=d2;d.setDate(d.getDate()+1)){
     giorni++;
