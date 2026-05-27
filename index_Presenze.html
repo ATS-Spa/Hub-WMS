@@ -783,14 +783,14 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
 .gantt-table{border-collapse:collapse;white-space:nowrap;font-size:12px}
 .gantt-table th{background:var(--card);border:1px solid var(--border);padding:5px 6px;font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.3px;color:var(--subtle);text-align:center;position:sticky;top:0;z-index:5}
 .gantt-table th.gh-nome{text-align:left;min-width:160px;left:0;z-index:7;background:#1a2236;box-shadow:2px 0 4px rgba(0,0,0,.3)}
-.gantt-table th.gh-sap{min-width:60px;left:160px;z-index:7;background:#1a2236}
-.gantt-table th.gh-ferie-res{min-width:56px;background:#1a2236;color:var(--blue);position:sticky;left:220px;z-index:7;border-bottom:2px solid rgba(59,130,246,.5)}
-.gantt-table th.gh-perm-res{min-width:56px;background:#1a2236;color:var(--purple);position:sticky;left:276px;z-index:7;border-bottom:2px solid rgba(168,85,247,.5);box-shadow:2px 0 6px rgba(0,0,0,.4)}
+.gantt-table th.gh-sap{min-width:60px;z-index:7;background:#1a2236}
+.gantt-table th.gh-ferie-res{min-width:56px;background:#1a2236;color:var(--blue);position:sticky;z-index:7;border-bottom:2px solid rgba(59,130,246,.5)}
+.gantt-table th.gh-perm-res{min-width:56px;background:#1a2236;color:var(--purple);position:sticky;z-index:7;border-bottom:2px solid rgba(168,85,247,.5);box-shadow:2px 0 6px rgba(0,0,0,.4)}
 .gantt-table td{border:1px solid rgba(36,48,72,.3);padding:0;height:36px}
 .gantt-table td.gd-nome{font-size:12px;font-weight:600;padding:0 8px;position:sticky;left:0;background:#131929;z-index:3;min-width:160px;max-width:160px;overflow:hidden;text-overflow:ellipsis;box-shadow:2px 0 4px rgba(0,0,0,.3)}
-.gantt-table td.gd-sap{font-family:var(--ffm);font-size:10px;color:var(--muted);padding:0 6px;text-align:center;position:sticky;left:160px;background:#131929;z-index:3;min-width:60px}
-.gantt-table td.gd-ferie-res{text-align:center;font-family:var(--ffm);font-size:12px;font-weight:700;background:#131929;position:sticky;left:220px;z-index:3;min-width:56px}
-.gantt-table td.gd-perm-res{text-align:center;font-family:var(--ffm);font-size:12px;font-weight:700;background:#131929;position:sticky;left:276px;z-index:3;min-width:56px;box-shadow:2px 0 6px rgba(0,0,0,.4)}
+.gantt-table td.gd-sap{font-family:var(--ffm);font-size:10px;color:var(--muted);padding:0 6px;text-align:center;position:sticky;background:#131929;z-index:3;min-width:60px}
+.gantt-table td.gd-ferie-res{text-align:center;font-family:var(--ffm);font-size:12px;font-weight:700;background:#131929;position:sticky;z-index:3;min-width:56px}
+.gantt-table td.gd-perm-res{text-align:center;font-family:var(--ffm);font-size:12px;font-weight:700;background:#131929;position:sticky;z-index:3;min-width:56px;box-shadow:2px 0 6px rgba(0,0,0,.4)}
 .gantt-table td.gd-ferie-res.warn{color:var(--amber)}
 .gantt-table td.gd-ferie-res.over{color:var(--red)}
 .gantt-table td.gd-perm-res.warn{color:var(--amber)}
@@ -5119,13 +5119,22 @@ function renderGantt(dipList,year,mDa,mA){
   if(tFres){tFres.classList.toggle('tog-off',!showFres);}
   if(tHpres){tHpres.classList.toggle('tog-off',!showHpres);}
   document.getElementById('ganttColToggles').style.display='flex';
-  // Calcola colspan corretto per header mesi (esclude colonne nascoste)
-  var fixedCols=1+(showSap?1:0)+(showFres?1:0)+(showHpres?1:0); // nome + opzionali
-  var h='<div style="overflow:auto"><table class="gantt-table"><thead><tr>';
-  h+='<th class="gh-nome" rowspan="2">Dipendente</th>';
-  if(showSap) h+='<th class="gh-sap" rowspan="2">SAP</th>';
-  if(showFres) h+='<th class="gh-ferie-res" rowspan="2" title="Ferie residue">F res.</th>';
-  if(showHpres) h+='<th class="gh-perm-res" rowspan="2" title="Permessi residui">HP res.</th>';
+  // Calcola posizioni sticky dinamicamente
+  var NOME_W=160, SAP_W=60, FRES_W=56, HPRES_W=56;
+  var leftSap=NOME_W;
+  var leftFres=NOME_W+(showSap?SAP_W:0);
+  var leftHpres=NOME_W+(showSap?SAP_W:0)+(showFres?FRES_W:0);
+  var h='<style>'
+    +'.gd-nome-d,.gh-nome-d{left:0px}'
+    +(showSap?'.gd-sap-d,.gh-sap-d{left:'+leftSap+'px}':'')
+    +(showFres?'.gd-fres-d,.gh-fres-d{left:'+leftFres+'px}':'')
+    +(showHpres?'.gd-hpres-d,.gh-hpres-d{left:'+leftHpres+'px}':'')
+    +'</style>';
+  h+='<div style="overflow:auto"><table class="gantt-table"><thead><tr>';
+  h+='<th class="gh-nome gh-nome-d" rowspan="2">Dipendente</th>';
+  if(showSap) h+='<th class="gh-sap gh-sap-d" rowspan="2">SAP</th>';
+  if(showFres) h+='<th class="gh-ferie-res gh-fres-d" rowspan="2" title="Ferie residue">F res.</th>';
+  if(showHpres) h+='<th class="gh-perm-res gh-hpres-d" rowspan="2" title="Permessi residui">HP res.</th>';
   for(var mi=mDa;mi<=mA;mi++){
     var nd=new Date(year,mi,0).getDate();var mIdx=(mi-1)%2;
     var mcls='gh-month-label gm-'+(mIdx===0?'odd':'even');
@@ -5149,10 +5158,10 @@ function renderGantt(dipList,year,mDa,mA){
       if(dRecord){(dRecord.ferie_godute||[]).forEach(function(g){ferieSet[g.data]=true;});(dRecord.permessi_goduti||[]).forEach(function(g){permSet[g.data]=g.ore;});}
     }
     h+='<tr>';
-    h+='<td class="gd-nome" title="'+esc(dip.nome)+'">'+esc(dip.nome)+'</td>';
-    if(showSap) h+='<td class="gd-sap">'+esc(dip.sap)+'</td>';
-    if(showFres) h+='<td class="gd-ferie-res'+(res.ferie<0?' over':res.ferie<=5?' warn':'')+'" title="'+res.ferieGodute+'/'+res.ferieTot+'">'+res.ferie+'</td>';
-    if(showHpres) h+='<td class="gd-perm-res'+(res.permessi<0?' over':res.permessi<=4?' warn':'')+'" title="'+res.permGodute+'/'+res.permTot+'h">'+res.permessi+'h</td>';
+    h+='<td class="gd-nome gd-nome-d" title="'+esc(dip.nome)+'">'+esc(dip.nome)+'</td>';
+    if(showSap) h+='<td class="gd-sap gd-sap-d">'+esc(dip.sap)+'</td>';
+    if(showFres) h+='<td class="gd-ferie-res gd-fres-d'+(res.ferie<0?' over':res.ferie<=5?' warn':'')+'" title="'+res.ferieGodute+'/'+res.ferieTot+'">'+res.ferie+'</td>';
+    if(showHpres) h+='<td class="gd-perm-res gd-hpres-d'+(res.permessi<0?' over':res.permessi<=4?' warn':'')+'" title="'+res.permGodute+'/'+res.permTot+'h">'+res.permessi+'h</td>';
     for(var mi3=mDa;mi3<=mA;mi3++){
       var nd3=new Date(year,mi3,0).getDate();var mIdx3=(mi3-1)%2;var mbg3='gd-'+(mIdx3===0?'odd':'even');
       for(var d2=1;d2<=nd3;d2++){
