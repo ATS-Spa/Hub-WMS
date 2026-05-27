@@ -5560,11 +5560,15 @@ function ganttCellClick(sap,mese,giorno){
     openPickerGeneric('ats',ei,di);
   };
 
-  // Se il mese è già caricato apri subito
+  // Se il mese è già caricato E contiene il dipendente, apri subito
   if(atsData&&atsEmps.length){
     var curY=parseInt(document.getElementById('aYear').value);
     var curM=parseInt(document.getElementById('aMonth').value);
-    if(curY===year&&curM===mese){doOpen();return;}
+    if(curY===year&&curM===mese){
+      var quickEi=atsEmps.findIndex(function(e){return String(e.id||e.sap||'').trim()===String(sap).trim();});
+      if(quickEi>=0){doOpen(atsEmps);return;}
+      // Dipendente non in questo file — cerca negli altri file del mese
+    }
   }
 
   var resp=dip.resp;var plant=dip.plant;
