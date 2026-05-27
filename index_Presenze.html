@@ -2085,6 +2085,11 @@ function adminConfirm(){
     setTimeout(clearSearchFields,500);
     if(coopEmps.length)coopRender();
     if(atsEmps.length)atsRender();
+    // Se c'era un inserimento massivo in attesa dal Piano Ferie mobile, aprilo
+    if(window._pendingMobSap){
+      var _sap=window._pendingMobSap;window._pendingMobSap=null;
+      setTimeout(function(){mobMassivoForDip(_sap);},200);
+    }
   }else{
     document.getElementById('adminErr').classList.add('show');
     document.getElementById('adminPw').focus();
@@ -5288,7 +5293,14 @@ function ferieExport(){
 
 // Apre Inserimento Massivo dal Piano Ferie mobile pre-selezionando il dipendente
 function mobMassivoForDip(sap){
-  if(!adminMode){toast('Attiva la modalità Admin prima','warn');return;}
+  if(!adminMode){
+    // Apri il modal admin senza toast ridondante
+    toggleAdmin();
+    // Dopo il login, ricorda il sap da aprire
+    window._pendingMobSap=sap;
+    return;
+  }
+  window._pendingMobSap=null;
   openMassivo('ferie');
   // Dopo che il modal è aperto, pre-seleziona il dipendente
   setTimeout(function(){
