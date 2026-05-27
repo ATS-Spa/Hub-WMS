@@ -365,15 +365,12 @@ select.fc option{background:var(--card)}
 .scroll{flex:1;overflow:auto;padding:14px 24px 28px;min-height:0;scroll-padding-top:0}
 
 /* ── TABLE ── */
-/* .tout wraps the table and handles horizontal overflow.
-   To allow thead sticky (vertical), the table uses a wrapper approach:
-   .scroll handles vertical scroll, .tout handles horizontal scroll only. */
-.tout{border-radius:10px;border:1px solid var(--border);background:var(--surface);overflow-x:auto;overflow-y:visible;margin-top:8px;animation:fadeIn .22s ease}
+/* .tout è solo contenitore decorativo (bordo/radius).
+   Lo scroll orizzontale e verticale è gestito da .scroll,
+   così thead sticky funziona correttamente su entrambi gli assi. */
+.tout{border-radius:10px;border:1px solid var(--border);background:var(--surface);overflow:clip;margin-top:8px;animation:fadeIn .22s ease}
 .tout table{border-collapse:collapse;white-space:nowrap;width:max-content;min-width:100%}
 .sf{position:sticky;z-index:3;background:var(--card)}
-/* L'intestazione è sticky rispetto al .tout (il container con overflow-x:auto).
-   Siccome .tout ha overflow-x:auto e .scroll ha overflow-y:auto, 
-   thead sticky funziona correttamente nel contesto di scroll verticale del .scroll. */
 thead{position:sticky;top:0;z-index:10;background:var(--card)}
 thead th{position:sticky;top:0;z-index:4;background:var(--card);border-bottom:2px solid var(--border);padding:6px 10px;font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--subtle);border-right:1px solid var(--border);box-shadow:0 2px 4px rgba(0,0,0,.15)}
 thead th.sf{z-index:6}
