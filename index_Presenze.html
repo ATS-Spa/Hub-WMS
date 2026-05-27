@@ -1419,6 +1419,10 @@ body.theme-light .gantt-table th.gh-perm-res{background:#e2e8f0}
   </div>
   <div id="massInfo" style="font-size:12px;color:var(--subtle);background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-top:6px;display:none;line-height:1.7"></div>
   <div id="massWarn" style="font-size:11px;color:var(--amber);background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:6px;padding:8px 12px;margin-top:4px;display:none"></div>
+  <div style="margin-top:6px">
+    <div style="font-size:11px;color:var(--muted);margin-bottom:4px;font-family:var(--ffc);font-weight:700;letter-spacing:.5px">📝 NOTA (opzionale — applicata a tutti i giorni)</div>
+    <textarea class="mi" id="massNota" placeholder="Inserisci una nota per tutti i giorni del range…" style="resize:vertical;min-height:60px;font-family:var(--ff);font-size:12px;line-height:1.5"></textarea>
+  </div>
   <div class="mbtns"><button class="mbtn cancel" onclick="mClose('moMassivo')">Annulla</button><button class="mbtn ok" id="massConfirmBtn" onclick="massConfirm()">✓ Inserisci</button></div>
 </div></div>
 
@@ -4284,6 +4288,7 @@ function openMassivo(mode){
   document.getElementById('massOrariWrap').style.display='';
   document.getElementById('massInfo').style.display='none';
   document.getElementById('massWarn').style.display='none';
+  document.getElementById('massNota').value='';
 
   // Griglia sigle
   var g=document.getElementById('massGrid');g.innerHTML='';
@@ -4381,6 +4386,7 @@ function massConfirm(){
   var qty=parseFloat(document.getElementById('massQtyV').value)||1;
   var fv=massSigla;
   if(massSigla&&SM[massSigla]&&SM[massSigla].hasQty&&qty!==1)fv=qty+massSigla;
+  var massNota=(document.getElementById('massNota').value||''  ).trim();
 
   var _d1=dal.split('-'),_d2=al.split('-');
   var d1=new Date(+_d1[0],+_d1[1]-1,+_d1[2]);
@@ -4393,7 +4399,7 @@ function massConfirm(){
     if(!dip){toast('Dipendente non trovato','warn');return;}
     mClose('moMassivo');
     toast('⏳ Inserimento massivo in corso…','warn');
-    massivoFerieRange(dip,d1,d2,fv,ing,usc,showOr,pausaH,qty);
+    massivoFerieRange(dip,d1,d2,fv,ing,usc,showOr,pausaH,qty,massNota);
     return;
   }
 
@@ -4421,6 +4427,7 @@ function massConfirm(){
       if(showOr){emp.ingresso[di]=ing;emp.uscita[di]=usc;emp.pausa[di]=pausaH;}
       else{emp.ingresso[di]='';emp.uscita[di]='';emp.pausa[di]=null;}
       updateFerieResiduo(emp,di,fv,oldSig,y,m,'ats');
+      if(massNota)emp.notes[di]=massNota;
       totSet++;
     });
     if(massMode==='ats') saveFerieResiduo().catch(function(e){console.warn('[WMS]',e.message);});
@@ -4438,7 +4445,7 @@ function massConfirm(){
 }
 
 // Gestione range multi-mese dal Piano Ferie
-function massivoFerieRange(dip,d1,d2,fv,ing,usc,showOr,pausaH,qty){
+function massivoFerieRange(dip,d1,d2,fv,ing,usc,showOr,pausaH,qty,nota){
   var anno=d1.getFullYear();
   // Carica ferieData prima di tutto, poi esegui
   var doRange=function(){
@@ -4475,6 +4482,7 @@ function massivoFerieRange(dip,d1,d2,fv,ing,usc,showOr,pausaH,qty){
           emp.sigla[di]=fv;
           if(showOr){emp.ingresso[di]=ing;emp.uscita[di]=usc;emp.pausa[di]=pausaH;}
           else{emp.ingresso[di]='';emp.uscita[di]='';emp.pausa[di]=null;}
+          if(nota){if(!emp.notes)emp.notes=Array(nd).fill('');emp.notes[di]=nota;}
           updateFerieResiduo(emp,di,fv,old,y,m,'ats');
           totSet++;
           var col=colToLetter(DST+di);
@@ -4485,7 +4493,11 @@ function massivoFerieRange(dip,d1,d2,fv,ing,usc,showOr,pausaH,qty){
           }
         });
         if(!updates.length)return Promise.resolve();
-        return sheetsBatchUpdate(existing.id,updates);
+        return sheetsBatchUpdate(existing.id,updates).then(function(){
+          // Salva note su Sheets se presenti
+          if(!nota)return;
+          return massivoSaveNote(existing.id,sname,emp,dates,d1,d2,DST,nota);
+        });
       }).catch(function(e){console.warn('[WMS] massivo skip mese '+y+'/'+m,e.message);});
     });
 
@@ -4506,6 +4518,35 @@ function massivoFerieRange(dip,d1,d2,fv,ing,usc,showOr,pausaH,qty){
   } else {
     doRange();
   }
+}
+
+function massivoSaveNote(fileId,sname,emp,dates,d1,d2,DST,nota){
+  if(!nota||!emp.sheetRows||emp.sheetRows.n===undefined)return Promise.resolve();
+  return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties')
+  .then(function(meta){
+    var sh=(meta.sheets||[]).find(function(s){return s.properties.title===sname;});
+    if(!sh)return;
+    var rowIdx=emp.sheetRows.n;
+    var requests=[];
+    dates.forEach(function(dt,di){
+      var dateObj=new Date(dt.year||new Date().getFullYear(),dt.month||0,dt.day);
+      // usa solo giorno/mese/anno dal contesto
+      var wd=dt.weekday;
+      if((wd===0||wd===6))return;
+      var col=DST+di;
+      requests.push({updateCells:{
+        range:{sheetId:sh.properties.sheetId,startRowIndex:rowIdx,endRowIndex:rowIdx+1,startColumnIndex:col,endColumnIndex:col+1},
+        rows:[{values:[{note:nota}]}],
+        fields:'note'
+      }});
+    });
+    if(!requests.length)return;
+    return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+':batchUpdate',{
+      method:'POST',
+      headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+      body:JSON.stringify({requests:requests})
+    });
+  }).catch(function(e){console.warn('[WMS] massivoSaveNote:',e.message);});
 }
 
 function massivoCreateAndWrite(dip,y,m,fname,d1,d2,fv,ing,usc,showOr,pausaH){
