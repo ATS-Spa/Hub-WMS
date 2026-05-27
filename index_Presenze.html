@@ -5546,10 +5546,17 @@ function ganttCellClick(sap,mese,giorno){
   var dip=ferieDipList.find(function(d){return String(d.sap||'').trim()===String(sap).trim();});
   if(!dip){toast('Dipendente non trovato','warn');return;}
 
-  // Apre il picker ATS standard per quel dipendente/giorno
-  var doOpen=function(){
-    var ei=atsEmps.findIndex(function(e){return String(e.id||e.sap||'').trim()===String(sap).trim();});
-    if(ei<0){toast('Dipendente non trovato nel mese caricato','warn');return;}
+  // Apre il picker ATS per quel dipendente/giorno
+  // empData opzionale: se passato usa quello invece di atsEmps
+  var doOpen=function(empData){
+    var emps=empData||atsEmps;
+    var ei=emps.findIndex(function(e){return String(e.id||e.sap||'').trim()===String(sap).trim();});
+    if(ei<0){
+      // Prova a trovarlo anche con altri campi
+      ei=emps.findIndex(function(e){return String(e.nome||'').trim()===String(dip.nome||'').trim();});
+    }
+    if(ei<0){toast('Dipendente non trovato nel file','warn');return;}
+    if(empData){atsEmps=empData;} // aggiorna atsEmps con i dati trovati
     openPickerGeneric('ats',ei,di);
   };
 
@@ -5596,7 +5603,7 @@ function ganttCellClick(sap,mese,giorno){
           atsData=d;atsEmps=d.employees;atsFileId=f.id;
           document.getElementById('aYear').value=String(year);
           document.getElementById('aMonth').value=String(mese);
-          doOpen();
+          doOpen(d.employees);
         }).catch(function(){tryNext(idx+1);});
       };
       tryNext(0);
@@ -5616,7 +5623,7 @@ function ganttCellClick(sap,mese,giorno){
       atsData=d;atsEmps=d.employees;atsFileId=existing.id;
       document.getElementById('aYear').value=String(year);
       document.getElementById('aMonth').value=String(mese);
-      doOpen();
+      doOpen(d.employees);
     }).catch(function(e){toast('Errore caricamento: '+(e.message||e),'warn');});
     return;
   }
