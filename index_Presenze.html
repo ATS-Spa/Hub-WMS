@@ -504,7 +504,7 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
 #toast.err{background:var(--red);color:#fff}
 #toast.warn{background:var(--amber);color:#000}
 
-::-webkit-scrollbar{width:6px;height:6px}::-webkit-scrollbar-track{background:var(--bg)}::-webkit-scrollbar-thumb{background:var(--border);border-radius:3px}
+::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-track{background:rgba(0,0,0,.1);border-radius:5px}::-webkit-scrollbar-thumb{background:rgba(148,163,184,.4);border-radius:5px;border:2px solid transparent;background-clip:content-box}::-webkit-scrollbar-thumb:hover{background:rgba(148,163,184,.7);background-clip:content-box;border:2px solid transparent}::-webkit-scrollbar-corner{background:transparent}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
@@ -897,16 +897,16 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
 .gantt-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 .gantt-table{border-collapse:collapse;white-space:nowrap;font-size:12px}
 .gantt-table th{background:var(--card);border:1px solid var(--border);padding:5px 6px;font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.3px;color:var(--subtle);text-align:center;position:sticky;top:0;z-index:5}
-.gantt-table thead tr:nth-child(2) th{top:29px}
-.gantt-table th.gh-nome{text-align:left;min-width:160px;left:0;z-index:7;background:#1a2236;box-shadow:2px 0 4px rgba(0,0,0,.3)}
-.gantt-table th.gh-sap{min-width:60px;z-index:7;background:#1a2236}
-.gantt-table th.gh-ferie-res{min-width:56px;background:#1a2236;color:var(--blue);position:sticky;z-index:7;border-bottom:2px solid rgba(59,130,246,.5)}
-.gantt-table th.gh-perm-res{min-width:56px;background:#1a2236;color:var(--purple);position:sticky;z-index:7;border-bottom:2px solid rgba(168,85,247,.5);box-shadow:2px 0 6px rgba(0,0,0,.4)}
+.gantt-table thead tr:nth-child(2) th{top:28px;border-top:none}
+.gantt-table th.gh-nome{text-align:left;min-width:140px;max-width:180px;left:0;z-index:7;background:#1a2236;box-shadow:2px 0 4px rgba(0,0,0,.3)}
+.gantt-table th.gh-sap{min-width:44px;max-width:52px;z-index:7;background:#1a2236}
+.gantt-table th.gh-ferie-res{min-width:48px;max-width:52px;background:#1a2236;color:var(--blue);position:sticky;z-index:7;border-bottom:2px solid rgba(59,130,246,.5)}
+.gantt-table th.gh-perm-res{min-width:48px;max-width:52px;background:#1a2236;color:var(--purple);position:sticky;z-index:7;border-bottom:2px solid rgba(168,85,247,.5);box-shadow:2px 0 6px rgba(0,0,0,.4)}
 .gantt-table td{border:1px solid rgba(148,163,184,.3);padding:0;height:38px}
 .gantt-table td.gd-nome{font-size:12px;font-weight:600;padding:0 8px;position:sticky;left:0;background:#131929;z-index:3;min-width:160px;max-width:160px;overflow:hidden;text-overflow:ellipsis;box-shadow:2px 0 4px rgba(0,0,0,.3)}
-.gantt-table td.gd-sap{font-family:var(--ffm);font-size:10px;color:var(--muted);padding:0 6px;text-align:center;position:sticky;background:#131929;z-index:3;min-width:60px}
-.gantt-table td.gd-ferie-res{text-align:center;font-family:var(--ffm);font-size:12px;font-weight:700;background:#131929;position:sticky;z-index:3;min-width:56px}
-.gantt-table td.gd-perm-res{text-align:center;font-family:var(--ffm);font-size:12px;font-weight:700;background:#131929;position:sticky;z-index:3;min-width:56px;box-shadow:2px 0 6px rgba(0,0,0,.4)}
+.gantt-table td.gd-sap{font-family:var(--ffm);font-size:10px;color:var(--muted);padding:0 4px;text-align:center;position:sticky;background:#131929;z-index:3;min-width:44px;max-width:52px}
+.gantt-table td.gd-ferie-res{text-align:center;font-family:var(--ffm);font-size:12px;font-weight:700;background:#131929;position:sticky;z-index:3;min-width:48px;max-width:52px}
+.gantt-table td.gd-perm-res{text-align:center;font-family:var(--ffm);font-size:12px;font-weight:700;background:#131929;position:sticky;z-index:3;min-width:48px;max-width:52px;box-shadow:2px 0 6px rgba(0,0,0,.4)}
 .gantt-table td.gd-ferie-res.warn{color:var(--amber)}
 .gantt-table td.gd-ferie-res.over{color:var(--red)}
 .gantt-table td.gd-perm-res.warn{color:var(--amber)}
@@ -5297,7 +5297,7 @@ function renderGantt(dipList,year,mDa,mA){
   if(tHpres){tHpres.classList.toggle('tog-off',!showHpres);}
   document.getElementById('ganttColToggles').style.display='flex';
   // Calcola posizioni sticky dinamicamente
-  var NOME_W=160, SAP_W=60, FRES_W=56, HPRES_W=56;
+  var NOME_W=140, SAP_W=44, FRES_W=48, HPRES_W=48;
   var leftSap=NOME_W;
   var leftFres=NOME_W+(showSap?SAP_W:0);
   var leftHpres=NOME_W+(showSap?SAP_W:0)+(showFres?FRES_W:0);
