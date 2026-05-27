@@ -1423,7 +1423,7 @@ body.theme-light .gantt-table th.gh-perm-res{background:#e2e8f0}
 </div></div>
 
 
-<div id="moSigla" class="mo hide"><div class="mc" style="width:460px">
+<div id="moSigla" class="mo hide"><div class="mc" style="width:460px;max-height:85vh;overflow-y:auto">
   <div class="mt" id="spTitle">Imposta Presenza</div>
   <div class="ms" id="spSub"></div>
   <div class="sgrid" id="spGrid"></div>
@@ -4434,65 +4434,73 @@ function massConfirm(){
 
 // Gestione range multi-mese dal Piano Ferie
 function massivoFerieRange(dip,d1,d2,fv,ing,usc,showOr,pausaH,qty){
-  // Raccoglie tutti i mesi nel range
-  var mesi=[];
-  var cur=new Date(d1.getFullYear(),d1.getMonth(),1);
-  var fine=new Date(d2.getFullYear(),d2.getMonth(),1);
-  while(cur<=fine){
-    mesi.push({y:cur.getFullYear(),m:cur.getMonth()+1});
-    cur.setMonth(cur.getMonth()+1);
-  }
-  var totSet=0;
-  var promises=mesi.map(function(ym){
-    var y=ym.y,m=ym.m;
-    var mm=('0'+m).slice(-2);
-    var fname=dip.resp+'_'+dip.plant+'_'+y+mm;
-    var existing=allFiles.find(function(f){var n=f.name.replace(/\.xlsx$/i,'');return n.toLowerCase()===fname.toLowerCase();});
-    if(!existing){
-      // Mese non esiste: crealo con solo questo dipendente
-      return massivoCreateAndWrite(dip,y,m,fname,d1,d2,fv,ing,usc,showOr,pausaH).then(function(n){totSet+=n;});
-    }
-    // Mese esiste: carica, modifica, salva
-    var sname=MESI[m-1]+'_ATS';
-    return sheetsRead(existing.id,sname+'!A1:AQ300').then(function(vals){
-      return parseSheetValues(vals,y,m,existing.id,sname,'ats');
-    }).then(function(data){
-      var emp=data.employees.find(function(e){return String(e.id||e.sap||'').trim()===String(dip.sap).trim();});
-      if(!emp){
-        // Dipendente non ancora nel file: aggiungilo
-        return massivoAddEmpToFile(existing.id,sname,dip,y,m,data,d1,d2,fv,ing,usc,showOr,pausaH).then(function(n){totSet+=n;});
+  var anno=d1.getFullYear();
+  // Carica ferieData prima di tutto, poi esegui
+  var doRange=function(){
+    var mesi=[];
+    var cur=new Date(d1.getFullYear(),d1.getMonth(),1);
+    var fine=new Date(d2.getFullYear(),d2.getMonth(),1);
+    while(cur<=fine){mesi.push({y:cur.getFullYear(),m:cur.getMonth()+1});cur.setMonth(cur.getMonth()+1);}
+    var totSet=0;
+    var promises=mesi.map(function(ym){
+      var y=ym.y,m=ym.m;
+      var mm=('0'+m).slice(-2);
+      var fname=dip.resp+'_'+dip.plant+'_'+y+mm;
+      var existing=allFiles.find(function(f){var n=f.name.replace(/\.xlsx$/i,'');return n.toLowerCase()===fname.toLowerCase();});
+      if(!existing){
+        return massivoCreateAndWrite(dip,y,m,fname,d1,d2,fv,ing,usc,showOr,pausaH).then(function(n){totSet+=n;});
       }
-      var dates=data.dates;var nd=dates.length;
-      ['sigla','ingresso','uscita'].forEach(function(f){if(!emp[f]||emp[f].length<nd)emp[f]=(emp[f]||[]).concat(Array(nd).fill('')).slice(0,nd);});
-      if(!emp.pausa||emp.pausa.length<nd)emp.pausa=(emp.pausa||[]).concat(Array(nd).fill(null)).slice(0,nd);
-      var updates=[];var DST=data.dayStart||3;
-      dates.forEach(function(dt,di){
-        var dateObj=new Date(y,m-1,dt.day);
-        if(dateObj<d1||dateObj>d2)return;
-        var wd=dt.weekday;if((wd===0||wd===6)||isHoliday(dt.day,m,y))return;
-        var old=(emp.sigla||[])[di]||'';
-        emp.sigla[di]=fv;
-        if(showOr){emp.ingresso[di]=ing;emp.uscita[di]=usc;emp.pausa[di]=pausaH;}
-        else{emp.ingresso[di]='';emp.uscita[di]='';emp.pausa[di]=null;}
-        updateFerieResiduo(emp,di,fv,old,y,m,'ats');
-        totSet++;
-        var col=colToLetter(DST+di);
-        if(emp.sheetRows&&emp.sheetRows.n!==undefined)updates.push({range:sname+'!'+col+(emp.sheetRows.n+1),values:[[fv]]});
-        if(showOr){
-          if(emp.sheetRows&&emp.sheetRows.i!==undefined)updates.push({range:sname+'!'+col+(emp.sheetRows.i+1),values:[[ing]]});
-          if(emp.sheetRows&&emp.sheetRows.u!==undefined)updates.push({range:sname+'!'+col+(emp.sheetRows.u+1),values:[[usc]]});
+      var sname=MESI[m-1]+'_ATS';
+      return sheetsRead(existing.id,sname+'!A1:AQ300').then(function(vals){
+        return parseSheetValues(vals,y,m,existing.id,sname,'ats');
+      }).then(function(data){
+        var emp=data.employees.find(function(e){return String(e.id||e.sap||'').trim()===String(dip.sap).trim();});
+        if(!emp){
+          return massivoAddEmpToFile(existing.id,sname,dip,y,m,data,d1,d2,fv,ing,usc,showOr,pausaH).then(function(n){totSet+=n;});
         }
-      });
-      if(!updates.length)return Promise.resolve();
-      return sheetsBatchUpdate(existing.id,updates);
-    }).catch(function(e){console.warn('[WMS] massivo skip mese '+y+'/'+m,e.message);});
-  });
+        var dates=data.dates;var nd=dates.length;
+        ['sigla','ingresso','uscita'].forEach(function(f){if(!emp[f]||emp[f].length<nd)emp[f]=(emp[f]||[]).concat(Array(nd).fill('')).slice(0,nd);});
+        if(!emp.pausa||emp.pausa.length<nd)emp.pausa=(emp.pausa||[]).concat(Array(nd).fill(null)).slice(0,nd);
+        var updates=[];var DST=data.dayStart||3;
+        dates.forEach(function(dt,di){
+          var dateObj=new Date(y,m-1,dt.day);
+          if(dateObj<d1||dateObj>d2)return;
+          var wd=dt.weekday;if((wd===0||wd===6)||isHoliday(dt.day,m,y))return;
+          var old=(emp.sigla||[])[di]||'';
+          emp.sigla[di]=fv;
+          if(showOr){emp.ingresso[di]=ing;emp.uscita[di]=usc;emp.pausa[di]=pausaH;}
+          else{emp.ingresso[di]='';emp.uscita[di]='';emp.pausa[di]=null;}
+          updateFerieResiduo(emp,di,fv,old,y,m,'ats');
+          totSet++;
+          var col=colToLetter(DST+di);
+          if(emp.sheetRows&&emp.sheetRows.n!==undefined)updates.push({range:sname+'!'+col+(emp.sheetRows.n+1),values:[[fv]]});
+          if(showOr){
+            if(emp.sheetRows&&emp.sheetRows.i!==undefined)updates.push({range:sname+'!'+col+(emp.sheetRows.i+1),values:[[ing]]});
+            if(emp.sheetRows&&emp.sheetRows.u!==undefined)updates.push({range:sname+'!'+col+(emp.sheetRows.u+1),values:[[usc]]});
+          }
+        });
+        if(!updates.length)return Promise.resolve();
+        return sheetsBatchUpdate(existing.id,updates);
+      }).catch(function(e){console.warn('[WMS] massivo skip mese '+y+'/'+m,e.message);});
+    });
 
-  Promise.all(promises).then(function(){
-    loadAllFiles();
-    setTimeout(ferieRenderOnly,300);
-    toast('✓ Inserite '+totSet+' giornate per '+esc(dip.nome));
-  }).catch(function(e){toast('✗ Errore: '+(e.message||e),'err');});
+    Promise.all(promises).then(function(){
+      // Salva ferieResiduo UNA SOLA VOLTA alla fine
+      return saveFerieResiduo();
+    }).then(function(){
+      loadAllFiles();
+      setTimeout(ferieRenderOnly,300);
+      toast('✓ Inserite '+totSet+' giornate per '+esc(dip.nome));
+    }).catch(function(e){toast('✗ Errore: '+(e.message||e),'err');});
+  };
+
+  // Assicura ferieData caricato prima di eseguire
+  if(!ferieData||ferieYear!==anno){
+    ferieYear=anno;
+    loadFerieResiduo(anno).then(doRange).catch(function(){ferieData={anno:anno,dipendenti:[]};doRange();});
+  } else {
+    doRange();
+  }
 }
 
 function massivoCreateAndWrite(dip,y,m,fname,d1,d2,fv,ing,usc,showOr,pausaH){
