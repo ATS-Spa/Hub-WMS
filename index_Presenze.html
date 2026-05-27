@@ -131,7 +131,7 @@ body.theme-avorio{
   --red:#b53030;--red-dim:#f0c8c8;
   --purple:#6b4fa0;--cyan:#1a7a8a;--sky:#2060a0;
   --orange:#b55a10;--lime:#4a7a1a;--pink:#a03060;
-  --text:#2c2418;--muted:#7a6a55;--subtle:#5a4e3e;
+  --text:#1a1008;--muted:#5a4a38;--subtle:#3d3020;
   --c-X:#2d7a3a;--c-F:#3b6fa0;--c-hF:#5a8fbe;--c-M:#b53030;
   --c-HP:#6b4fa0;--c-H104:#b5620a;--c-104:#b55a10;--c-CP:#a03060;
   --c-HPE:#2a7d5f;--c-PE:#1a7a8a;--c-SW:#4a7a1a;--c-Lutto:#7a6a55;--c-TFS:#2060a0;--c-PLT:#b5620a;
@@ -184,6 +184,12 @@ body.theme-avorio .gantt-table th.gh-perm-res{background:#e5dfd3}
 body.theme-avorio .gantt-table th{background:#e5dfd3;color:#5a4e3e;border-color:#c9bfaf;}
 body.theme-avorio .gantt-table td{border-color:rgba(180,165,140,.4);}
 body.theme-avorio .gantt-cell.gc-we{background:rgba(44,36,24,.12);}
+body.theme-avorio tbody tr:hover td{background:rgba(44,36,24,.06)!important;}
+body.theme-avorio tbody tr:hover td.gd-nome,
+body.theme-avorio tbody tr:hover td.gd-sap,
+body.theme-avorio tbody tr:hover td.gd-ferie-res,
+body.theme-avorio tbody tr:hover td.gd-perm-res{background:#ddd7ca!important;}
+body.theme-avorio tbody tr:hover .gantt-cell.gc-we{background:rgba(44,36,24,.18)!important;}
 body.theme-avorio .gantt-cell.gc-hol{background:rgba(181,48,48,.08);}
 /* mob cards */
 body.theme-avorio .ferie-mob-card{background:#e5dfd3;border-color:#c9bfaf;}
@@ -5585,101 +5591,61 @@ function ganttCellClick(sap,mese,giorno){
   var year=parseInt(document.getElementById('fAnno').value)||new Date().getFullYear();
   var di=giorno-1;
 
-  // Dipendente dalla lista caricata
   var dip=ferieDipList.find(function(d){return String(d.sap||'').trim()===String(sap).trim();});
   if(!dip){toast('Dipendente non trovato','warn');return;}
 
-  // Apre il picker ATS per quel dipendente/giorno
-  // empData opzionale: se passato usa quello invece di atsEmps
   var doOpen=function(empData){
     var emps=empData||atsEmps;
     var ei=emps.findIndex(function(e){return String(e.id||e.sap||'').trim()===String(sap).trim();});
-    if(ei<0){
-      // Prova a trovarlo anche con altri campi
-      ei=emps.findIndex(function(e){return String(e.nome||'').trim()===String(dip.nome||'').trim();});
-    }
+    if(ei<0) ei=emps.findIndex(function(e){return String(e.nome||'').trim()===String(dip.nome||'').trim();});
     if(ei<0){toast('Dipendente non trovato nel file','warn');return;}
-    if(empData){atsEmps=empData;} // aggiorna atsEmps con i dati trovati
+    atsEmps=emps;
     openPickerGeneric('ats',ei,di);
   };
 
-  // Se il mese è già caricato E contiene il dipendente, apri subito
-  if(atsData&&atsEmps.length){
-    var curY=parseInt(document.getElementById('aYear').value);
-    var curM=parseInt(document.getElementById('aMonth').value);
-    if(curY===year&&curM===mese){
-      var quickEi=atsEmps.findIndex(function(e){return String(e.id||e.sap||'').trim()===String(sap).trim();});
-      if(quickEi>=0){doOpen(atsEmps);return;}
-      // Dipendente non in questo file — cerca negli altri file del mese
-    }
-  }
-
-  var resp=dip.resp;var plant=dip.plant;
+  // Piano Ferie cerca SEMPRE su Drive indipendentemente da cosa è caricato in tab Dipendenti
   var mm=('0'+mese).slice(-2);
-
-  // Cerca prima il file specifico per resp/plant, poi qualsiasi file del mese che potrebbe contenere il dipendente
-  var fname=resp+'_'+plant+'_'+year+mm;
-  var existing=allFiles.find(function(f){
-    var n=f.name.replace(/\.xlsx$/i,'');return n.toLowerCase()===fname.toLowerCase();
+  var allMonthFiles=allFiles.filter(function(f){
+    var p=parseFileName(f.name);return p&&p.year===year&&p.month===mese;
+  });
+  // Metti il file del resp/plant del dipendente in cima
+  var fname=(dip.resp+'_'+dip.plant+'_'+year+mm).toLowerCase();
+  allMonthFiles.sort(function(a,b){
+    var an=a.name.replace(/\.xlsx$/i,'').toLowerCase();
+    var bn=b.name.replace(/\.xlsx$/i,'').toLowerCase();
+    return (an===fname?-1:bn===fname?1:0);
   });
 
-  // Se non trovato per nome esatto, cerca tutti i file del mese e prova a caricarli
-  if(!existing){
-    var candidates=allFiles.filter(function(f){
-      var p=parseFileName(f.name);
-      return p&&p.year===year&&p.month===mese;
+  if(!allMonthFiles.length){
+    showConf('📅 File mese mancante','Nessun file per '+MESI[mese-1]+' '+year+'.\nCrearlo con '+dip.nome+'?',function(){
+      ganttCellCreateFile(dip,year,mese,giorno,di);
     });
-    // Cerca il primo che contiene il dipendente
-    if(candidates.length){
-      toast('Ricerca '+dip.nome+' in '+candidates.length+' file…');
-      var tryNext=function(idx){
-        if(idx>=candidates.length){
-          // Nessun file trovato — chiedi creazione
-          var dateLabel=giorno+'/'+mm+'/'+year;
-          showConf('📅 File mese mancante','Il file per '+MESI[mese-1]+' non esiste.\nCrearlo con '+dip.nome+'?',function(){
-            ganttCellCreateFile(dip,year,mese,giorno,di);
-          });
-          return;
-        }
-        var f=candidates[idx];var sname=MESI[mese-1]+'_ATS';
-        var isXlsx=/\.xlsx$/i.test(f.name||'');
-        (isXlsx?downloadFile(f.id).then(function(b){return parseSheetBlob(b,year,mese,f.id,sname,'ats');}):sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,year,mese,f.id,sname,'ats');}))
-        .then(function(d){
-          var found=d.employees.find(function(e){return String(e.id||e.sap||'').trim()===String(sap).trim();});
-          if(!found){tryNext(idx+1);return;}
-          atsData=d;atsEmps=d.employees;atsFileId=f.id;
-          document.getElementById('aYear').value=String(year);
-          document.getElementById('aMonth').value=String(mese);
-          doOpen(d.employees);
-        }).catch(function(){tryNext(idx+1);});
-      };
-      tryNext(0);
-      return;
-    }
-  }
-
-  if(existing){
-    // File esiste → carica e apri picker
-    toast('Caricamento '+MESI[mese-1]+'…');
-    var sname=MESI[mese-1]+'_ATS';
-    var isXlsx=/\.xlsx$/i.test(existing.name||'');
-    (isXlsx
-      ?downloadFile(existing.id).then(function(b){return parseSheetBlob(b,year,mese,existing.id,sname,'ats');})
-      :sheetsRead(existing.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,year,mese,existing.id,sname,'ats');})
-    ).then(function(d){
-      atsData=d;atsEmps=d.employees;atsFileId=existing.id;
-      document.getElementById('aYear').value=String(year);
-      document.getElementById('aMonth').value=String(mese);
-      doOpen(d.employees);
-    }).catch(function(e){toast('Errore caricamento: '+(e.message||e),'warn');});
     return;
   }
 
-  // File NON esiste → chiedi conferma creazione
-  var dateLabel=giorno+'/'+mm+'/'+year;
-  showConf('📅 File mese mancante','Il file "'+fname+'" non esiste.\nCrearlo con '+dip.nome+'?',function(){
-    ganttCellCreateFile(dip,year,mese,giorno,di);
-  });
+  toast('Caricamento '+MESI[mese-1]+'…');
+  var tryNext=function(idx){
+    if(idx>=allMonthFiles.length){
+      showConf('📅 Dipendente non trovato',''+dip.nome+' non trovato in nessun file di '+MESI[mese-1]+'.\nCreare un nuovo file?',function(){
+        ganttCellCreateFile(dip,year,mese,giorno,di);
+      });
+      return;
+    }
+    var f=allMonthFiles[idx];var sname=MESI[mese-1]+'_ATS';
+    var isXlsx=/\.xlsx$/i.test(f.name||'');
+    (isXlsx
+      ?downloadFile(f.id).then(function(b){return parseSheetBlob(b,year,mese,f.id,sname,'ats');})
+      :sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,year,mese,f.id,sname,'ats');})
+    ).then(function(d){
+      var found=d.employees.find(function(e){return String(e.id||e.sap||'').trim()===String(sap).trim();});
+      if(!found){tryNext(idx+1);return;}
+      atsData=d;atsEmps=d.employees;atsFileId=f.id;
+      document.getElementById('aYear').value=String(year);
+      document.getElementById('aMonth').value=String(mese);
+      doOpen(d.employees);
+    }).catch(function(e){console.warn('[WMS] tryNext skip '+f.name+':',e.message);tryNext(idx+1);});
+  };
+  tryNext(0);
 }
 
 function ganttCellCreateFile(dip,year,mese,giorno,di){
