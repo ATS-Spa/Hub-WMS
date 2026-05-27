@@ -893,7 +893,7 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
 }
 
 /* ── PIANO FERIE ── */
-.gantt-wrap{padding:16px 24px 28px;overflow:auto;flex:1}
+.gantt-wrap{padding:16px 0 0;overflow:hidden;flex:1;display:flex;flex-direction:column}
 .gantt-toolbar{display:flex;align-items:center;gap:10px;flex-wrap:wrap;margin-bottom:14px}
 .gantt-table{border-collapse:collapse;white-space:nowrap;font-size:12px}
 .gantt-table th{background:var(--card);border:1px solid var(--border);padding:5px 6px;font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.3px;color:var(--subtle);text-align:center;position:sticky;top:0;z-index:5}
@@ -966,7 +966,7 @@ body.theme-light .gantt-table th.gh-perm-res{background:#e2e8f0}
 .gantt-cell.gc-M{background:rgba(239,68,68,.45);color:#fff}
 .gantt-month-hdr{font-family:var(--ffc);font-size:11px;font-weight:800;letter-spacing:.5px}
 .gantt-spinner{display:flex;align-items:center;justify-content:center;gap:12px;padding:48px;color:var(--muted);font-size:13px}
-.ferie-legend{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:12px}
+.ferie-legend{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:8px;padding:12px 24px 0;flex-shrink:0}
 .ferie-leg-item{display:flex;align-items:center;gap:5px;font-size:11px;color:var(--subtle);font-family:var(--ffc);font-weight:700}
 .ferie-leg-dot{width:12px;height:12px;border-radius:3px}
 /* contratti nel pannello permessi */
@@ -984,7 +984,7 @@ body.theme-light .gantt-table th.gh-perm-res{background:#e2e8f0}
 }
 .ferie-mobile-list{display:none}
 /* ── PIANO FERIE MOBILE ── */
-.gantt-table-wrap{display:block}
+.gantt-table-wrap{display:flex;flex-direction:column;flex:1;overflow:hidden}
 @media (max-width:768px){
   .gantt-table-wrap{display:none!important}
   .ferie-mobile-list{display:flex;flex-direction:column;gap:10px}
@@ -1292,7 +1292,7 @@ body.theme-light .gantt-table th.gh-perm-res{background:#e2e8f0}
         <button class="ba bghost" id="togHpres" onclick="ganttToggleCol('hpres')" style="padding:4px 10px;font-size:11px;font-family:var(--ffc);font-weight:700;color:var(--purple)">HP.Res</button>
       </div>
     </div>
-    <div class="gantt-wrap" id="ferieContent">
+    <div class="gantt-wrap" id="ferieContent" style="display:flex;flex-direction:column;overflow:hidden">
       <div class="state"><div class="state-ico">🏖️</div><div class="state-title">Seleziona filtri e premi Carica</div></div>
     </div>
   </div>
@@ -5300,7 +5300,7 @@ function renderGantt(dipList,year,mDa,mA){
     +(showFres?'.gd-fres-d,.gh-fres-d{left:'+leftFres+'px}':'')
     +(showHpres?'.gd-hpres-d,.gh-hpres-d{left:'+leftHpres+'px}':'')
     +'</style>';
-  h+='<div style="overflow:auto"><table class="gantt-table"><thead><tr>';
+  h+='<div style="overflow:auto;flex:1" id="ganttScroll"><table class="gantt-table"><thead><tr>';
   h+='<th class="gh-nome gh-nome-d" rowspan="2">Dipendente</th>';
   if(showSap) h+='<th class="gh-sap gh-sap-d" rowspan="2">SAP</th>';
   if(showFres) h+='<th class="gh-ferie-res gh-fres-d" rowspan="2" title="Ferie residue">F res.</th>';
@@ -5389,7 +5389,7 @@ function renderGantt(dipList,year,mDa,mA){
   });
   mob+='</div>';
 
-  document.getElementById('ferieContent').innerHTML='<div class="gantt-table-wrap">'+leg+h+'</div>'+mob;
+  document.getElementById('ferieContent').innerHTML=leg+'<div class="gantt-table-wrap">'+h+'</div>'+mob;
   document.getElementById('ferieInfo').textContent=dipList.length+' dipendenti \u00b7 '+MESI[mDa-1]+' \u2013 '+MESI[mA-1]+' '+year;
 }
 
