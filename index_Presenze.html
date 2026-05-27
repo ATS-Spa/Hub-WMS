@@ -869,7 +869,9 @@ body.theme-light .gantt-table th.gh-perm-res{background:#e2e8f0}
 }
 .ferie-mobile-list{display:none}
 /* ── PIANO FERIE MOBILE ── */
+.gantt-table-wrap{display:block}
 @media (max-width:768px){
+  .gantt-table-wrap{display:none!important}
   .ferie-mobile-list{display:flex;flex-direction:column;gap:10px}
   .ferie-mob-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 14px}
   .ferie-mob-card-header{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px}
@@ -3048,7 +3050,7 @@ function spConfirm(){
     updateFerieResiduo(emp,spDi,fv,vecchiaSigla,y2c,m2c);
     atsRender();aSave();
     // Se il Gantt è visibile, ridisegnalo subito
-    if(curSec==='ferie')setTimeout(ferieRenderOnly,100);
+    if(curSec==='ferie')setTimeout(ferieRenderOnly,300);
   }else{coopRender();cSave();}
   toast('✓ Salvato');
 }
@@ -4951,16 +4953,25 @@ function calcResiduo(sap){
 
 function updateFerieResiduo(emp,di,nuovaSigla,vecchiaSigla,anno,mese){
   if(!emp||!emp.sap||spMode!=='ats')return;
-  var data=atsData&&atsData.dates&&atsData.dates[di];if(!data)return;
-  var dateStr=anno+'-'+('0'+mese).slice(-2)+'-'+('0'+data.day).slice(-2);
+  // di può essere: indice in atsData.dates (da spConfirm) oppure giorno-1 (da massivoFerieRange)
+  // Ricaviamo il giorno del mese in modo robusto
+  var dayOfMonth=null;
+  if(atsData&&atsData.dates&&atsData.dates[di]){
+    dayOfMonth=atsData.dates[di].day;
+  } else {
+    // Fallback: di è giorno-1 (0-based), quindi giorno = di+1
+    dayOfMonth=di+1;
+  }
+  if(!dayOfMonth)return;
+  var dateStr=anno+'-'+('0'+mese).slice(-2)+'-'+('0'+dayOfMonth).slice(-2);
   var nuovaCodice=xSig(nuovaSigla||'');var vecchiaCodice=xSig(vecchiaSigla||'');
   var doUpdate=function(){
     var dip=getFerieDip(emp.sap,emp.nome,emp.resp,emp.plant);if(!dip)return;
     if(vecchiaCodice==='F')dip.ferie_godute=dip.ferie_godute.filter(function(g){return g.data!==dateStr;});
     else if(vecchiaCodice==='HP')dip.permessi_goduti=dip.permessi_goduti.filter(function(g){return g.data!==dateStr;});
     if(nuovaCodice==='F'){
-      var wd=new Date(anno,mese-1,data.day).getDay();
-      if(wd!==0&&wd!==6&&!isHoliday(data.day,mese,anno))dip.ferie_godute.push({data:dateStr});
+      var wd=new Date(anno,mese-1,dayOfMonth).getDay();
+      if(wd!==0&&wd!==6&&!isHoliday(dayOfMonth,mese,anno))dip.ferie_godute.push({data:dateStr});
     } else if(nuovaCodice==='HP'){
       var qtyH=parseFloat((String(nuovaSigla||'').match(/^[\d.]*/)||['1'])[0])||1;
       dip.permessi_goduti.push({data:dateStr,ore:qtyH});
