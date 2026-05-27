@@ -786,7 +786,7 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
 .gantt-table th.gh-sap{min-width:60px;z-index:7;background:#1a2236}
 .gantt-table th.gh-ferie-res{min-width:56px;background:#1a2236;color:var(--blue);position:sticky;z-index:7;border-bottom:2px solid rgba(59,130,246,.5)}
 .gantt-table th.gh-perm-res{min-width:56px;background:#1a2236;color:var(--purple);position:sticky;z-index:7;border-bottom:2px solid rgba(168,85,247,.5);box-shadow:2px 0 6px rgba(0,0,0,.4)}
-.gantt-table td{border:1px solid rgba(36,48,72,.3);padding:0;height:36px}
+.gantt-table td{border:1px solid rgba(100,116,139,.25);padding:0;height:36px}
 .gantt-table td.gd-nome{font-size:12px;font-weight:600;padding:0 8px;position:sticky;left:0;background:#131929;z-index:3;min-width:160px;max-width:160px;overflow:hidden;text-overflow:ellipsis;box-shadow:2px 0 4px rgba(0,0,0,.3)}
 .gantt-table td.gd-sap{font-family:var(--ffm);font-size:10px;color:var(--muted);padding:0 6px;text-align:center;position:sticky;background:#131929;z-index:3;min-width:60px}
 .gantt-table td.gd-ferie-res{text-align:center;font-family:var(--ffm);font-size:12px;font-weight:700;background:#131929;position:sticky;z-index:3;min-width:56px}
@@ -829,8 +829,8 @@ body.theme-light .gantt-table th.gh-sap,
 body.theme-light .gantt-table th.gh-ferie-res,
 body.theme-light .gantt-table th.gh-perm-res{background:#e2e8f0}
 /* colori alternati mesi */
-.gantt-table th.gm-odd,.gantt-table td.gd-odd{background-color:rgba(20,184,166,.04)}
-.gantt-table th.gm-even,.gantt-table td.gd-even{background-color:rgba(59,130,246,.04)}
+.gantt-table th.gm-odd,.gantt-table td.gd-odd{background-color:rgba(20,184,166,.07)}
+.gantt-table th.gm-even,.gantt-table td.gd-even{background-color:rgba(59,130,246,.07)}
 .gantt-table th.gm-cur-hdr{background:rgba(20,184,166,.15)!important;color:var(--teal)!important}
 /* intestazione giorni */
 .gh-day{min-width:22px;max-width:22px;padding:2px 1px!important;font-size:10px!important;font-weight:800!important;line-height:1.2;color:var(--subtle);vertical-align:bottom}
@@ -5533,10 +5533,47 @@ function ganttCellClick(sap,mese,giorno){
 
   var resp=dip.resp;var plant=dip.plant;
   var mm=('0'+mese).slice(-2);
+
+  // Cerca prima il file specifico per resp/plant, poi qualsiasi file del mese che potrebbe contenere il dipendente
   var fname=resp+'_'+plant+'_'+year+mm;
   var existing=allFiles.find(function(f){
     var n=f.name.replace(/\.xlsx$/i,'');return n.toLowerCase()===fname.toLowerCase();
   });
+
+  // Se non trovato per nome esatto, cerca tutti i file del mese e prova a caricarli
+  if(!existing){
+    var candidates=allFiles.filter(function(f){
+      var p=parseFileName(f.name);
+      return p&&p.year===year&&p.month===mese;
+    });
+    // Cerca il primo che contiene il dipendente
+    if(candidates.length){
+      toast('Ricerca '+dip.nome+' in '+candidates.length+' file…');
+      var tryNext=function(idx){
+        if(idx>=candidates.length){
+          // Nessun file trovato — chiedi creazione
+          var dateLabel=giorno+'/'+mm+'/'+year;
+          showConf('📅 File mese mancante','Il file per '+MESI[mese-1]+' non esiste.\nCrearlo con '+dip.nome+'?',function(){
+            ganttCellCreateFile(dip,year,mese,giorno,di);
+          });
+          return;
+        }
+        var f=candidates[idx];var sname=MESI[mese-1]+'_ATS';
+        var isXlsx=/\.xlsx$/i.test(f.name||'');
+        (isXlsx?downloadFile(f.id).then(function(b){return parseSheetBlob(b,year,mese,f.id,sname,'ats');}):sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,year,mese,f.id,sname,'ats');}))
+        .then(function(d){
+          var found=d.employees.find(function(e){return String(e.id||e.sap||'').trim()===String(sap).trim();});
+          if(!found){tryNext(idx+1);return;}
+          atsData=d;atsEmps=d.employees;atsFileId=f.id;
+          document.getElementById('aYear').value=String(year);
+          document.getElementById('aMonth').value=String(mese);
+          doOpen();
+        }).catch(function(){tryNext(idx+1);});
+      };
+      tryNext(0);
+      return;
+    }
+  }
 
   if(existing){
     // File esiste → carica e apri picker
@@ -5555,66 +5592,59 @@ function ganttCellClick(sap,mese,giorno){
     return;
   }
 
-  // File NON esiste → chiedi conferma creazione + inserimento F diretto
-  var dateLabel=giorno+'/'+('0'+mese).slice(-2)+'/'+year;
-  showConf(
-    '📅 File mese mancante',
-    'Il file "'+fname+'" non esiste.\nCrearlo e inserire la sigla per '+dip.nome+' il '+dateLabel+'?',
-    function(){
-      toast('⏳ Creazione '+fname+'…','warn');
-      var dates=getDates(year,mese);
-      var mName=MESI[mese-1];
-      var extraEmps=[{sap:dip.sap,nome:dip.nome,plant:plant,resp:resp}];
-      // Crea il file con il dipendente dentro, poi apre il picker
-      var h0=['Resp. '+resp,'Dipendenti','Plant','Data'];
-      var h1=['ExtEmpN_SAP','Nominativo','Plant '+plant,mName.substring(0,3).toLowerCase()+'-'+String(year).slice(2)];
-      dates.forEach(function(d){h0.push(d.day);h1.push(GGS[d.weekday]);});
-      var sig=[dip.sap,dip.nome,'Sigla'];dates.forEach(function(){sig.push('');});
-      var ing=[dip.sap,dip.nome,'Ingresso'];dates.forEach(function(){ing.push('');});
-      var usc=[dip.sap,dip.nome,'Uscita'];dates.forEach(function(){usc.push('');});
-      var coopRows=[h0,h1];
-      var atsRows=[h0,h1,sig,ing,usc,[]];
-      var legRows=[['SIGLA','DESCRIZIONE','NOTE']];
-      SIGLE.forEach(function(s){legRows.push([s.code,s.label,s.hasQty?'Es. 1'+s.code:'']);});
+  // File NON esiste → chiedi conferma creazione
+  var dateLabel=giorno+'/'+mm+'/'+year;
+  showConf('📅 File mese mancante','Il file "'+fname+'" non esiste.\nCrearlo con '+dip.nome+'?',function(){
+    ganttCellCreateFile(dip,year,mese,giorno,di);
+  });
+}
 
-      fetch('https://sheets.googleapis.com/v4/spreadsheets',{
-        method:'POST',
-        headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
-        body:JSON.stringify({
-          properties:{title:fname},
-          sheets:[{properties:{title:mName+'_Coop'}},{properties:{title:mName+'_ATS'}},{properties:{title:'Leggenda'}}]
-        })
-      }).then(function(r){return r.json();}).then(function(ss){
-        var ssId=ss.spreadsheetId;if(!ssId)throw new Error('Errore creazione');
-        return fetch('https://www.googleapis.com/drive/v3/files/'+ssId+'?addParents='+FOLDER_ID+'&removeParents=root&fields=id',{
-          method:'PATCH',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},body:JSON.stringify({})
-        }).then(function(){return ssId;});
-      }).then(function(ssId){
-        return sheetsBatchUpdate(ssId,[
-          {range:mName+'_Coop!A1',values:coopRows},
-          {range:mName+'_ATS!A1',values:atsRows},
-          {range:'Leggenda!A1',values:legRows}
-        ]).then(function(){return ssId;});
-      }).then(function(ssId){
-        toast('✅ File creato: '+fname+' — ora scegli la sigla');
-        loadAllFiles();
-        // Carica il foglio appena creato e apre il picker
-        var sname2=mName+'_ATS';
-        setTimeout(function(){
-          sheetsRead(ssId,sname2+'!A1:AQ300').then(function(vals){
-            return parseSheetValues(vals,year,mese,ssId,sname2,'ats');
-          }).then(function(d){
-            atsData=d;atsEmps=d.employees;atsFileId=ssId;
-            document.getElementById('aYear').value=String(year);
-            document.getElementById('aMonth').value=String(mese);
-            var ei=atsEmps.findIndex(function(e){return String(e.id||e.sap||'').trim()===String(dip.sap).trim();});
-            if(ei>=0){openPickerGeneric('ats',ei,di);}
-            else{toast('File creato. Carica il mese dalla tab Dipendenti per inserire la sigla.','warn');}
-          }).catch(function(e){toast('File creato. Carica il mese manualmente.','warn');console.warn(e);});
-        },1800);
-      }).catch(function(e){toast('✗ Errore creazione: '+(e.message||e),'err');});
-    }
-  );
+function ganttCellCreateFile(dip,year,mese,giorno,di){
+  var resp=dip.resp,plant=dip.plant;
+  var mm=('0'+mese).slice(-2);
+  var fname=resp+'_'+plant+'_'+year+mm;
+  var mName=MESI[mese-1];
+  toast('⏳ Creazione '+fname+'…','warn');
+  var dates=getDates(year,mese);
+  var h0=['Resp. '+resp,'Dipendenti','Plant','Data'];
+  var h1=['ExtEmpN_SAP','Nominativo','Plant '+plant,mName.substring(0,3).toLowerCase()+'-'+String(year).slice(2)];
+  dates.forEach(function(d){h0.push(d.day);h1.push(GGS[d.weekday]);});
+  var sig=[dip.sap,dip.nome,'Sigla'];dates.forEach(function(){sig.push('');});
+  var ing=[dip.sap,dip.nome,'Ingresso'];dates.forEach(function(){ing.push('');});
+  var usc=[dip.sap,dip.nome,'Uscita'];dates.forEach(function(){usc.push('');});
+  var legRows=[['SIGLA','DESCRIZIONE','NOTE']];SIGLE.forEach(function(s){legRows.push([s.code,s.label,s.hasQty?'Es. 1'+s.code:'']);});
+
+  fetch('https://sheets.googleapis.com/v4/spreadsheets',{
+    method:'POST',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+    body:JSON.stringify({properties:{title:fname},sheets:[{properties:{title:mName+'_Coop'}},{properties:{title:mName+'_ATS'}},{properties:{title:'Leggenda'}}]})
+  }).then(function(r){return r.json();}).then(function(ss){
+    var ssId=ss.spreadsheetId;if(!ssId)throw new Error('Errore creazione');
+    return fetch('https://www.googleapis.com/drive/v3/files/'+ssId+'?addParents='+FOLDER_ID+'&removeParents=root&fields=id',{
+      method:'PATCH',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},body:JSON.stringify({})
+    }).then(function(){return ssId;});
+  }).then(function(ssId){
+    return sheetsBatchUpdate(ssId,[
+      {range:mName+'_Coop!A1',values:[h0,h1]},
+      {range:mName+'_ATS!A1',values:[h0,h1,sig,ing,usc,[]]},
+      {range:'Leggenda!A1',values:legRows}
+    ]).then(function(){return ssId;});
+  }).then(function(ssId){
+    toast('✅ File creato: '+fname+' — ora scegli la sigla');
+    loadAllFiles();
+    var sname2=mName+'_ATS';
+    setTimeout(function(){
+      sheetsRead(ssId,sname2+'!A1:AQ300').then(function(vals){
+        return parseSheetValues(vals,year,mese,ssId,sname2,'ats');
+      }).then(function(d){
+        atsData=d;atsEmps=d.employees;atsFileId=ssId;
+        document.getElementById('aYear').value=String(year);
+        document.getElementById('aMonth').value=String(mese);
+        var ei=atsEmps.findIndex(function(e){return String(e.id||e.sap||'').trim()===String(dip.sap).trim();});
+        if(ei>=0){openPickerGeneric('ats',ei,di);}
+        else{toast('File creato. Carica il mese dalla tab Dipendenti.','warn');}
+      }).catch(function(e){toast('File creato. Carica il mese manualmente.','warn');console.warn(e);});
+    },1800);
+  }).catch(function(e){toast('✗ Errore creazione: '+(e.message||e),'err');});
 }
 
 
