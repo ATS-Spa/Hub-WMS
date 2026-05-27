@@ -4402,7 +4402,7 @@ function massConfirm(){
     emp.sigla[di]=fv;
     if(showOr){emp.ingresso[di]=ing;emp.uscita[di]=usc;emp.pausa[di]=pausaH;}
     else{emp.ingresso[di]='';emp.uscita[di]='';emp.pausa[di]=null;}
-    updateFerieResiduo(emp,di,fv,old,y,m);
+    updateFerieResiduo(emp,di,fv,old,y,m,'ats');
     totSet++;
   });
 
@@ -4454,7 +4454,7 @@ function massivoFerieRange(dip,d1,d2,fv,ing,usc,showOr,pausaH,qty){
         emp.sigla[di]=fv;
         if(showOr){emp.ingresso[di]=ing;emp.uscita[di]=usc;emp.pausa[di]=pausaH;}
         else{emp.ingresso[di]='';emp.uscita[di]='';emp.pausa[di]=null;}
-        updateFerieResiduo(emp,di,fv,old,y,m);
+        updateFerieResiduo(emp,di,fv,old,y,m,'ats');
         totSet++;
         var col=colToLetter(DST+di);
         if(emp.sheetRows&&emp.sheetRows.n!==undefined)updates.push({range:sname+'!'+col+(emp.sheetRows.n+1),values:[[fv]]});
@@ -4508,7 +4508,7 @@ function massivoCreateAndWrite(dip,y,m,fname,d1,d2,fv,ing,usc,showOr,pausaH){
       dates.forEach(function(dt,di){
         var dateObj=new Date(y,m-1,dt.day);
         var wd=dt.weekday;if(dateObj<d1||dateObj>d2||wd===0||wd===6||isHoliday(dt.day,m,y))return;
-        updateFerieResiduo({sap:dip.sap,nome:dip.nome,resp:dip.resp,plant:dip.plant,sigla:sigRow.slice(4)},di,fv,'',y,m);
+        updateFerieResiduo({sap:dip.sap,nome:dip.nome,resp:dip.resp,plant:dip.plant,sigla:sigRow.slice(4)},di,fv,'',y,m,'ats');
       });
       return n;
     });
@@ -4526,7 +4526,7 @@ function massivoAddEmpToFile(fileId,sname,dip,y,m,data,d1,d2,fv,ing,usc,showOr,p
     var dateObj=new Date(y,m-1,dt.day);
     var wd=dt.weekday;var inRange=dateObj>=d1&&dateObj<=d2&&wd!==0&&wd!==6&&!isHoliday(dt.day,m,y);
     sigRow.push(inRange?fv:'');ingRow.push(inRange&&showOr?ing:'');uscRow.push(inRange&&showOr?usc:'');
-    if(inRange){updateFerieResiduo({sap:dip.sap,nome:dip.nome,resp:dip.resp,plant:dip.plant},di,fv,'',y,m);n++;}
+    if(inRange){updateFerieResiduo({sap:dip.sap,nome:dip.nome,resp:dip.resp,plant:dip.plant},di,fv,'',y,m,'ats');n++;}
   });
   return sheetsBatchUpdate(fileId,[
     {range:sname+'!A'+startRow,values:[sigRow]},
@@ -4951,15 +4951,15 @@ function calcResiduo(sap){
   return{ferie:contratto.ferie_giorni-ferieGodute,permessi:Math.round((contratto.permessi_ore-permGodute)*10)/10,ferieGodute:ferieGodute,permGodute:Math.round(permGodute*10)/10,ferieTot:contratto.ferie_giorni,permTot:contratto.permessi_ore};
 }
 
-function updateFerieResiduo(emp,di,nuovaSigla,vecchiaSigla,anno,mese){
-  if(!emp||!emp.sap||spMode!=='ats')return;
+function updateFerieResiduo(emp,di,nuovaSigla,vecchiaSigla,anno,mese,forceMode){
+  if(!emp||!emp.sap)return;
+  // Accetta chiamate dirette dal Piano Ferie (forceMode='ats') o da spConfirm (spMode='ats')
+  if((forceMode||spMode)!=='ats')return;
   // di può essere: indice in atsData.dates (da spConfirm) oppure giorno-1 (da massivoFerieRange)
-  // Ricaviamo il giorno del mese in modo robusto
   var dayOfMonth=null;
   if(atsData&&atsData.dates&&atsData.dates[di]){
     dayOfMonth=atsData.dates[di].day;
   } else {
-    // Fallback: di è giorno-1 (0-based), quindi giorno = di+1
     dayOfMonth=di+1;
   }
   if(!dayOfMonth)return;
