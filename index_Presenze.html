@@ -5382,6 +5382,37 @@ function ganttMonthClick(sap,mese,year){
 
   meseDipRenderGrid(sap,mese,year);
   mOpen('moMeseDip');
+
+  // Carica mese ATS in background se non già caricato (per note e sigle reali)
+  var curY=parseInt(document.getElementById('aYear').value);
+  var curM=parseInt(document.getElementById('aMonth').value);
+  var alreadyLoaded=atsData&&atsEmps.length&&curY===year&&curM===mese;
+  if(!alreadyLoaded&&dip){
+    var mm=('0'+mese).slice(-2);
+    var fname=dip.resp+'_'+dip.plant+'_'+year+mm;
+    var existing=allFiles.find(function(f){var n=f.name.replace(/\.xlsx$/i,'');return n.toLowerCase()===fname.toLowerCase();});
+    if(existing){
+      var sname=MESI[mese-1]+'_ATS';
+      sheetsRead(existing.id,sname+'!A1:AQ300').then(function(vals){
+        return parseSheetValues(vals,year,mese,existing.id,sname,'ats');
+      }).then(function(d){
+        // Carica note per il dipendente
+        var emp=d.employees.find(function(e){return String(e.id||e.sap||'').trim()===String(sap).trim();});
+        if(!emp)return;
+        var DST=d.dayStart||3;
+        return loadNotesForEmps([emp],existing.id,sname,DST,d.nd||d.dates.length).then(function(){
+          // Aggiorna atsData/atsEmps se non sono già caricati per un altro mese
+          if(!atsEmps.length){atsData=d;atsEmps=d.employees;atsFileId=existing.id;
+            document.getElementById('aYear').value=String(year);
+            document.getElementById('aMonth').value=String(mese);}
+          // Ridisegna la griglia con le note aggiornate
+          if(document.getElementById('moMeseDip')&&!document.getElementById('moMeseDip').classList.contains('hide')){
+            meseDipRenderGrid(sap,mese,year);
+          }
+        });
+      }).catch(function(){});
+    }
+  }
 }
 
 function meseDipRenderGrid(sap,mese,year){
