@@ -368,13 +368,15 @@ select.fc option{background:var(--card)}
 .tout{border-radius:10px;border:1px solid var(--border);background:var(--surface);overflow-x:auto;overflow-y:visible;margin-top:8px;animation:fadeIn .22s ease}
 .tout table{border-collapse:collapse;white-space:nowrap;width:max-content;min-width:100%}
 .sf{position:sticky;z-index:3;background:var(--card)}
-/* thead non è più sticky globale: l'intestazione giorni è ripetuta per ogni dipendente */
+/* thead originale nascosto nelle tab Coop/Dipendenti: l'intestazione è ripetuta per ogni dipendente con tr.emp-hdr */
 thead{background:var(--card)}
+.tout table thead{display:none}
 thead th{z-index:4;background:var(--card);border-bottom:2px solid var(--border);padding:6px 10px;font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--subtle);border-right:1px solid var(--border);box-shadow:0 2px 4px rgba(0,0,0,.15)}
 thead th.sf{z-index:6}
 thead th:last-child{border-right:none}
 /* Intestazione giorni ripetuta per ogni dipendente nel tbody */
 tr.emp-hdr td{background:var(--surface);border-top:2px solid var(--border);border-bottom:1px solid var(--border);padding:3px 2px;font-family:var(--ffc);font-size:10px;font-weight:700;letter-spacing:.3px;text-align:center;color:var(--muted);border-right:1px solid rgba(36,48,72,.3)}
+tr.emp-hdr td.conf-th,tr.emp-hdr td:not(.ca0):not(.ca1):not(.ca2):not(.sf){position:static!important;top:auto!important}
 tr.emp-hdr td.eh-num{color:var(--muted);font-size:9px}
 tr.emp-hdr td.eh-nome{text-align:left;padding-left:6px;color:var(--muted);font-size:10px}
 tr.emp-hdr td.dh{color:var(--text);font-size:11px;font-weight:700}
@@ -2455,8 +2457,8 @@ function renderSection(sec, emps, data, opts){
     h+='<td class="sf ca2 eh-nome">T</td>';
     dates.forEach(function(d){var w=d.weekday===0||d.weekday===6;var hol=isHoliday(d.day,m,y);
       h+='<td class="dh'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+'"><div class="dn">'+d.day+'</div><div class="dw">'+GGS[d.weekday]+'</div></td>';});
-    totHdrs.forEach(function(th){h+='<td style="background:var(--surface);text-align:center;font-family:var(--ffc);font-size:10px;font-weight:700;color:'+th.c+';border-right:1px solid rgba(36,48,72,.3)">'+th.l+'</td>';});
-    if(!isAts)h+='<td style="background:var(--surface);text-align:center;font-size:10px;color:var(--green);font-family:var(--ffc);font-weight:700">✓</td>';
+    totHdrs.forEach(function(th){h+='<td class="'+totClass+'" style="background:var(--surface);text-align:center;font-family:var(--ffc);font-size:10px;font-weight:700;color:'+th.c+';border-right:1px solid rgba(36,48,72,.3)">'+th.l+'</td>';});
+    if(!isAts)h+='<td class="conf-th" style="font-size:10px">✓</td>';
     if(adminMode)h+='<td style="background:var(--surface)"></td>';
     h+='</tr>';
 
