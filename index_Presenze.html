@@ -3047,10 +3047,19 @@ function spConfirm(){
     // Aggiorna residuo ferie/permessi
     var y2c=parseInt(document.getElementById('aYear').value);
     var m2c=parseInt(document.getElementById('aMonth').value);
-    updateFerieResiduo(emp,spDi,fv,vecchiaSigla,y2c,m2c);
+    // Assicura ferieData caricato, poi aggiorna e salva
+    var doFerieUpdate=function(){
+      updateFerieResiduo(emp,spDi,fv,vecchiaSigla,y2c,m2c);
+      saveFerieResiduo().catch(function(e){console.warn('[WMS] saveFerieResiduo:',e.message);});
+      if(curSec==='ferie')setTimeout(ferieRenderOnly,300);
+    };
+    if(!ferieData||ferieYear!==y2c){
+      ferieYear=y2c;
+      loadFerieResiduo(y2c).then(doFerieUpdate).catch(function(){ferieData={anno:y2c,dipendenti:[]};doFerieUpdate();});
+    } else {
+      doFerieUpdate();
+    }
     atsRender();aSave();
-    // Se il Gantt è visibile, ridisegnalo subito
-    if(curSec==='ferie')setTimeout(ferieRenderOnly,300);
   }else{coopRender();cSave();}
   toast('✓ Salvato');
 }
@@ -4393,23 +4402,31 @@ function massConfirm(){
   var y=parseInt(document.getElementById(massMode==='ats'?'aYear':'cYear').value);
   var m=parseInt(document.getElementById(massMode==='ats'?'aMonth':'cMonth').value);
 
-  dates.forEach(function(dt,di){
-    var dateObj=new Date(y,m-1,dt.day);
-    if(dateObj<d1||dateObj>d2)return;
-    var wd=dt.weekday;var isWe=wd===0||wd===6;var isHol=isHoliday(dt.day,m,y);
-    if(massSigla!==''&&(isWe||isHol))return; // salta weekend/festivi salvo cancellazione
-    var old=(emp.sigla||[])[di]||'';
-    emp.sigla[di]=fv;
-    if(showOr){emp.ingresso[di]=ing;emp.uscita[di]=usc;emp.pausa[di]=pausaH;}
-    else{emp.ingresso[di]='';emp.uscita[di]='';emp.pausa[di]=null;}
-    updateFerieResiduo(emp,di,fv,old,y,m,'ats');
-    totSet++;
-  });
-
-  mClose('moMassivo');
-  if(massMode==='ats'){atsRender();aSave();}else{coopRender();cSave();}
-  if(curSec==='ferie')setTimeout(ferieRenderOnly,200);
-  toast('✓ Inserite '+totSet+' giornate per '+esc(emp.nome));
+  var doMassLoop=function(){
+    dates.forEach(function(dt,di){
+      var dateObj=new Date(y,m-1,dt.day);
+      if(dateObj<d1||dateObj>d2)return;
+      var wd=dt.weekday;var isWe=wd===0||wd===6;var isHol=isHoliday(dt.day,m,y);
+      if(massSigla!==''&&(isWe||isHol))return;
+      var oldSig=(emp.sigla||[])[di]||'';
+      emp.sigla[di]=fv;
+      if(showOr){emp.ingresso[di]=ing;emp.uscita[di]=usc;emp.pausa[di]=pausaH;}
+      else{emp.ingresso[di]='';emp.uscita[di]='';emp.pausa[di]=null;}
+      updateFerieResiduo(emp,di,fv,oldSig,y,m,'ats');
+      totSet++;
+    });
+    if(massMode==='ats') saveFerieResiduo().catch(function(e){console.warn('[WMS]',e.message);});
+    mClose('moMassivo');
+    if(massMode==='ats'){atsRender();aSave();}else{coopRender();cSave();}
+    if(curSec==='ferie')setTimeout(ferieRenderOnly,300);
+    toast('✓ Inserite '+totSet+' giornate per '+esc(emp.nome));
+  };
+  if(massMode==='ats'&&(!ferieData||ferieYear!==y)){
+    ferieYear=y;
+    loadFerieResiduo(y).then(doMassLoop).catch(function(){ferieData={anno:y,dipendenti:[]};doMassLoop();});
+  } else {
+    doMassLoop();
+  }
 }
 
 // Gestione range multi-mese dal Piano Ferie
@@ -4953,9 +4970,8 @@ function calcResiduo(sap){
 
 function updateFerieResiduo(emp,di,nuovaSigla,vecchiaSigla,anno,mese,forceMode){
   if(!emp||!emp.sap)return;
-  // Accetta chiamate dirette dal Piano Ferie (forceMode='ats') o da spConfirm (spMode='ats')
   if((forceMode||spMode)!=='ats')return;
-  // di può essere: indice in atsData.dates (da spConfirm) oppure giorno-1 (da massivoFerieRange)
+  if(!ferieData)return; // ferieData deve essere già caricato dal chiamante
   var dayOfMonth=null;
   if(atsData&&atsData.dates&&atsData.dates[di]){
     dayOfMonth=atsData.dates[di].day;
@@ -4965,21 +4981,17 @@ function updateFerieResiduo(emp,di,nuovaSigla,vecchiaSigla,anno,mese,forceMode){
   if(!dayOfMonth)return;
   var dateStr=anno+'-'+('0'+mese).slice(-2)+'-'+('0'+dayOfMonth).slice(-2);
   var nuovaCodice=xSig(nuovaSigla||'');var vecchiaCodice=xSig(vecchiaSigla||'');
-  var doUpdate=function(){
-    var dip=getFerieDip(emp.sap,emp.nome,emp.resp,emp.plant);if(!dip)return;
-    if(vecchiaCodice==='F')dip.ferie_godute=dip.ferie_godute.filter(function(g){return g.data!==dateStr;});
-    else if(vecchiaCodice==='HP')dip.permessi_goduti=dip.permessi_goduti.filter(function(g){return g.data!==dateStr;});
-    if(nuovaCodice==='F'){
-      var wd=new Date(anno,mese-1,dayOfMonth).getDay();
-      if(wd!==0&&wd!==6&&!isHoliday(dayOfMonth,mese,anno))dip.ferie_godute.push({data:dateStr});
-    } else if(nuovaCodice==='HP'){
-      var qtyH=parseFloat((String(nuovaSigla||'').match(/^[\d.]*/)||['1'])[0])||1;
-      dip.permessi_goduti.push({data:dateStr,ore:qtyH});
-    }
-    saveFerieResiduo().catch(function(e){console.warn('[WMS] saveFerieResiduo:',e.message);});
-  };
-  if(!ferieData||ferieYear!==anno){ferieYear=anno;loadFerieResiduo(anno).then(doUpdate).catch(function(){ferieData={anno:anno,dipendenti:[]};doUpdate();});}
-  else doUpdate();
+  var dip=getFerieDip(emp.sap,emp.nome,emp.resp,emp.plant);if(!dip)return;
+  if(vecchiaCodice==='F')dip.ferie_godute=dip.ferie_godute.filter(function(g){return g.data!==dateStr;});
+  else if(vecchiaCodice==='HP')dip.permessi_goduti=dip.permessi_goduti.filter(function(g){return g.data!==dateStr;});
+  if(nuovaCodice==='F'){
+    var wd=new Date(anno,mese-1,dayOfMonth).getDay();
+    if(wd!==0&&wd!==6&&!isHoliday(dayOfMonth,mese,anno))dip.ferie_godute.push({data:dateStr});
+  } else if(nuovaCodice==='HP'){
+    var qtyH=parseFloat((String(nuovaSigla||'').match(/^[\d.]*/)||['1'])[0])||1;
+    dip.permessi_goduti.push({data:dateStr,ore:qtyH});
+  }
+  // NON salva qui - il chiamante chiama saveFerieResiduo() una sola volta alla fine
 }
 
 function ferieSyncFilters(){
