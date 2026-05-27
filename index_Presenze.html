@@ -368,6 +368,7 @@ select.fc option{background:var(--card)}
 .tout{border-radius:10px;border:1px solid var(--border);background:var(--surface);overflow-x:auto;margin-top:8px;animation:fadeIn .22s ease}
 .tout table{border-collapse:collapse;white-space:nowrap;width:max-content;min-width:100%}
 .sf{position:sticky;z-index:3;background:var(--card)}
+thead{position:sticky;top:0;z-index:10;background:var(--card)}
 thead th{position:sticky;top:0;z-index:4;background:var(--card);border-bottom:2px solid var(--border);padding:6px 10px;font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--subtle);border-right:1px solid var(--border);box-shadow:0 2px 4px rgba(0,0,0,.15)}
 thead th.sf{z-index:6}
 thead th:last-child{border-right:none}
@@ -375,7 +376,7 @@ tbody tr{border-bottom:1px solid rgba(36,48,72,.5);transition:background .1s}
 tbody tr:hover{background:rgba(255,255,255,.018)}
 td{padding:5px 10px;border-right:1px solid rgba(36,48,72,.4);font-size:13px}
 td:last-child{border-right:none}
-th.dh{text-align:center;min-width:36px;max-width:36px;padding:3px 2px;position:sticky;top:0;z-index:4;background:var(--card);box-shadow:0 2px 4px rgba(0,0,0,.12)}
+th.dh{text-align:center;min-width:36px;max-width:36px;padding:3px 2px;position:sticky;top:0;z-index:4;background:var(--card)}
 th.dh .dn{font-family:var(--ffm);font-size:12px;font-weight:600;color:var(--text)}
 th.dh .dw{font-size:8px;color:var(--muted);letter-spacing:.3px}
 th.dh.we .dn{color:var(--muted)}th.dh.we .dw{color:var(--border)}
@@ -517,7 +518,7 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
 #toast.err{background:var(--red);color:#fff}
 #toast.warn{background:var(--amber);color:#000}
 
-::-webkit-scrollbar{width:10px;height:10px}::-webkit-scrollbar-track{background:rgba(0,0,0,.1);border-radius:5px}::-webkit-scrollbar-thumb{background:rgba(148,163,184,.4);border-radius:5px;border:2px solid transparent;background-clip:content-box}::-webkit-scrollbar-thumb:hover{background:rgba(148,163,184,.7);background-clip:content-box;border:2px solid transparent}::-webkit-scrollbar-corner{background:transparent}
+::-webkit-scrollbar{width:12px;height:12px}::-webkit-scrollbar-track{background:rgba(0,0,0,.15);border-radius:6px}::-webkit-scrollbar-thumb{background:rgba(148,163,184,.5);border-radius:6px;border:2px solid transparent;background-clip:content-box}::-webkit-scrollbar-thumb:hover{background:rgba(148,163,184,.8);background-clip:content-box;border:2px solid transparent}::-webkit-scrollbar-corner{background:transparent}
 @keyframes pulse{0%,100%{opacity:1;transform:scale(1)}50%{opacity:.4;transform:scale(.7)}}
 @keyframes spin{to{transform:rotate(360deg)}}
 @keyframes fadeIn{from{opacity:0;transform:translateY(5px)}to{opacity:1;transform:translateY(0)}}
@@ -911,7 +912,7 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
 .gantt-table{border-collapse:collapse;white-space:nowrap;font-size:12px}
 .gantt-table th{background:var(--card);border:1px solid var(--border);padding:5px 6px;font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.3px;color:var(--subtle);text-align:center;position:sticky;top:0;z-index:5}
 .gantt-table thead{position:sticky;top:0;z-index:10;background:var(--card)}
-.gantt-table thead tr:nth-child(2) th{top:28px;border-top:none;box-shadow:0 3px 0 var(--card)}
+.gantt-table thead tr:nth-child(2) th{top:var(--gantt-row1-h,28px);border-top:none}
 .gantt-table th.gh-nome{text-align:left;min-width:140px;max-width:180px;left:0;z-index:7;background:#1a2236}
 .gantt-table th.gh-sap{min-width:44px;max-width:52px;z-index:7;background:#1a2236}
 .gantt-table th.gh-ferie-res{min-width:48px;max-width:52px;background:#1a2236;color:var(--blue);position:sticky;z-index:7;border-bottom:2px solid rgba(59,130,246,.5)}
@@ -5247,13 +5248,12 @@ function ferieLoad(){
       document.getElementById('ferieContent').innerHTML='<div class="state"><div class="state-ico">\ud83d\udcc2</div><div class="state-title">Nessun file trovato</div></div>';
       document.getElementById('fRicalcBtn').disabled=false;return;
     }
-    var firstFiles={};
-    files.forEach(function(f){var p=parseFileName(f.name);var key=(p.resp+'_'+p.plant).toLowerCase();if(!firstFiles[key]||p.month<firstFiles[key].month)firstFiles[key]={f:f,p:p};});
+    // Load ALL files to get ALL employees (not just first month)
     ferieDipList=[];
-    var promises=Object.values(firstFiles).map(function(item){
-      var f=item.f;var p=item.p;var sname=MESI[p.month-1]+'_ATS';var isXlsx=/\.xlsx$/i.test(f.name);
+    var promises=files.map(function(f){
+      var p=parseFileName(f.name);var sname=MESI[p.month-1]+'_ATS';var isXlsx=/\.xlsx$/i.test(f.name);
       return (isXlsx?downloadFile(f.id).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');}):sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
-      .then(function(d){d.employees.forEach(function(e){var sap=e.id||e.sap||'';if(!ferieDipList.find(function(x){return x.sap===sap;}))ferieDipList.push({sap:sap,nome:e.nome,resp:d.globalResp||p.resp,plant:e.plant||p.plant});});}).catch(function(){});
+      .then(function(d){d.employees.forEach(function(e){var sap=String(e.id||e.sap||'').trim();var nome=String(e.nome||'').trim();if(!nome)return;var key=(sap||nome);if(!ferieDipList.find(function(x){return (x.sap&&x.sap===sap)||(x.nome===nome&&x.plant===(e.plant||p.plant));}))ferieDipList.push({sap:sap,nome:nome,resp:d.globalResp||p.resp,plant:e.plant||p.plant});});}).catch(function(){});
     });
     Promise.all(promises).then(function(){
       ferieDipList.sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'');});
@@ -5421,7 +5421,15 @@ function renderGantt(dipList,year,mDa,mA){
   mob+='</div>';
 
   document.getElementById('ferieContent').innerHTML=leg+'<div class="gantt-table-wrap">'+h+'</div>'+mob;
-  document.getElementById('ferieInfo').textContent=dipList.length+' dipendenti \u00b7 '+MESI[mDa-1]+' \u2013 '+MESI[mA-1]+' '+year;
+  document.getElementById('ferieInfo').textContent=dipList.length+' dipendenti · '+MESI[mDa-1]+' – '+MESI[mA-1]+' '+year;
+  // Misura altezza prima riga thead e imposta CSS var per sticky corretto
+  setTimeout(function(){
+    var firstRow=document.querySelector('#ganttScroll thead tr:first-child th');
+    if(firstRow){
+      var h=firstRow.getBoundingClientRect().height;
+      document.getElementById('ganttScroll').style.setProperty('--gantt-row1-h',Math.round(h)+'px');
+    }
+  },50);
 }
 
 
