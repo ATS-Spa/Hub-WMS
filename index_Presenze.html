@@ -5865,6 +5865,13 @@ function cfgSave(){
           if(td.onclick) val.onclick = td.onclick;
           else if(td.getAttribute('onclick')) val.setAttribute('onclick', td.getAttribute('onclick'));
           if(td.onclick || td.getAttribute('onclick')){val.style.cursor='pointer';val.classList.add('mob-day-clickable');}
+          // Indicatore nota (pallino arancione)
+          if(td.classList.contains('has-note')){
+            val.style.position='relative';
+            var noteDot=document.createElement('span');
+            noteDot.style.cssText='position:absolute;top:1px;right:2px;width:5px;height:5px;border-radius:50%;background:var(--amber);display:block';
+            val.appendChild(noteDot);
+          }
           dayWrap.appendChild(val);
 
           // Ingresso
