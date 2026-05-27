@@ -4377,7 +4377,9 @@ function massConfirm(){
   var fv=massSigla;
   if(massSigla&&SM[massSigla]&&SM[massSigla].hasQty&&qty!==1)fv=qty+massSigla;
 
-  var d1=new Date(dal),d2=new Date(al);
+  var _d1=dal.split('-'),_d2=al.split('-');
+  var d1=new Date(+_d1[0],+_d1[1]-1,+_d1[2]);
+  var d2=new Date(+_d2[0],+_d2[1]-1,+_d2[2]);
   var totSet=0;
 
   if(massMode==='ferie'){
