@@ -39,6 +39,7 @@ body.theme-dim .tout{background:#252d3d;}
 body.theme-dim table{background:#252d3d;}
 body.theme-dim .sf{background:#2d3748 !important;}
 body.theme-dim .filters{background:#252d3d;border-bottom:1px solid #3d4f6b;}
+body.theme-dim .ferie-sigla-bar{background:#252d3d;border-bottom:1px solid #3d4f6b;}
 body.theme-dim .fc{background:#2d3748;border-color:#3d4f6b;color:#cbd5e1;}
 
 /* ── TEMA SAP (blu navy aziendale) ── */
@@ -58,6 +59,7 @@ body.theme-sap .mc{background:#0f2040;border:1px solid #1e3d6e;}
 body.theme-sap .mi{background:#162a52;border-color:#1e3d6e;color:#e8eef8;}
 body.theme-sap .sf{background:#162a52 !important;}
 body.theme-sap .filters{background:#0f2040;border-bottom:1px solid #1e3d6e;}
+body.theme-sap .ferie-sigla-bar{background:#0f2040;border-bottom:1px solid #1e3d6e;}
 body.theme-sap .fc{background:#162a52;border-color:#1e3d6e;color:#e8eef8;}
 body.theme-sap .tout{background:#0f2040;}
 body.theme-sap table{background:#0f2040;}
@@ -76,6 +78,7 @@ body.theme-grafite .mc{background:#22252b;border:1px solid #3a3f4a;}
 body.theme-grafite .mi{background:#2a2e36;border-color:#3a3f4a;color:#d8dce4;}
 body.theme-grafite .sf{background:#2a2e36 !important;}
 body.theme-grafite .filters{background:#22252b;border-bottom:1px solid #3a3f4a;}
+body.theme-grafite .ferie-sigla-bar{background:#22252b;border-bottom:1px solid #3a3f4a;}
 body.theme-grafite .fc{background:#2a2e36;border-color:#3a3f4a;color:#d8dce4;}
 body.theme-grafite .tout{background:#22252b;}
 body.theme-grafite table{background:#22252b;}
@@ -101,6 +104,7 @@ body.theme-salvia .snb.on{color:#1a2818;}
 body.theme-salvia .drawer{background:#d8e4d4;border-right:1px solid #b4c8ae;}
 body.theme-salvia .topbar{background:#e4ebe1;border-bottom:1px solid #b4c8ae;}
 body.theme-salvia .filters{background:#ddebd6;border-bottom:1px solid #aac4a2;}
+body.theme-salvia .ferie-sigla-bar{background:#ddebd6;border-bottom:1px solid #aac4a2;}
 body.theme-salvia .sf{background:#c8e0c2!important;}
 body.theme-salvia .fc{background:#c8e0c2;border-color:#aac4a2;color:#1a2818;}
 body.theme-salvia .mi{background:#c8e0c2;border-color:#aac4a2;color:#1a2818;}
@@ -158,6 +162,7 @@ body.theme-oceano .mc{background:#071828;border:1px solid #1a4a6a;}
 body.theme-oceano .mi{background:#0a2038;border-color:#1a4a6a;color:#bae6fd;}
 body.theme-oceano .sf{background:#0a2038 !important;}
 body.theme-oceano .filters{background:#071828;border-bottom:1px solid #1a4a6a;}
+body.theme-oceano .ferie-sigla-bar{background:#071828;border-bottom:1px solid #1a4a6a;}
 body.theme-oceano .fc{background:#0a2038;border-color:#1a4a6a;color:#bae6fd;}
 body.theme-oceano .topbar{background:#050e1a;border-bottom:1px solid #1a4a6a;}
 body.theme-oceano .legbar{background:#071828;}
@@ -196,6 +201,7 @@ body.theme-avorio .snb.on{color:#2c2418;}
 body.theme-avorio .drawer{background:#e5dfd3;border-right:1px solid #c9bfaf;}
 body.theme-avorio .topbar{background:#ede8df;border-bottom:1px solid #c9bfaf;}
 body.theme-avorio .filters{background:#e5dfd3;border-bottom:1px solid #c9bfaf;}
+body.theme-avorio .ferie-sigla-bar{background:#e5dfd3;border-bottom:1px solid #c9bfaf;}
 body.theme-avorio .sf{background:#ddd7ca!important;}
 body.theme-avorio .fc{background:#ddd7ca;border-color:#c9bfaf;color:#2c2418;}
 body.theme-avorio .mi{background:#ddd7ca;border-color:#c9bfaf;color:#2c2418;}
@@ -258,6 +264,7 @@ body.theme-light td.dc.emp{color:#cbd5e1;}
 body.theme-light .sbar{background:#f8fafc;}
 body.theme-light .stat{background:#ffffff;border-color:#e2e8f0;}
 body.theme-light .filters{background:#ffffff;border-bottom:1px solid #e2e8f0;}
+body.theme-light .ferie-sigla-bar{background:#f8fafc;border-bottom:1px solid #e2e8f0;}
 body.theme-light .fc{background:#f8fafc;border-color:#e2e8f0;color:#1e293b;}
 body.theme-light .ba{border-color:#e2e8f0;color:#64748b;}
 body.theme-light .ba:hover{border-color:#94a3b8;color:#1e293b;}
@@ -365,13 +372,26 @@ select.fc option{background:var(--card)}
 .scroll{flex:1;overflow:auto;padding:14px 24px 28px;min-height:0;scroll-padding-top:0}
 
 /* ── TABLE ── */
-.tout{border-radius:10px;border:1px solid var(--border);background:var(--surface);overflow-x:auto;margin-top:8px;animation:fadeIn .22s ease}
+.tout{border-radius:10px;border:1px solid var(--border);background:var(--surface);overflow:hidden;margin-top:8px;animation:fadeIn .22s ease}
 .tout table{border-collapse:collapse;white-space:nowrap;width:max-content;min-width:100%}
+/* inner scroll wrapper that allows sticky thead to work */
+.tout-scroll{overflow-x:auto;overflow-y:visible}
 .sf{position:sticky;z-index:3;background:var(--card)}
 thead{position:sticky;top:0;z-index:10;background:var(--card)}
 thead th{position:sticky;top:0;z-index:4;background:var(--card);border-bottom:2px solid var(--border);padding:6px 10px;font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;color:var(--subtle);border-right:1px solid var(--border);box-shadow:0 2px 4px rgba(0,0,0,.15)}
 thead th.sf{z-index:6}
 thead th:last-child{border-right:none}
+
+/* ── SIGLA FILTER BAR (Piano Ferie) ── */
+.ferie-sigla-bar{display:flex;align-items:center;gap:6px;flex-wrap:wrap;padding:8px 24px;background:var(--surface);border-bottom:1px solid var(--border);flex-shrink:0}
+.ferie-sigla-label{font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.4px;color:var(--muted);text-transform:uppercase;margin-right:4px}
+.ferie-sigla-btn{background:transparent;border:1px solid var(--border);color:var(--muted);font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.3px;padding:4px 12px;border-radius:20px;cursor:pointer;transition:all .15s}
+.ferie-sigla-btn:hover{border-color:var(--fsb-color,var(--teal));color:var(--fsb-color,var(--teal));background:rgba(255,255,255,.05)}
+.ferie-sigla-btn.active{background:var(--fsb-color,var(--teal));border-color:var(--fsb-color,var(--teal));color:#fff}
+.ferie-sigla-btn:first-of-type.active{background:var(--teal);border-color:var(--teal)}
+/* hide filtered cells */
+#ganttScroll td.gd-hidden{opacity:0;pointer-events:none}
+#ganttScroll td.gd-hidden .gantt-cell{background:transparent!important;color:transparent!important}
 tbody tr{border-bottom:1px solid rgba(36,48,72,.5);transition:background .1s}
 tbody tr:hover{background:rgba(255,255,255,.018)}
 td{padding:5px 10px;border-right:1px solid rgba(36,48,72,.4);font-size:13px}
@@ -715,6 +735,7 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
     overflow:visible;
     margin-top:0;
   }
+  .tout-scroll{overflow:visible}
   /* Nascondi la tabella classica su mobile */
   .tout table{display:none}
   /* Card list generata da JS via classe .mob-cards */
@@ -919,7 +940,7 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
 .gantt-table th{background:var(--card);border:1px solid var(--border);padding:5px 6px;font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.3px;color:var(--subtle);text-align:center;position:sticky;top:0;z-index:5}
 .gantt-table thead{position:sticky;top:0;z-index:10;background:var(--card)}
 .gantt-table thead tr:nth-child(2) th{top:var(--gantt-row1-h,28px);border-top:none}
-.gantt-table th.gh-nome{text-align:left;min-width:140px;max-width:180px;left:0;z-index:7;background:#1a2236}
+.gantt-table th.gh-nome{text-align:left;min-width:160px;max-width:160px;left:0;z-index:7;background:#1a2236}
 .gantt-table th.gh-sap{min-width:44px;max-width:52px;z-index:7;background:#1a2236}
 .gantt-table th.gh-ferie-res{min-width:48px;max-width:52px;background:#1a2236;color:var(--blue);position:sticky;z-index:7;border-bottom:2px solid rgba(59,130,246,.5)}
 .gantt-table th.gh-perm-res{min-width:48px;max-width:52px;background:#1a2236;color:var(--purple);position:sticky;z-index:7;border-bottom:2px solid rgba(168,85,247,.5);box-shadow:2px 0 6px rgba(0,0,0,.4)}
@@ -1092,6 +1113,7 @@ body.theme-rovere .snb.on{color:#1e140a;}
 body.theme-rovere .drawer{background:#e0d4c0;border-right:1px solid #bfad95;}
 body.theme-rovere .topbar{background:#ebe2d4;border-bottom:1px solid #bfad95;}
 body.theme-rovere .filters{background:#e0d4c0;border-bottom:1px solid #bfad95;}
+body.theme-rovere .ferie-sigla-bar{background:#e0d4c0;border-bottom:1px solid #bfad95;}
 body.theme-rovere .sf{background:#d4c8b0!important;}
 body.theme-rovere .fc{background:#d4c8b0;border-color:#bfad95;color:#1e140a;}
 body.theme-rovere .mi{background:#d4c8b0;border-color:#bfad95;color:#1e140a;}
@@ -1395,6 +1417,15 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
         <button class="ba bghost" id="togFres" onclick="ganttToggleCol('fres')" style="padding:4px 10px;font-size:11px;font-family:var(--ffc);font-weight:700;color:var(--blue)">F.Res</button>
         <button class="ba bghost" id="togHpres" onclick="ganttToggleCol('hpres')" style="padding:4px 10px;font-size:11px;font-family:var(--ffc);font-weight:700;color:var(--purple)">HP.Res</button>
       </div>
+    </div>
+    <div class="ferie-sigla-bar" id="ferieSiglaBar" style="display:none">
+      <span class="ferie-sigla-label">Mostra:</span>
+      <button class="ferie-sigla-btn active" id="fsBtnAll" onclick="ferieSiglaFilter('ALL')">Tutti</button>
+      <button class="ferie-sigla-btn" id="fsBtnX" onclick="ferieSiglaFilter('X')" style="--fsb-color:var(--green)">✔ Presenti (X)</button>
+      <button class="ferie-sigla-btn" id="fsBtnF" onclick="ferieSiglaFilter('F')" style="--fsb-color:var(--blue)">🏖 Ferie (F)</button>
+      <button class="ferie-sigla-btn" id="fsBtnHP" onclick="ferieSiglaFilter('HP')" style="--fsb-color:var(--purple)">⏱ Permessi (HP)</button>
+      <button class="ferie-sigla-btn" id="fsBtnM" onclick="ferieSiglaFilter('M')" style="--fsb-color:var(--red)">🏥 Malattia (M)</button>
+      <button class="ferie-sigla-btn" id="fsBtnWE" onclick="ferieSiglaFilter('WE')" style="--fsb-color:var(--muted)">📅 Weekend</button>
     </div>
     <div class="gantt-wrap" id="ferieContent" style="display:flex;flex-direction:column;overflow:hidden">
       <div class="state"><div class="state-ico">🏖️</div><div class="state-title">Seleziona filtri e premi Carica</div></div>
@@ -2374,7 +2405,7 @@ function renderSection(sec, emps, data, opts){
   var totTdClass=isAts?'ats-tot-td':'coop-tot-td';
   var oreHidden=!opts.oreVisible;
 
-  var h='<div class="tout"><table><thead><tr>';
+  var h='<div class="tout"><div class="tout-scroll"><table><thead><tr>';
   h+='<th class="sf ca0" style="z-index:7;font-size:10px">#</th>';
   h+='<th class="sf ca1" style="z-index:7">Dipendente</th>';
   h+='<th class="sf ca2" style="z-index:7">T</th>';
@@ -2481,8 +2512,7 @@ function renderSection(sec, emps, data, opts){
     if(adminMode)h+='<td></td>';
     h+='</tr>';
   });
-  h+='</tbody></table></div>';
-  setEl(opts.contentId,h);
+  h+='</tbody></table></div></div>';
   if(!opts.totVisible){
     setTimeout(function(){document.querySelectorAll('.'+totClass+',.'+totTdClass).forEach(function(el){el.style.display='none';});},10);
   }
@@ -5321,6 +5351,33 @@ function ferieSyncFilters(){
 
 function ferieOnFilterChange(){ferieSyncFilters();ferieLoad();}
 
+// ── Filtro Sigla Piano Ferie ──
+var _ferieSiglaActive='ALL';
+function ferieSiglaFilter(code){
+  _ferieSiglaActive=code;
+  // aggiorna bottoni attivi
+  ['ALL','X','F','HP','M','WE'].forEach(function(c){
+    var btn=document.getElementById('fsBtn'+c);
+    if(btn)btn.classList.toggle('active',c===code);
+  });
+  var scroll=document.getElementById('ganttScroll');
+  if(!scroll)return;
+  var cells=scroll.querySelectorAll('tbody td:not(.gd-nome):not(.gd-sap):not(.gd-ferie-res):not(.gd-perm-res)');
+  cells.forEach(function(td){
+    var div=td.querySelector('.gantt-cell');
+    if(!div){td.classList.remove('gd-hidden');return;}
+    if(code==='ALL'){td.classList.remove('gd-hidden');return;}
+    var isWe=div.classList.contains('gc-we')||div.classList.contains('gc-hol');
+    var show=false;
+    if(code==='WE')show=isWe;
+    else if(code==='X')show=!isWe&&div.classList.contains('gc-X');
+    else if(code==='F')show=div.classList.contains('gc-F');
+    else if(code==='HP')show=div.classList.contains('gc-HP');
+    else if(code==='M')show=div.classList.contains('gc-M');
+    td.classList.toggle('gd-hidden',!show);
+  });
+}
+
 function ferieRenderOnly(){
   if(!ferieDipList.length)return;
   var year=parseInt(document.getElementById('fAnno').value)||new Date().getFullYear();
@@ -5454,7 +5511,7 @@ function renderGantt(dipList,year,mDa,mA){
   if(tHpres){tHpres.classList.toggle('tog-off',!showHpres);}
   document.getElementById('ganttColToggles').style.display='flex';
   // Calcola posizioni sticky dinamicamente
-  var NOME_W=140, SAP_W=44, FRES_W=48, HPRES_W=48;
+  var NOME_W=160, SAP_W=44, FRES_W=48, HPRES_W=48;
   var leftSap=NOME_W;
   var leftFres=NOME_W+(showSap?SAP_W:0);
   var leftHpres=NOME_W+(showSap?SAP_W:0)+(showFres?FRES_W:0);
@@ -5566,6 +5623,9 @@ function renderGantt(dipList,year,mDa,mA){
 
   document.getElementById('ferieContent').innerHTML=leg+'<div class="gantt-table-wrap">'+h+'</div>'+mob;
   document.getElementById('ferieInfo').textContent=dipList.length+' dipendenti · '+MESI[mDa-1]+' – '+MESI[mA-1]+' '+year;
+  // Mostra barra filtro sigla e resetta a "Tutti"
+  var sigBar=document.getElementById('ferieSiglaBar');
+  if(sigBar){sigBar.style.display='flex';_ferieSiglaActive='ALL';['ALL','X','F','HP','M','WE'].forEach(function(c){var b=document.getElementById('fsBtn'+c);if(b)b.classList.toggle('active',c==='ALL');});}
   // Misura altezza prima riga thead e imposta CSS var per sticky corretto
   setTimeout(function(){
     var firstRow=document.querySelector('#ganttScroll thead tr:first-child th');
