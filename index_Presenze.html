@@ -2090,6 +2090,25 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
   <div class="mbtns" style="margin-top:4px"><button class="mbtn cancel" onclick="mClose('moConf')">Annulla</button><button class="mbtn danger" id="confOk">Conferma</button></div>
 </div></div>
 
+<!-- ── MODAL MAIL NOTIFICA ── -->
+<div id="moMail" class="mo hide"><div class="mc" style="width:400px">
+  <div class="mt" id="moMailTitle">✉ Notifica via email</div>
+  <div class="ms" id="moMailMsg" style="margin-top:0;color:var(--subtle);font-size:13px;white-space:pre-line"></div>
+  <div style="margin:12px 0 4px;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:8px;font-size:12px">
+    <div style="font-family:var(--ffc);font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--subtle);margin-bottom:4px">A:</div>
+    <div id="moMailTo" style="color:var(--text);font-family:var(--ffm)"></div>
+  </div>
+  <div id="moMailFallback" style="display:none;margin:8px 0;padding:10px 14px;background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.3);border-radius:8px;font-size:12px;color:var(--amber);line-height:1.6">
+    ⚠️ Il client email non si è aperto.<br>
+    <span style="color:var(--muted)">Assicurati che Outlook (o un altro client) sia impostato come app predefinita per le email, oppure usa il link qui sotto:</span><br>
+    <a id="moMailLink" href="#" style="color:var(--teal);font-family:var(--ffm);font-size:11px;word-break:break-all"></a>
+  </div>
+  <div class="mbtns" style="margin-top:8px">
+    <button class="mbtn cancel" onclick="mClose('moMail');document.getElementById('moMailFallback').style.display='none'">Chiudi</button>
+    <button class="mbtn" id="moMailOk" style="background:var(--teal);color:#fff;border-color:var(--teal)" onclick="moMailSend()">✉ Apri client email</button>
+  </div>
+</div></div>
+
 <!-- ── MODAL CONFIG ORARIO ── -->
 <div id="moConfig" class="mo hide"><div class="mc" style="width:360px">
   <div class="mt">⚙ Config Orario Default</div>
@@ -2725,11 +2744,13 @@ function loadConfig(){
     return fetch('https://www.googleapis.com/drive/v3/files/'+configFileId+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}})
     .then(function(r){return r.text();}).then(function(t){
       try{permConfig=JSON.parse(t);}catch(e){permConfig={super_users:[SUPER_USER],admins:[],users:{},default:{sections:['coop','ats']}};}
+      _pausaCache=null; // invalida cache pausa
       applyPerm();
       loadAllFiles();
     });
   }).catch(function(){
     permConfig={super_users:[SUPER_USER],admins:[],users:{},default:{sections:['coop','ats']}};
+    _pausaCache=null;
     applyPerm();
     loadAllFiles();
   });
@@ -4480,23 +4501,28 @@ function calcOreGiorno(ing,usc,pausaOre){
   return{tot:tot,eff:eff,ord:Math.min(8,eff),str:Math.max(0,eff-8)};
 }
 
-// Risolve la pausa per un dipendente e giorno specifico:
-// 1. valore letto dal foglio (non null)  → usa quello
-// 2. pausa_default nel config dipendente → usa quello
-// 3. wmsConfig.pausa (default globale)   → usa quello
-// 4. 1 ora (fallback assoluto)
+// Cache pausa per dipendente: si aggiorna ogni volta che cambia permConfig
+var _pausaCache = null;
+function _buildPausaCache(){
+  _pausaCache = {};
+  if(!permConfig) return;
+  (permConfig.dipendenti||[]).filter(function(d){return !d._esempio;}).forEach(function(d){
+    var v = d.pausa_default !== undefined ? parseFloat(d.pausa_default) : null;
+    if(v === null) return;
+    if(d.sap)  _pausaCache['sap:'+String(d.sap).trim()] = v;
+    if(d.nome) _pausaCache['nom:'+d.nome.toLowerCase().trim()] = v;
+  });
+}
+
 function getPausaDip(emp, di){
   var ps=(emp.pausa||[])[di];
   if(ps!==null&&ps!==undefined) return parseFloat(ps);
-  // cerca nel config permessi
-  if(permConfig){
-    var dips=(permConfig.dipendenti||[]).filter(function(d){return !d._esempio;});
-    var found=dips.find(function(d){
-      return (d.sap&&emp.sap&&String(d.sap).trim()===String(emp.sap).trim()) ||
-             ((d.nome||'').toLowerCase()===(emp.nome||'').toLowerCase());
-    });
-    if(found&&found.pausa_default!==undefined) return parseFloat(found.pausa_default)||1;
-  }
+  // Usa la cache invece di rifare filter+find ogni volta
+  if(_pausaCache === null) _buildPausaCache();
+  var v = null;
+  if(emp.sap)  v = _pausaCache['sap:'+String(emp.sap).trim()];
+  if(v===undefined&&emp.nome) v = _pausaCache['nom:'+(emp.nome||'').toLowerCase().trim()];
+  if(v!==undefined&&v!==null) return v;
   return wmsConfig.pausa||1;
 }
 function timeToMin(t){if(!t)return 0;var p=t.split(':');return parseInt(p[0]||0)*60+parseInt(p[1]||0);}
@@ -7606,6 +7632,36 @@ function richCalcGiorni(){
   badge.style.color = gg===0 ? 'var(--red)' : 'var(--teal)';
 }
 
+// ── Modal mail dedicato ───────────────────────────────────────────────────────
+var _moMailHref = '';
+function showMail(title, msg, toEmail, mailtoHref){
+  _moMailHref = mailtoHref;
+  document.getElementById('moMailTitle').textContent = title;
+  document.getElementById('moMailMsg').textContent   = msg;
+  document.getElementById('moMailTo').textContent    = toEmail;
+  document.getElementById('moMailFallback').style.display = 'none';
+  var link = document.getElementById('moMailLink');
+  link.href = mailtoHref;
+  link.textContent = toEmail;
+  mOpen('moMail');
+}
+function moMailSend(){
+  var href = _moMailHref;
+  // Prova ad aprire il client email
+  var before = Date.now();
+  window.location.href = href;
+  // Dopo 1.5s controlla se la pagina è ancora attiva (se il client si è aperto
+  // la pagina va in background e document.hasFocus() diventa false)
+  setTimeout(function(){
+    var elapsed = Date.now() - before;
+    // Se siamo ancora qui dopo 1.5s e la pagina è ancora a fuoco → mailto non ha funzionato
+    if(document.hasFocus() && elapsed >= 1400){
+      var fb = document.getElementById('moMailFallback');
+      if(fb) fb.style.display = '';
+    }
+  }, 1500);
+}
+
 // ── Helper mailto ────────────────────────────────────────────────────────────
 function richMailtoRichiesta(req){
   if(!req.responsabile_email) return;
@@ -7626,7 +7682,13 @@ function richMailtoRichiesta(req){
     +'\r\nPuoi approvare o rifiutare direttamente dal portale WMS Presenze.\r\n\r\n'
     +'Cordiali saluti,\r\n'+req.dipendente_nome
   );
-  window.location.href = 'mailto:'+encodeURIComponent(req.responsabile_email)+'?subject='+subj+'&body='+body;
+  var href = 'mailto:'+encodeURIComponent(req.responsabile_email)+'?subject='+subj+'&body='+body;
+  showMail(
+    '✉ Notifica al responsabile',
+    'Vuoi inviare una notifica a '+req.responsabile_nome+'?\nSi aprirà il tuo client di posta precompilato.',
+    req.responsabile_email,
+    href
+  );
 }
 
 function richMailtoEsito(req){
@@ -7647,7 +7709,13 @@ function richMailtoEsito(req){
     +(approvata ? '\r\nLe presenze sono state aggiornate automaticamente sul foglio.\r\n' : '')
     +'\r\nCordiali saluti,\r\n'+req.responsabile_nome
   );
-  window.location.href = 'mailto:'+encodeURIComponent(req.dipendente_email)+'?subject='+subj+'&body='+body;
+  var href = 'mailto:'+encodeURIComponent(req.dipendente_email)+'?subject='+subj+'&body='+body;
+  showMail(
+    approvata ? '✅ Notifica approvazione' : '❌ Notifica rifiuto',
+    'Vuoi notificare '+req.dipendente_nome+' dell\'esito?\nSi aprirà il tuo client di posta precompilato.',
+    req.dipendente_email,
+    href
+  );
 }
 
 function richInvia(){
@@ -7710,21 +7778,8 @@ function richInvia(){
   saveRichieste().then(function(){
     richUpdateBadge();
     richRender();
-    // Proponi apertura Outlook
     if(respEmail){
-      showConf(
-        '✉ Notifica via email',
-        'Richiesta salvata!\n\nVuoi aprire Outlook per inviare una notifica a '+respNome+' ('+respEmail+')?',
-        function(){ richMailtoRichiesta(req); }
-      );
-      // Cambia testo pulsante conferma
-      setTimeout(function(){
-        var okBtn=document.getElementById('confOk');
-        if(okBtn){okBtn.textContent='✉ Apri Outlook';okBtn.style.background='var(--teal)';}
-        // Aggiungi tasto "No grazie" col testo corretto
-        var cancelBtn=document.querySelector('#moConf .mbtn.cancel');
-        if(cancelBtn) cancelBtn.textContent='No grazie';
-      },30);
+      richMailtoRichiesta(req);
     } else {
       toast('✅ Richiesta inviata a '+respNome);
     }
@@ -7754,22 +7809,8 @@ function richApprova(id){
       }).then(function(){
         richUpdateBadge();
         richRender();
-        // Proponi notifica al dipendente
-        if(req.dipendente_email){
-          showConf(
-            '✅ Approvata — Notifica dipendente',
-            'Presenze aggiornate!\n\nVuoi aprire Outlook per notificare '+req.dipendente_nome+'?',
-            function(){ richMailtoEsito(req); }
-          );
-          setTimeout(function(){
-            var okBtn=document.getElementById('confOk');
-            if(okBtn){okBtn.textContent='✉ Notifica via email';okBtn.style.background='var(--teal)';}
-            var cancelBtn=document.querySelector('#moConf .mbtn.cancel');
-            if(cancelBtn) cancelBtn.textContent='No grazie';
-          },30);
-        } else {
-          toast('✅ Approvata e scritta sul foglio presenze');
-        }
+        if(req.dipendente_email) richMailtoEsito(req);
+        else toast('✅ Approvata e scritta sul foglio presenze');
       }).catch(function(e){
         toast('✗ Errore scrittura: '+e.message,'err');
         saveRichieste().then(function(){richUpdateBadge();richRender();});
@@ -7790,22 +7831,8 @@ function richRifiuta(id){
       saveRichieste().then(function(){
         richUpdateBadge();
         richRender();
-        // Proponi notifica al dipendente
-        if(req.dipendente_email){
-          showConf(
-            '❌ Rifiutata — Notifica dipendente',
-            'Vuoi aprire Outlook per notificare '+req.dipendente_nome+' del rifiuto?',
-            function(){ richMailtoEsito(req); }
-          );
-          setTimeout(function(){
-            var okBtn=document.getElementById('confOk');
-            if(okBtn){okBtn.textContent='✉ Notifica via email';okBtn.style.background='var(--red)';}
-            var cancelBtn=document.querySelector('#moConf .mbtn.cancel');
-            if(cancelBtn) cancelBtn.textContent='No grazie';
-          },30);
-        } else {
-          toast('Richiesta rifiutata');
-        }
+        if(req.dipendente_email) richMailtoEsito(req);
+        else toast('Richiesta rifiutata');
       });
     }
   );
@@ -8045,6 +8072,7 @@ function richSaveAnag(){
   toast('⏳ Salvo anagrafica…','warn');
   savePermConfigWithDips().then(function(){
     toast('✅ Anagrafica salvata su Drive');
+    _pausaCache=null; // invalida cache pausa
     richIdentifyUser();
   }).catch(function(e){toast('✗ '+e.message,'err');});
 }
