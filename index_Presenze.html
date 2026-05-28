@@ -2963,7 +2963,8 @@ function renderSection(sec, emps, data, opts){
     {l:'Malattia',v:T.M,c:'var(--c-M)'},{l:'HP',v:T.HP,c:'var(--c-HP)'},
     {l:'H104',v:T.H104,c:'var(--c-H104)'},{l:'SW',v:T.SW,c:'var(--c-SW)'},
     {l:'TFS',v:T.TFS,c:'var(--c-TFS)'},
-    {l:'H.Ord.',v:fmtOre(T.ord),c:'var(--green)'},{l:'H.Str.',v:fmtOre(T.str),c:'var(--amber)'},{l:'H.Fest.',v:fmtOre(T.fest),c:'var(--red)'}
+    {l:'H.Ord.',v:fmtOre(T.ord),c:'var(--green)'},{l:'H.Str.',v:fmtOre(T.str),c:'var(--amber)'},
+    {l:'H.Week',v:fmtOre(T.week),c:'var(--purple)'},{l:'H.Fest.',v:fmtOre(T.fest),c:'var(--red)'}
   ];
   sb.innerHTML=statDefs.filter(function(d){return d.v!==0&&d.v!=='0'&&d.v!=='';})
     .map(function(d){return '<div class="stat" style="border-top:2px solid '+d.c+'"><div class="sl">'+d.l+'</div><div class="sv" style="color:'+d.c+'">'+d.v+'</div></div>';}).join('');
@@ -2975,12 +2976,12 @@ function renderSection(sec, emps, data, opts){
     {l:'HP',c:'var(--c-HP)',k:'HP'},{l:'H104',c:'var(--c-H104)',k:'H104'},{l:'104',c:'var(--c-104)',k:'104'},
     {l:'CP',c:'var(--c-CP)',k:'CP'},{l:'HPE',c:'var(--c-HPE)',k:'HPE'},{l:'PE',c:'var(--c-PE)',k:'PE'},
     {l:'SW',c:'var(--c-SW)',k:'SW'},{l:'Lut',c:'var(--c-Lutto)',k:'Lutto'},{l:'TFS',c:'var(--c-TFS)',k:'TFS'},
-    {l:'ORD',c:'var(--green)',k:'ord'},{l:'STR',c:'var(--amber)',k:'str'},{l:'FEST',c:'var(--red)',k:'fest'}
+    {l:'ORD',c:'var(--green)',k:'ord'},{l:'STR',c:'var(--amber)',k:'str'},
+    {l:'WEEK',c:'var(--purple)',k:'week'},{l:'FEST',c:'var(--red)',k:'fest'}
   ];
-  // Mappa sigla-code → chiave totale (X=P, Lutto=Lut, ecc.)
   var SIGLA_TO_TOT={X:'X',F:'F','1/2F':'F',M:'M',HP:'HP',H104:'H104','104':'104',CP:'CP',HPE:'HPE',PE:'PE',SW:'SW',Lutto:'Lutto',TFS:'TFS'};
   var activeSiglaCodes=isAts?SIGLE.filter(function(s){return ATS_EXCL_CODES.indexOf(s.code)===-1;}).map(function(s){return s.code;}):COOP_SIGLE_CODES;
-  var activeTotKeys=['ord','str','fest'];
+  var activeTotKeys=['ord','str','week','fest'];
   activeSiglaCodes.forEach(function(code){var k=SIGLA_TO_TOT[code];if(k&&activeTotKeys.indexOf(k)===-1)activeTotKeys.push(k);});
   var totHdrs=ALL_TOT_HDRS.filter(function(th){return activeTotKeys.indexOf(th.k)!==-1;});
   var NCOLS_TOT=totHdrs.length;
@@ -3417,7 +3418,7 @@ function coopExport(){
   XLSX.utils.book_append_sheet(wb,coopSheet,mName+'_Coop');
   // Report con sole sigle attive in Coop
   var COOP_REP=[
-    {l:'P',k:'X'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},{l:'PLT',k:'PLT'},{l:'PLT.ORE',k:'PLT_ore'},{l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'H.FEST',k:'fest'}
+    {l:'P',k:'X'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},{l:'PLT',k:'PLT'},{l:'PLT.ORE',k:'PLT_ore'},{l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'WEEK',k:'week'},{l:'H.FEST',k:'fest'}
   ];
   var repHdr=['SAP','Nominativo','Resp.','Plant'].concat(COOP_REP.map(function(c){return c.l;}));
   var repRows=[repHdr];
@@ -3679,7 +3680,7 @@ function atsExport(){
   var ATS_REP=[
     {l:'P',k:'X'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},
     {l:'H104',k:'H104'},{l:'104',k:'104'},{l:'CP',k:'CP'},{l:'HPE',k:'HPE'},{l:'PE',k:'PE'},
-    {l:'SW',k:'SW'},{l:'Lutto',k:'Lutto'},{l:'TFS',k:'TFS'},{l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'H.FEST',k:'fest'}
+    {l:'SW',k:'SW'},{l:'Lutto',k:'Lutto'},{l:'TFS',k:'TFS'},{l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'WEEK',k:'week'},{l:'H.FEST',k:'fest'}
   ];
   var atsRepHdr=['SAP','Nominativo','Resp.','Plant'].concat(ATS_REP.map(function(c){return c.l;}));
   var repRows=[atsRepHdr];
@@ -4518,45 +4519,46 @@ function parsePausaVal(v){
 function fmtOre(h){if(!h)return '';var i=Math.floor(h),f=h-i;return i+(f===0.5?'.5':f>0?'.'+Math.round(f*10):'');}
 
 function calcTots(sig,ingresso,uscita,pause,dates,month,year){
-  var r={X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,PLT:0,PLT_ore:0,ord:0,str:0,fest:0};
+  var r={X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,PLT:0,PLT_ore:0,ord:0,str:0,fest:0,week:0};
   (sig||[]).forEach(function(v,di){
     if(!v)return;
     var sg=xSig(v);
     var qty=parseFloat((String(v).match(/^[\d.]+/)||['1'])[0])||1;
     if(r.hasOwnProperty(sg)) r[sg]+=qty;
+    var d=dates&&dates[di];
+    var isWe=d&&(d.weekday===0||d.weekday===6);
     if(sg==='PLT'){
-      // Cottimo: IN=quantità, OUT=ore
       var qta=parseFloat((ingresso||[])[di])||0;
       var oreStr=(uscita||[])[di]||'';
       r.PLT+=qta;
       if(oreStr){var om=oreStr.match(/^(\d+):(\d+)/);if(om)r.PLT_ore+=parseInt(om[1])+(parseInt(om[2])/60);}
     } else if(sg==='X'||sg==='SW'||sg==='TFS'){
       var ing=(ingresso||[])[di]||'',usc2=(uscita||[])[di]||'';
-      var ps=(pause||[])[di];var ph=(ps===undefined||ps===null)?1:parseFloat(ps);
-      var d=dates&&dates[di];
+      var ps=(pause||[])[di];var ph=parsePausaVal(ps!==null&&ps!==undefined?ps:null);if(ph===null)ph=getPausaDefaultGlobal();
       var hol=d&&month&&year&&isHoliday(d.day,month,year);
       if(!ing||!usc2){if(hol){ing=wmsConfig.ingresso||'08:00';usc2=wmsConfig.uscita||'18:00';}}
       if(ing&&usc2){
         var o=calcOreGiorno(ing,usc2,ph);
         if(hol){r.fest+=o.ord+o.str;}
+        else if(isWe){r.week+=o.ord+o.str;}
         else{r.ord+=o.ord;r.str+=o.str;}
       }
     } else if(sg==='HP'||sg==='H104'){
-      // Permesso parziale: calcola ore del turno e sottrae le ore permesso
       var ing2=(ingresso||[])[di]||'',usc3=(uscita||[])[di]||'';
-      var ps2=(pause||[])[di];var ph2=(ps2===undefined||ps2===null)?1:parseFloat(ps2);
+      var ps2=(pause||[])[di];var ph2=parsePausaVal(ps2!==null&&ps2!==undefined?ps2:null);if(ph2===null)ph2=getPausaDefaultGlobal();
       if(!ing2)ing2=wmsConfig.ingresso||'08:00';
       if(!usc3)usc3=wmsConfig.uscita||'18:00';
       if(ing2&&usc3){
         var o2=calcOreGiorno(ing2,usc3,ph2);
         var oreResidueOrd=Math.max(0,(o2.ord+o2.str)-qty);
-        r.ord+=oreResidueOrd;
-        if(o2.str>0)r.str+=o2.str;
+        if(isWe){r.week+=oreResidueOrd;}
+        else{r.ord+=oreResidueOrd;if(o2.str>0)r.str+=o2.str;}
       }
     }
   });
   return r;
 }
+function getPausaDefaultGlobal(){return wmsConfig.pausa!==undefined?wmsConfig.pausa:1;}
 function xSig(v){if(!v)return '';var m=String(v).match(/^[\d.]*(.+)$/);return m?m[1]:v;}
 
 // ═══════════════════════════════════════════════════════════
@@ -7624,7 +7626,7 @@ function richMailtoRichiesta(req){
     +'\r\nPuoi approvare o rifiutare direttamente dal portale WMS Presenze.\r\n\r\n'
     +'Cordiali saluti,\r\n'+req.dipendente_nome
   );
-  window.open('mailto:'+encodeURIComponent(req.responsabile_email)+'?subject='+subj+'&body='+body,'_blank');
+  window.location.href = 'mailto:'+encodeURIComponent(req.responsabile_email)+'?subject='+subj+'&body='+body;
 }
 
 function richMailtoEsito(req){
@@ -7645,7 +7647,7 @@ function richMailtoEsito(req){
     +(approvata ? '\r\nLe presenze sono state aggiornate automaticamente sul foglio.\r\n' : '')
     +'\r\nCordiali saluti,\r\n'+req.responsabile_nome
   );
-  window.open('mailto:'+encodeURIComponent(req.dipendente_email)+'?subject='+subj+'&body='+body,'_blank');
+  window.location.href = 'mailto:'+encodeURIComponent(req.dipendente_email)+'?subject='+subj+'&body='+body;
 }
 
 function richInvia(){
@@ -7924,10 +7926,9 @@ function richRenderAnagPanel(){
   var dips  = (permConfig.dipendenti ||[]).filter(function(d){return !d._esempio;});
   var resps = (permConfig.responsabili||[]).filter(function(r){return !r._esempio;});
 
-  // Lista nomi responsabili per il select
+  // Responsabili: SOLO dai nomi dei file Drive
   var respNomi = {};
-  (allFiles||[]).forEach(function(f){var p=parseFileName(f.name);if(p)respNomi[p.resp]=true;});
-  resps.forEach(function(r){respNomi[r.nome]=true;});
+  (allFiles||[]).forEach(function(f){var p=parseFileName(f.name);if(p&&p.resp)respNomi[p.resp]=true;});
   var respOpts = Object.keys(respNomi).sort().map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
 
   var h = '<div class="anag-panel">';
