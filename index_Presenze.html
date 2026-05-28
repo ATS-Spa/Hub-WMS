@@ -2090,6 +2090,20 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
   <div class="mbtns" style="margin-top:4px"><button class="mbtn cancel" onclick="mClose('moConf')">Annulla</button><button class="mbtn danger" id="confOk">Conferma</button></div>
 </div></div>
 
+<!-- ── MODAL MAIL NOTIFICA ── -->
+<div id="moMail" class="mo hide"><div class="mc" style="width:380px">
+  <div class="mt" id="moMailTitle">✉ Notifica via email</div>
+  <div class="ms" id="moMailMsg" style="margin-top:0;color:var(--subtle);font-size:13px;white-space:pre-line"></div>
+  <div style="margin:12px 0 4px;padding:10px 14px;background:var(--card);border:1px solid var(--border);border-radius:8px;font-size:12px;color:var(--muted)">
+    <div style="font-family:var(--ffc);font-size:10px;letter-spacing:.5px;text-transform:uppercase;color:var(--subtle);margin-bottom:4px">A:</div>
+    <div id="moMailTo" style="color:var(--text);font-family:var(--ffm)"></div>
+  </div>
+  <div class="mbtns" style="margin-top:8px">
+    <button class="mbtn cancel" onclick="mClose('moMail')">No grazie</button>
+    <button class="mbtn" id="moMailOk" style="background:var(--teal);color:#fff;border-color:var(--teal)" onclick="moMailSend()">✉ Apri Outlook</button>
+  </div>
+</div></div>
+
 <!-- ── MODAL CONFIG ORARIO ── -->
 <div id="moConfig" class="mo hide"><div class="mc" style="width:360px">
   <div class="mt">⚙ Config Orario Default</div>
@@ -7606,6 +7620,21 @@ function richCalcGiorni(){
   badge.style.color = gg===0 ? 'var(--red)' : 'var(--teal)';
 }
 
+// ── Modal mail dedicato ───────────────────────────────────────────────────────
+var _moMailHref = '';
+function showMail(title, msg, toEmail, mailtoHref){
+  _moMailHref = mailtoHref;
+  document.getElementById('moMailTitle').textContent = title;
+  document.getElementById('moMailMsg').textContent   = msg;
+  document.getElementById('moMailTo').textContent    = toEmail;
+  mOpen('moMail');
+}
+function moMailSend(){
+  mClose('moMail');
+  // Piccolo delay per assicurarsi che il modal sia chiuso prima del redirect
+  setTimeout(function(){ window.location.href = _moMailHref; }, 80);
+}
+
 // ── Helper mailto ────────────────────────────────────────────────────────────
 function richMailtoRichiesta(req){
   if(!req.responsabile_email) return;
@@ -7626,7 +7655,13 @@ function richMailtoRichiesta(req){
     +'\r\nPuoi approvare o rifiutare direttamente dal portale WMS Presenze.\r\n\r\n'
     +'Cordiali saluti,\r\n'+req.dipendente_nome
   );
-  window.location.href = 'mailto:'+encodeURIComponent(req.responsabile_email)+'?subject='+subj+'&body='+body;
+  var href = 'mailto:'+encodeURIComponent(req.responsabile_email)+'?subject='+subj+'&body='+body;
+  showMail(
+    '✉ Notifica al responsabile',
+    'Vuoi inviare una notifica a '+req.responsabile_nome+'?\nSi aprirà il tuo client di posta precompilato.',
+    req.responsabile_email,
+    href
+  );
 }
 
 function richMailtoEsito(req){
@@ -7647,7 +7682,13 @@ function richMailtoEsito(req){
     +(approvata ? '\r\nLe presenze sono state aggiornate automaticamente sul foglio.\r\n' : '')
     +'\r\nCordiali saluti,\r\n'+req.responsabile_nome
   );
-  window.location.href = 'mailto:'+encodeURIComponent(req.dipendente_email)+'?subject='+subj+'&body='+body;
+  var href = 'mailto:'+encodeURIComponent(req.dipendente_email)+'?subject='+subj+'&body='+body;
+  showMail(
+    approvata ? '✅ Notifica approvazione' : '❌ Notifica rifiuto',
+    'Vuoi notificare '+req.dipendente_nome+' dell\'esito?\nSi aprirà il tuo client di posta precompilato.',
+    req.dipendente_email,
+    href
+  );
 }
 
 function richInvia(){
@@ -7710,21 +7751,8 @@ function richInvia(){
   saveRichieste().then(function(){
     richUpdateBadge();
     richRender();
-    // Proponi apertura Outlook
     if(respEmail){
-      showConf(
-        '✉ Notifica via email',
-        'Richiesta salvata!\n\nVuoi aprire Outlook per inviare una notifica a '+respNome+' ('+respEmail+')?',
-        function(){ richMailtoRichiesta(req); }
-      );
-      // Cambia testo pulsante conferma
-      setTimeout(function(){
-        var okBtn=document.getElementById('confOk');
-        if(okBtn){okBtn.textContent='✉ Apri Outlook';okBtn.style.background='var(--teal)';}
-        // Aggiungi tasto "No grazie" col testo corretto
-        var cancelBtn=document.querySelector('#moConf .mbtn.cancel');
-        if(cancelBtn) cancelBtn.textContent='No grazie';
-      },30);
+      richMailtoRichiesta(req);
     } else {
       toast('✅ Richiesta inviata a '+respNome);
     }
@@ -7754,22 +7782,8 @@ function richApprova(id){
       }).then(function(){
         richUpdateBadge();
         richRender();
-        // Proponi notifica al dipendente
-        if(req.dipendente_email){
-          showConf(
-            '✅ Approvata — Notifica dipendente',
-            'Presenze aggiornate!\n\nVuoi aprire Outlook per notificare '+req.dipendente_nome+'?',
-            function(){ richMailtoEsito(req); }
-          );
-          setTimeout(function(){
-            var okBtn=document.getElementById('confOk');
-            if(okBtn){okBtn.textContent='✉ Notifica via email';okBtn.style.background='var(--teal)';}
-            var cancelBtn=document.querySelector('#moConf .mbtn.cancel');
-            if(cancelBtn) cancelBtn.textContent='No grazie';
-          },30);
-        } else {
-          toast('✅ Approvata e scritta sul foglio presenze');
-        }
+        if(req.dipendente_email) richMailtoEsito(req);
+        else toast('✅ Approvata e scritta sul foglio presenze');
       }).catch(function(e){
         toast('✗ Errore scrittura: '+e.message,'err');
         saveRichieste().then(function(){richUpdateBadge();richRender();});
@@ -7790,22 +7804,8 @@ function richRifiuta(id){
       saveRichieste().then(function(){
         richUpdateBadge();
         richRender();
-        // Proponi notifica al dipendente
-        if(req.dipendente_email){
-          showConf(
-            '❌ Rifiutata — Notifica dipendente',
-            'Vuoi aprire Outlook per notificare '+req.dipendente_nome+' del rifiuto?',
-            function(){ richMailtoEsito(req); }
-          );
-          setTimeout(function(){
-            var okBtn=document.getElementById('confOk');
-            if(okBtn){okBtn.textContent='✉ Notifica via email';okBtn.style.background='var(--red)';}
-            var cancelBtn=document.querySelector('#moConf .mbtn.cancel');
-            if(cancelBtn) cancelBtn.textContent='No grazie';
-          },30);
-        } else {
-          toast('Richiesta rifiutata');
-        }
+        if(req.dipendente_email) richMailtoEsito(req);
+        else toast('Richiesta rifiutata');
       });
     }
   );
