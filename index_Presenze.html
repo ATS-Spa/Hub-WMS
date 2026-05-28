@@ -4089,7 +4089,7 @@ function parseSheetValues(values,year,month,fileId,sheetName,secType){
         ing.push(fTM(hasI?nr1[DST+di]:''));
         usc.push(fTM(uRow?uRow[DST+di]:''));
         var pv=pRow?pRow[DST+di]:null;
-        psa.push(pv!==null&&pv!==undefined&&pv!==''?parseFloat(pv):null);
+        psa.push(pv!==null&&pv!==undefined&&pv!==''?parsePausaVal(pv):null);
       }
       var confCol=DST+nd;
       var confVal=String(row[confCol]||'').trim().toUpperCase();
@@ -4499,6 +4499,22 @@ function getPausaDip(emp, di){
   return wmsConfig.pausa||1;
 }
 function timeToMin(t){if(!t)return 0;var p=t.split(':');return parseInt(p[0]||0)*60+parseInt(p[1]||0);}
+
+// Converte un valore pausa dal foglio in ore decimali
+// Accetta: "1.5", "1,5", "01:30", "1:30", "1" → tutti → 1.5
+function parsePausaVal(v){
+  if(v===null||v===undefined||v==='') return null;
+  var s=String(v).trim();
+  if(s.indexOf(':')!==-1){
+    // formato HH:MM o H:MM
+    var parts=s.split(':');
+    var h=parseInt(parts[0])||0;
+    var min=parseInt(parts[1])||0;
+    return h + min/60;
+  }
+  // formato decimale con virgola o punto
+  return parseFloat(s.replace(',','.'))||0;
+}
 function fmtOre(h){if(!h)return '';var i=Math.floor(h),f=h-i;return i+(f===0.5?'.5':f>0?'.'+Math.round(f*10):'');}
 
 function calcTots(sig,ingresso,uscita,pause,dates,month,year){
