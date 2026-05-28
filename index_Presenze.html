@@ -4,7 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WMS · Presenze</title>
-<meta name="wms-version" content="v2.6 · 2026-05-26 · Piano Ferie + Inserimento Massivo + Genera Anno">
+<meta name="wms-version" content="v2.7 · 2026-05-28 · Richieste Ferie + Auto-registrazione + Gestione Anagrafica">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
@@ -1160,7 +1160,486 @@ body.theme-rovere .gantt-cell.gc-we{background:rgba(30,20,10,.1);}
 body.theme-rovere .ferie-mob-card{background:#e0d4c0;border-color:#bfad95;}
 body.theme-rovere .mob-day-val{background:rgba(30,20,10,.05);}
 body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
-</style>
+
+/* ══════════════════════════════════════════════════════
+   NOTIFICA BADGE + TOPBAR RICHIESTE
+   ══════════════════════════════════════════════════════ */
+.notif-btn {
+  position: relative;
+  background: none;
+  border: 1px solid rgba(245,158,11,.35);
+  color: var(--amber);
+  border-radius: 6px;
+  padding: 4px 10px;
+  font-size: 12px;
+  font-family: var(--ff);
+  cursor: pointer;
+  transition: all .15s;
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+.notif-btn:hover { background: rgba(245,158,11,.08); border-color: rgba(245,158,11,.6); }
+.notif-btn.has-pending { border-color: var(--amber); animation: notif-pulse 2s infinite; }
+@keyframes notif-pulse {
+  0%,100% { box-shadow: 0 0 0 0 rgba(245,158,11,.3); }
+  50%      { box-shadow: 0 0 0 5px rgba(245,158,11,0); }
+}
+.notif-count {
+  background: var(--amber);
+  color: #000;
+  border-radius: 10px;
+  font-size: 10px;
+  font-weight: 700;
+  padding: 1px 5px;
+  min-width: 16px;
+  text-align: center;
+  line-height: 1.4;
+}
+
+/* ══════════════════════════════════════════════════════
+   SETUP WIZARD (prima configurazione dipendente)
+   ══════════════════════════════════════════════════════ */
+#setupWizard {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.6);
+  z-index: 9000;
+  align-items: center;
+  justify-content: center;
+}
+.setup-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 32px 36px;
+  width: 480px;
+  max-width: 95vw;
+  box-shadow: 0 24px 64px rgba(0,0,0,.5);
+}
+.setup-title {
+  font-family: var(--ffc);
+  font-size: 22px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: .5px;
+  margin-bottom: 4px;
+}
+.setup-sub {
+  font-size: 12px;
+  color: var(--muted);
+  margin-bottom: 24px;
+  line-height: 1.6;
+}
+.setup-grid {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 12px;
+  margin-bottom: 16px;
+}
+.setup-grid .fg { margin: 0; }
+.setup-grid .fg.full { grid-column: 1 / -1; }
+.setup-role-toggle {
+  display: flex;
+  gap: 8px;
+  margin-bottom: 16px;
+}
+.setup-role-btn {
+  flex: 1;
+  padding: 10px;
+  border-radius: 8px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  font-family: var(--ffc);
+  font-size: 13px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .15s;
+  text-align: center;
+}
+.setup-role-btn.active {
+  border-color: var(--teal);
+  background: var(--teal-dim);
+  color: var(--teal);
+}
+
+/* ══════════════════════════════════════════════════════
+   SEZIONE RICHIESTE FERIE
+   ══════════════════════════════════════════════════════ */
+#secRich.on {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+}
+.rich-layout {
+  display: flex;
+  flex: 1;
+  overflow: hidden;
+  gap: 0;
+}
+.rich-sidebar {
+  width: 340px;
+  flex-shrink: 0;
+  border-right: 1px solid var(--border);
+  background: var(--surface);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.rich-sidebar-hdr {
+  padding: 16px 20px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--card);
+}
+.rich-profile {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 12px;
+}
+.rich-avatar {
+  width: 38px; height: 38px;
+  border-radius: 50%;
+  background: var(--teal-dim);
+  border: 1px solid var(--teal);
+  display: flex; align-items: center; justify-content: center;
+  font-family: var(--ffc); font-weight: 800; font-size: 15px; color: var(--teal);
+  flex-shrink: 0;
+  overflow: hidden;
+}
+.rich-avatar img { width: 100%; height: 100%; object-fit: cover; border-radius: 50%; }
+.rich-profile-info { flex: 1; min-width: 0; }
+.rich-profile-name {
+  font-family: var(--ffc); font-size: 14px; font-weight: 700; color: var(--text);
+  white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+}
+.rich-profile-meta {
+  font-size: 11px; color: var(--muted);
+  display: flex; gap: 6px; flex-wrap: wrap; margin-top: 2px;
+}
+.rich-meta-chip {
+  background: var(--card); border: 1px solid var(--border);
+  border-radius: 10px; padding: 1px 7px; font-size: 10px;
+  font-family: var(--ffc); font-weight: 700;
+}
+.rich-meta-chip.blue { color: var(--blue); border-color: rgba(59,130,246,.3); background: rgba(59,130,246,.07); }
+.rich-meta-chip.teal { color: var(--teal); border-color: rgba(20,184,166,.3); background: rgba(20,184,166,.07); }
+
+.rich-form {
+  padding: 16px 20px;
+  flex: 1;
+  overflow-y: auto;
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+}
+.rich-type-grid {
+  display: grid;
+  grid-template-columns: repeat(4, 1fr);
+  gap: 6px;
+}
+.rich-type-btn {
+  padding: 8px 4px;
+  border-radius: 7px;
+  border: 1px solid var(--border);
+  background: var(--card);
+  color: var(--muted);
+  font-family: var(--ffc);
+  font-size: 11px;
+  font-weight: 700;
+  cursor: pointer;
+  text-align: center;
+  transition: all .15s;
+  line-height: 1.3;
+}
+.rich-type-btn.sel {
+  border-color: var(--teal);
+  background: var(--teal-dim);
+  color: var(--teal);
+}
+.rich-type-btn .rtb-code { font-size: 13px; display: block; }
+.rich-type-btn .rtb-label { font-size: 9px; color: inherit; opacity: .8; display: block; }
+
+.rich-date-row {
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 8px;
+}
+.rich-days-badge {
+  background: var(--teal-dim);
+  border: 1px solid rgba(20,184,166,.3);
+  border-radius: 8px;
+  padding: 8px 12px;
+  font-size: 12px;
+  color: var(--teal);
+  font-family: var(--ffm);
+  text-align: center;
+}
+.rich-send-btn {
+  width: 100%;
+  padding: 12px;
+  background: var(--teal);
+  border: none;
+  border-radius: 8px;
+  color: #fff;
+  font-family: var(--ffc);
+  font-size: 14px;
+  font-weight: 700;
+  cursor: pointer;
+  letter-spacing: .5px;
+  transition: opacity .15s;
+}
+.rich-send-btn:hover { opacity: .88; }
+.rich-send-btn:disabled { opacity: .4; cursor: not-allowed; }
+
+/* Lista richieste (colonna destra) */
+.rich-main {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 24px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+.rich-main-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  flex-shrink: 0;
+}
+.rich-main-title {
+  font-family: var(--ffc);
+  font-size: 18px;
+  font-weight: 800;
+  color: var(--text);
+  letter-spacing: .3px;
+}
+.rich-filter-tabs {
+  display: flex;
+  gap: 4px;
+}
+.rich-ftab {
+  padding: 4px 12px;
+  border-radius: 6px;
+  border: 1px solid var(--border);
+  background: none;
+  color: var(--muted);
+  font-size: 11px;
+  font-family: var(--ffc);
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .15s;
+}
+.rich-ftab.on {
+  background: var(--card);
+  color: var(--text);
+  border-color: var(--subtle);
+}
+
+/* Card singola richiesta */
+.rich-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 14px 16px;
+  transition: border-color .15s;
+}
+.rich-card:hover { border-color: var(--subtle); }
+.rich-card.stato-approvata { border-left: 3px solid var(--green); }
+.rich-card.stato-rifiutata { border-left: 3px solid var(--red); }
+.rich-card.stato-in_attesa { border-left: 3px solid var(--amber); }
+.rich-card-hdr {
+  display: flex;
+  align-items: flex-start;
+  gap: 10px;
+  margin-bottom: 8px;
+}
+.rich-card-info { flex: 1; }
+.rich-card-name {
+  font-family: var(--ffc);
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text);
+}
+.rich-card-meta {
+  font-size: 11px;
+  color: var(--muted);
+  margin-top: 2px;
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  align-items: center;
+}
+.rich-stato {
+  display: inline-flex;
+  align-items: center;
+  gap: 4px;
+  padding: 2px 9px;
+  border-radius: 10px;
+  font-size: 10px;
+  font-family: var(--ffc);
+  font-weight: 700;
+  letter-spacing: .3px;
+}
+.rich-stato.in_attesa  { background: rgba(245,158,11,.12); color: var(--amber); border: 1px solid rgba(245,158,11,.3); }
+.rich-stato.approvata  { background: rgba(16,185,129,.1);  color: var(--green); border: 1px solid rgba(16,185,129,.3); }
+.rich-stato.rifiutata  { background: rgba(239,68,68,.1);   color: var(--red);   border: 1px solid rgba(239,68,68,.3); }
+
+.rich-card-dates {
+  font-family: var(--ffm);
+  font-size: 12px;
+  color: var(--blue);
+  font-weight: 600;
+}
+.rich-card-gg {
+  font-size: 11px;
+  color: var(--muted);
+}
+.rich-card-note {
+  font-size: 11px;
+  color: var(--subtle);
+  font-style: italic;
+  margin-top: 4px;
+  padding: 6px 10px;
+  background: var(--card);
+  border-radius: 6px;
+  border-left: 2px solid var(--border);
+}
+.rich-card-actions {
+  display: flex;
+  gap: 6px;
+  margin-top: 10px;
+}
+.rich-btn-approva {
+  padding: 6px 14px;
+  background: rgba(16,185,129,.1);
+  border: 1px solid rgba(16,185,129,.4);
+  border-radius: 6px;
+  color: var(--green);
+  font-family: var(--ffc);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .15s;
+}
+.rich-btn-approva:hover { background: rgba(16,185,129,.2); }
+.rich-btn-rifiuta {
+  padding: 6px 14px;
+  background: rgba(239,68,68,.08);
+  border: 1px solid rgba(239,68,68,.3);
+  border-radius: 6px;
+  color: var(--red);
+  font-family: var(--ffc);
+  font-size: 12px;
+  font-weight: 700;
+  cursor: pointer;
+  transition: all .15s;
+}
+.rich-btn-rifiuta:hover { background: rgba(239,68,68,.16); }
+.rich-btn-annulla {
+  padding: 6px 14px;
+  background: none;
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  color: var(--muted);
+  font-family: var(--ffc);
+  font-size: 12px;
+  cursor: pointer;
+}
+
+/* ══════════════════════════════════════════════════════
+   PANNELLO ANAGRAFICA in Permessi (solo superuser)
+   ══════════════════════════════════════════════════════ */
+.anag-panel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  margin: 16px 24px;
+  overflow: hidden;
+}
+.anag-hdr {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 12px 18px;
+  background: var(--card);
+  border-bottom: 1px solid var(--border);
+}
+.anag-title {
+  font-family: var(--ffc);
+  font-size: 14px;
+  font-weight: 800;
+  letter-spacing: .5px;
+  color: var(--text);
+}
+.anag-table {
+  width: 100%;
+  border-collapse: collapse;
+  font-size: 12px;
+}
+.anag-table th {
+  background: var(--card);
+  padding: 8px 12px;
+  text-align: left;
+  font-family: var(--ffc);
+  font-size: 10px;
+  font-weight: 700;
+  letter-spacing: .5px;
+  color: var(--muted);
+  text-transform: uppercase;
+  border-bottom: 1px solid var(--border);
+}
+.anag-table td {
+  padding: 8px 12px;
+  border-bottom: 1px solid rgba(36,48,72,.3);
+  color: var(--text);
+  vertical-align: middle;
+}
+.anag-table tr:hover td { background: rgba(255,255,255,.02); }
+.anag-input {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  font-family: var(--ff);
+  font-size: 12px;
+  padding: 4px 8px;
+  width: 100%;
+  box-sizing: border-box;
+}
+.anag-input:focus { outline: none; border-color: var(--teal); }
+.anag-select {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 5px;
+  color: var(--text);
+  font-family: var(--ff);
+  font-size: 12px;
+  padding: 4px 8px;
+  width: 100%;
+}
+.anag-del-btn {
+  background: none;
+  border: 1px solid rgba(239,68,68,.3);
+  border-radius: 5px;
+  color: var(--red);
+  font-size: 12px;
+  padding: 3px 8px;
+  cursor: pointer;
+  transition: all .15s;
+}
+.anag-del-btn:hover { background: rgba(239,68,68,.1); }
+
+/* Responsive richieste */
+@media (max-width: 768px) {
+  .rich-layout { flex-direction: column; }
+  .rich-sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
+  .rich-form { max-height: 400px; }
+  .rich-type-grid { grid-template-columns: repeat(4, 1fr); }
+}</style>
 </head>
 <body>
 
@@ -1196,6 +1675,9 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
     <div class="tright">
       <span class="pbadge" id="permBadge" onclick="goPermSection()">—</span>
       <div class="ubadge"><div id="uavW"></div><span id="uName">—</span></div>
+      <button class="notif-btn" id="btnNotif" onclick="switchSec('rich')" style="display:none" title="Richieste Ferie">
+        ✉ <span id="notifCount" class="notif-count" style="display:none">0</span>
+      </button>
       <button class="btn-top" id="btnAdmin" onclick="toggleAdmin()"><span class="adot"></span>Admin</button>
       <button class="btn-top" id="btnConfig" onclick="openConfig()" style="color:var(--muted)">⚙ Config</button>
       <button class="btn-top" style="color:var(--red)" onclick="signOut()">Esci</button>
@@ -1208,6 +1690,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
     <button class="snb file" id="snFile" onclick="switchSec('file')" style="display:none"><span class="sndot file"></span>File Import</button>
     <button class="snb ferie" id="snFerie" onclick="switchSec('ferie')" style="display:none"><span class="sndot ferie"></span>Piano Ferie</button>
     <button class="snb perm" id="snPerm" onclick="switchSec('perm')" style="display:none"><span class="sndot perm"></span>Permessi</button>
+    <button class="snb rich" id="snRich" onclick="switchSec('rich')" style="display:none"><span class="sndot" style="background:var(--amber)"></span>Richieste<span id="snRichBadge" style="display:none;margin-left:5px;background:var(--amber);color:#000;border-radius:8px;font-size:9px;font-weight:700;padding:1px 5px">0</span></button>
   </nav>
 
   <!-- ══ COOP ══ -->
@@ -1475,7 +1958,59 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
     </div>
   </div>
 
+  <!-- ══ RICHIESTE FERIE ══ -->
+  <div class="sec" id="secRich">
+    <div id="richContent" style="display:flex;flex:1;overflow:hidden">
+    </div>
+  </div>
+
 </div><!-- /appShell -->
+
+<!-- ══ SETUP WIZARD ══ -->
+<div id="setupWizard">
+  <div class="setup-card">
+    <div class="setup-title">👋 Prima configurazione</div>
+    <div class="setup-sub">Completa il tuo profilo per usare il modulo Richieste. I dati vengono salvati in modo sicuro su Drive e potranno essere modificati dal responsabile.</div>
+
+    <div style="margin-bottom:14px">
+      <div class="fl" style="margin-bottom:6px">Sei un</div>
+      <div class="setup-role-toggle">
+        <button class="setup-role-btn active" id="setupRoleDip" onclick="setupSetRole('dipendente')">👤 Dipendente</button>
+        <button class="setup-role-btn" id="setupRoleResp" onclick="setupSetRole('responsabile')">👔 Responsabile</button>
+      </div>
+    </div>
+
+    <div class="setup-grid">
+      <div class="fg full">
+        <div class="fl">Nome e Cognome *</div>
+        <input class="mi" id="setupNome" type="text" placeholder="Es. Mario Rossi" autocomplete="off">
+      </div>
+      <div class="fg" id="setupSapWrap">
+        <div class="fl">Codice SAP</div>
+        <input class="mi" id="setupSap" type="text" placeholder="00123" autocomplete="off">
+      </div>
+      <div class="fg">
+        <div class="fl">Plant *</div>
+        <select class="fc" id="setupPlant"></select>
+      </div>
+      <div class="fg full" id="setupRespWrap">
+        <div class="fl">Responsabile *</div>
+        <select class="fc" id="setupResp"><option value="">— seleziona —</option></select>
+      </div>
+      <div class="fg full" id="setupSupWrap" style="display:none">
+        <div class="fl">Superiore (per le tue richieste ferie) *</div>
+        <select class="fc" id="setupSup"><option value="">— seleziona —</option></select>
+      </div>
+    </div>
+
+    <div class="merr" id="setupErr" style="display:none;margin-bottom:8px">Compila tutti i campi obbligatori.</div>
+
+    <div style="display:flex;gap:8px;margin-top:8px">
+      <button class="ba bghost" onclick="signOut()" style="flex:1">Esci</button>
+      <button class="ba bteal" onclick="setupSave()" style="flex:2">💾 Salva e continua</button>
+    </div>
+  </div>
+</div>
 
 <!-- ══ MODALI ══ -->
 
@@ -1562,6 +2097,15 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
   <div style="display:flex;gap:12px;margin-top:4px">
     <div class="fg" style="flex:1"><div class="fl">Ingresso</div><input class="mi" id="cfgIng" type="time"></div>
     <div class="fg" style="flex:1"><div class="fl">Uscita</div><input class="mi" id="cfgUsc" type="time"></div>
+    <div class="fg" style="width:110px;flex-shrink:0"><div class="fl">Pausa pranzo</div>
+      <select class="mi" id="cfgPausa">
+        <option value="0">Nessuna</option>
+        <option value="0.5">30 min</option>
+        <option value="1">1 ora</option>
+        <option value="1.5">1h 30min</option>
+        <option value="2">2 ore</option>
+      </select>
+    </div>
   </div>
   <div class="fg" style="margin-top:4px">
     <div class="fl">Tema</div>
@@ -1911,7 +2455,7 @@ var oreVisible=false, coopOreVisible=false;
 
 // ── Config orario utente (salvata su Drive per cartella) ──
 var USER_CONFIG_FOLDER = '1LGoR9SKDthz1tUDLxbZhClqA-xhkjoNY';
-var wmsConfig = {ingresso:'08:00', uscita:'18:00', tema:'scuro'};
+var wmsConfig = {ingresso:'08:00', uscita:'18:00', pausa:1, tema:'scuro'};
 var wmsConfigFileId = null;
 
 function userConfigFname(email){
@@ -1930,6 +2474,7 @@ function loadUserConfig(){
         .then(function(cfg){
           if(cfg.ingresso) wmsConfig.ingresso=cfg.ingresso;
           if(cfg.uscita)   wmsConfig.uscita=cfg.uscita;
+          if(cfg.pausa!==undefined) wmsConfig.pausa=parseFloat(cfg.pausa)||1;
           if(cfg.tema)     wmsConfig.tema=cfg.tema;
           if(cfg.ganttShowSap!==undefined) wmsConfig.ganttShowSap=cfg.ganttShowSap;
           if(cfg.ganttShowFres!==undefined) wmsConfig.ganttShowFres=cfg.ganttShowFres;
@@ -2208,6 +2753,7 @@ function applyPerm(){
     renderPermPanel();
     document.getElementById('appShell').style.display='flex';
     document.getElementById('accessDenied').style.display='none';
+    richInit();
     return;
   }
   if(isAdminUser){
@@ -2241,6 +2787,8 @@ function applyPerm(){
   if(isReadOnly)document.body.classList.add('readonly-mode');
   else document.body.classList.remove('readonly-mode');
   if(userSecs.indexOf('coop')===-1&&userSecs.indexOf('ats')!==-1)switchSec('ats');
+  // Inizializza modulo richieste
+  richInit();
 }
 function canSeeFile(fname){
   if(userTags.indexOf('*')!==-1)return true;
@@ -2315,7 +2863,10 @@ function switchSec(s){
     var fa=document.getElementById('fAnno');
     if(fa&&!fa.value)fa.value=String(new Date().getFullYear());
   }
-  ['coop','ats','file','perm','ferie'].forEach(function(x){
+  if(s==='rich'){
+    richRender();
+  }
+  ['coop','ats','file','perm','ferie','rich'].forEach(function(x){
     var nb=document.getElementById('sn'+x.charAt(0).toUpperCase()+x.slice(1));
     var sc=document.getElementById('sec'+x.charAt(0).toUpperCase()+x.slice(1));
     if(nb)nb.className='snb'+(s===x?' on '+x:'');
@@ -2456,7 +3007,7 @@ function renderSection(sec, emps, data, opts){
     var oreGiorno=dates.map(function(d,di){
       var sg=xSig((emp.sigla||[])[di]||'');
       var ing=(emp.ingresso||[])[di]||'',usc2=(emp.uscita||[])[di]||'';
-      var ps=(emp.pausa||[])[di];var ph=(ps===undefined||ps===null)?1:parseFloat(ps);
+      var ph=getPausaDip(emp,di);
       if(sg==='X'||sg==='SW'||sg==='TFS'){
         return ing&&usc2?calcOreGiorno(ing,usc2,ph):null;
       } else if(sg==='HP'||sg==='H104'){
@@ -2724,10 +3275,10 @@ function coopAeConfirm(){
   var sname=coopData?coopData.sheetName:(MESI[m-1]+'_Coop');
 
   if(fid&&sname&&coopData){
-    var nextRow=2+(coopEmps.length)*4;
-    var rowN=nextRow,rowI=nextRow+1,rowU=nextRow+2;
+    var nextRow=2+(coopEmps.length)*5;
+    var rowN=nextRow,rowI=nextRow+1,rowU=nextRow+2,rowP=nextRow+3;
     newEmp._manual=false;
-    newEmp.sheetRows={n:rowN,i:rowI,u:rowU,fileId:fid,sheetName:sname};
+    newEmp.sheetRows={n:rowN,i:rowI,u:rowU,p:rowP,fileId:fid,sheetName:sname};
     coopEmps.push(newEmp);
     mClose('moAddEmp');coopRender();
     toast('⏳ Salvo su Drive…','warn');
@@ -2738,7 +3289,8 @@ function coopAeConfirm(){
       {range:sname+'!A'+(rowN+1),values:[makeRow('Sigla')]},
       {range:sname+'!A'+(rowI+1),values:[makeRow('Ingresso')]},
       {range:sname+'!A'+(rowU+1),values:[makeRow('Uscita')]},
-      {range:sname+'!A'+(rowU+2),values:[['']]}
+      {range:sname+'!A'+(rowP+1),values:[makeRow('Pausa')]},
+      {range:sname+'!A'+(rowP+2),values:[['']]}
     ]).then(function(){toast('✓ '+n+' aggiunto su Drive');})
     .catch(function(e){toast('✗ Errore Drive: '+e.message,'err');});
   }else{
@@ -2781,9 +3333,11 @@ function cSave(){
       for(var di=0;di<nd;di++){
         var col=DST+di;var colL=colToLetter(col);
         var sv=(emp.sigla||[])[di]||'';var iv=(emp.ingresso||[])[di]||'';var uv=(emp.uscita||[])[di]||'';
+        var pv=(emp.pausa||[])[di];var pvStr=pv!==null&&pv!==undefined?String(pv):'';
         if(emp.sheetRows.n!==undefined)byFile[fid].push({range:coopData.sheetName+'!'+colL+(emp.sheetRows.n+1),values:[[sv]]});
         if(emp.sheetRows.i!==undefined)byFile[fid].push({range:coopData.sheetName+'!'+colL+(emp.sheetRows.i+1),values:[[iv]]});
         if(emp.sheetRows.u!==undefined)byFile[fid].push({range:coopData.sheetName+'!'+colL+(emp.sheetRows.u+1),values:[[uv]]});
+        if(emp.sheetRows.p!==undefined)byFile[fid].push({range:coopData.sheetName+'!'+colL+(emp.sheetRows.p+1),values:[[pvStr]]});
       }
     });
     var fids=Object.keys(byFile);if(!fids.length){toast('—');return;}
@@ -3032,17 +3586,14 @@ function aeConfirm(){
   var sname=atsData?atsData.sheetName:(MESI[m-1]+'_ATS');
 
   if(fid&&sname&&atsData){
-    // Calcola la prima riga libera dopo l'ultimo dipendente (4 righe per dip: sigla, ingresso, uscita, vuota)
     var DST=atsData.dayStart||3;
-    // Numero di righe occupate: header (2) + 4 righe per ogni dipendente
-    var nextRow=2+(atsEmps.length)*4; // 0-indexed: riga 0 e 1 sono header
-    var rowN=nextRow, rowI=nextRow+1, rowU=nextRow+2;
+    var nextRow=2+(atsEmps.length)*5;
+    var rowN=nextRow, rowI=nextRow+1, rowU=nextRow+2, rowP=nextRow+3;
     newEmp._manual=false;
-    newEmp.sheetRows={n:rowN,i:rowI,u:rowU,fileId:fid,sheetName:sname};
+    newEmp.sheetRows={n:rowN,i:rowI,u:rowU,p:rowP,fileId:fid,sheetName:sname};
     atsEmps.push(newEmp);
     mClose('moAddEmp');atsRender();
     toast('⏳ Salvo su Drive…','warn');
-    // Costruisce le 3 righe (sigla, ingresso, uscita)
     var makeRow=function(tipo){
       var r=[empId,n,tipo];for(var i=0;i<nd;i++)r.push('');return r;
     };
@@ -3050,7 +3601,8 @@ function aeConfirm(){
       {range:sname+'!A'+(rowN+1),values:[makeRow('Sigla')]},
       {range:sname+'!A'+(rowI+1),values:[makeRow('Ingresso')]},
       {range:sname+'!A'+(rowU+1),values:[makeRow('Uscita')]},
-      {range:sname+'!A'+(rowU+2),values:[['']]}
+      {range:sname+'!A'+(rowP+1),values:[makeRow('Pausa')]},
+      {range:sname+'!A'+(rowP+2),values:[['']]}
     ]).then(function(){toast('✓ '+n+' aggiunto su Drive');})
     .catch(function(e){toast('✗ Errore Drive: '+e.message,'err');});
   }else{
@@ -3093,9 +3645,11 @@ function aSave(){
       for(var di=0;di<nd;di++){
         var col=DST+di;var colL=colToLetter(col);
         var sv=(emp.sigla||[])[di]||'';var iv=(emp.ingresso||[])[di]||'';var uv=(emp.uscita||[])[di]||'';
+        var pv=(emp.pausa||[])[di];var pvStr=pv!==null&&pv!==undefined?String(pv):'';
         if(emp.sheetRows.n!==undefined)byFile[fid].push({range:atsData.sheetName+'!'+colL+(emp.sheetRows.n+1),values:[[sv]]});
         if(emp.sheetRows.i!==undefined)byFile[fid].push({range:atsData.sheetName+'!'+colL+(emp.sheetRows.i+1),values:[[iv]]});
         if(emp.sheetRows.u!==undefined)byFile[fid].push({range:atsData.sheetName+'!'+colL+(emp.sheetRows.u+1),values:[[uv]]});
+        if(emp.sheetRows.p!==undefined)byFile[fid].push({range:atsData.sheetName+'!'+colL+(emp.sheetRows.p+1),values:[[pvStr]]});
       }
     });
     var fids=Object.keys(byFile);if(!fids.length){toast('—');return;}
@@ -3116,7 +3670,7 @@ function atsExport(){
   var calRows=[hdr];
   atsEmps.forEach(function(e){
     var mkRow=function(tipo,arr){var r=[e.id||'',e.nome,e.resp||'',e.plant||'',tipo];(arr||[]).forEach(function(v){r.push(v||'');});return r;};
-    calRows.push(mkRow('Sigla',e.sigla));calRows.push(mkRow('Ingresso',e.ingresso));calRows.push(mkRow('Uscita',e.uscita));calRows.push([]);
+    calRows.push(mkRow('Sigla',e.sigla));calRows.push(mkRow('Ingresso',e.ingresso));calRows.push(mkRow('Uscita',e.uscita));calRows.push(mkRow('Pausa',e.pausa));calRows.push([]);
   });
   var atsSheet=XLSX.utils.aoa_to_sheet(calRows);
   applyHolidayStyles(atsSheet,dates,parseInt(m),parseInt(y),calRows.length);
@@ -3218,14 +3772,14 @@ function openPickerGeneric(mode,ri,di){
   var dates=(mode==='ats'?atsData:coopData)?((mode==='ats'?atsData:coopData).dates):getDates(y,m);
   var dt=dates[di];
   var cs=(emp.sigla||[])[di]||'';
-  var curPs=(emp.pausa||[])[di];
+  var curPs=getPausaDip(emp,di);
   var nome=mode==='ats'?(emp.nome||''):(emp.nom2||emp.nome||'');
   document.getElementById('spTitle').textContent='Presenza · '+nome;
   document.getElementById('spSub').textContent=GGS[dt.weekday].toUpperCase()+' '+dt.day+'/'+('0'+m).slice(-2)+'/'+y;
   document.getElementById('spIng').value=(emp.ingresso||[])[di]||wmsConfig.ingresso||'08:00';
   document.getElementById('spUsc').value=(emp.uscita||[])[di]||wmsConfig.uscita||'18:00';
-  document.getElementById('spPausa').checked=(curPs===undefined||curPs===null)?true:(curPs>0);
-  document.getElementById('spPausaDur').value=(curPs===undefined||curPs===null||curPs===0)?'1':String(curPs<=0?1:curPs);
+  document.getElementById('spPausa').checked=curPs>0;
+  document.getElementById('spPausaDur').value=curPs>0?String(curPs):'1';
   var g=document.getElementById('spGrid');g.innerHTML='';
 
   // ── FIX 1: filtra le sigle in base alla sezione ──
@@ -3518,31 +4072,43 @@ function parseSheetValues(values,year,month,fileId,sheetName,secType){
       ||/^\d+$/.test(tipoVal)||tipoVal==='tipo'||tipoVal==='data'){r++;continue;}
 
     if(tipoVal==='sigla'||tipoVal.indexOf('sigla')!==-1){
-      var nr1=values[r+1]||[],nr2=values[r+2]||[];
+      var nr1=values[r+1]||[],nr2=values[r+2]||[],nr3=values[r+3]||[];
       var t1=String(nr1[TIPO_COL]||'').trim().toLowerCase();
       var t2=String(nr2[TIPO_COL]||'').trim().toLowerCase();
-      var hasI=t1.indexOf('ingresso')!==-1;var hasU=t2.indexOf('uscita')!==-1;
-      var sig=[],ing=[],usc=[];
+      var t3=String(nr3[TIPO_COL]||'').trim().toLowerCase();
+      var hasI=t1.indexOf('ingresso')!==-1;
+      var hasU=hasI ? t2.indexOf('uscita')!==-1 : t1.indexOf('uscita')!==-1;
+      var uRow=hasI&&hasU?nr2:((!hasI&&hasU)?nr1:null);
+      var afterU=hasI&&hasU?nr3:(hasI?nr2:nr2);
+      var t_afterU=String((afterU||[])[TIPO_COL]||'').trim().toLowerCase();
+      var hasP=t_afterU.indexOf('pausa')!==-1;
+      var pRow=hasP?afterU:null;
+      var sig=[],ing=[],usc=[],psa=[];
       for(var di=0;di<nd;di++){
         sig.push(fAV(row[DST+di]));
         ing.push(fTM(hasI?nr1[DST+di]:''));
-        usc.push(fTM(hasU?nr2[DST+di]:''));
+        usc.push(fTM(uRow?uRow[DST+di]:''));
+        var pv=pRow?pRow[DST+di]:null;
+        psa.push(pv!==null&&pv!==undefined&&pv!==''?parseFloat(pv):null);
       }
       var confCol=DST+nd;
       var confVal=String(row[confCol]||'').trim().toUpperCase();
       var effectivePlant=plantVal||globalPlant;
+      // Calcola offset riga pausa
+      var rowsUsed=(hasI?1:0)+(hasU?1:0)+(hasP?1:0)+1;
+      var pRowIdx=hasP?(r+(hasI?1:0)+(hasU?1:0)+1):undefined;
       var emp={
         nome:nomeVal,nom2:nomeVal,id:sapVal,sap:sapVal,
         resp:globalResp,plant:effectivePlant,
         sigla:sig,ingresso:ing,uscita:usc,
-        pausa:Array(nd).fill(null),
+        pausa:psa,
         notes:Array(nd).fill(''),
         confermato:confVal==='SI'||confVal==='TRUE'||confVal==='1',
         confCol:confCol,
-        sheetRows:{n:r,i:hasI?r+1:undefined,u:hasU?(hasI?r+2:r+1):undefined,fileId:fileId,sheetName:sheetName}
+        sheetRows:{n:r,i:hasI?r+1:undefined,u:hasI&&hasU?r+2:(!hasI&&hasU?r+1:undefined),p:pRowIdx,fileId:fileId,sheetName:sheetName}
       };
       emps.push(emp);
-      r+=(hasI&&hasU?3:hasI?2:1);
+      r+=rowsUsed;
       while(r<values.length&&!(values[r]||[]).some(function(c){return c!==null&&c!==''&&c!==undefined;}))r++;
     }else r++;
   }
@@ -3908,9 +4474,29 @@ function calcOreGiorno(ing,usc,pausaOre){
   var im=timeToMin(ing),um=timeToMin(usc);
   if(um<=im)return{tot:0,eff:0,ord:0,str:0};
   var tot=(um-im)/60;
-  var pausa=pausaOre!==undefined?pausaOre:1;
+  var pausa=pausaOre!==undefined&&pausaOre!==null?pausaOre:wmsConfig.pausa||1;
   var eff=Math.max(0,tot-pausa);
   return{tot:tot,eff:eff,ord:Math.min(8,eff),str:Math.max(0,eff-8)};
+}
+
+// Risolve la pausa per un dipendente e giorno specifico:
+// 1. valore letto dal foglio (non null)  → usa quello
+// 2. pausa_default nel config dipendente → usa quello
+// 3. wmsConfig.pausa (default globale)   → usa quello
+// 4. 1 ora (fallback assoluto)
+function getPausaDip(emp, di){
+  var ps=(emp.pausa||[])[di];
+  if(ps!==null&&ps!==undefined) return parseFloat(ps);
+  // cerca nel config permessi
+  if(permConfig){
+    var dips=(permConfig.dipendenti||[]).filter(function(d){return !d._esempio;});
+    var found=dips.find(function(d){
+      return (d.sap&&emp.sap&&String(d.sap).trim()===String(emp.sap).trim()) ||
+             ((d.nome||'').toLowerCase()===(emp.nome||'').toLowerCase());
+    });
+    if(found&&found.pausa_default!==undefined) return parseFloat(found.pausa_default)||1;
+  }
+  return wmsConfig.pausa||1;
 }
 function timeToMin(t){if(!t)return 0;var p=t.split(':');return parseInt(p[0]||0)*60+parseInt(p[1]||0);}
 function fmtOre(h){if(!h)return '';var i=Math.floor(h),f=h-i;return i+(f===0.5?'.5':f>0?'.'+Math.round(f*10):'');}
@@ -4034,6 +4620,13 @@ function renderPermPanel(){
   h+='<button class="ba bghost te" style="padding:6px 12px;font-size:12px" onclick="addContr()">＋ Aggiungi</button>';
   h+='</div>';
   h+='</div></div>';
+  // ── Pannello anagrafica richieste (solo superuser) ──
+  if(isSuperUser){
+    h += '<div style="padding:8px 0 0;border-top:2px solid var(--border);margin-top:8px">';
+    h += '<div style="font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:1px;color:var(--amber);text-transform:uppercase;padding:0 0 12px">✉ Modulo Richieste Ferie — Anagrafica</div>';
+    h += richRenderAnagPanel();
+    h += '</div>';
+  }
   document.getElementById('permPanel').innerHTML=h;
 }
 function updateDefault(){
@@ -4801,6 +5394,7 @@ function massivoFerieRange(dip,d1,d2,fv,ing,usc,showOr,pausaH,qty,nota){
           if(showOr){
             if(emp.sheetRows&&emp.sheetRows.i!==undefined)updates.push({range:sname+'!'+col+(emp.sheetRows.i+1),values:[[ing]]});
             if(emp.sheetRows&&emp.sheetRows.u!==undefined)updates.push({range:sname+'!'+col+(emp.sheetRows.u+1),values:[[usc]]});
+            if(emp.sheetRows&&emp.sheetRows.p!==undefined)updates.push({range:sname+'!'+col+(emp.sheetRows.p+1),values:[[pausaH]]});
           }
         });
         if(!updates.length)return Promise.resolve();
@@ -4865,13 +5459,14 @@ function massivoCreateAndWrite(dip,y,m,fname,d1,d2,fv,ing,usc,showOr,pausaH){
   var h0=['Resp. '+dip.resp,'Dipendenti','Plant','Data'];
   var h1=['ExtEmpN_SAP','Nominativo','Plant '+dip.plant,mName.substring(0,3).toLowerCase()+'-'+String(y).slice(2)];
   dates.forEach(function(d){h0.push(d.day);h1.push(GGS[d.weekday]);});
-  var sigRow=[dip.sap,dip.nome,'Sigla'];var ingRow=[dip.sap,dip.nome,'Ingresso'];var uscRow=[dip.sap,dip.nome,'Uscita'];
+  var sigRow=[dip.sap,dip.nome,'Sigla'];var ingRow=[dip.sap,dip.nome,'Ingresso'];var uscRow=[dip.sap,dip.nome,'Uscita'];var psaRow=[dip.sap,dip.nome,'Pausa'];
   dates.forEach(function(dt,di){
     var dateObj=new Date(y,m-1,dt.day);
     var wd=dt.weekday;var inRange=dateObj>=d1&&dateObj<=d2&&wd!==0&&wd!==6&&!isHoliday(dt.day,m,y);
     sigRow.push(inRange?fv:'');
     ingRow.push(inRange&&showOr?ing:'');
     uscRow.push(inRange&&showOr?usc:'');
+    psaRow.push(inRange&&showOr?pausaH:'');
   });
   var n=sigRow.filter(function(v,i){return i>3&&v!=='';}).length;
   var legRows=[['SIGLA','DESCRIZIONE','NOTE']];SIGLE.forEach(function(s){legRows.push([s.code,s.label,s.hasQty?'Es. 1'+s.code:'']);});
@@ -4886,10 +5481,9 @@ function massivoCreateAndWrite(dip,y,m,fname,d1,d2,fv,ing,usc,showOr,pausaH){
   }).then(function(ssId){
     return sheetsBatchUpdate(ssId,[
       {range:mName+'_Coop!A1',values:[h0,h1]},
-      {range:mName+'_ATS!A1',values:[h0,h1,sigRow,ingRow,uscRow,[]]},
+      {range:mName+'_ATS!A1',values:[h0,h1,sigRow,ingRow,uscRow,psaRow,[]]},
       {range:'Leggenda!A1',values:legRows}
     ]).then(function(){
-      // Aggiorna ferieResiduo per le date scritte
       dates.forEach(function(dt,di){
         var dateObj=new Date(y,m-1,dt.day);
         var wd=dt.weekday;if(dateObj<d1||dateObj>d2||wd===0||wd===6||isHoliday(dt.day,m,y))return;
@@ -4903,20 +5497,21 @@ function massivoCreateAndWrite(dip,y,m,fname,d1,d2,fv,ing,usc,showOr,pausaH){
 function massivoAddEmpToFile(fileId,sname,dip,y,m,data,d1,d2,fv,ing,usc,showOr,pausaH){
   var dates=data.dates;
   var lastRow=(data.employees.length?data.employees[data.employees.length-1]:null);
-  var startRow=lastRow?(Math.max(lastRow.sheetRows&&lastRow.sheetRows.u||0,lastRow.sheetRows&&lastRow.sheetRows.n||0)+3):4;
+  var startRow=lastRow?(Math.max(lastRow.sheetRows&&lastRow.sheetRows.p||lastRow.sheetRows&&lastRow.sheetRows.u||0,lastRow.sheetRows&&lastRow.sheetRows.n||0)+3):4;
   var DST=data.dayStart||3;
-  var sigRow=[dip.sap,dip.nome,'Sigla'];var ingRow=[dip.sap,dip.nome,'Ingresso'];var uscRow=[dip.sap,dip.nome,'Uscita'];
+  var sigRow=[dip.sap,dip.nome,'Sigla'];var ingRow=[dip.sap,dip.nome,'Ingresso'];var uscRow=[dip.sap,dip.nome,'Uscita'];var psaRow=[dip.sap,dip.nome,'Pausa'];
   var n=0;
   dates.forEach(function(dt,di){
     var dateObj=new Date(y,m-1,dt.day);
     var wd=dt.weekday;var inRange=dateObj>=d1&&dateObj<=d2&&wd!==0&&wd!==6&&!isHoliday(dt.day,m,y);
-    sigRow.push(inRange?fv:'');ingRow.push(inRange&&showOr?ing:'');uscRow.push(inRange&&showOr?usc:'');
+    sigRow.push(inRange?fv:'');ingRow.push(inRange&&showOr?ing:'');uscRow.push(inRange&&showOr?usc:'');psaRow.push(inRange&&showOr?pausaH:'');
     if(inRange){updateFerieResiduo({sap:dip.sap,nome:dip.nome,resp:dip.resp,plant:dip.plant},di,fv,'',y,m,'ats');n++;}
   });
   return sheetsBatchUpdate(fileId,[
     {range:sname+'!A'+startRow,values:[sigRow]},
     {range:sname+'!A'+(startRow+1),values:[ingRow]},
-    {range:sname+'!A'+(startRow+2),values:[uscRow]}
+    {range:sname+'!A'+(startRow+2),values:[uscRow]},
+    {range:sname+'!A'+(startRow+3),values:[psaRow]}
   ]).then(function(){return n;});
 }
 
@@ -6011,20 +6606,27 @@ function applyTheme(t){
 function openConfig(){
   document.getElementById('cfgIng').value=wmsConfig.ingresso||'08:00';
   document.getElementById('cfgUsc').value=wmsConfig.uscita||'18:00';
+  var cfgP=document.getElementById('cfgPausa');
+  if(cfgP) cfgP.value=String(wmsConfig.pausa!==undefined?wmsConfig.pausa:1);
   var radios=document.querySelectorAll('input[name="cfgTema"]');
   radios.forEach(function(r){r.checked=(r.value===(wmsConfig.tema||'scuro'));});
   cfgUpdatePreview();
   document.getElementById('cfgIng').oninput=cfgUpdatePreview;
   document.getElementById('cfgUsc').oninput=cfgUpdatePreview;
+  var cfgP2=document.getElementById('cfgPausa');
+  if(cfgP2) cfgP2.onchange=cfgUpdatePreview;
   mOpen('moConfig');
 }
 function cfgUpdatePreview(){
   var ing=document.getElementById('cfgIng').value;
   var usc=document.getElementById('cfgUsc').value;
-  var o=calcOreGiorno(ing,usc,1);
+  var cfgP=document.getElementById('cfgPausa');
+  var pausa=cfgP?parseFloat(cfgP.value)||0:1;
+  var o=calcOreGiorno(ing,usc,pausa);
   var prev=document.getElementById('cfgPreview');
   if(!ing||!usc){prev.textContent='—';return;}
-  prev.textContent='Orario: '+ing+' → '+usc+' · '+o.eff.toFixed(1)+'h effettive (pausa 1h) → Ord: '+fmtOre(o.ord)+'h · Str: '+fmtOre(o.str)+'h';
+  var pausaLabel=pausa===0?'senza pausa':pausa===0.5?'pausa 30min':pausa===1?'pausa 1h':pausa===1.5?'pausa 1h30':'pausa '+pausa+'h';
+  prev.textContent='Orario: '+ing+' → '+usc+' · '+pausaLabel+' → '+o.eff.toFixed(1)+'h effettive · Ord: '+fmtOre(o.ord)+'h · Str: '+fmtOre(o.str)+'h';
 }
 function cfgSave(){
   var ing=document.getElementById('cfgIng').value;
@@ -6032,12 +6634,17 @@ function cfgSave(){
   if(!ing||!usc){toast('Inserisci ingresso e uscita','warn');return;}
   var temaEl=document.querySelector('input[name="cfgTema"]:checked');
   var tema=temaEl?temaEl.value:'scuro';
-  wmsConfig.ingresso=ing; wmsConfig.uscita=usc; wmsConfig.tema=tema;
+  var cfgP=document.getElementById('cfgPausa');
+  var pausa=cfgP?parseFloat(cfgP.value):1;
+  wmsConfig.ingresso=ing; wmsConfig.uscita=usc; wmsConfig.pausa=pausa; wmsConfig.tema=tema;
   applyTheme(tema);
   mClose('moConfig');
   toast('⏳ Salvo config su Drive…','warn');
   saveUserConfig()
-    .then(function(){toast('✓ Config salvata: '+ing+' – '+usc+' · tema '+tema);})
+    .then(function(){
+      var pLabel=pausa===0?'no pausa':pausa+'h pausa';
+      toast('✓ Config salvata: '+ing+' – '+usc+' · '+pLabel+' · tema '+tema);
+    })
     .catch(function(e){toast('✗ Errore salvataggio config','err');console.error(e);});
 }
 
@@ -6503,6 +7110,927 @@ function applyHiddenSigleToTables(){}
     if(MOBILE()) wrapFilters();
   });
 })();
+
+// ═══════════════════════════════════════════════════════════════════════════
+//  MODULO RICHIESTE FERIE v1.0
+//  - Auto-registrazione dipendenti/responsabili al primo login
+//  - Invio richiesta (F, HP, 104, H104, CP, HPE, PE) con range date
+//  - Flusso approvativo: responsabile approva/rifiuta
+//  - All'approvazione: scrittura automatica su file Drive (multi-mese)
+//  - Pannello anagrafica in Permessi (solo superuser)
+// ═══════════════════════════════════════════════════════════════════════════
+
+var RICH_FNAME = 'richieste_ferie.json';
+var richFileId = null;
+var richData = null;          // { richieste: [...] }
+var currentDipendente = null; // profilo utente loggato come dipendente
+var currentRespProfile = null;// profilo utente loggato come responsabile
+var richFilterTab = 'tutte';
+var richFormTipo = 'F';
+
+// Tipi richiedibili con label breve
+var RICH_TIPI = [
+  {code:'F',    label:'Ferie',     color:'var(--c-F)'},
+  {code:'HP',   label:'Ore Perm.', color:'var(--c-HP)',  hasQty:true},
+  {code:'104',  label:'G. 104',    color:'var(--c-104)'},
+  {code:'H104', label:'Ore 104',   color:'var(--c-H104)',hasQty:true},
+  {code:'CP',   label:'Cong.Par.', color:'var(--c-CP)'},
+  {code:'HPE',  label:'Perm.Esami',color:'var(--c-HPE)', hasQty:true},
+  {code:'PE',   label:'P.Esami',   color:'var(--c-PE)'}
+];
+
+// ── Carica file richieste da Drive ──────────────────────────────────────────
+function loadRichieste(){
+  return listFiles('"'+FOLDER_ID+'" in parents and name="'+RICH_FNAME+'" and trashed=false')
+  .then(function(files){
+    if(!files.length){
+      richFileId=null;
+      richData={richieste:[]};
+      return richData;
+    }
+    richFileId=files[0].id;
+    return fetch('https://www.googleapis.com/drive/v3/files/'+richFileId+'?alt=media',
+      {headers:{Authorization:'Bearer '+TOKEN}})
+    .then(function(r){return r.json();})
+    .then(function(d){richData=d;return d;});
+  }).catch(function(){richData={richieste:[]};return richData;});
+}
+
+// ── Salva file richieste su Drive ──────────────────────────────────────────
+function saveRichieste(){
+  if(!richData) return Promise.resolve();
+  var json = JSON.stringify(richData, null, 2);
+  var blob = new Blob([json], {type:'application/json'});
+  var bnd = 'rich_'+Date.now(), enc = new TextEncoder();
+  var meta = richFileId
+    ? JSON.stringify({name:RICH_FNAME})
+    : JSON.stringify({name:RICH_FNAME, parents:[FOLDER_ID]});
+  var pre  = '--'+bnd+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+meta+'\r\n--'+bnd+'\r\nContent-Type: application/json\r\n\r\n';
+  var post = '\r\n--'+bnd+'--';
+  var method = richFileId ? 'PATCH' : 'POST';
+  var url    = richFileId
+    ? 'https://www.googleapis.com/upload/drive/v3/files/'+richFileId+'?uploadType=multipart'
+    : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+  return blob.arrayBuffer().then(function(buf){
+    var ab=enc.encode(pre), bb=new Uint8Array(buf), cb=enc.encode(post);
+    var body=new Uint8Array(ab.length+bb.length+cb.length);
+    body.set(ab); body.set(bb,ab.length); body.set(cb,ab.length+bb.length);
+    return fetch(url,{method:method,headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'multipart/related; boundary='+bnd},body:body});
+  }).then(function(r){return r.json();}).then(function(d){if(d.id)richFileId=d.id;});
+}
+
+// ── Salva config (aggiorna dipendenti/responsabili) ─────────────────────────
+function savePermConfigWithDips(){
+  if(!permConfig || !configFileId) return Promise.resolve();
+  var json = JSON.stringify(permConfig, null, 2);
+  var blob = new Blob([json], {type:'application/json'});
+  var bnd = 'cfg_'+Date.now(), enc = new TextEncoder();
+  var meta = JSON.stringify({name: CONFIG_FNAME});
+  var pre  = '--'+bnd+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+meta+'\r\n--'+bnd+'\r\nContent-Type: application/json\r\n\r\n';
+  var post = '\r\n--'+bnd+'--';
+  return blob.arrayBuffer().then(function(buf){
+    var ab=enc.encode(pre), bb=new Uint8Array(buf), cb=enc.encode(post);
+    var body=new Uint8Array(ab.length+bb.length+cb.length);
+    body.set(ab); body.set(bb,ab.length); body.set(cb,ab.length+bb.length);
+    return fetch('https://www.googleapis.com/upload/drive/v3/files/'+configFileId+'?uploadType=multipart',
+      {method:'PATCH',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'multipart/related; boundary='+bnd},body:body});
+  }).then(function(r){return r.json();});
+}
+
+// ── Identifica il profilo dell'utente loggato ───────────────────────────────
+function richIdentifyUser(){
+  if(!permConfig) return;
+  var em = uEmail.toLowerCase().trim();
+  // Cerca come dipendente
+  var dips = (permConfig.dipendenti||[]).filter(function(d){return !d._esempio;});
+  currentDipendente = dips.find(function(d){return (d.email_google||'').toLowerCase()===em;}) || null;
+  // Cerca come responsabile
+  var resps = (permConfig.responsabili||[]).filter(function(r){return !r._esempio;});
+  currentRespProfile = resps.find(function(r){return (r.email_google||'').toLowerCase()===em;}) || null;
+}
+
+// ── Conta richieste pending per l'utente loggato ────────────────────────────
+function richCountPending(){
+  if(!richData) return 0;
+  var em = uEmail.toLowerCase().trim();
+  // Se responsabile: conta richieste in_attesa indirizzate a lui
+  if(currentRespProfile){
+    return richData.richieste.filter(function(r){
+      return r.stato==='in_attesa' && (r.responsabile_email||'').toLowerCase()===em;
+    }).length;
+  }
+  return 0;
+}
+
+// ── Aggiorna il badge notifica ──────────────────────────────────────────────
+function richUpdateBadge(){
+  var n = richCountPending();
+  var btn = document.getElementById('btnNotif');
+  var cnt = document.getElementById('notifCount');
+  var snBadge = document.getElementById('snRichBadge');
+  if(!btn) return;
+  if(n>0){
+    btn.classList.add('has-pending');
+    cnt.style.display='';
+    cnt.textContent=n;
+    if(snBadge){snBadge.style.display='';snBadge.textContent=n;}
+  } else {
+    btn.classList.remove('has-pending');
+    cnt.style.display='none';
+    if(snBadge) snBadge.style.display='none';
+  }
+}
+
+// ── Init modulo richieste (chiamato da applyPerm dopo loadConfig) ────────────
+function richInit(){
+  richIdentifyUser();
+  var em = uEmail.toLowerCase().trim();
+  var isSup = (permConfig.super_users||[]).some(function(s){return s.toLowerCase()===em;});
+  var isAdm = isSup || (permConfig.admins||[]).some(function(a){return a.toLowerCase()===em;});
+
+  // Mostra tab Richieste a: dipendenti registrati + responsabili + super/admin
+  var hasAccess = currentDipendente || currentRespProfile || isSup || isAdm;
+
+  // Se non è registrato né super/admin → mostra il wizard
+  if(!hasAccess && !isSup && !isAdm){
+    showSetupWizard();
+    return;
+  }
+
+  var btn = document.getElementById('btnNotif');
+  var snRich = document.getElementById('snRich');
+  if(btn) btn.style.display='';
+  if(snRich) snRich.style.display='';
+
+  loadRichieste().then(function(){
+    richUpdateBadge();
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  SETUP WIZARD
+// ══════════════════════════════════════════════════════════════════════════════
+var setupRole = 'dipendente';
+
+function showSetupWizard(){
+  var wiz = document.getElementById('setupWizard');
+  if(!wiz) return;
+  // Popola plant dal Drive
+  var plants = {};
+  (allFiles||[]).forEach(function(f){var p=parseFileName(f.name);if(p)plants[p.plant]=true;});
+  var plSel = document.getElementById('setupPlant');
+  if(plSel){
+    plSel.innerHTML='<option value="">— seleziona —</option>';
+    Object.keys(plants).sort().forEach(function(pl){
+      var o=document.createElement('option');o.value=pl;o.textContent=pl;plSel.appendChild(o);
+    });
+  }
+  // Popola responsabili dai file Drive
+  var resps = {};
+  (allFiles||[]).forEach(function(f){var p=parseFileName(f.name);if(p)resps[p.resp]=true;});
+  // Aggiungi anche responsabili già nel config
+  ((permConfig&&permConfig.responsabili)||[]).filter(function(r){return !r._esempio;}).forEach(function(r){resps[r.nome]=true;});
+  var rSel = document.getElementById('setupResp');
+  if(rSel){
+    rSel.innerHTML='<option value="">— seleziona —</option>';
+    Object.keys(resps).sort().forEach(function(r){
+      var o=document.createElement('option');o.value=r;o.textContent=r;rSel.appendChild(o);
+    });
+  }
+  // Popola superiori (tutti i responsabili + super_users)
+  var supSel = document.getElementById('setupSup');
+  if(supSel){
+    supSel.innerHTML='<option value="">— seleziona —</option>';
+    Object.keys(resps).sort().forEach(function(r){
+      var o=document.createElement('option');o.value=r;o.textContent=r;supSel.appendChild(o);
+    });
+  }
+  setupSetRole('dipendente');
+  wiz.style.display='flex';
+}
+
+function setupSetRole(role){
+  setupRole = role;
+  document.getElementById('setupRoleDip').classList.toggle('active', role==='dipendente');
+  document.getElementById('setupRoleResp').classList.toggle('active', role==='responsabile');
+  document.getElementById('setupSapWrap').style.display  = role==='dipendente' ? '' : 'none';
+  document.getElementById('setupRespWrap').style.display = role==='dipendente' ? '' : 'none';
+  document.getElementById('setupSupWrap').style.display  = role==='responsabile' ? '' : 'none';
+}
+
+function setupSave(){
+  var nome  = (document.getElementById('setupNome').value||'').trim();
+  var plant = (document.getElementById('setupPlant').value||'').trim();
+  var errEl = document.getElementById('setupErr');
+  errEl.style.display='none';
+
+  if(!nome || !plant){errEl.style.display='';return;}
+
+  if(!permConfig.dipendenti) permConfig.dipendenti=[];
+  if(!permConfig.responsabili) permConfig.responsabili=[];
+
+  var contratto = (permConfig.ats_contratto_default)||{ferie_giorni:22,permessi_ore:32};
+
+  if(setupRole==='dipendente'){
+    var resp  = (document.getElementById('setupResp').value||'').trim();
+    var sap   = (document.getElementById('setupSap').value||'').trim();
+    if(!resp){errEl.style.display='';return;}
+    // Cerca email responsabile nel config
+    var respRecord = (permConfig.responsabili||[]).find(function(r){return r.nome===resp && !r._esempio;});
+    var respEmail  = respRecord ? respRecord.email_google : '';
+    var newDip = {
+      email_google: uEmail,
+      nome: nome, sap: sap, plant: plant,
+      responsabile_nome: resp,
+      responsabile_email: respEmail,
+      contratto: {ferie_giorni: contratto.ferie_giorni, permessi_ore: contratto.permessi_ore}
+    };
+    // Rimuovi esempio se presente
+    permConfig.dipendenti = permConfig.dipendenti.filter(function(d){return !d._esempio;});
+    permConfig.dipendenti.push(newDip);
+    currentDipendente = newDip;
+  } else {
+    var sup  = (document.getElementById('setupSup').value||'').trim();
+    if(!sup){errEl.style.display='';return;}
+    var newResp = {
+      email_google: uEmail,
+      nome: nome,
+      superiore_nome: sup,
+      superiore_email: ''
+    };
+    permConfig.responsabili = permConfig.responsabili.filter(function(r){return !r._esempio;});
+    permConfig.responsabili.push(newResp);
+    currentRespProfile = newResp;
+  }
+
+  toast('⏳ Salvo profilo su Drive…','warn');
+  savePermConfigWithDips().then(function(){
+    toast('✅ Profilo salvato!');
+    document.getElementById('setupWizard').style.display='none';
+    var btn = document.getElementById('btnNotif');
+    var snRich = document.getElementById('snRich');
+    if(btn) btn.style.display='';
+    if(snRich) snRich.style.display='';
+    loadRichieste().then(function(){
+      richUpdateBadge();
+      switchSec('rich');
+    });
+  }).catch(function(e){toast('✗ Errore salvataggio: '+e.message,'err');});
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  RENDER SEZIONE RICHIESTE
+// ══════════════════════════════════════════════════════════════════════════════
+function richRender(){
+  if(!richData){ loadRichieste().then(function(){richRender();}); return; }
+  var em = uEmail.toLowerCase().trim();
+  var isSup = (permConfig&&permConfig.super_users||[]).some(function(s){return s.toLowerCase()===em;});
+  var isAdm = isSup || ((permConfig&&permConfig.admins)||[]).some(function(a){return a.toLowerCase()===em;});
+  var isResp = !!currentRespProfile;
+  var isDip  = !!currentDipendente;
+
+  var h = '<div class="rich-layout">';
+
+  // ── SIDEBAR: form invio richiesta (dipendente o responsabile che fa anche richiesta) ──
+  if(isDip || (isResp && currentRespProfile.superiore_nome)){
+    var profile = isDip ? currentDipendente : {nome: currentRespProfile.nome, sap:'', plant:'', responsabile_nome: currentRespProfile.superiore_nome};
+    h += richBuildSidebar(profile);
+  } else if(isAdm || isSup){
+    h += '<div class="rich-sidebar"><div class="rich-sidebar-hdr"><div style="font-family:var(--ffc);font-size:13px;font-weight:700;color:var(--muted)">Vista amministratore</div><div style="font-size:11px;color:var(--muted);margin-top:4px">Puoi visualizzare e gestire tutte le richieste</div></div></div>';
+  }
+
+  // ── MAIN: lista richieste ──
+  h += '<div class="rich-main">';
+  h += '<div class="rich-main-hdr">';
+
+  var titleLabel = isResp ? 'Richieste del mio team' : (isSup||isAdm ? 'Tutte le richieste' : 'Le mie richieste');
+  h += '<div class="rich-main-title">'+esc(titleLabel)+'</div>';
+  h += '<div class="rich-filter-tabs">';
+  ['tutte','in_attesa','approvata','rifiutata'].forEach(function(t){
+    var labels={tutte:'Tutte',in_attesa:'⏳ In attesa',approvata:'✅ Approvate',rifiutata:'❌ Rifiutate'};
+    h += '<button class="rich-ftab'+(richFilterTab===t?' on':'')+'" onclick="richSetFilter(\''+t+'\')">'+labels[t]+'</button>';
+  });
+  h += '</div></div>';
+
+  // Filtra richieste
+  var lista = richData.richieste.filter(function(r){
+    if(richFilterTab!=='tutte' && r.stato!==richFilterTab) return false;
+    if(isSup||isAdm) return true;
+    if(isResp && !isDip){
+      return (r.responsabile_email||'').toLowerCase()===em;
+    }
+    if(isDip && !isResp){
+      return (r.dipendente_email||'').toLowerCase()===em;
+    }
+    // Sia dipendente che responsabile: vede sue e quelle del suo team
+    return (r.dipendente_email||'').toLowerCase()===em || (r.responsabile_email||'').toLowerCase()===em;
+  }).slice().reverse(); // più recenti prima
+
+  if(!lista.length){
+    h += '<div class="state" style="flex:1"><div class="state-ico">📭</div><div class="state-title">Nessuna richiesta</div></div>';
+  } else {
+    lista.forEach(function(r){
+      h += richBuildCard(r, em, isResp, isSup, isAdm);
+    });
+  }
+
+  h += '</div></div>'; // /rich-main /rich-layout
+  document.getElementById('richContent').innerHTML = h;
+  richInitForm();
+}
+
+function richBuildSidebar(profile){
+  var initials = (profile.nome||'?').split(' ').map(function(p){return p[0];}).join('').substring(0,2).toUpperCase();
+  var pic = uPic ? '<img src="'+esc(uPic)+'" referrerpolicy="no-referrer">' : initials;
+  var tipiH = RICH_TIPI.map(function(t){
+    return '<button class="rich-type-btn'+(richFormTipo===t.code?' sel':'')+'" onclick="richSelTipo(\''+t.code+'\')">'+
+      '<span class="rtb-code" style="color:'+t.color+'">'+t.code+'</span>'+
+      '<span class="rtb-label">'+esc(t.label)+'</span></button>';
+  }).join('');
+
+  return '<div class="rich-sidebar">'+
+    '<div class="rich-sidebar-hdr">'+
+      '<div class="rich-profile">'+
+        '<div class="rich-avatar">'+pic+'</div>'+
+        '<div class="rich-profile-info">'+
+          '<div class="rich-profile-name">'+esc(profile.nome)+'</div>'+
+          '<div class="rich-profile-meta">'+
+            (profile.plant?'<span class="rich-meta-chip blue">'+esc(profile.plant)+'</span>':'')+
+            (profile.responsabile_nome?'<span class="rich-meta-chip teal">→ '+esc(profile.responsabile_nome)+'</span>':'')+
+            (profile.sap?'<span class="rich-meta-chip">#'+esc(profile.sap)+'</span>':'')+
+          '</div>'+
+        '</div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="rich-form">'+
+      '<div>'+
+        '<div class="fl" style="margin-bottom:6px">Tipo richiesta</div>'+
+        '<div class="rich-type-grid">'+tipiH+'</div>'+
+      '</div>'+
+      '<div id="richQtyWrap" style="display:none">'+
+        '<div class="fl">Ore</div>'+
+        '<input class="mi" id="richQty" type="number" min="0.5" max="8" step="0.5" value="1" style="width:90px">'+
+      '</div>'+
+      '<div class="rich-date-row">'+
+        '<div><div class="fl">Dal</div><input class="mi fc" id="richDal" type="date" oninput="richCalcGiorni()"></div>'+
+        '<div><div class="fl">Al</div><input class="mi fc" id="richAl" type="date" oninput="richCalcGiorni()"></div>'+
+      '</div>'+
+      '<div class="rich-days-badge" id="richGiorniBadge">Seleziona le date</div>'+
+      '<div>'+
+        '<div class="fl">Note (opzionale)</div>'+
+        '<textarea class="mi fc" id="richNote" rows="2" placeholder="Motivazione, dettagli…" style="resize:vertical;font-family:var(--ff);font-size:12px"></textarea>'+
+      '</div>'+
+      '<button class="rich-send-btn" id="richSendBtn" onclick="richInvia()">✉ Invia richiesta</button>'+
+    '</div>'+
+  '</div>';
+}
+
+function fmtDateIT(s){
+  // converte 2026-06-09 → 09/06/2026
+  if(!s) return '—';
+  var p=s.split('-');
+  if(p.length===3) return p[2]+'/'+p[1]+'/'+p[0];
+  return s;
+}
+
+function richBuildCard(r, em, isResp, isSup, isAdm){
+  var isMyRequest = (r.dipendente_email||'').toLowerCase()===em;
+  var isForMe     = (r.responsabile_email||'').toLowerCase()===em;
+  var statoLabel  = {in_attesa:'⏳ In attesa',approvata:'✅ Approvata',rifiutata:'❌ Rifiutata'};
+  var dataStr = r.data_dal===r.data_al
+    ? fmtDateIT(r.data_dal)
+    : fmtDateIT(r.data_dal)+' → '+fmtDateIT(r.data_al);
+
+  var h = '<div class="rich-card stato-'+esc(r.stato)+'" id="rcard_'+esc(r.id)+'">';
+  h += '<div class="rich-card-hdr">';
+  h += '<div class="rich-card-info">';
+
+  // Sempre: nome dipendente + chips SAP / plant / tipo / responsabile
+  h += '<div class="rich-card-name">'+esc(r.dipendente_nome||'—')+'</div>';
+  h += '<div class="rich-card-meta">';
+  if(r.dipendente_sap)  h += '<span style="color:var(--muted);font-family:var(--ffm)">SAP '+esc(r.dipendente_sap)+'</span><span style="color:var(--border)">·</span>';
+  if(r.dipendente_plant)h += '<span style="color:var(--blue);font-family:var(--ffc);font-weight:700">'+esc(r.dipendente_plant)+'</span><span style="color:var(--border)">·</span>';
+  h += '<span style="color:var(--teal);font-family:var(--ffc);font-weight:700">'+esc(r.tipo)+'</span>';
+  h += '<span style="color:var(--border)">·</span><span style="color:var(--muted)">→ '+esc(r.responsabile_nome)+'</span>';
+  h += '</div>';
+
+  h += '</div>';
+  h += '<div style="text-align:right;flex-shrink:0">';
+  h += '<span class="rich-stato '+esc(r.stato)+'">'+statoLabel[r.stato]+'</span>';
+  h += '<div class="rich-card-dates" style="margin-top:4px">'+esc(dataStr)+'</div>';
+  h += '<div class="rich-card-gg">'+esc(r.giorni_lavorativi)+' gg lav.</div>';
+  h += '</div>';
+  h += '</div>';
+
+  if(r.note){
+    h += '<div class="rich-card-note">📝 '+esc(r.note)+'</div>';
+  }
+  if(r.nota_resp){
+    h += '<div class="rich-card-note" style="border-left-color:var(--teal);color:var(--teal)">💬 '+esc(r.nota_resp)+'</div>';
+  }
+  h += '<div style="font-size:10px;color:var(--muted);margin-top:6px">Richiesta il '+esc(r.data_richiesta||'—')+'</div>';
+
+  // Azioni: approva/rifiuta solo se sono il responsabile e la richiesta è in_attesa
+  if(r.stato==='in_attesa' && (isForMe || isSup || isAdm)){
+    var rid = esc(r.id);
+    h += '<div class="rich-card-actions">';
+    h += '<button class="rich-btn-approva" onclick="richApprova(\''+rid+'\')">✅ Approva</button>';
+    h += '<button class="rich-btn-rifiuta" onclick="richRifiuta(\''+rid+'\')">❌ Rifiuta</button>';
+    h += '</div>';
+  }
+  // Annulla: solo il dipendente può annullare se in_attesa
+  if(r.stato==='in_attesa' && isMyRequest && !isForMe){
+    h += '<div class="rich-card-actions">';
+    h += '<button class="rich-btn-annulla" onclick="richAnnulla(\''+esc(r.id)+'\')">✕ Annulla richiesta</button>';
+    h += '</div>';
+  }
+  h += '</div>';
+  return h;
+}
+
+function richInitForm(){
+  // Imposta date default: oggi → oggi
+  var today = new Date().toISOString().split('T')[0];
+  var dal = document.getElementById('richDal');
+  var al  = document.getElementById('richAl');
+  if(dal && !dal.value) dal.value = today;
+  if(al  && !al.value)  al.value  = today;
+  richCalcGiorni();
+}
+
+function richSelTipo(code){
+  richFormTipo = code;
+  document.querySelectorAll('.rich-type-btn').forEach(function(b){
+    b.classList.toggle('sel', b.querySelector('.rtb-code').textContent===code);
+  });
+  var tipoInfo = RICH_TIPI.find(function(t){return t.code===code;});
+  var qtyWrap = document.getElementById('richQtyWrap');
+  if(qtyWrap) qtyWrap.style.display = (tipoInfo&&tipoInfo.hasQty) ? '' : 'none';
+}
+
+function richCalcGiorni(){
+  var dal = document.getElementById('richDal');
+  var al  = document.getElementById('richAl');
+  var badge = document.getElementById('richGiorniBadge');
+  if(!dal||!al||!badge) return;
+  var d1 = new Date(dal.value), d2 = new Date(al.value);
+  if(!dal.value||!al.value||isNaN(d1)||isNaN(d2)){badge.textContent='Seleziona le date';return;}
+  if(d2<d1){al.value=dal.value;d2=new Date(dal.value);}
+  var gg = 0;
+  var cur = new Date(d1);
+  while(cur<=d2){
+    var wd=cur.getDay();
+    var m=cur.getMonth()+1, day=cur.getDate(), y=cur.getFullYear();
+    if(wd!==0&&wd!==6&&!isHoliday(day,m,y)) gg++;
+    cur.setDate(cur.getDate()+1);
+  }
+  badge.textContent = gg+' giorn'+(gg===1?'o':'i')+' lavorativ'+(gg===1?'o':'i');
+  badge.style.color = gg===0 ? 'var(--red)' : 'var(--teal)';
+}
+
+// ── Helper mailto ────────────────────────────────────────────────────────────
+function richMailtoRichiesta(req){
+  if(!req.responsabile_email) return;
+  var tipoLabel = {F:'Ferie',HP:'Ore Permesso',104:'Giornata 104',H104:'Ore 104',CP:'Congedo Parentale',HPE:'Ore Permesso Esami',PE:'Permesso Esami'};
+  var label = tipoLabel[req.tipo_code] || req.tipo_code || req.tipo;
+  var dalIT = fmtDateIT(req.data_dal), alIT = fmtDateIT(req.data_al);
+  var periodo = req.data_dal===req.data_al ? dalIT : dalIT+' → '+alIT;
+  var subj = encodeURIComponent('Richiesta '+label+' – '+req.dipendente_nome+' – '+periodo);
+  var body = encodeURIComponent(
+    'Buongiorno '+req.responsabile_nome+',\r\n\r\n'
+    +'ho inviato una richiesta tramite WMS Presenze:\r\n\r\n'
+    +'  Tipo:     '+label+(req.tipo!==req.tipo_code?' ('+req.tipo+')':'')+'\r\n'
+    +'  Periodo:  '+periodo+'\r\n'
+    +'  Giorni:   '+req.giorni_lavorativi+' lavorativi\r\n'
+    +(req.dipendente_sap  ? '  SAP:      '+req.dipendente_sap+'\r\n' : '')
+    +(req.dipendente_plant? '  Plant:    '+req.dipendente_plant+'\r\n': '')
+    +(req.note            ? '  Note:     '+req.note+'\r\n'           : '')
+    +'\r\nPuoi approvare o rifiutare direttamente dal portale WMS Presenze.\r\n\r\n'
+    +'Cordiali saluti,\r\n'+req.dipendente_nome
+  );
+  window.open('mailto:'+encodeURIComponent(req.responsabile_email)+'?subject='+subj+'&body='+body,'_blank');
+}
+
+function richMailtoEsito(req){
+  if(!req.dipendente_email) return;
+  var tipoLabel = {F:'Ferie',HP:'Ore Permesso',104:'Giornata 104',H104:'Ore 104',CP:'Congedo Parentale',HPE:'Ore Permesso Esami',PE:'Permesso Esami'};
+  var label = tipoLabel[req.tipo_code] || req.tipo_code || req.tipo;
+  var dalIT = fmtDateIT(req.data_dal), alIT = fmtDateIT(req.data_al);
+  var periodo = req.data_dal===req.data_al ? dalIT : dalIT+' → '+alIT;
+  var approvata = req.stato==='approvata';
+  var subj = encodeURIComponent((approvata?'✅ Approvata':'❌ Rifiutata')+' – Richiesta '+label+' – '+periodo);
+  var body = encodeURIComponent(
+    'Buongiorno '+req.dipendente_nome+',\r\n\r\n'
+    +'la tua richiesta è stata '+(approvata?'APPROVATA':'RIFIUTATA')+'.\r\n\r\n'
+    +'  Tipo:     '+label+'\r\n'
+    +'  Periodo:  '+periodo+'\r\n'
+    +'  Giorni:   '+req.giorni_lavorativi+' lavorativi\r\n'
+    +(req.nota_resp ? '  Nota:     '+req.nota_resp+'\r\n' : '')
+    +(approvata ? '\r\nLe presenze sono state aggiornate automaticamente sul foglio.\r\n' : '')
+    +'\r\nCordiali saluti,\r\n'+req.responsabile_nome
+  );
+  window.open('mailto:'+encodeURIComponent(req.dipendente_email)+'?subject='+subj+'&body='+body,'_blank');
+}
+
+function richInvia(){
+  var dal = (document.getElementById('richDal')||{}).value;
+  var al  = (document.getElementById('richAl')||{}).value;
+  var note = (document.getElementById('richNote')||{}).value||'';
+  var qty  = parseFloat((document.getElementById('richQty')||{}).value)||1;
+
+  if(!dal||!al){toast('Seleziona le date','warn');return;}
+
+  var d1=new Date(dal),d2=new Date(al);
+  if(d2<d1){toast('Data fine prima di data inizio','warn');return;}
+
+  // Calcola giorni lavorativi
+  var gg=0;var cur=new Date(d1);
+  while(cur<=d2){var wd=cur.getDay();var m=cur.getMonth()+1,day=cur.getDate(),y=cur.getFullYear();if(wd!==0&&wd!==6&&!isHoliday(day,m,y))gg++;cur.setDate(cur.getDate()+1);}
+  if(gg===0){toast('Nessun giorno lavorativo nel range selezionato','warn');return;}
+
+  // Determina profilo mittente
+  var profile = currentDipendente;
+  var respNome='', respEmail='';
+  if(profile){
+    respNome  = profile.responsabile_nome||'';
+    respEmail = profile.responsabile_email||'';
+  } else if(currentRespProfile){
+    profile = {nome:currentRespProfile.nome, sap:'', plant:'', email_google:uEmail};
+    respNome  = currentRespProfile.superiore_nome||'';
+    respEmail = currentRespProfile.superiore_email||'';
+  }
+  if(!respNome){toast('Nessun responsabile configurato per il tuo profilo','warn');return;}
+
+  var tipoInfo = RICH_TIPI.find(function(t){return t.code===richFormTipo;});
+  var sigla = (tipoInfo&&tipoInfo.hasQty&&qty!==1) ? qty+richFormTipo : richFormTipo;
+
+  var req = {
+    id: 'R'+Date.now(),
+    tipo: sigla,
+    tipo_code: richFormTipo,
+    data_dal: dal,
+    data_al:  al,
+    giorni_lavorativi: gg,
+    note: note.trim(),
+    stato: 'in_attesa',
+    data_richiesta: new Date().toLocaleDateString('it-IT'),
+    dipendente_nome:  profile.nome,
+    dipendente_email: uEmail,
+    dipendente_sap:   profile.sap||'',
+    dipendente_plant: profile.plant||'',
+    responsabile_nome:  respNome,
+    responsabile_email: respEmail,
+    nota_resp: ''
+  };
+
+  if(!richData) richData={richieste:[]};
+  richData.richieste.push(req);
+
+  var btn = document.getElementById('richSendBtn');
+  if(btn) btn.disabled=true;
+  toast('⏳ Salvataggio richiesta…','warn');
+  saveRichieste().then(function(){
+    richUpdateBadge();
+    richRender();
+    // Proponi apertura Outlook
+    if(respEmail){
+      showConf(
+        '✉ Notifica via email',
+        'Richiesta salvata!\n\nVuoi aprire Outlook per inviare una notifica a '+respNome+' ('+respEmail+')?',
+        function(){ richMailtoRichiesta(req); }
+      );
+      // Cambia testo pulsante conferma
+      setTimeout(function(){
+        var okBtn=document.getElementById('confOk');
+        if(okBtn){okBtn.textContent='✉ Apri Outlook';okBtn.style.background='var(--teal)';}
+        // Aggiungi tasto "No grazie" col testo corretto
+        var cancelBtn=document.querySelector('#moConf .mbtn.cancel');
+        if(cancelBtn) cancelBtn.textContent='No grazie';
+      },30);
+    } else {
+      toast('✅ Richiesta inviata a '+respNome);
+    }
+  }).catch(function(e){
+    if(btn) btn.disabled=false;
+    toast('✗ Errore: '+e.message,'err');
+  });
+}
+
+function richSetFilter(f){
+  richFilterTab=f;
+  richRender();
+}
+
+// ── Approva richiesta ────────────────────────────────────────────────────────
+function richApprova(id){
+  var req = richData.richieste.find(function(r){return r.id===id;});
+  if(!req) return;
+  showConf('✅ Approva richiesta',
+    'Approvare la richiesta di '+req.dipendente_nome+' ('+fmtDateIT(req.data_dal)+' → '+fmtDateIT(req.data_al)+')?\n\nVerrà scritto automaticamente sul foglio presenze.',
+    function(){
+      req.stato='approvata';
+      req.data_risposta=new Date().toLocaleDateString('it-IT');
+      toast('⏳ Approvazione in corso…','warn');
+      richScriviSuDrive(req).then(function(){
+        return saveRichieste();
+      }).then(function(){
+        richUpdateBadge();
+        richRender();
+        // Proponi notifica al dipendente
+        if(req.dipendente_email){
+          showConf(
+            '✅ Approvata — Notifica dipendente',
+            'Presenze aggiornate!\n\nVuoi aprire Outlook per notificare '+req.dipendente_nome+'?',
+            function(){ richMailtoEsito(req); }
+          );
+          setTimeout(function(){
+            var okBtn=document.getElementById('confOk');
+            if(okBtn){okBtn.textContent='✉ Notifica via email';okBtn.style.background='var(--teal)';}
+            var cancelBtn=document.querySelector('#moConf .mbtn.cancel');
+            if(cancelBtn) cancelBtn.textContent='No grazie';
+          },30);
+        } else {
+          toast('✅ Approvata e scritta sul foglio presenze');
+        }
+      }).catch(function(e){
+        toast('✗ Errore scrittura: '+e.message,'err');
+        saveRichieste().then(function(){richUpdateBadge();richRender();});
+      });
+    }
+  );
+}
+
+// ── Rifiuta richiesta ────────────────────────────────────────────────────────
+function richRifiuta(id){
+  var req = richData.richieste.find(function(r){return r.id===id;});
+  if(!req) return;
+  showConf('❌ Rifiuta richiesta',
+    'Rifiutare la richiesta di '+req.dipendente_nome+' ('+fmtDateIT(req.data_dal)+' → '+fmtDateIT(req.data_al)+')?',
+    function(){
+      req.stato='rifiutata';
+      req.data_risposta=new Date().toLocaleDateString('it-IT');
+      saveRichieste().then(function(){
+        richUpdateBadge();
+        richRender();
+        // Proponi notifica al dipendente
+        if(req.dipendente_email){
+          showConf(
+            '❌ Rifiutata — Notifica dipendente',
+            'Vuoi aprire Outlook per notificare '+req.dipendente_nome+' del rifiuto?',
+            function(){ richMailtoEsito(req); }
+          );
+          setTimeout(function(){
+            var okBtn=document.getElementById('confOk');
+            if(okBtn){okBtn.textContent='✉ Notifica via email';okBtn.style.background='var(--red)';}
+            var cancelBtn=document.querySelector('#moConf .mbtn.cancel');
+            if(cancelBtn) cancelBtn.textContent='No grazie';
+          },30);
+        } else {
+          toast('Richiesta rifiutata');
+        }
+      });
+    }
+  );
+}
+
+// ── Annulla richiesta (dal dipendente) ───────────────────────────────────────
+function richAnnulla(id){
+  var req = richData.richieste.find(function(r){return r.id===id;});
+  if(!req) return;
+  showConf('Annulla richiesta','Annullare la richiesta dal '+fmtDateIT(req.data_dal)+' al '+fmtDateIT(req.data_al)+'?',function(){
+    richData.richieste = richData.richieste.filter(function(r){return r.id!==id;});
+    saveRichieste().then(function(){toast('Richiesta annullata');richRender();});
+  });
+}
+
+// ── Scrittura automatica su Drive all'approvazione ───────────────────────────
+// Riusa la logica dell'inserimento massivo: gestisce multi-mese
+function richScriviSuDrive(req){
+  var sap   = req.dipendente_sap||'';
+  var nome  = req.dipendente_nome||'';
+  var plant = req.dipendente_plant||'';
+  var sigla = req.tipo||req.tipo_code||'F';
+  // Trova il responsabile (nome) dal nome del file
+  var respNome = req.responsabile_nome||'';
+
+  var d1 = new Date(req.data_dal);
+  var d2 = new Date(req.data_al);
+
+  // Raggruppa per mese
+  var mesi = {};
+  var cur = new Date(d1);
+  while(cur<=d2){
+    var wd=cur.getDay(),m=cur.getMonth()+1,day=cur.getDate(),y=cur.getFullYear();
+    if(wd!==0&&wd!==6&&!isHoliday(day,m,y)){
+      var key=y+'-'+('0'+m).slice(-2);
+      if(!mesi[key]) mesi[key]={year:y,month:m,giorni:[]};
+      mesi[key].giorni.push(day);
+    }
+    cur.setDate(cur.getDate()+1);
+  }
+
+  var promises = Object.keys(mesi).map(function(key){
+    var info = mesi[key];
+    var mm = ('0'+info.month).slice(-2);
+    // Cerca il file: Responsabile_Plant_AnnoMese
+    var fnames = allFiles.filter(function(f){
+      var p=parseFileName(f.name);
+      return p&&p.year===info.year&&p.month===info.month&&
+        (!respNome||p.resp.toLowerCase()===respNome.toLowerCase())&&
+        (!plant||p.plant.toLowerCase()===plant.toLowerCase());
+    });
+    if(!fnames.length){
+      console.warn('[WMS RICH] File non trovato per '+key+' resp='+respNome+' plant='+plant);
+      return Promise.resolve();
+    }
+    var f=fnames[0];
+    var sname=MESI[info.month-1]+'_ATS';
+    return ((/\.xlsx$/i.test(f.name))
+      ? downloadFile(f.id).then(function(b){return parseSheetBlob(b,info.year,info.month,f.id,sname,'ats');})
+      : sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,info.year,info.month,f.id,sname,'ats');}))
+    .then(function(d){
+      var emp = d.employees.find(function(e){
+        return (sap&&String(e.id||e.sap||'').trim()===String(sap).trim()) ||
+               ((e.nome||'').toLowerCase()===(nome||'').toLowerCase());
+      });
+      if(!emp){console.warn('[WMS RICH] Dipendente '+nome+' non trovato in '+f.name);return;}
+      var DST=d.dayStart||3;
+      var updates=[];
+      info.giorni.forEach(function(giorno){
+        var di=d.dates.findIndex(function(dt){return dt.day===giorno;});
+        if(di<0||!emp.sheetRows||emp.sheetRows.n===undefined)return;
+        var col=colToLetter(DST+di);
+        updates.push({range:sname+'!'+col+(emp.sheetRows.n+1),values:[[sigla]]});
+      });
+      if(!updates.length) return;
+      return sheetsBatchUpdate(f.id, updates);
+    });
+  });
+
+  return Promise.all(promises).then(function(){
+    // Aggiorna ferieResiduo se è F o HP
+    var code = req.tipo_code||'F';
+    if(code==='F'||code==='HP'){
+      var anno=d1.getFullYear();
+      var doUpdate=function(){
+        if(!ferieData||ferieYear!==anno){ferieYear=anno;}
+        var dipR=getFerieDip(sap,nome,respNome,plant);
+        if(!dipR)return;
+        var cur2=new Date(d1);
+        while(cur2<=d2){
+          var wd2=cur2.getDay(),m2=cur2.getMonth()+1,day2=cur2.getDate(),y2=cur2.getFullYear();
+          if(wd2!==0&&wd2!==6&&!isHoliday(day2,m2,y2)){
+            var dateStr=y2+'-'+('0'+m2).slice(-2)+'-'+('0'+day2).slice(-2);
+            if(code==='F') dipR.ferie_godute.push({data:dateStr});
+            else if(code==='HP'){var qty=parseFloat(String(req.tipo).match(/^[\d.]*/)[0])||1;dipR.permessi_goduti.push({data:dateStr,ore:qty});}
+          }
+          cur2.setDate(cur2.getDate()+1);
+        }
+        saveFerieResiduo().catch(function(){});
+      };
+      if(!ferieData){
+        loadFerieResiduo(anno).then(doUpdate).catch(doUpdate);
+      } else {
+        doUpdate();
+      }
+    }
+    loadAllFiles();
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════════
+//  PANNELLO ANAGRAFICA DIPENDENTI (in sezione Permessi, solo superuser)
+// ══════════════════════════════════════════════════════════════════════════════
+function richRenderAnagPanel(){
+  if(!isSuperUser) return '';
+  if(!permConfig) return '';
+
+  var dips  = (permConfig.dipendenti ||[]).filter(function(d){return !d._esempio;});
+  var resps = (permConfig.responsabili||[]).filter(function(r){return !r._esempio;});
+
+  // Lista nomi responsabili per il select
+  var respNomi = {};
+  (allFiles||[]).forEach(function(f){var p=parseFileName(f.name);if(p)respNomi[p.resp]=true;});
+  resps.forEach(function(r){respNomi[r.nome]=true;});
+  var respOpts = Object.keys(respNomi).sort().map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
+
+  var h = '<div class="anag-panel">';
+  h += '<div class="anag-hdr"><div class="anag-title">👥 Anagrafica Dipendenti</div>';
+  h += '<div style="display:flex;gap:8px">';
+  h += '<button class="ba bghost te" onclick="richAddDip()" style="font-size:12px;padding:5px 12px">＋ Dipendente</button>';
+  h += '<button class="ba bteal" onclick="richSaveAnag()" style="font-size:12px;padding:5px 12px">💾 Salva</button>';
+  h += '</div></div>';
+
+  h += '<div style="overflow-x:auto">';
+  h += '<table class="anag-table">';
+  h += '<thead><tr><th>Nome</th><th>Email Google</th><th>SAP</th><th>Plant</th><th>Responsabile</th><th>Ferie tot.</th><th>HP ore</th><th>Pausa std</th><th></th></tr></thead>';
+  h += '<tbody id="anagBody">';
+  dips.forEach(function(d,i){
+    h += richAnagRow(d,i,respOpts);
+  });
+  h += '</tbody></table></div>';
+  h += '</div>';
+
+  // Pannello responsabili
+  h += '<div class="anag-panel">';
+  h += '<div class="anag-hdr"><div class="anag-title">👔 Responsabili</div>';
+  h += '<div style="display:flex;gap:8px">';
+  h += '<button class="ba bghost te" onclick="richAddResp()" style="font-size:12px;padding:5px 12px">＋ Responsabile</button>';
+  h += '<button class="ba bteal" onclick="richSaveAnag()" style="font-size:12px;padding:5px 12px">💾 Salva</button>';
+  h += '</div></div>';
+  h += '<div style="overflow-x:auto">';
+  h += '<table class="anag-table">';
+  h += '<thead><tr><th>Nome</th><th>Email Google</th><th>Superiore</th><th>Email Superiore</th><th></th></tr></thead>';
+  h += '<tbody id="anagRespBody">';
+  resps.forEach(function(r,i){
+    h += richAnagRespRow(r,i,respOpts);
+  });
+  h += '</tbody></table></div>';
+  h += '</div>';
+
+  return h;
+}
+
+function richAnagRow(d,i,respOpts){
+  var c = d.contratto||{};
+  var pausaOpts=['0','0.5','1','1.5','2'].map(function(v){
+    var lbl=v==='0'?'No':v==='0.5'?'30min':v==='1'?'1h':v==='1.5'?'1h30':'2h';
+    return '<option value="'+v+'"'+(String(d.pausa_default||1)===v?' selected':'')+'>'+lbl+'</option>';
+  }).join('');
+  return '<tr id="anagDip_'+i+'">'
+    +'<td><input class="anag-input" value="'+esc(d.nome||'')+'" onchange="richAnagChange(\'dip\','+i+',\'nome\',this.value)"></td>'
+    +'<td><input class="anag-input" value="'+esc(d.email_google||'')+'" onchange="richAnagChange(\'dip\','+i+',\'email_google\',this.value)"></td>'
+    +'<td><input class="anag-input" value="'+esc(d.sap||'')+'" style="width:70px" onchange="richAnagChange(\'dip\','+i+',\'sap\',this.value)"></td>'
+    +'<td><input class="anag-input" value="'+esc(d.plant||'')+'" style="width:60px" onchange="richAnagChange(\'dip\','+i+',\'plant\',this.value)"></td>'
+    +'<td><select class="anag-select" onchange="richAnagChange(\'dip\','+i+',\'responsabile_nome\',this.value)"><option value="">—</option>'+respOpts+'</select></td>'
+    +'<td><input class="anag-input" type="number" value="'+(c.ferie_giorni||22)+'" style="width:55px" onchange="richAnagChange(\'dip\','+i+',\'contratto_ferie\',this.value)"></td>'
+    +'<td><input class="anag-input" type="number" value="'+(c.permessi_ore||32)+'" style="width:55px" onchange="richAnagChange(\'dip\','+i+',\'contratto_hp\',this.value)"></td>'
+    +'<td><select class="anag-select" style="width:70px" onchange="richAnagChange(\'dip\','+i+',\'pausa_default\',parseFloat(this.value))">'+pausaOpts+'</select></td>'
+    +'<td><button class="anag-del-btn" onclick="richDelDip('+i+')">🗑</button></td>'
+    +'</tr>';
+}
+
+function richAnagRespRow(r,i,respOpts){
+  return '<tr>'
+    +'<td><input class="anag-input" value="'+esc(r.nome||'')+'" onchange="richAnagChange(\'resp\','+i+',\'nome\',this.value)"></td>'
+    +'<td><input class="anag-input" value="'+esc(r.email_google||'')+'" onchange="richAnagChange(\'resp\','+i+',\'email_google\',this.value)"></td>'
+    +'<td><select class="anag-select" onchange="richAnagChange(\'resp\','+i+',\'superiore_nome\',this.value)"><option value="">—</option>'+respOpts+'</select></td>'
+    +'<td><input class="anag-input" value="'+esc(r.superiore_email||'')+'" onchange="richAnagChange(\'resp\','+i+',\'superiore_email\',this.value)"></td>'
+    +'<td><button class="anag-del-btn" onclick="richDelResp('+i+')">🗑</button></td>'
+    +'</tr>';
+}
+
+function richAnagChange(tipo,i,field,val){
+  if(!permConfig) return;
+  var arr = tipo==='dip' ? (permConfig.dipendenti||[]).filter(function(d){return !d._esempio;})
+                         : (permConfig.responsabili||[]).filter(function(r){return !r._esempio;});
+  if(!arr[i]) return;
+  if(field==='contratto_ferie'){if(!arr[i].contratto)arr[i].contratto={};arr[i].contratto.ferie_giorni=parseInt(val)||22;}
+  else if(field==='contratto_hp'){if(!arr[i].contratto)arr[i].contratto={};arr[i].contratto.permessi_ore=parseInt(val)||32;}
+  else if(field==='pausa_default'){arr[i].pausa_default=parseFloat(val);}
+  else arr[i][field]=val;
+}
+
+function richAddDip(){
+  if(!permConfig.dipendenti) permConfig.dipendenti=[];
+  permConfig.dipendenti = permConfig.dipendenti.filter(function(d){return !d._esempio;});
+  permConfig.dipendenti.push({email_google:'',nome:'',sap:'',plant:'',responsabile_nome:'',responsabile_email:'',contratto:{ferie_giorni:22,permessi_ore:32}});
+  // Rirender il pannello permessi
+  renderPermPanel();
+  setTimeout(function(){switchSec('perm');},50);
+}
+function richAddResp(){
+  if(!permConfig.responsabili) permConfig.responsabili=[];
+  permConfig.responsabili = permConfig.responsabili.filter(function(r){return !r._esempio;});
+  permConfig.responsabili.push({email_google:'',nome:'',superiore_nome:'',superiore_email:''});
+  renderPermPanel();
+  setTimeout(function(){switchSec('perm');},50);
+}
+function richDelDip(i){
+  var dips=(permConfig.dipendenti||[]).filter(function(d){return !d._esempio;});
+  showConf('Rimuovi dipendente','Rimuovere "'+esc(dips[i]&&dips[i].nome||'?')+'""?',function(){
+    var real=permConfig.dipendenti.filter(function(d){return !d._esempio;});
+    real.splice(i,1);
+    permConfig.dipendenti=permConfig.dipendenti.filter(function(d){return d._esempio;}).concat(real);
+    renderPermPanel();
+  });
+}
+function richDelResp(i){
+  var resps=(permConfig.responsabili||[]).filter(function(r){return !r._esempio;});
+  showConf('Rimuovi responsabile','Rimuovere "'+esc(resps[i]&&resps[i].nome||'?')+'""?',function(){
+    var real=permConfig.responsabili.filter(function(r){return !r._esempio;});
+    real.splice(i,1);
+    permConfig.responsabili=permConfig.responsabili.filter(function(r){return r._esempio;}).concat(real);
+    renderPermPanel();
+  });
+}
+function richSaveAnag(){
+  toast('⏳ Salvo anagrafica…','warn');
+  savePermConfigWithDips().then(function(){
+    toast('✅ Anagrafica salvata su Drive');
+    richIdentifyUser();
+  }).catch(function(e){toast('✗ '+e.message,'err');});
+}
 </script>
 </body>
 </html>
