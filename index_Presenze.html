@@ -7306,9 +7306,12 @@ function richInit(){
   if(btn) btn.style.display='';
   if(snRich) snRich.style.display='';
 
-  loadRichieste().then(function(){
-    richUpdateBadge();
-  });
+  // Carica richieste in background SOLO dopo che i file presenze sono pronti
+  // così non rallenta il caricamento principale
+  richData = null;
+  setTimeout(function(){
+    loadRichieste().then(function(){ richUpdateBadge(); });
+  }, 3000);
 }
 
 // ══════════════════════════════════════════════════════════════════════════════
