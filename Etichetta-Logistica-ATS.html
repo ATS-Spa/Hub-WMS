@@ -1,0 +1,581 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Etichetta ATS - Stampa 10x5 / 10x10 cm</title>
+<style>
+    * { margin:0; padding:0; box-sizing:border-box; }
+    body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, sans-serif; background:#f5f5f7; padding:20px; color:#1d1d1f; }
+    .container { max-width:420px; margin:0 auto; }
+    .card { background:white; border-radius:18px; box-shadow:0 4px 20px rgba(0,0,0,0.1); overflow:hidden; margin-bottom:30px; }
+    .header { background:#007aff; color:white; padding:18px; text-align:center; font-size:20px; font-weight:600; }
+    .form { padding:20px; }
+    .radio-group { display:flex; justify-content:center; gap:20px; margin-bottom:25px; font-size:15px; flex-wrap:wrap; }
+    .radio-group label { display:flex; align-items:center; gap:8px; cursor:pointer; }
+    .field { margin-bottom:18px; position:relative; }
+    .field label { display:block; font-size:15px; font-weight:600; margin-bottom:6px; color:#333; }
+    .field input, .field select { width:100%; padding:14px 16px; border: 0.5px solid #d2d2d7; border-radius:12px; font-size:17px; background:#fff; }
+    .field input:focus, .field select:focus { outline:none; border-color:#007aff; box-shadow:0 0 0 3px rgba(0,122,255,0.2); }
+    .btn { width:100%; padding:16px; background:#007aff; color:white; border:none; border-radius:12px; font-size:18px; font-weight:600; cursor:pointer; margin-top:10px; display:flex; align-items:center; justify-content:center; gap:10px; }
+    .btn:hover { background:#0066cc; }
+    .btn.reset { background:#ff3b30; }
+    .btn.reset:hover { background:#cc2e26; }
+    .btn.admin { background:#34c759; margin-top:20px; }
+    .btn.admin:hover { background:#32b94a; }
+    .btn:disabled { background:#aaa; cursor:not-allowed; }
+    #anteprima { display:flex; flex-wrap:wrap; gap:24px; justify-content:center; padding:30px 15px; background:#e5e5e5; border-radius:12px; margin-top:20px; }
+    .etichetta { width:100mm; min-height:50mm; border: 0.5px solid #ddd; box-shadow:0 6px 20px rgba(0,0,0,0.25); background:white; padding:2mm; display:flex; flex-direction:column; }
+    .etichetta.grande { min-height:100mm; }
+    .etichetta.extra-grande { min-height:150mm; }
+    
+    .header-logo { border-bottom:0.5px solid black; padding-bottom:6px; margin-bottom:6px; display:flex; justify-content:space-between; align-items:center; height:50px; padding:0 10px; }
+    .logo-principale { height:42px; width:auto; object-fit:contain; }
+    .icon-commessa { height:38px; width:auto; object-fit:contain; }
+    .campo-data { border: 0.5px solid black; padding:4px 8px; text-align:center; font-size:25px; font-weight:bold; margin-bottom:4px; }
+    .riga-odp { display:flex; align-items:center; justify-content:space-between; padding:0 8px; }
+    .odp { font-size:28px; font-weight:bold; text-align:center; flex:1; }
+    .dati-10x5 { font-size:13.5px; font-weight:bold; line-height:1.4; margin-left:8px; margin-top:2px; }
+    .progressivo { text-align:center; font-size:24px; font-weight:bold; margin:8px 0; }
+    .campo { border: 0.5px solid black; padding:6px 8px; margin-bottom:8px; flex-shrink:0; }
+    .label { font-size:11px; font-weight:bold; }
+    .valore { font-size:25px; font-weight:bold; margin-top:4px; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
+    
+    /* Stili specifici per Conf. 10×5 */
+    .etichetta.conf-piccola .header-logo { height:32px; padding-bottom:3px; margin-bottom:3px; }
+    .etichetta.conf-piccola .logo-principale { height:28px; }
+    .etichetta.conf-piccola .icon-commessa { height:26px; }
+    .etichetta.conf-piccola .campo-data { font-size:11px; padding:2px 4px; margin-bottom:2px; }
+    .etichetta.conf-piccola .odp { font-size:16px; }
+    .etichetta.conf-piccola .progressivo { font-size:12px; margin:3px 0; }
+    .etichetta.conf-piccola .campo { padding:3px 5px; margin-bottom:3px; }
+    .etichetta.conf-piccola .label { font-size:6px; }
+    .etichetta.conf-piccola .valore { font-size:12px; margin-top:1px; }
+    
+/* Stili specifici per Conf. 10×15 */
+.etichetta.conf-extra .header-logo { height:50px; padding-bottom:6px; margin-bottom:6px; }
+.etichetta.conf-extra .logo-principale { height:42px; }
+.etichetta.conf-extra .icon-commessa { height:38px; }
+.etichetta.conf-extra .campo-data { font-size:32px; padding:6px 10px; margin-bottom:8px; }
+.etichetta.conf-extra .odp { font-size:36px; }
+.etichetta.conf-extra .progressivo { font-size:30px; margin:12px 0; }
+.etichetta.conf-extra .campo { padding:10px 12px; margin-bottom:12px; }
+.etichetta.conf-extra .label { font-size:14px; }
+.etichetta.conf-extra .valore { font-size:28px; margin-top:6px; white-space: normal; word-wrap: break-word; line-height: 1.2; }
+    
+    .riga-id { display:flex; justify-content:space-between; width:100%; }
+    .colli-inline { font-weight:bold; margin-left:10px; white-space:nowrap; }
+    .label-odp { font-size:14px; font-weight:bold; }
+    #listaDestinazioni {
+        position:absolute;
+        background:white;
+        border: 0.5px solid #aaa;
+        width:100%;
+        max-height:200px;
+        overflow-y:auto;
+        z-index:10;
+        display:none;
+        box-shadow:0 8px 20px rgba(0,0,0,0.15);
+        border-radius:8px;
+        margin-top:4px;
+    }
+    #listaDestinazioni div { padding:12px; cursor:pointer; border-bottom:1px solid #eee; }
+    #listaDestinazioni div:hover { background:#f0f0f0; }
+    #modalAdmin, #modalPassword { display:none; position:fixed; inset:0; background:rgba(0,0,0,0.6); z-index:9999; align-items:center; justify-content:center; }
+    #modalAdmin.show, #modalPassword.show { display:flex; }
+    .modal-content { background:white; border-radius:18px; width:90%; max-width:900px; max-height:90vh; overflow:hidden; box-shadow:0 20px 60px rgba(0,0,0,0.4); }
+    .modal-header { background:#007aff; color:white; padding:20px 60px 20px 20px; font-size:20px; font-weight:600; position:relative; }
+    .close-modal { position:absolute; top:10px; right:15px; font-size:40px; cursor:pointer; width:50px; height:50px; display:flex; align-items:center; justify-content:center; border-radius:50%; }
+    .close-modal:hover { background:rgba(255,255,255,0.2); }
+    .modal-body { padding:25px; overflow-y:auto; max-height:calc(90vh - 100px); }
+    .form-grid { display:grid; grid-template-columns:1fr 1fr 1fr auto; gap:15px; margin-bottom:25px; align-items:end; }
+    .totale { font-weight:600; color:#007aff; margin:20px 0 10px; }
+    table { width:100%; border-collapse:collapse; }
+    th { background:#f2f2f7; padding:12px; text-align:left; position:sticky; top:0; }
+    td { padding:12px; border-bottom:1px solid #eee; }
+    .btn-small { padding:6px 12px; border:none; border-radius:8px; color:white; cursor:pointer; font-size:13px; }
+    .btn-delete { background:#ff3b30; }
+@media print {
+    .etichetta.grande {
+        padding-top: 8mm !important;
+    }
+/* Compattazione campi DESTINO / INDIRIZZO / ODP – Conf. 10×10 */
+.etichetta.grande .campo {
+    padding: 4px 6px !important;      /* ↓ altezza interna */
+    margin-bottom: 4px !important;    /* ↓ spazio tra campi */
+}
+
+.etichetta.grande .label {
+    font-size: 10px !important;       /* ↓ intestazione */
+}
+
+.etichetta.grande .valore {
+    font-size: 20px !important;       /* ↓ testo principale */
+    margin-top: 2px !important;       /* ↓ spazio label→valore */
+    line-height: 1.05;                /* ↓ compatta verticalmente */
+}
+}
+   /* Allinea il contenuto in alto per etichette 10x5 */
+.etichetta.conf-piccola,
+.etichetta.odp-10x5 {
+    justify-content: flex-start !important;
+    align-items: stretch;
+    padding-top: 1mm !important;
+}
+   /* Stili specifici per Conf. 10×10 */
+.etichetta.grande .campo {
+    padding: 4px 6px;
+    margin-bottom: 4px;
+}
+
+.etichetta.grande .label {
+    font-size: 11px;
+}
+
+.etichetta.grande .valore {
+    font-size: 22px;
+    margin-top: 3px;
+    white-space: normal;
+    line-height: 1.1;
+}
+   .etichetta.grande .progressivo {
+    font-size: 22px;
+    margin: 6px 0;
+}
+</style>
+</head>
+<body>
+<div class="container">
+    <div class="card">
+        <div class="header">Etichetta ATS - Magazzino</div>
+        <div class="form">
+            <div class="radio-group">
+                <label><input type="radio" name="size" value="conf-10x10" checked onchange="cambiaFormato()"> Conf. 10×10</label>
+                <label><input type="radio" name="size" value="odp-10x5" onchange="cambiaFormato()"> ODP 10×5</label>
+                <label><input type="radio" name="size" value="conf-10x5" onchange="cambiaFormato()"> Conf. 10×5</label>
+                <label><input type="radio" name="size" value="conf-10x15" onchange="cambiaFormato()"> Conf. 10×15</label>
+            </div>
+            <div class="field"><label>Data:</label><input type="date" id="data" onchange="genera()"></div>
+            <div class="field" id="commessaField">
+                <label>Commessa:</label>
+                <select id="commessa" onchange="caricaDestinazioni(); genera();">
+                    <option value="" selected disabled>Inserire Commessa</option>
+                    <option value="VODAFONE-NTD">VODAFONE SpA - NTD</option>
+                    <option value="VODAFONE-FLM">VODAFONE SpA - FLM</option>
+                    <option value="INWIT">INWIT SpA</option>
+                    <option value="ZAS">ZAS TRADING SRL</option>
+                    <option value="GREENCHEM">GREENCHEM</option>
+                    <option value="JOIGUM">JOIGUM</option>
+                    <option value="AG-LOGISTICA">AG LOGISTICA</option>
+                </select>
+            </div>
+            <div class="field" id="odpField" style="display:none;">
+                <label>ODP:</label><input type="text" id="odp" placeholder="es. 123456789" oninput="genera()">
+            </div>
+            <div class="field" id="destinoField">
+                <label>Destino:</label>
+                <input type="text" id="destino" placeholder="Caricamento..." autocomplete="off" oninput="filtraDestinazioni()" onclick="this.select()">
+                <div id="listaDestinazioni"></div>
+            </div>
+            <div class="field" id="locationField" style="display:none;">
+                <label>Location:</label><input type="text" id="location" placeholder="es. ITWXXXXXXX" oninput="genera()">
+            </div>
+            <div class="field">
+                <label id="labelIndirizzo">Indirizzo:</label>
+                <input type="text" id="indirizzo" placeholder="si compila automaticamente" oninput="genera()">
+            </div>
+            <div class="field" id="odpConfField" style="display:none;">
+                <label>ODP:</label>
+                <input type="text" id="odpConf" placeholder="es. 123456789" oninput="genera()">
+            </div>
+            <div class="field">
+                <label>Colli per pallet (es. 5,3,7):</label>
+                <input type="text" id="palletColli" placeholder="5,3,7" oninput="genera()">
+            </div>
+            <button class="btn" onclick="window.print()">Stampa Etichette</button>
+            <button class="btn reset" onclick="resetCampi()">Reset Campi</button>
+            <button class="btn admin" onclick="chiediPassword()">Gestisci Destinazioni</button>
+        </div>
+    </div>
+    <div id="anteprima"></div>
+</div>
+
+<div id="modalPassword">
+    <div class="modal-content" style="width:320px;">
+        <div class="modal-header">Accesso Admin</div>
+        <div class="modal-body" style="text-align:center; padding:40px 20px;">
+            <input type="password" id="inputPassword" placeholder="Password" style="width:100%; padding:14px; font-size:18px; text-align:center; border-radius:12px; border: 0.5px solid #aaa; margin-bottom:20px;">
+            <button class="btn" onclick="verificaPassword()">Accedi</button>
+            <button class="btn reset" style="margin-top:10px;" onclick="document.getElementById('modalPassword').classList.remove('show')">Annulla</button>
+        </div>
+    </div>
+</div>
+
+<div id="modalAdmin">
+    <div class="modal-content">
+        <div class="modal-header">
+            Gestione Destinazioni
+            <span class="close-modal" onclick="chiudiModal()">×</span>
+        </div>
+        <div class="modal-body">
+            <div class="form-grid">
+                <div class="field"><label>Commessa</label>
+                    <select id="adminCommessa" onchange="aggiornaTabellaAdmin()">
+                        <option value="VODAFONE-NTD">VODAFONE-NTD</option>
+                        <option value="VODAFONE-FLM">VODAFONE-FLM</option>
+                        <option value="INWIT">INWIT</option>
+                        <option value="ZAS">ZAS</option>
+                        <option value="GREENCHEM">GREENCHEM</option>
+                        <option value="JOIGUM">JOIGUM</option>
+                        <option value="AG-LOGISTICA">AG LOGISTICA</option>
+                    </select>
+                </div>
+                <div class="field"><label>Destinazione</label><input id="adminDestino" placeholder="es. TEST - Milano"></div>
+                <div class="field"><label>Indirizzo</label><input id="adminIndirizzo" placeholder="Via, CAP, Città"></div>
+                <button class="btn" id="btnAggiungiAdmin">Aggiungi</button>
+            </div>
+            <p class="totale">Destinazioni per <strong id="nomeCommessa">nessuna</strong>: <span id="totaleDest">0</span></p>
+            <table>
+                <thead><tr><th>Destinazione</th><th>Indirizzo</th><th></th></tr></thead>
+                <tbody id="tabellaDest"></tbody>
+            </table>
+        </div>
+    </div>
+</div>
+
+<script>
+const API_URL = "https://script.google.com/macros/s/AKfycbzP-L7wJgg6njb6FKUGGYaceMHYm0vQ0nQAIte5W7hWiSorKykQYHjYfO140bC0TyhH/exec";
+const GID = {
+    "ZAS": 0,
+    "VODAFONE-NTD": 422824578,
+    "VODAFONE-FLM": 655395330,
+    "INWIT": 1836812344,
+    "GREENCHEM": 783261315,
+    "JOIGUM": 114825062,
+    "AG-LOGISTICA": 414795981
+};
+
+const iconeCommessa = {
+    "VODAFONE-NTD": "https://raw.githubusercontent.com/Daniele1995-design/WebAppSap/3ce9084239885145e00c0fffb5551103814ffdcf/Fastweb_%2B_Vodafone_logo.png",
+    "VODAFONE-FLM": "https://raw.githubusercontent.com/Daniele1995-design/WebAppSap/3ce9084239885145e00c0fffb5551103814ffdcf/Fastweb_%2B_Vodafone_logo.png",
+    "INWIT": "https://raw.githubusercontent.com/Daniele1995-design/WebAppSap/a6818037dcd5d038508a396f155ce4c9eb23f5bb/INWIT_logo_(2020-present).png",
+    "ZAS": "https://raw.githubusercontent.com/Daniele1995-design/WebAppSap/refs/heads/main/logo-zas.jfif",
+    "GREENCHEM": "https://raw.githubusercontent.com/Daniele1995-design/WebAppSap/main/greenchem.png",
+    "JOIGUM": "https://raw.githubusercontent.com/Daniele1995-design/WebAppSap/main/joigum.png",
+    "AG-LOGISTICA": "https://raw.githubusercontent.com/Daniele1995-design/WebAppSap/main/ag-logistica.png"
+};
+
+let destinazioni = {};
+
+function chiediPassword() {
+    document.getElementById("modalPassword").classList.add("show");
+    setTimeout(() => document.getElementById("inputPassword").focus(), 100);
+}
+function verificaPassword() {
+    if (document.getElementById("inputPassword").value === "Ats2025") {
+        document.getElementById("modalPassword").classList.remove("show");
+        apriModal();
+    } else {
+        alert("Password errata!");
+    }
+}
+document.getElementById("inputPassword").addEventListener("keyup", e => { if(e.key==="Enter") verificaPassword(); });
+
+async function caricaTutto() {
+    for (let c in GID) {
+        const res = await fetch(API_URL, {method:"POST", body:JSON.stringify({mode:"list", gid:GID[c]})})
+                         .then(r => r.json()).catch(() => ({data:[]}));
+        destinazioni[c] = res.data || [];
+    }
+    document.getElementById("data").valueAsDate = new Date();
+    genera();
+}
+caricaTutto();
+
+function caricaDestinazioni() {
+    const commessa = document.getElementById("commessa").value;
+    const arr = destinazioni[commessa] || [];
+    const input = document.getElementById("destino");
+    input.placeholder = arr.length ? `Scrivi per filtrare... (${arr.length})` : "Nessuna destinazione";
+    input.value = "";
+    document.getElementById("indirizzo").value = "";
+    filtraDestinazioni();
+}
+
+function filtraDestinazioni() {
+    const testo = (document.getElementById("destino").value || "").toLowerCase();
+    const lista = document.getElementById("listaDestinazioni");
+    lista.innerHTML = "";
+    const commessa = document.getElementById("commessa").value;
+    const filtrati = (destinazioni[commessa] || []).filter(d => d.destino.toLowerCase().includes(testo));
+    
+    if (filtrati.length === 0) {
+        lista.style.display = "none";
+        return;
+    }
+    
+    filtrati.forEach(d => {
+        const div = document.createElement("div");
+        div.textContent = d.destino;
+        div.onclick = () => {
+            document.getElementById("destino").value = d.destino;
+            document.getElementById("indirizzo").value = d.indirizzo;
+            lista.style.display = "none";
+            genera();
+        };
+        lista.appendChild(div);
+    });
+    lista.style.display = "block";
+}
+
+document.addEventListener("click", e => {
+    if (!e.target.closest("#destinoField")) {
+        document.getElementById("listaDestinazioni").style.display = "none";
+    }
+});
+document.getElementById("destino").addEventListener("focus", filtraDestinazioni);
+
+function apriModal() {
+    document.getElementById("adminCommessa").value = document.getElementById("commessa").value || "ZAS";
+    aggiornaTabellaAdmin();
+    document.getElementById("modalAdmin").classList.add("show");
+}
+function chiudiModal() {
+    document.getElementById("modalAdmin").classList.remove("show");
+}
+
+function aggiornaTabellaAdmin() {
+    const c = document.getElementById("adminCommessa").value;
+    const lista = destinazioni[c] || [];
+    const tb = document.getElementById("tabellaDest");
+    tb.innerHTML = "";
+    lista.forEach(d => {
+        const tr = document.createElement("tr");
+        tr.innerHTML = `<td>${d.destino}</td><td>${d.indirizzo}</td>
+            <td><button class="btn-small btn-delete" onclick="elimina('${c}',${d.row})">Elimina</button></td>`;
+        tb.appendChild(tr);
+    });
+    document.getElementById("nomeCommessa").textContent = c;
+    document.getElementById("totaleDest").textContent = lista.length;
+}
+
+document.getElementById("btnAggiungiAdmin").addEventListener("click", async () => {
+    const btn = document.getElementById("btnAggiungiAdmin");
+    if (btn.disabled) return;
+    btn.disabled = true;
+    const c = document.getElementById("adminCommessa").value;
+    const dest = document.getElementById("adminDestino").value.trim();
+    const ind = document.getElementById("adminIndirizzo").value.trim();
+    if (!dest || !ind) { alert("Compila tutto"); btn.disabled = false; return; }
+    if (destinazioni[c]?.some(x => x.destino.toLowerCase() === dest.toLowerCase())) {
+        alert("Destinazione già esistente!");
+        btn.disabled = false;
+        return;
+    }
+    await fetch(API_URL, {method:"POST", body:JSON.stringify({mode:"add", gid:GID[c], destino:dest, indirizzo:ind})});
+    const res = await fetch(API_URL, {method:"POST", body:JSON.stringify({mode:"list", gid:GID[c]})}).then(r=>r.json());
+    destinazioni[c] = res.data || [];
+    document.getElementById("adminDestino").value = "";
+    document.getElementById("adminIndirizzo").value = "";
+    aggiornaTabellaAdmin();
+    if (document.getElementById("commessa").value === c) caricaDestinazioni();
+    btn.disabled = false;
+});
+
+async function elimina(commessa, row) {
+    if (!confirm("Eliminare?")) return;
+    await fetch(API_URL, {method:"POST", body:JSON.stringify({mode:"delete", gid:GID[commessa], row})});
+    const res = await fetch(API_URL, {method:"POST", body:JSON.stringify({mode:"list", gid:GID[commessa]})}).then(r=>r.json());
+    destinazioni[commessa] = res.data || [];
+    aggiornaTabellaAdmin();
+    if (document.getElementById("commessa").value === commessa) caricaDestinazioni();
+}
+
+function cambiaFormato() {
+    const tipo = document.querySelector('input[name="size"]:checked').value;
+    const isODP = tipo === "odp-10x5";
+    const isConf = tipo === "conf-10x10" || tipo === "conf-10x5" || tipo === "conf-10x15";
+    const isConf10x5o15 = tipo === "conf-10x5" || tipo === "conf-10x10" || tipo === "conf-10x15";
+    
+    document.getElementById("commessaField").style.display = isConf ? "block" : "none";
+    document.getElementById("odpField").style.display = isODP ? "block" : "none";
+    document.getElementById("destinoField").style.display = isConf ? "block" : "none";
+    document.getElementById("locationField").style.display = isODP ? "block" : "none";
+    document.getElementById("odpConfField").style.display = isConf10x5o15 ? "block" : "none";
+    
+    document.getElementById("labelIndirizzo").textContent = isODP ? "ID Scheda:" : "Indirizzo:";
+    document.getElementById("indirizzo").readOnly = isConf;
+    document.getElementById("indirizzo").placeholder = isODP ? "es. 123456789" : "si compila automaticamente";
+    
+    if (isODP) { 
+        document.getElementById("indirizzo").value = ""; 
+        document.getElementById("location").value = ""; 
+    } else { 
+        document.getElementById("destino").value = ""; 
+        document.getElementById("indirizzo").value = ""; 
+    }
+    
+    genera();
+    aggiornaPageSize();
+}
+
+function genera() {
+    const anteprima = document.getElementById("anteprima");
+    anteprima.innerHTML = "";
+    let data = document.getElementById("data").value || new Date().toISOString().split('T')[0];
+    data = data.split("-").reverse().join("/");
+    
+    const tipo = document.querySelector('input[name="size"]:checked').value;
+    const testoPrincipale = (tipo === "odp-10x5") 
+        ? (document.getElementById("odp").value || "—") 
+        : (document.getElementById("commessa").value || "—");
+    const location = (tipo === "odp-10x5") 
+        ? (document.getElementById("location").value || "—") 
+        : (document.getElementById("destino").value || "—");
+    const idscheda = document.getElementById("indirizzo").value.trim() || "—";
+    const odpConf = document.getElementById("odpConf").value.trim() || "—";
+    const inputColli = document.getElementById("palletColli").value.trim();
+    const numeri = inputColli ? inputColli.split(",").map(n => parseInt(n.trim())).filter(n => !isNaN(n) && n > 0) : [1];
+    const icona = iconeCommessa[document.getElementById("commessa").value] || "";
+
+    if (tipo === "odp-10x5") {
+        numeri.forEach((colli, i) => {
+            for (let c = 1; c <= colli; c++) {
+                const prog = `${c}/${colli}`;
+                const et = document.createElement("div");
+                et.className = "etichetta";
+                et.innerHTML = `
+                    <div class="header-logo">
+                        <img src="https://raw.githubusercontent.com/Daniele1995-design/WebAppSap/refs/heads/main/logo%20ats.jpg" class="logo-principale">
+                        ${icona ? `<img src="${icona}" class="icon-commessa">` : ''}
+                    </div>
+                    <div class="campo-data">${data}</div>
+                    <div class="riga-odp">
+                        <div class="label-odp">ODP</div>
+                        <div class="odp">${testoPrincipale}</div>
+                    </div>
+                    <div class="dati-10x5">
+                        Location: ${location}<br>
+                        <div class="riga-id">
+                            <span>ID Scheda: ${idscheda}</span>
+                            <span class="colli-inline">Colli : ${prog}</span>
+                        </div>
+                    </div>
+                `;
+                anteprima.appendChild(et);
+            }
+        });
+    } else if (tipo === "conf-10x5") {
+        numeri.forEach((colli, i) => {
+            const prog = `Pallet: ${i+1}/${numeri.length} → ${colli} colli`;
+            const et = document.createElement("div");
+            et.className = "etichetta conf-piccola";
+            et.innerHTML = `
+                <div class="header-logo">
+                    <img src="https://raw.githubusercontent.com/Daniele1995-design/WebAppSap/refs/heads/main/logo%20ats.jpg" class="logo-principale">
+                    ${icona ? `<img src="${icona}" class="icon-commessa">` : ''}
+                </div>
+                <div class="campo-data">${data}</div>
+                <div class="odp">${testoPrincipale}</div>
+                <div class="progressivo">${prog}</div>
+                <div class="campo"><div class="label">DESTINO</div><div class="valore">${location}</div></div>
+                <div class="campo"><div class="label">INDIRIZZO</div><div class="valore">${idscheda}</div></div>
+                <div class="campo"><div class="label">ODP</div><div class="valore">${odpConf}</div></div>
+            `;
+            anteprima.appendChild(et);
+        });
+    } else if (tipo === "conf-10x15") {
+        numeri.forEach((colli, i) => {
+            const prog = `Pallet: ${i+1}/${numeri.length} → ${colli} colli`;
+            const et = document.createElement("div");
+            et.className = "etichetta extra-grande conf-extra";
+            et.innerHTML = `
+                <div class="header-logo">
+                    <img src="https://raw.githubusercontent.com/Daniele1995-design/WebAppSap/refs/heads/main/logo%20ats.jpg" class="logo-principale">
+                    ${icona ? `<img src="${icona}" class="icon-commessa">` : ''}
+                </div>
+                <div class="campo-data">${data}</div>
+                <div class="odp">${testoPrincipale}</div>
+                <div class="progressivo">${prog}</div>
+                <div class="campo"><div class="label">DESTINO</div><div class="valore">${location}</div></div>
+                <div class="campo"><div class="label">INDIRIZZO</div><div class="valore">${idscheda}</div></div>
+                <div class="campo"><div class="label">ODP</div><div class="valore">${odpConf}</div></div>
+            `;
+            anteprima.appendChild(et);
+        });
+    } else {
+        numeri.forEach((colli, i) => {
+            const prog = `Pallet: ${i+1}/${numeri.length} → ${colli} colli`;
+            const et = document.createElement("div");
+            et.className = "etichetta grande";
+            et.innerHTML = `
+                <div class="header-logo">
+                    <img src="https://raw.githubusercontent.com/Daniele1995-design/WebAppSap/refs/heads/main/logo%20ats.jpg" class="logo-principale">
+                    ${icona ? `<img src="${icona}" class="icon-commessa">` : ''}
+                </div>
+                <div class="campo-data">${data}</div>
+                <div class="odp">${testoPrincipale}</div>
+                <div class="progressivo">${prog}</div>
+                <div class="campo"><div class="label">DESTINO</div><div class="valore">${location}</div></div>
+                <div class="campo"><div class="label">INDIRIZZO</div><div class="valore">${idscheda}</div></div>
+                <div class="campo"><div class="label">ODP</div><div class="valore">${odpConf}</div></div>
+            `;
+            anteprima.appendChild(et);
+        });
+    }
+    aggiornaPageSize();
+}
+function aggiornaPageSize() {
+const tipo = document.querySelector('input[name="size"]:checked').value;
+let height = "100mm";
+if (tipo === "conf-10x5" || tipo === "odp-10x5") height = "50mm";
+if (tipo === "conf-10x15") height = "150mm";
+   const numEtichette = document.querySelectorAll('.etichetta').length;
+
+let style = document.getElementById("print-dynamic");
+if (!style) { style = document.createElement("style"); style.id = "print-dynamic"; document.head.appendChild(style); }
+
+style.innerHTML = `@media print { 
+    @page { size: 100mm ${height}; margin: 0; padding: 0; } 
+    * { margin: 0 !important; padding: 0 !important; }
+    body { margin: 0 !important; padding: 0 !important; visibility: hidden; }
+    #anteprima { visibility: visible; position: absolute; left: 0; top: 0; margin: 0 !important; padding: 0 !important; display: block !important; }
+    #anteprima * { visibility: visible; }
+    .etichetta { 
+        height: ${height} !important; 
+        width: 100mm !important;
+        margin: 0 !important;
+        padding: 5mm !important;
+        box-sizing: border-box !important;
+        .etichetta:last-child { 
+    page-break-after: avoid !important;
+}
+        page-break-inside: avoid;
+        border: none !important;
+        box-shadow: none !important;
+        display: block !important;
+        background: white !important;
+    }
+    .etichetta:last-child { 
+        page-break-after: avoid !important;
+    }
+}`;
+}
+
+
+function resetCampi() {
+document.getElementById("data").valueAsDate = new Date();
+document.getElementById("commessa").value = "";
+document.getElementById("odp").value = "";
+document.getElementById("location").value = "";
+document.getElementById("destino").value = "";
+document.getElementById("indirizzo").value = "";
+document.getElementById("odpConf").value = "";
+document.getElementById("palletColli").value = "";
+document.getElementById("anteprima").innerHTML = "";
+genera();
+}
+cambiaFormato();
+</script>
+</body>
+</html>

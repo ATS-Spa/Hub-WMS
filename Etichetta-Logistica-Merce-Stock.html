@@ -1,0 +1,475 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="utf-8">
+<title>Etichette ATS</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
+<style>
+  body { margin: 0px; background:#f0f0f0; font-family:Arial,sans-serif; }
+  .no-print { margin-bottom:20px; padding:10px; }
+
+  .btn-stampa {
+    background:#007bff; color:white; padding:10px 20px; font-size:13pt;
+    border:none; border-radius:5px; cursor:pointer; font-weight:bold;
+    margin-right:8px; margin-bottom:8px;
+  }
+  .btn-stampa:hover { background:#0056b3; }
+  #formManuale {
+    background:white; padding:20px; border:2px solid #000;
+    border-radius:8px; max-width:600px; margin-bottom:20px;
+  }
+  #formManuale h3 { margin-top:0; color:#2c3e50; font-size:18pt; }
+  #formManuale label { display:block; margin:8px 0; font-size:12pt; }
+  #formManuale input, #formManuale textarea { width:100%; padding:6px; box-sizing:border-box; font-size:12pt; }
+  #formManuale textarea { height:80px; }
+  .selettori-row { display:flex; align-items:center; gap:24px; margin-bottom:12px; flex-wrap:wrap; }
+  .selettori-row label { font-size:12pt; display:flex; align-items:center; gap:8px; margin:0; }
+  .selettori-row select { font-size:12pt; padding:4px 8px; border-radius:4px; border:1px solid #aaa; }
+  .sn-row-label { font-size:12pt; margin:8px 0 4px; display:flex; align-items:center; gap:10px; }
+  .btn-genera-sn {
+    background:#17a2b8; color:white; border:none; border-radius:4px;
+    padding:4px 12px; font-size:10pt; font-weight:bold; cursor:pointer; white-space:nowrap;
+  }
+  .btn-genera-sn:hover { background:#117a8b; }
+  @media print { .no-print { display:none; } }
+
+  /* ============================================================
+     ETICHETTA 10x10
+     Layout per ogni sezione con dati:
+     [scritta verticale] [QR]  |  [TESTO]  |  [logo destra]
+     ============================================================ */
+  .etichetta-10x10 {
+    width:100mm; height:100mm; border:0.5px solid #000; background:white;
+    padding:2mm 2.5mm; box-sizing:border-box; page-break-after:always;
+    position:relative; margin-bottom:10mm;
+    display:flex; flex-direction:column;
+  }
+
+  hr { border:none; border-top:1.8px solid black; margin:0.7mm 0; }
+  hr.thin { border-top:1.8px solid black; margin:0.5mm 0; }
+
+  /* --- Riga generica con: [vert+QR a sx] [testo al centro] [logo opzionale a dx] --- */
+  .et-row {
+    display: flex;
+    align-items: center;
+    gap: 1.5mm;
+    margin-bottom: 0.3mm;
+  }
+
+  /* Colonna sinistra: scritta verticale + QR */
+  .et-left {
+    display: flex;
+    align-items: center;
+    gap: 1mm;
+    flex-shrink: 0;
+  }
+
+  .et-vert {
+    font-size: 7pt;
+    font-weight: bold;
+    writing-mode: vertical-rl;
+    transform: rotate(180deg);
+    letter-spacing: 0.3px;
+    white-space: nowrap;
+    line-height: 1;
+  }
+
+  .et-qr {
+    width: 11mm;
+    height: 11mm;
+    flex-shrink: 0;
+    display: block;
+  }
+
+  /* Colonna centrale: testo */
+  .et-body {
+    flex: 1;
+    min-width: 0;
+  }
+
+  /* Colonna destra: logo */
+  .et-logo {
+    height: 9mm;
+    flex-shrink: 0;
+    margin-left: auto;
+  }
+
+  /* Testi */
+  .lbl  { font-size:9pt; font-weight:bold; display:block; line-height:1.2; }
+  .val-lg  { font-size:20pt; font-weight:bold; line-height:1; display:block; }
+  .val-md  { font-size:16pt; font-weight:bold; line-height:1; display:block; }
+  .val-sm  { font-size:12pt; font-weight:bold; line-height:1.2; word-break:break-all; display:block; }
+
+  /* Barcode + WMS (sezione centrale senza QR laterale) */
+  .art-label { font-weight:bold; font-size:9pt; margin:0 0 0.5mm; }
+  .barcode-svg { width:76mm; height:26px; margin:0 auto 0.5mm; display:block; }
+  .wms { text-align:center; font-size:10.5pt; font-weight:bold; margin-bottom:0.5mm; }
+
+  /* PO row */
+  .po-row { display:flex; justify-content:space-between; align-items:flex-start; margin:0.8mm 0; }
+  .po-col { flex:1; }
+  .po-col.right { text-align:right; }
+  .po-label { font-size:9pt; font-weight:bold; }
+  .po-value { font-size:18pt; font-weight:bold; line-height:1; display:block; }
+
+  /* Ubicazione sotto SN */
+  .ubicazione { margin-top:0.5mm; }
+
+  /* ============================================================
+     ETICHETTA 10x5
+     ============================================================ */
+  @page { size:100mm 50mm; }
+  .etichetta-10x5 {
+    width:100mm; height:50mm; border:0.5px solid #000; background:white;
+    padding:2mm 2.5mm; box-sizing:border-box; page-break-after:always;
+    position:relative; font-size:8pt;
+  }
+  .et5-top {
+    display:flex; align-items:center; gap:1.5mm; margin-bottom:1mm;
+  }
+  .et5-vert {
+    font-size:7pt; font-weight:bold;
+    writing-mode:vertical-rl; transform:rotate(180deg);
+    letter-spacing:0.3px; white-space:nowrap;
+  }
+  .et5-qr { width:10mm; height:10mm; flex-shrink:0; }
+  .et5-codbp-block { flex:1; }
+  .et5-codbp-label { font-size:8pt; font-weight:bold; }
+  .et5-codbp-val { font-size:13pt; font-weight:bold; line-height:1.2; }
+  .et5-logo { height:8mm; margin-left:auto; }
+  .et5-barcode { width:55mm; height:20px; display:block; margin:1mm auto 0.5mm; }
+  .et5-wms { text-align:center; font-weight:bold; font-size:9pt; margin-bottom:0.5mm; }
+  .et5-footer { display:flex; align-items:center; gap:1.5mm; margin-top:1mm; }
+  .et5-info { font-size:9pt; line-height:1.5; flex:1; }
+</style>
+</head>
+<body>
+<div class="no-print">
+  <div class="selettori-row">
+    <label>Seleziona formato:
+      <select id="formatoEtichetta">
+        <option value="10x10">10×10</option>
+        <option value="10x5">10×5</option>
+      </select>
+    </label>
+    <label>Seleziona commessa:
+      <select id="commessaSelect">
+        <option value="NTD">NTD</option>
+        <option value="FLM">FLM</option>
+        <option value="INWIT">INWIT</option>
+        <option value="ZAS">ZAS</option>
+        <option value="SME">SME</option>
+      </select>
+    </label>
+  </div>
+
+  <input type="file" id="excelFile" accept=".xlsx,.xls,.csv" style="margin-right:10px;">
+  <button class="btn-stampa" onclick="apriFormManuale()">COMPILA MANUALMENTE</button>
+  <button class="btn-stampa" onclick="window.print()">STAMPA TUTTE</button>
+  <button class="btn-stampa" onclick="resetFile()" style="background:#dc3545;">RESET</button>
+  <button class="btn-stampa" onclick="downloadTemplate()" style="background:#28a745;">SCARICA TEMPLATE</button>
+
+  <div id="formManuale" style="display:none;">
+    <h3>Compila Etichetta Manualmente</h3>
+    <label>Codice BP: <input type="text" id="m_CodiceBP" placeholder="Inserisci Codice BP"></label>
+    <label>Part Number: <input type="text" id="m_PartNumber" placeholder="Inserisci Part Number"></label>
+    <label>Articolo WMS: <input type="text" id="m_ArticoloWMS" readonly></label>
+    <div class="sn-row-label">
+      <span>Serial Number/Lotto:</span>
+      <button class="btn-genera-sn" onclick="generaSeriale()">⚡ Genera Lotto</button>
+    </div>
+    <textarea id="m_SerialNumber" placeholder="Inserisci un seriale per riga, oppure Seleziona Commessa e usa Genera Lotto"></textarea>
+    <label>PO: <input type="text" id="m_PO"></label>
+    <label>Posizione: <input type="text" id="m_Posizione"></label>
+    <label>Ubicazione: <input type="text" id="m_Ubicazione"></label>
+    <br>
+    <button class="btn-stampa" onclick="aggiungiEtichettaManuale()">AGGIUNGI ETICHETTA</button>
+    <button class="btn-stampa" onclick="resetFormManuale()" style="background:#ffc107;">RESET CAMPI</button>
+    <button class="btn-stampa" onclick="chiudiFormManuale()" style="background:#6c757d;">CHIUDI</button>
+  </div>
+</div>
+
+<div id="output"></div>
+
+<script>
+let etichettaCounter = 1000;
+
+function resetFile() { document.getElementById('excelFile').value=''; document.getElementById('output').innerHTML=''; }
+function apriFormManuale() { document.getElementById('formManuale').style.display='block'; }
+function chiudiFormManuale() { document.getElementById('formManuale').style.display='none'; }
+function resetFormManuale() {
+  ['m_CodiceBP','m_PartNumber','m_SerialNumber','m_ArticoloWMS','m_PO','m_Posizione','m_Ubicazione']
+  .forEach(id=>document.getElementById(id).value='');
+}
+
+function generaSeriale() {
+  const commessa = document.getElementById('commessaSelect').value;
+  const now = new Date();
+  const pad = n => String(n).padStart(2,'0');
+  const seriale = `${commessa}-${now.getFullYear()}${pad(now.getMonth()+1)}${pad(now.getDate())}-${pad(now.getHours())}${pad(now.getMinutes())}${pad(now.getSeconds())}`;
+  const ta = document.getElementById('m_SerialNumber');
+  const righe = ta.value.trimEnd().split('\n');
+  if (righe[righe.length-1].trim() === seriale) { ta.focus(); return; }
+  ta.value = ta.value.trim() !== '' ? ta.value.trimEnd()+'\n'+seriale : seriale;
+  ta.scrollTop = ta.scrollHeight;
+  ta.focus();
+}
+
+function downloadTemplate() {
+  const wb = XLSX.utils.book_new();
+  const ws = XLSX.utils.aoa_to_sheet([
+    ['CodiceBP','PartNumber','SerialNumber/Lotto','ArticoloWMS','PO','Posizione PO','Ubicazione'],
+    ['000000000302059612','02310CET','2102310CET10E5001574','WMS0006047-FLM','471005225','10','71-STK-S11-C14-05-003']
+  ]);
+  XLSX.utils.book_append_sheet(wb, ws, 'Etichette');
+  XLSX.writeFile(wb, 'Template_Etichette_ATS.xlsx');
+}
+
+/* ============================================================
+   ETICHETTA 10x10
+   Layout:
+   - Riga 1: logo ATS in alto a destra (solo)
+   - Riga 2: [COD BP vert][QR] | "Codice BP" + valore CENTRATI
+   - Riga 3: "Articolo" centrato + barcode + WMS
+   - Riga 4: PO sx / Posizione dx
+   - Riga 5: [TPN vert][QR] | label+valore TUTTO A DESTRA
+   - Riga 6: [SN vert][QR]  | label+valore TUTTO A DESTRA
+   ============================================================ */
+function creaEtichetta10x10(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO, Posizione, Ubicazione, bcId){
+  const qrBP = `https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(CodiceBP)}`;
+  const qrPN = `https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(PartNumber)}`;
+  const qrSN = `https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(SerialNumber)}`;
+  const logo = `https://raw.githubusercontent.com/Daniele1995-design/WebAppSap/refs/heads/main/logo%20ats.jpg`;
+
+  return `<div class="etichetta-10x10">
+
+    <!-- RIGA 1: logo ATS in alto a destra da solo -->
+    <div style="text-align:right; margin-bottom:1mm;">
+      <img style="height:9mm;" src="${logo}">
+    </div>
+
+    <!-- RIGA 2: [COD BP vert][QR] | Codice BP centrato -->
+    <div class="et-row">
+      <div class="et-left">
+        <span class="et-vert">COD BP</span>
+        <img class="et-qr" src="${qrBP}">
+      </div>
+      <div class="et-body" style="text-align:center;">
+        <span class="lbl">Codice BP</span>
+        <span class="val-lg">${CodiceBP}</span>
+      </div>
+    </div>
+
+    <hr>
+
+    <!-- Piccolo spazio tra Codice BP e Articolo -->
+    <div style="height:2mm;"></div>
+
+    <!-- RIGA 3: Articolo verticale a sinistra + barcode + WMS -->
+    <div style="display:flex; align-items:center; gap:1mm;">
+      <span style="font-size:7pt; font-weight:bold; writing-mode:vertical-rl; transform:rotate(180deg); letter-spacing:0.3px; white-space:nowrap; flex-shrink:0;">Articolo</span>
+      <div style="flex:1;">
+        <svg class="barcode-svg" id="${bcId}" style="width:100%;"></svg>
+        <div class="wms">${ArticoloWMS}</div>
+      </div>
+    </div>
+
+    <hr>
+
+    <!-- RIGA 4: PO sx / Posizione dx -->
+    <div class="po-row">
+      <div class="po-col">
+        <span class="po-label">Po Nr°</span>
+        <span class="po-value">${PO}</span>
+      </div>
+      <div class="po-col right">
+        <span class="po-label">Posizione</span>
+        <span class="po-value">${Posizione}</span>
+      </div>
+    </div>
+
+    <hr class="thin">
+
+    <!-- RIGA 5: [TPN vert][QR] | Part Number TUTTO A DESTRA -->
+    <div class="et-row">
+      <div class="et-left">
+        <span class="et-vert">TPN</span>
+        <img class="et-qr" src="${qrPN}">
+      </div>
+      <div class="et-body" style="text-align:right;">
+        <span class="lbl">Part Number</span>
+        <span class="val-md">${PartNumber}</span>
+      </div>
+    </div>
+
+    <hr class="thin">
+
+    <!-- SPACER flessibile: occupa tutto lo spazio rimanente tra TPN e SN -->
+    <div style="flex:1;"></div>
+
+    <!-- RIGA 6: [SN vert][QR] | SerialNumber TUTTO A DESTRA - spinto al fondo -->
+    <div class="et-row" style="margin-top:0;">
+      <div class="et-left">
+        <span class="et-vert">SN</span>
+        <img class="et-qr" src="${qrSN}">
+      </div>
+      <div class="et-body" style="text-align:right;">
+        <span class="lbl">SerialNumber/Lotto</span>
+        <span class="val-md">${SerialNumber}</span>
+      </div>
+    </div>
+
+    <!-- Ubicazione a destra -->
+    <div style="text-align:right; margin-top:0.5mm;">
+      <span class="lbl">Ubicazione</span>
+      <span class="val-sm">${Ubicazione}</span>
+    </div>
+
+  </div>`;
+}
+
+/* ============================================================
+   ETICHETTA 10x5
+   Struttura: [vert] [QR] [testo] [logo]
+   ============================================================ */
+function creaEtichetta10x5(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO, Posizione, bcId){
+  const qrBP = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(CodiceBP)}`;
+  const qrSN = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(SerialNumber)}`;
+  const logo = `https://raw.githubusercontent.com/Daniele1995-design/WebAppSap/refs/heads/main/logo%20ats.jpg`;
+
+  return `<div class="etichetta-10x5">
+
+    <!-- HEADER: [COD BP vert] [QR] [testo BP] [logo] -->
+    <div class="et5-top">
+      <span class="et5-vert">COD BP</span>
+      <img class="et5-qr" src="${qrBP}">
+      <div class="et5-codbp-block">
+        <div class="et5-codbp-label">Codice BP</div>
+        <div class="et5-codbp-val">${CodiceBP}</div>
+      </div>
+      <img class="et5-logo" src="${logo}">
+    </div>
+
+    <!-- Barcode + WMS -->
+    <svg class="et5-barcode" id="${bcId}"></svg>
+    <div class="et5-wms">${ArticoloWMS}</div>
+
+    <!-- FOOTER: [SN vert] [QR] [info testo] -->
+    <div class="et5-footer">
+      <span class="et5-vert">SN</span>
+      <img class="et5-qr" src="${qrSN}">
+      <div class="et5-info">
+        PO Nr°: ${PO} / Pos: ${Posizione}<br>
+        Part Number: ${PartNumber}<br>
+        Seriale: ${SerialNumber}
+      </div>
+    </div>
+
+  </div>`;
+}
+
+/* ---------- DATABASE BP ---------- */
+let bpDatabase = [];
+fetch('https://docs.google.com/spreadsheets/d/e/2PACX-1vSC8jBRzMHrA7IMzvnjbvQ0shOg2Eg5q1UpJZlk2VmT1TEHQ3bKrYlj8MX7J405NPcO7TwK5R5QHlXD/pub?output=csv')
+.then(r=>r.text())
+.then(csv=>{
+  const lines = csv.split(/\r?\n/);
+  bpDatabase = lines.slice(1).map(l=>{
+    const [CodiceBP, ArticoloWMS, PartNumber] = l.split(',');
+    return {CodiceBP:CodiceBP?.trim(), ArticoloWMS:ArticoloWMS?.trim(), PartNumber:PartNumber?.trim()};
+  }).filter(r=>r.CodiceBP);
+});
+
+function verificaCodiceBP(){
+  const bp = document.getElementById('m_CodiceBP').value.trim();
+  if(!bp) return;
+  const matches = bpDatabase.filter(r=>r.CodiceBP===bp);
+  if(matches.length===0) return alert('Codice BP non trovato.');
+  if(matches.length===1){
+    document.getElementById('m_ArticoloWMS').value = matches[0].ArticoloWMS;
+    document.getElementById('m_PartNumber').value  = matches[0].PartNumber;
+  } else {
+    const popup = document.createElement('div');
+    popup.id = 'bp-popup';
+    popup.style.cssText = 'position:fixed;left:50%;top:50%;transform:translate(-50%,-50%);background:#fff;padding:20px;border:2px solid #000;z-index:9999;';
+    let html = '<div>Scegli Articolo WMS:</div><ul style="padding-left:0;">';
+    matches.forEach((m,i)=>{
+      html += `<li style="list-style:none;margin:5px 0;cursor:pointer;padding:4px;border:1px solid #000;" onclick="scegliArticolo(${i})">${m.ArticoloWMS} / ${m.PartNumber}</li>`;
+    });
+    popup.innerHTML = html+'</ul>';
+    document.body.appendChild(popup);
+    window.scegliArticolo = function(index){
+      document.getElementById('m_ArticoloWMS').value = matches[index].ArticoloWMS;
+      document.getElementById('m_PartNumber').value  = matches[index].PartNumber;
+      document.body.removeChild(document.getElementById('bp-popup'));
+    };
+  }
+}
+
+document.getElementById('m_CodiceBP').addEventListener('blur', verificaCodiceBP);
+document.getElementById('m_CodiceBP').addEventListener('keypress', e=>{
+  if(e.key==='Enter'){ e.preventDefault(); verificaCodiceBP(); }
+});
+
+function aggiungiEtichettaManuale(){
+  const CodiceBP    = document.getElementById('m_CodiceBP').value.trim();
+  const PartNumber  = document.getElementById('m_PartNumber').value.trim();
+  const ArticoloWMS = document.getElementById('m_ArticoloWMS').value.trim();
+  const SerialNumbers = document.getElementById('m_SerialNumber').value.trim().split(/\r?\n/).filter(s=>s.trim());
+  const PO          = document.getElementById('m_PO').value.trim();
+  const Posizione   = document.getElementById('m_Posizione').value.trim();
+  const Ubicazione  = document.getElementById('m_Ubicazione').value.trim();
+  const formato     = document.getElementById('formatoEtichetta').value;
+
+  if(!CodiceBP || !PartNumber || !ArticoloWMS) return alert('Compila Codice BP e seleziona Articolo WMS.');
+
+  SerialNumbers.forEach(serial=>{
+    const bcId = 'bc-manual-'+(etichettaCounter++);
+    const html = formato==='10x10'
+      ? creaEtichetta10x10(CodiceBP, PartNumber, serial, ArticoloWMS, PO, Posizione, Ubicazione, bcId)
+      : creaEtichetta10x5(CodiceBP, PartNumber, serial, ArticoloWMS, PO, Posizione, bcId);
+    document.getElementById('output').innerHTML += html;
+    setTimeout(()=>{
+      if(document.getElementById(bcId))
+        JsBarcode('#'+bcId, ArticoloWMS, {format:"CODE128", height:formato==='10x10'?26:20, width:1.8, displayValue:false, margin:0});
+    },100);
+  });
+}
+
+document.getElementById('excelFile').addEventListener('change', e=>{
+  const f = e.target.files[0]; if(!f) return;
+  const r = new FileReader();
+  r.onload = e=>{
+    const wb = XLSX.read(e.target.result,{type:'array'});
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]],{header:1});
+    const formato = document.getElementById('formatoEtichetta').value;
+    let html='';
+    for(let i=1;i<rows.length;i++){
+      const CodiceBP    = (rows[i][0]||'').toString().trim();
+      const PartNumber  = (rows[i][1]||'').toString().trim();
+      const SerialNumber= (rows[i][2]||'').toString().trim();
+      const ArticoloWMS = (rows[i][3]||'').toString().trim();
+      const PO          = (rows[i][4]||'').toString().trim();
+      const Posizione   = (rows[i][5]||'').toString().trim();
+      const Ubicazione  = (rows[i][6]||'').toString().trim();
+      const bcId = 'bc-'+i;
+      html += formato==='10x10'
+        ? creaEtichetta10x10(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO, Posizione, Ubicazione, bcId)
+        : creaEtichetta10x5(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO, Posizione, bcId);
+    }
+    document.getElementById('output').innerHTML = html;
+    setTimeout(()=>{
+      for(let i=1;i<rows.length;i++){
+        const val=(rows[i][3]||'').toString().trim();
+        const bcId='bc-'+i;
+        if(val && document.getElementById(bcId))
+          JsBarcode('#'+bcId, val, {format:"CODE128", height:formato==='10x10'?26:20, width:1.8, displayValue:false, margin:0});
+      }
+    },300);
+  };
+  r.readAsArrayBuffer(f);
+});
+</script>
+</body>
+</html>
