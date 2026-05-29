@@ -2,12 +2,40 @@
 <html lang="it">
 <head>
 <meta charset="utf-8">
-<title>Etichette ATS</title>
+<title>Etichette Merce Stock</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.5/dist/JsBarcode.all.min.js"></script>
 <style>
-  body { margin: 0px; background:#f0f0f0; font-family:Arial,sans-serif; }
-  .no-print { margin-bottom:20px; padding:10px; }
+  body { margin:0; background:#f0f0f0; font-family:Arial,sans-serif; }
+  .no-print { margin-bottom:20px; }
+
+  /* --- Topbar stile WMS Hub dentro no-print --- */
+  @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap');
+  .topbar {
+    height: 52px;
+    background: #0b0f18;
+    border-bottom: 1px solid #243048;
+    display: flex;
+    align-items: center;
+    padding: 0 16px 0 60px;
+    gap: 10px;
+    margin: 0 0 14px 0;
+    width: 100%;
+    box-sizing: border-box;
+  }
+  .topbar-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 20px; font-weight: 800;
+    letter-spacing: 1.5px; text-transform: uppercase;
+    color: #00c8ff; white-space: nowrap;
+  }
+  .topbar-title span { color: #64748b; font-weight: 600; }
+  .topbar-div { width:1px; height:18px; background:#243048; flex-shrink:0; }
+  .topbar-sub {
+    font-size: 11px; letter-spacing: 1.5px; text-transform: uppercase;
+    color: #64748b; white-space: nowrap;
+    font-family: 'Barlow Condensed', sans-serif; font-weight: 600;
+  }
 
   .btn-stampa {
     background:#007bff; color:white; padding:10px 20px; font-size:13pt;
@@ -32,56 +60,12 @@
     padding:4px 12px; font-size:10pt; font-weight:bold; cursor:pointer; white-space:nowrap;
   }
   .btn-genera-sn:hover { background:#117a8b; }
-  @media print { .no-print { display:none; } body { padding-top:0; } }
 
-  /* --- Topbar stile WMS Hub --- */
-  @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap');
-  .topbar {
-    position: fixed;
-    top: 0; left: 0; right: 0;
-    height: 52px;
-    background: #0b0f18;
-    border-bottom: 1px solid #243048;
-    display: flex;
-    align-items: center;
-    padding: 0 16px 0 60px;
-    gap: 10px;
-    z-index: 9999;
-  }
-  .topbar-title {
-    font-family: 'Barlow Condensed', sans-serif;
-    font-size: 20px;
-    font-weight: 800;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    color: #00c8ff;
-    white-space: nowrap;
-  }
-  .topbar-title span {
-    color: #64748b;
-    font-weight: 600;
-  }
-  .topbar-div {
-    width: 1px; height: 18px;
-    background: #243048;
-    flex-shrink: 0;
-  }
-  .topbar-sub {
-    font-size: 11px;
-    letter-spacing: 1.5px;
-    text-transform: uppercase;
-    color: #64748b;
-    white-space: nowrap;
-    font-family: 'Barlow Condensed', sans-serif;
-    font-weight: 600;
-  }
-  /* spinge il contenuto sotto la topbar */
-  body { padding-top: 52px; }
+  @media print { .no-print { display:none; } }
 
   /* ============================================================
      ETICHETTA 10x10
-     Layout per ogni sezione con dati:
-     [scritta verticale] [QR]  |  [TESTO]  |  [logo destra]
+     [scritta verticale] [QR]  |  [TESTO]  |  logo in alto dx
      ============================================================ */
   .etichetta-10x10 {
     width:100mm; height:100mm; border:0.5px solid #000; background:white;
@@ -93,72 +77,29 @@
   hr { border:none; border-top:1.8px solid black; margin:0.7mm 0; }
   hr.thin { border-top:1.8px solid black; margin:0.5mm 0; }
 
-  /* --- Riga generica con: [vert+QR a sx] [testo al centro] [logo opzionale a dx] --- */
-  .et-row {
-    display: flex;
-    align-items: center;
-    gap: 1.5mm;
-    margin-bottom: 0.3mm;
-  }
-
-  /* Colonna sinistra: scritta verticale + QR */
-  .et-left {
-    display: flex;
-    align-items: center;
-    gap: 1mm;
-    flex-shrink: 0;
-  }
-
+  .et-row { display:flex; align-items:center; gap:1.5mm; margin-bottom:0.3mm; }
+  .et-left { display:flex; align-items:center; gap:1mm; flex-shrink:0; }
   .et-vert {
-    font-size: 7pt;
-    font-weight: bold;
-    writing-mode: vertical-rl;
-    transform: rotate(180deg);
-    letter-spacing: 0.3px;
-    white-space: nowrap;
-    line-height: 1;
+    font-size:7pt; font-weight:bold;
+    writing-mode:vertical-rl; transform:rotate(180deg);
+    letter-spacing:0.3px; white-space:nowrap; line-height:1;
   }
+  .et-qr { width:11mm; height:11mm; flex-shrink:0; display:block; }
+  .et-body { flex:1; min-width:0; }
 
-  .et-qr {
-    width: 11mm;
-    height: 11mm;
-    flex-shrink: 0;
-    display: block;
-  }
-
-  /* Colonna centrale: testo */
-  .et-body {
-    flex: 1;
-    min-width: 0;
-  }
-
-  /* Colonna destra: logo */
-  .et-logo {
-    height: 9mm;
-    flex-shrink: 0;
-    margin-left: auto;
-  }
-
-  /* Testi */
   .lbl  { font-size:9pt; font-weight:bold; display:block; line-height:1.2; }
   .val-lg  { font-size:20pt; font-weight:bold; line-height:1; display:block; }
   .val-md  { font-size:16pt; font-weight:bold; line-height:1; display:block; }
   .val-sm  { font-size:12pt; font-weight:bold; line-height:1.2; word-break:break-all; display:block; }
 
-  /* Barcode + WMS (sezione centrale senza QR laterale) */
-  .art-label { font-weight:bold; font-size:9pt; margin:0 0 0.5mm; }
   .barcode-svg { width:76mm; height:26px; margin:0 auto 0.5mm; display:block; }
   .wms { text-align:center; font-size:10.5pt; font-weight:bold; margin-bottom:0.5mm; }
 
-  /* PO row */
   .po-row { display:flex; justify-content:space-between; align-items:flex-start; margin:0.8mm 0; }
   .po-col { flex:1; }
   .po-col.right { text-align:right; }
   .po-label { font-size:9pt; font-weight:bold; }
   .po-value { font-size:18pt; font-weight:bold; line-height:1; display:block; }
-
-  /* Ubicazione sotto SN */
-  .ubicazione { margin-top:0.5mm; }
 
   /* ============================================================
      ETICHETTA 10x5
@@ -169,9 +110,7 @@
     padding:2mm 2.5mm; box-sizing:border-box; page-break-after:always;
     position:relative; font-size:8pt;
   }
-  .et5-top {
-    display:flex; align-items:center; gap:1.5mm; margin-bottom:1mm;
-  }
+  .et5-top { display:flex; align-items:center; gap:1.5mm; margin-bottom:1mm; }
   .et5-vert {
     font-size:7pt; font-weight:bold;
     writing-mode:vertical-rl; transform:rotate(180deg);
@@ -189,12 +128,14 @@
 </style>
 </head>
 <body>
+
 <div class="no-print">
   <div class="topbar">
     <div class="topbar-title">Hub Logistica <span>WMS</span></div>
     <div class="topbar-div"></div>
-    <div class="topbar-sub">Etichetta Logistica ATS</div>
+    <div class="topbar-sub">Etichetta Logistica Merce Stock</div>
   </div>
+
   <div class="selettori-row">
     <label>Seleziona formato:
       <select id="formatoEtichetta">
@@ -273,18 +214,11 @@ function downloadTemplate() {
     ['000000000302059612','02310CET','2102310CET10E5001574','WMS0006047-FLM','471005225','10','71-STK-S11-C14-05-003','IT2V']
   ]);
   XLSX.utils.book_append_sheet(wb, ws, 'Etichette');
-  XLSX.writeFile(wb, 'Template_Etichette_ATS.xlsx');
+  XLSX.writeFile(wb, 'Template_Etichette_Merce_Stock.xlsx');
 }
 
 /* ============================================================
    ETICHETTA 10x10
-   Layout:
-   - Riga 1: logo ATS in alto a destra (solo)
-   - Riga 2: [COD BP vert][QR] | "Codice BP" + valore CENTRATI
-   - Riga 3: "Articolo" centrato + barcode + WMS
-   - Riga 4: PO sx / Posizione dx
-   - Riga 5: [TPN vert][QR] | label+valore TUTTO A DESTRA
-   - Riga 6: [SN vert][QR]  | label+valore TUTTO A DESTRA
    ============================================================ */
 function creaEtichetta10x10(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO, Posizione, Ubicazione, CDC, bcId){
   const qrBP = `https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(CodiceBP)}`;
@@ -294,12 +228,12 @@ function creaEtichetta10x10(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO,
 
   return `<div class="etichetta-10x10">
 
-    <!-- RIGA 1: logo ATS in alto a destra da solo -->
+    <!-- Logo in alto a destra -->
     <div style="text-align:right; margin-bottom:1mm;">
       <img style="height:9mm;" src="${logo}">
     </div>
 
-    <!-- RIGA 2: [COD BP vert][QR] | Codice BP centrato -->
+    <!-- Codice BP -->
     <div class="et-row">
       <div class="et-left">
         <span class="et-vert">COD BP</span>
@@ -313,12 +247,10 @@ function creaEtichetta10x10(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO,
 
     <hr>
 
-    <!-- Piccolo spazio tra Codice BP e Articolo -->
+    <!-- Articolo verticale + barcode -->
     <div style="height:1mm;"></div>
-
-    <!-- RIGA 3: Articolo verticale a sinistra + barcode + WMS -->
     <div style="display:flex; align-items:center; gap:1mm;">
-      <span style="font-size:7pt; font-weight:bold; writing-mode:vertical-rl; transform:rotate(180deg); letter-spacing:0.3px; white-space:nowrap; flex-shrink:0;">Articolo</span>
+      <span style="font-size:7pt;font-weight:bold;writing-mode:vertical-rl;transform:rotate(180deg);letter-spacing:0.3px;white-space:nowrap;flex-shrink:0;">Articolo</span>
       <div style="flex:1;">
         <svg class="barcode-svg" id="${bcId}" style="width:100%;"></svg>
         <div class="wms">${ArticoloWMS}</div>
@@ -327,7 +259,7 @@ function creaEtichetta10x10(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO,
 
     <hr>
 
-    <!-- RIGA 4: PO sx / Posizione dx -->
+    <!-- PO + Posizione -->
     <div class="po-row">
       <div class="po-col">
         <span class="po-label">Po Nr°</span>
@@ -341,7 +273,7 @@ function creaEtichetta10x10(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO,
 
     <hr class="thin">
 
-    <!-- RIGA 5: [TPN vert][QR] | Part Number TUTTO A DESTRA -->
+    <!-- Part Number -->
     <div class="et-row">
       <div class="et-left">
         <span class="et-vert">TPN</span>
@@ -355,11 +287,11 @@ function creaEtichetta10x10(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO,
 
     <hr class="thin">
 
-    <!-- SPACER flessibile: spazio ridotto tra TPN e SN -->
+    <!-- Spacer -->
     <div style="flex:0.4;"></div>
 
-    <!-- RIGA 6: [SN vert][QR] | SerialNumber TUTTO A DESTRA - spinto al fondo -->
-    <div class="et-row" style="margin-top:0;">
+    <!-- Serial Number -->
+    <div class="et-row">
       <div class="et-left">
         <span class="et-vert">SN</span>
         <img class="et-qr" src="${qrSN}">
@@ -370,10 +302,10 @@ function creaEtichetta10x10(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO,
       </div>
     </div>
 
-    <!-- Spacer: spinge CDC+Ubicazione al fondo -->
+    <!-- Spacer verso fondo -->
     <div style="flex:1;min-height:0;"></div>
 
-    <!-- CDC a sinistra + Ubicazione a destra sulla stessa riga -->
+    <!-- CDC sx + Ubicazione dx -->
     <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-top:0.5mm;">
       <div style="text-align:left;">
         <span class="lbl">CDC</span>
@@ -390,7 +322,6 @@ function creaEtichetta10x10(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO,
 
 /* ============================================================
    ETICHETTA 10x5
-   Struttura: [vert] [QR] [testo] [logo]
    ============================================================ */
 function creaEtichetta10x5(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO, Posizione, bcId){
   const qrBP = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(CodiceBP)}`;
@@ -398,8 +329,6 @@ function creaEtichetta10x5(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO, 
   const logo = `https://raw.githubusercontent.com/Daniele1995-design/WebAppSap/refs/heads/main/logo%20ats.jpg`;
 
   return `<div class="etichetta-10x5">
-
-    <!-- HEADER: [COD BP vert] [QR] [testo BP] [logo] -->
     <div class="et5-top">
       <span class="et5-vert">COD BP</span>
       <img class="et5-qr" src="${qrBP}">
@@ -409,12 +338,8 @@ function creaEtichetta10x5(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO, 
       </div>
       <img class="et5-logo" src="${logo}">
     </div>
-
-    <!-- Barcode + WMS -->
     <svg class="et5-barcode" id="${bcId}"></svg>
     <div class="et5-wms">${ArticoloWMS}</div>
-
-    <!-- FOOTER: [SN vert] [QR] [info testo] -->
     <div class="et5-footer">
       <span class="et5-vert">SN</span>
       <img class="et5-qr" src="${qrSN}">
@@ -424,7 +349,6 @@ function creaEtichetta10x5(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO, 
         Seriale: ${SerialNumber}
       </div>
     </div>
-
   </div>`;
 }
 
