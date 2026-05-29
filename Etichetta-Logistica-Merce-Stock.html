@@ -183,6 +183,7 @@
     <label>PO: <input type="text" id="m_PO"></label>
     <label>Posizione: <input type="text" id="m_Posizione"></label>
     <label>Ubicazione: <input type="text" id="m_Ubicazione"></label>
+    <label>CDC: <input type="text" id="m_CDC" placeholder="Es. IT2V"></label>
     <br>
     <button class="btn-stampa" onclick="aggiungiEtichettaManuale()">AGGIUNGI ETICHETTA</button>
     <button class="btn-stampa" onclick="resetFormManuale()" style="background:#ffc107;">RESET CAMPI</button>
@@ -199,7 +200,7 @@ function resetFile() { document.getElementById('excelFile').value=''; document.g
 function apriFormManuale() { document.getElementById('formManuale').style.display='block'; }
 function chiudiFormManuale() { document.getElementById('formManuale').style.display='none'; }
 function resetFormManuale() {
-  ['m_CodiceBP','m_PartNumber','m_SerialNumber','m_ArticoloWMS','m_PO','m_Posizione','m_Ubicazione']
+  ['m_CodiceBP','m_PartNumber','m_SerialNumber','m_ArticoloWMS','m_PO','m_Posizione','m_Ubicazione','m_CDC']
   .forEach(id=>document.getElementById(id).value='');
 }
 
@@ -219,8 +220,8 @@ function generaSeriale() {
 function downloadTemplate() {
   const wb = XLSX.utils.book_new();
   const ws = XLSX.utils.aoa_to_sheet([
-    ['CodiceBP','PartNumber','SerialNumber/Lotto','ArticoloWMS','PO','Posizione PO','Ubicazione'],
-    ['000000000302059612','02310CET','2102310CET10E5001574','WMS0006047-FLM','471005225','10','71-STK-S11-C14-05-003']
+    ['CodiceBP','PartNumber','SerialNumber/Lotto','ArticoloWMS','PO','Posizione PO','Ubicazione','CDC'],
+    ['000000000302059612','02310CET','2102310CET10E5001574','WMS0006047-FLM','471005225','10','71-STK-S11-C14-05-003','IT2V']
   ]);
   XLSX.utils.book_append_sheet(wb, ws, 'Etichette');
   XLSX.writeFile(wb, 'Template_Etichette_ATS.xlsx');
@@ -236,7 +237,7 @@ function downloadTemplate() {
    - Riga 5: [TPN vert][QR] | label+valore TUTTO A DESTRA
    - Riga 6: [SN vert][QR]  | label+valore TUTTO A DESTRA
    ============================================================ */
-function creaEtichetta10x10(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO, Posizione, Ubicazione, bcId){
+function creaEtichetta10x10(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO, Posizione, Ubicazione, CDC, bcId){
   const qrBP = `https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(CodiceBP)}`;
   const qrPN = `https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(PartNumber)}`;
   const qrSN = `https://api.qrserver.com/v1/create-qr-code/?size=110x110&data=${encodeURIComponent(SerialNumber)}`;
@@ -264,7 +265,7 @@ function creaEtichetta10x10(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO,
     <hr>
 
     <!-- Piccolo spazio tra Codice BP e Articolo -->
-    <div style="height:2mm;"></div>
+    <div style="height:1mm;"></div>
 
     <!-- RIGA 3: Articolo verticale a sinistra + barcode + WMS -->
     <div style="display:flex; align-items:center; gap:1mm;">
@@ -324,6 +325,12 @@ function creaEtichetta10x10(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO,
     <div style="text-align:right; margin-top:0.5mm;">
       <span class="lbl">Ubicazione</span>
       <span class="val-sm">${Ubicazione}</span>
+    </div>
+
+    <!-- CDC a sinistra -->
+    <div style="text-align:left; margin-top:0.8mm;">
+      <span class="lbl">CDC</span>
+      <span class="val-sm">${CDC}</span>
     </div>
 
   </div>`;
@@ -420,6 +427,7 @@ function aggiungiEtichettaManuale(){
   const PO          = document.getElementById('m_PO').value.trim();
   const Posizione   = document.getElementById('m_Posizione').value.trim();
   const Ubicazione  = document.getElementById('m_Ubicazione').value.trim();
+  const CDC         = document.getElementById('m_CDC').value.trim();
   const formato     = document.getElementById('formatoEtichetta').value;
 
   if(!CodiceBP || !PartNumber || !ArticoloWMS) return alert('Compila Codice BP e seleziona Articolo WMS.');
@@ -427,7 +435,7 @@ function aggiungiEtichettaManuale(){
   SerialNumbers.forEach(serial=>{
     const bcId = 'bc-manual-'+(etichettaCounter++);
     const html = formato==='10x10'
-      ? creaEtichetta10x10(CodiceBP, PartNumber, serial, ArticoloWMS, PO, Posizione, Ubicazione, bcId)
+      ? creaEtichetta10x10(CodiceBP, PartNumber, serial, ArticoloWMS, PO, Posizione, Ubicazione, CDC, bcId)
       : creaEtichetta10x5(CodiceBP, PartNumber, serial, ArticoloWMS, PO, Posizione, bcId);
     document.getElementById('output').innerHTML += html;
     setTimeout(()=>{
@@ -453,9 +461,10 @@ document.getElementById('excelFile').addEventListener('change', e=>{
       const PO          = (rows[i][4]||'').toString().trim();
       const Posizione   = (rows[i][5]||'').toString().trim();
       const Ubicazione  = (rows[i][6]||'').toString().trim();
+      const CDC         = (rows[i][7]||'').toString().trim();
       const bcId = 'bc-'+i;
       html += formato==='10x10'
-        ? creaEtichetta10x10(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO, Posizione, Ubicazione, bcId)
+        ? creaEtichetta10x10(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO, Posizione, Ubicazione, CDC, bcId)
         : creaEtichetta10x5(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO, Posizione, bcId);
     }
     document.getElementById('output').innerHTML = html;
