@@ -18,6 +18,8 @@
     --amber: #f59e0b;
     --green: #10b981;
     --red: #ef4444;
+    --violet: #8b5cf6;
+    --rose: #f43f5e;
     --text: #e2e8f0;
     --muted: #64748b;
     --subtle: #94a3b8;
@@ -150,6 +152,10 @@
   .dr-item.app-grn.active .dr-item-name { color: var(--green); }
   .dr-item.app-guida.active    { border-color: rgba(148,163,184,.3); }
   .dr-item.app-guida.active .dr-item-name { color: var(--subtle); }
+  .dr-item.app-stock.active    { border-color: rgba(139,92,246,.3); }
+  .dr-item.app-stock.active .dr-item-name { color: var(--violet); }
+  .dr-item.app-ats.active      { border-color: rgba(244,63,94,.3); }
+  .dr-item.app-ats.active .dr-item-name { color: var(--rose); }
 
   .dr-item-icon { font-size: 17px; flex-shrink: 0; width: 22px; text-align: center; }
   .dr-item-info { display: flex; flex-direction: column; gap: 1px; }
@@ -174,10 +180,13 @@
     align-items: center;
     justify-content: center;
     gap: 28px;
-    background:
-      radial-gradient(ellipse at 30% 40%, rgba(59,130,246,.06), transparent 55%),
-      radial-gradient(ellipse at 80% 70%, rgba(20,184,166,.05), transparent 55%),
-      var(--bg);
+    background-color: var(--bg);
+    background-image:
+      radial-gradient(ellipse at 30% 40%, rgba(59,130,246,.07), transparent 55%),
+      radial-gradient(ellipse at 80% 70%, rgba(20,184,166,.06), transparent 55%),
+      linear-gradient(rgba(59,130,246,.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(59,130,246,.045) 1px, transparent 1px);
+    background-size: auto, auto, 36px 36px, 36px 36px;
     z-index: 10;
     transition: opacity 0.25s;
   }
@@ -233,24 +242,42 @@
   .card-presenze::before  { background: radial-gradient(ellipse at top left, rgba(59,130,246,.1), transparent 70%); }
   .card-spedizioni::before { background: radial-gradient(ellipse at top left, rgba(245,158,11,.1), transparent 70%); }
   .card-grn::before        { background: radial-gradient(ellipse at top left, rgba(16,185,129,.1), transparent 70%); }
+  .card-stock::before      { background: radial-gradient(ellipse at top left, rgba(139,92,246,.1), transparent 70%); }
+  .card-ats::before        { background: radial-gradient(ellipse at top left, rgba(244,63,94,.1),  transparent 70%); }
   .card-presenze:hover  { border-color: rgba(59,130,246,.35); }
   .card-spedizioni:hover { border-color: rgba(245,158,11,.35); }
   .card-grn:hover        { border-color: rgba(16,185,129,.35); }
+  .card-stock:hover      { border-color: rgba(139,92,246,.35); }
+  .card-ats:hover        { border-color: rgba(244,63,94,.35); }
 
-  /* card GRN centrata su riga intera */
-  .card-grn { grid-column: 1 / -1; max-width: 253px; justify-self: center; }
+  /* 5 card in griglia: 2+2+1 centrata */
+  .welcome-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 14px;
+    max-width: 520px;
+    width: 88%;
+  }
+
+  /* card ATS centrata su riga intera (ultima) */
+  .card-grn { grid-column: auto; max-width: none; justify-self: auto; }
+  .card-ats { grid-column: 1 / -1; max-width: 253px; justify-self: center; }
 
   .card-icon { font-size: 30px; }
   .card-title { font-family: var(--ffc); font-size: 18px; font-weight: 800; letter-spacing: .5px; }
   .card-presenze .card-title  { color: var(--blue); }
   .card-spedizioni .card-title { color: var(--amber); }
   .card-grn .card-title        { color: var(--green); }
+  .card-stock .card-title      { color: var(--violet); }
+  .card-ats .card-title        { color: var(--rose); }
   .card-desc { font-size: 11px; color: var(--muted); line-height: 1.6; }
   .card-arrow { font-size: 15px; color: var(--muted); margin-top: 4px; transition: transform 0.18s, color 0.18s; }
   .app-card:hover .card-arrow { transform: translateX(5px); }
   .card-presenze:hover .card-arrow  { color: var(--blue); }
   .card-spedizioni:hover .card-arrow { color: var(--amber); }
   .card-grn:hover .card-arrow        { color: var(--green); }
+  .card-stock:hover .card-arrow      { color: var(--violet); }
+  .card-ats:hover .card-arrow        { color: var(--rose); }
 
   /* ══ IFRAMES ══ */
   .app-frame {
@@ -300,7 +327,36 @@
     display: none; /* mostrato via JS come gli altri app-frame */
   }
   .frame-wrap.active { display: block; }
-  .frame-wrap .app-frame { position: absolute; inset: 0; width: 100%; height: 100%; border: none; }
+  .frame-wrap .app-frame {
+    position: absolute; inset: 0; width: 100%; height: 100%; border: none;
+    opacity: 0; pointer-events: none; transition: opacity 0.22s;
+  }
+  .frame-wrap.active .app-frame { opacity: 1; pointer-events: all; }
+
+  /* ══ OROLOGIO ══ */
+  .hub-clock {
+    position: fixed;
+    top: 10px;
+    right: 12px;
+    z-index: 400;
+    font-family: var(--ffm);
+    font-size: 13px;
+    font-weight: 500;
+    color: #22d3ee;
+    letter-spacing: 1.5px;
+    padding: 5px 11px;
+    border-radius: 8px;
+    /* sfondo squadrettato */
+    background-color: #0b1220;
+    background-image:
+      linear-gradient(rgba(34,211,238,.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(34,211,238,.07) 1px, transparent 1px);
+    background-size: 10px 10px;
+    border: 1px solid rgba(34,211,238,.18);
+    box-shadow: 0 0 12px rgba(34,211,238,.08), inset 0 0 8px rgba(34,211,238,.03);
+    pointer-events: none;
+    user-select: none;
+  }
 
   /* ══ DESKTOP-ONLY OVERLAY (Spedizioni + GRN su mobile) ══ */
   .desktop-only-overlay {
@@ -419,6 +475,22 @@
       </div>
     </div>
 
+    <div class="dr-item app-stock" id="nav-stock" onclick="openApp('stock')">
+      <span class="dr-item-icon">📦</span>
+      <div class="dr-item-info">
+        <span class="dr-item-name">Etichetta Stock</span>
+        <span class="dr-item-desc">Stampa etichette merce stock</span>
+      </div>
+    </div>
+
+    <div class="dr-item app-ats" id="nav-ats" onclick="openApp('ats')">
+      <span class="dr-item-icon">🏷️</span>
+      <div class="dr-item-info">
+        <span class="dr-item-name">Etichetta ATS</span>
+        <span class="dr-item-desc">Stampa etichette logistica ATS</span>
+      </div>
+    </div>
+
     <div class="dr-sect">Risorse</div>
 
     <div class="dr-item app-guida" id="nav-guida" onclick="openApp('guida')">
@@ -462,6 +534,18 @@
         <div class="card-desc">Entrate merci WMS da web app · integrazione SAP B1.</div>
         <div class="card-arrow">→</div>
       </div>
+      <div class="app-card card-stock" onclick="openApp('stock')">
+        <div class="card-icon">📦</div>
+        <div class="card-title">Etichetta Stock</div>
+        <div class="card-desc">Generazione e stampa etichette per merce in stock.</div>
+        <div class="card-arrow">→</div>
+      </div>
+      <div class="app-card card-ats" onclick="openApp('ats')">
+        <div class="card-icon">🏷️</div>
+        <div class="card-title">Etichetta ATS</div>
+        <div class="card-desc">Stampa etichette logistica ATS con QR e barcode.</div>
+        <div class="card-arrow">→</div>
+      </div>
     </div>
   </div>
 
@@ -492,7 +576,13 @@
 
   <iframe class="app-frame" id="frame-guida"      src="" data-src="guida_hub.html"            title="Guida"></iframe>
 
+  <iframe class="app-frame" id="frame-stock" src="" data-src="Etichetta-Logistica-Merce-Stock.html" title="Etichetta Stock"></iframe>
+  <iframe class="app-frame" id="frame-ats"   src="" data-src="Etichetta-Logistica-ATS.html"        title="Etichetta ATS"></iframe>
+
 </main>
+
+<!-- ══ OROLOGIO ══ -->
+<div class="hub-clock" id="hubClock">00:00:00</div>
 
 <script>
   const frames = {
@@ -500,6 +590,8 @@
     spedizioni: document.getElementById('wrap-spedizioni'),   // wrapper div
     grn:        document.getElementById('wrap-grn'),          // wrapper div
     guida:      document.getElementById('frame-guida'),
+    stock:      document.getElementById('frame-stock'),
+    ats:        document.getElementById('frame-ats'),
   };
   // Iframe reali (per lazy-load src)
   const iframes = {
@@ -507,6 +599,8 @@
     spedizioni: document.getElementById('frame-spedizioni'),
     grn:        document.getElementById('frame-grn'),
     guida:      document.getElementById('frame-guida'),
+    stock:      document.getElementById('frame-stock'),
+    ats:        document.getElementById('frame-ats'),
   };
   const navItems = {
     home:       document.getElementById('nav-home'),
@@ -514,6 +608,8 @@
     spedizioni: document.getElementById('nav-spedizioni'),
     grn:        document.getElementById('nav-grn'),
     guida:      document.getElementById('nav-guida'),
+    stock:      document.getElementById('nav-stock'),
+    ats:        document.getElementById('nav-ats'),
   };
   let currentApp = null;
   let drawerOpen = false;
@@ -607,8 +703,21 @@
     if (e.altKey && e.key === '1') openApp('presenze');
     if (e.altKey && e.key === '2') openApp('spedizioni');
     if (e.altKey && e.key === '3') openApp('grn');
+    if (e.altKey && e.key === '4') openApp('stock');
+    if (e.altKey && e.key === '5') openApp('ats');
     if (e.altKey && e.key === '0') showHome();
   });
+
+  // Orologio
+  function tickClock() {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2,'0');
+    const mm = String(now.getMinutes()).padStart(2,'0');
+    const ss = String(now.getSeconds()).padStart(2,'0');
+    document.getElementById('hubClock').textContent = hh + ':' + mm + ':' + ss;
+  }
+  tickClock();
+  setInterval(tickClock, 1000);
 </script>
 </body>
 </html>
