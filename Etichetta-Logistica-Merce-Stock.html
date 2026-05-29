@@ -34,6 +34,38 @@
   .btn-genera-sn:hover { background:#117a8b; }
   @media print { .no-print { display:none; } }
 
+  /* --- Mini intestazione modulo --- */
+  .modulo-header {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 10px 16px;
+    background: #0a1628;
+    border-bottom: 2px solid #00c8ff;
+    margin-bottom: 14px;
+    font-family: 'Arial', sans-serif;
+  }
+  .modulo-header-title {
+    font-size: 13pt;
+    font-weight: bold;
+    color: #e8edf5;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+  }
+  .modulo-header-title span { color: #00c8ff; }
+  .modulo-header-sep {
+    width: 1px;
+    height: 20px;
+    background: rgba(255,255,255,0.25);
+  }
+  .modulo-header-sub {
+    font-size: 10pt;
+    font-weight: bold;
+    letter-spacing: 2px;
+    text-transform: uppercase;
+    color: #8892a4;
+  }
+
   /* ============================================================
      ETICHETTA 10x10
      Layout per ogni sezione con dati:
@@ -146,6 +178,11 @@
 </head>
 <body>
 <div class="no-print">
+  <div class="modulo-header">
+    <div class="modulo-header-title">Hub Logistica <span>WMS</span></div>
+    <div class="modulo-header-sep"></div>
+    <div class="modulo-header-sub">Etichetta Logistica ATS</div>
+  </div>
   <div class="selettori-row">
     <label>Seleziona formato:
       <select id="formatoEtichetta">
@@ -321,16 +358,16 @@ function creaEtichetta10x10(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO,
       </div>
     </div>
 
-    <!-- Ubicazione a destra -->
-    <div style="text-align:right; margin-top:0.5mm;">
-      <span class="lbl">Ubicazione</span>
-      <span class="val-sm">${Ubicazione}</span>
-    </div>
-
-    <!-- CDC a sinistra -->
-    <div style="text-align:left; margin-top:0.8mm;">
-      <span class="lbl">CDC</span>
-      <span class="val-sm">${CDC}</span>
+    <!-- CDC a sinistra + Ubicazione a destra sulla stessa riga -->
+    <div style="display:flex; justify-content:space-between; align-items:flex-start; margin-top:0.5mm;">
+      <div style="text-align:left;">
+        <span class="lbl">CDC</span>
+        <span class="val-sm">${CDC}</span>
+      </div>
+      <div style="text-align:right;">
+        <span class="lbl">Ubicazione</span>
+        <span class="val-sm">${Ubicazione}</span>
+      </div>
     </div>
 
   </div>`;
