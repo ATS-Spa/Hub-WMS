@@ -32,12 +32,7 @@
     padding:4px 12px; font-size:10pt; font-weight:bold; cursor:pointer; white-space:nowrap;
   }
   .btn-genera-sn:hover { background:#117a8b; }
-  @media print {
-    * { visibility: hidden !important; }
-    #output, #output * { visibility: visible !important; }
-    #output { position: fixed !important; top:0; left:0; padding:0; margin:0; }
-    body { padding-top: 0 !important; }
-  }
+  @media print { .no-print { display:none; } body { padding-top:0; } }
 
   /* --- Topbar stile WMS Hub --- */
   @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap');
@@ -194,13 +189,12 @@
 </style>
 </head>
 <body>
-<div class="topbar no-print">
-  <div class="topbar-title">Hub Logistica <span>WMS</span></div>
-  <div class="topbar-div"></div>
-  <div class="topbar-sub">Etichetta Logistica ATS</div>
-</div>
-
 <div class="no-print">
+  <div class="topbar">
+    <div class="topbar-title">Hub Logistica <span>WMS</span></div>
+    <div class="topbar-div"></div>
+    <div class="topbar-sub">Etichetta Logistica ATS</div>
+  </div>
   <div class="selettori-row">
     <label>Seleziona formato:
       <select id="formatoEtichetta">
