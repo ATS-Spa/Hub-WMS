@@ -643,6 +643,7 @@
     closeDrawer();
     hideAllPanels();
     document.getElementById('welcome').classList.remove('hidden');
+    document.getElementById('hubClock').style.display = '';
     setActiveNav('home');
     currentApp = null;
     localStorage.removeItem('wms_lastApp');
@@ -650,6 +651,7 @@
 
   function openApp(app) {
     closeDrawer();
+    document.getElementById('hubClock').style.display = 'none';
     const panel = frames[app];
     if (!panel) return;
     setActiveNav(app);
@@ -696,7 +698,6 @@
       setActiveNav('home');
     }
   }
-
   // Shortcuts
   document.addEventListener('keydown', e => {
     if (e.key === 'Escape') closeDrawer();
