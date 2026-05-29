@@ -34,37 +34,49 @@
   .btn-genera-sn:hover { background:#117a8b; }
   @media print { .no-print { display:none; } }
 
-  /* --- Mini intestazione modulo --- */
-  .modulo-header {
+  /* --- Topbar stile WMS Hub --- */
+  @import url('https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@600;700;800&display=swap');
+  .topbar {
+    position: fixed;
+    top: 0; left: 0; right: 0;
+    height: 42px;
+    background: #0b0f18;
+    border-bottom: 1px solid #243048;
     display: flex;
     align-items: center;
-    gap: 12px;
-    padding: 10px 16px;
-    background: #0a1628;
-    border-bottom: 2px solid #00c8ff;
-    margin-bottom: 14px;
-    font-family: 'Arial', sans-serif;
+    padding: 0 16px 0 60px;
+    gap: 10px;
+    z-index: 9999;
   }
-  .modulo-header-title {
-    font-size: 13pt;
-    font-weight: bold;
-    color: #e8edf5;
-    letter-spacing: 2px;
+  .topbar-title {
+    font-family: 'Barlow Condensed', sans-serif;
+    font-size: 20px;
+    font-weight: 800;
+    letter-spacing: 1.5px;
     text-transform: uppercase;
+    color: #00c8ff;
+    white-space: nowrap;
   }
-  .modulo-header-title span { color: #00c8ff; }
-  .modulo-header-sep {
-    width: 1px;
-    height: 20px;
-    background: rgba(255,255,255,0.25);
+  .topbar-title span {
+    color: #64748b;
+    font-weight: 600;
   }
-  .modulo-header-sub {
-    font-size: 10pt;
-    font-weight: bold;
-    letter-spacing: 2px;
+  .topbar-div {
+    width: 1px; height: 18px;
+    background: #243048;
+    flex-shrink: 0;
+  }
+  .topbar-sub {
+    font-size: 11px;
+    letter-spacing: 1.5px;
     text-transform: uppercase;
-    color: #8892a4;
+    color: #64748b;
+    white-space: nowrap;
+    font-family: 'Barlow Condensed', sans-serif;
+    font-weight: 600;
   }
+  /* spinge il contenuto sotto la topbar */
+  body { padding-top: 42px; }
 
   /* ============================================================
      ETICHETTA 10x10
@@ -177,12 +189,13 @@
 </style>
 </head>
 <body>
+<div class="topbar no-print">
+  <div class="topbar-title">Hub Logistica <span>WMS</span></div>
+  <div class="topbar-div"></div>
+  <div class="topbar-sub">Etichetta Logistica ATS</div>
+</div>
+
 <div class="no-print">
-  <div class="modulo-header">
-    <div class="modulo-header-title">Hub Logistica <span>WMS</span></div>
-    <div class="modulo-header-sep"></div>
-    <div class="modulo-header-sub">Etichetta Logistica ATS</div>
-  </div>
   <div class="selettori-row">
     <label>Seleziona formato:
       <select id="formatoEtichetta">
