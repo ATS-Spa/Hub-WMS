@@ -577,5 +577,43 @@ genera();
 }
 cambiaFormato();
 </script>
+
+// ══ AUTH DA HUB (token condiviso via localStorage) ══
+(function(){
+  var HUB_KEY_TOKEN = 'wms_hub_token';
+  var HUB_KEY_USER  = 'wms_hub_user';
+  // Compatibilità con chiavi hub (lsS usa prefisso wms_)
+  function _lsGet(k){ try{ var s=localStorage.getItem(k); return s?JSON.parse(s):null; }catch(e){ return null; } }
+
+  var hubToken = _lsGet('wms_hub_token');
+  var hubUser  = _lsGet('wms_hub_user');
+
+  if(!hubToken || !hubUser){
+    // Non autenticato → redirect all'hub
+    document.body.innerHTML = '<div style="position:fixed;inset:0;background:#0b0f18;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;font-family:Segoe UI,sans-serif;">'
+      +'<div style="font-size:48px">🔒</div>'
+      +'<div style="font-size:20px;font-weight:700;color:#e2e8f0;">Accesso non autorizzato</div>'
+      +'<div style="font-size:13px;color:#64748b;">Accedi prima dall'hub WMS.</div>'
+      +'<a href="index.html" style="background:#f97316;color:#fff;border-radius:8px;padding:10px 24px;text-decoration:none;font-weight:700;font-size:14px;">← Vai all'Hub</a>'
+      +'</div>';
+    throw new Error('No hub auth');
+  }
+
+  // Esponi globalmente per i moduli
+  window.HUB_TOKEN    = hubToken;
+  window.HUB_USER     = hubUser;
+  window.HUB_EMAIL    = hubUser.email || '';
+  window.HUB_NAME     = hubUser.name  || '';
+  window.HUB_ROLE     = hubUser.role  || 'user';
+  window.HUB_MODULI   = hubUser.moduli || [];
+
+  // Auto-refresh: ascolta aggiornamenti token dall'hub
+  window.addEventListener('storage', function(e){
+    if(e.key==='wms_hub_token' && e.newValue){
+      try{ window.HUB_TOKEN = JSON.parse(e.newValue); }catch(ex){}
+    }
+  });
+})();
+
 </body>
 </html>
