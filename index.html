@@ -3,1564 +3,1249 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Ticket Manager · WMS Hub</title>
+<title>WMS · Hub</title>
+<link rel="icon" href="https://ats-spa.github.io/Hub-WMS/ATS-Logo.png">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
-:root {
-  --bg: #0b0f18;
-  --surface: #131929;
-  --card: #1a2236;
-  --border: #243048;
-  --blue: #3b82f6;
-  --teal: #14b8a6;
-  --amber: #f59e0b;
-  --green: #10b981;
-  --red: #ef4444;
-  --violet: #8b5cf6;
-  --rose: #f43f5e;
-  --orange: #f97316;
-  --text: #e2e8f0;
-  --muted: #64748b;
-  --subtle: #94a3b8;
-  --ff: 'IBM Plex Sans', sans-serif;
-  --ffm: 'IBM Plex Mono', monospace;
-  --ffc: 'Barlow Condensed', sans-serif;
-}
-*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
-html, body { height: 100%; overflow: hidden; }
-body { background: var(--bg); color: var(--text); font-family: var(--ff); font-size: 14px; }
+  :root {
+    --bg: #0b0f18;
+    --surface: #131929;
+    --card: #1a2236;
+    --border: #243048;
+    --blue: #3b82f6;
+    --teal: #14b8a6;
+    --amber: #f59e0b;
+    --green: #10b981;
+    --red: #ef4444;
+    --violet: #8b5cf6;
+    --rose: #f43f5e;
+    --orange: #f97316;
+    --text: #e2e8f0;
+    --muted: #64748b;
+    --subtle: #94a3b8;
+    --ff: 'IBM Plex Sans', sans-serif;
+    --ffm: 'IBM Plex Mono', monospace;
+    --ffc: 'Barlow Condensed', sans-serif;
+  }
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+  html, body { height: 100%; overflow: hidden; }
+  body { background: var(--bg); color: var(--text); font-family: var(--ff); font-size: 14px; }
 
-/* ══ TOPBAR ══ */
-.topbar {
-  height: 52px;
-  background: var(--surface);
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  padding: 0 16px;
-  gap: 12px;
-  flex-shrink: 0;
-  position: relative;
-  z-index: 10;
-}
-.topbar-title { font-family: var(--ffc); font-size: 18px; font-weight: 800; letter-spacing: 1px; color: var(--orange); }
-.topbar-badge { font-family: var(--ffm); font-size: 10px; color: var(--muted); background: var(--card); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; }
-.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
-.topbar-user { display: flex; align-items: center; gap: 8px; }
-.topbar-avatar { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border); }
-.topbar-uname { font-size: 12px; color: var(--subtle); font-family: var(--ffm); }
-.topbar-urole { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; }
+  .main { position: fixed; inset: 0; z-index: 1; }
 
-/* ══ LAYOUT ══ */
-.layout { display: flex; height: calc(100vh - 52px); overflow: hidden; }
+  /* ══ HAMBURGER ══ */
+  .menu-btn {
+    position: fixed;
+    top: 12px;
+    left: 12px;
+    z-index: 300;
+    width: 36px;
+    height: 36px;
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 9px;
+    cursor: pointer;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 5px;
+    transition: background 0.18s, border-color 0.18s, opacity 0.2s;
+    box-shadow: 0 2px 12px rgba(0,0,0,.4);
+  }
+  .menu-btn:hover { background: var(--card); border-color: var(--subtle); }
+  .menu-btn .bar {
+    width: 16px;
+    height: 2px;
+    background: var(--subtle);
+    border-radius: 2px;
+    transition: transform 0.22s, opacity 0.22s, width 0.22s;
+  }
+  .menu-btn.open { opacity: 0; pointer-events: none; }
 
-/* ══ SIDEBAR FILTRI ══ */
-.sidebar {
-  width: 220px;
-  background: var(--surface);
-  border-right: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  overflow-y: auto;
-  padding: 12px 10px;
-  gap: 4px;
-}
-.sb-sect {
-  font-size: 9px;
-  font-weight: 700;
-  letter-spacing: 1.8px;
-  text-transform: uppercase;
-  color: var(--muted);
-  padding: 10px 8px 4px;
-}
-.sb-item {
-  display: flex;
-  align-items: center;
-  justify-content: space-between;
-  gap: 8px;
-  padding: 8px 10px;
-  border-radius: 8px;
-  cursor: pointer;
-  color: var(--muted);
-  border: 1px solid transparent;
-  transition: background .15s, color .15s;
-  font-size: 13px;
-}
-.sb-item:hover { background: var(--card); color: var(--subtle); }
-.sb-item.active { background: var(--card); border-color: var(--border); color: var(--text); }
-.sb-item-left { display: flex; align-items: center; gap: 8px; }
-.sb-count { font-family: var(--ffm); font-size: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--muted); }
-.sb-divider { height: 1px; background: var(--border); margin: 6px 4px; }
+  /* ══ OVERLAY ══ */
+  .overlay {
+    position: fixed;
+    inset: 0;
+    background: rgba(0,0,0,.55);
+    backdrop-filter: blur(2px);
+    z-index: 200;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.25s;
+  }
+  .overlay.show { opacity: 1; pointer-events: all; }
 
-/* Dot stato */
-.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
-.dot-aperto    { background: var(--blue); }
-.dot-assegnato { background: var(--amber); }
-.dot-attesa    { background: var(--violet); }
-.dot-risolto   { background: var(--green); }
-.dot-chiuso    { background: var(--muted); }
+  /* ══ DRAWER ══ */
+  .drawer {
+    position: fixed;
+    top: 0;
+    left: 0;
+    height: 100vh;
+    width: 240px;
+    background: var(--surface);
+    border-right: 1px solid var(--border);
+    z-index: 250;
+    display: flex;
+    flex-direction: column;
+    transform: translateX(-100%);
+    transition: transform 0.25s cubic-bezier(.4,0,.2,1);
+    box-shadow: 4px 0 32px rgba(0,0,0,.5);
+  }
+  .drawer.open { transform: translateX(0); }
 
-/* ══ MAIN CONTENT ══ */
-.content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+  .dr-header {
+    padding: 18px 20px 16px;
+    border-bottom: 1px solid var(--border);
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    flex-shrink: 0;
+  }
+  .dr-logo-img {
+    width: 140px;
+    height: 140px;
+    object-fit: contain;
+    filter: drop-shadow(0 0 6px rgba(59,130,246,.25));
+  }
+  .dr-logo-text { font-family: var(--ffc); font-size: 18px; font-weight: 800; letter-spacing: 1.5px; }
+  .dr-logo-text .c1 { color: var(--blue); }
+  .dr-logo-text .c2 { color: var(--teal); }
+  .dr-logo-text .c3 { color: var(--subtle); font-weight: 500; }
 
-/* Toolbar */
-.toolbar {
-  padding: 10px 16px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-  background: var(--bg);
-}
-.toolbar-search {
-  flex: 1;
-  max-width: 320px;
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 7px 12px;
-  color: var(--text);
-  font-family: var(--ff);
-  font-size: 13px;
-  outline: none;
-  transition: border-color .2s;
-}
-.toolbar-search:focus { border-color: var(--orange); }
-.toolbar-search::placeholder { color: var(--muted); }
+  .dr-nav {
+    flex: 1;
+    padding: 10px 10px;
+    display: flex;
+    flex-direction: column;
+    gap: 2px;
+    overflow-y: auto;
+  }
+  .dr-sect {
+    font-size: 9px;
+    font-weight: 700;
+    letter-spacing: 1.8px;
+    text-transform: uppercase;
+    color: var(--muted);
+    padding: 12px 8px 5px;
+  }
+  .dr-item {
+    display: flex;
+    align-items: center;
+    gap: 12px;
+    padding: 11px 12px;
+    border-radius: 10px;
+    cursor: pointer;
+    transition: background 0.15s, border-color 0.15s;
+    color: var(--muted);
+    border: 1px solid transparent;
+  }
+  .dr-item:hover { background: var(--card); color: var(--subtle); }
+  .dr-item.active { background: var(--card); border-color: var(--border); color: var(--text); }
+  .dr-item.app-home.active     { border-color: rgba(20,184,166,.3); }
+  .dr-item.app-home.active .dr-item-name { color: var(--teal); }
+  .dr-item.app-presenze.active { border-color: rgba(59,130,246,.3); }
+  .dr-item.app-presenze.active .dr-item-name { color: var(--blue); }
+  .dr-item.app-spedizioni.active { border-color: rgba(245,158,11,.3); }
+  .dr-item.app-spedizioni.active .dr-item-name { color: var(--amber); }
+  .dr-item.app-grn.active      { border-color: rgba(16,185,129,.3); }
+  .dr-item.app-grn.active .dr-item-name { color: var(--green); }
+  .dr-item.app-guida.active    { border-color: rgba(148,163,184,.3); }
+  .dr-item.app-guida.active .dr-item-name { color: var(--subtle); }
+  .dr-item.app-stock.active    { border-color: rgba(139,92,246,.3); }
+  .dr-item.app-stock.active .dr-item-name { color: var(--violet); }
+  .dr-item.app-ats.active      { border-color: rgba(244,63,94,.3); }
+  .dr-item.app-ats.active .dr-item-name { color: var(--rose); }
+  .dr-item.app-tickets.active  { border-color: rgba(249,115,22,.3); }
+  .dr-item.app-tickets.active .dr-item-name { color: var(--orange); }
 
-.sel {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 7px 10px;
-  color: var(--subtle);
-  font-family: var(--ff);
-  font-size: 13px;
-  outline: none;
-  cursor: pointer;
-  transition: border-color .2s;
-}
-.sel:focus { border-color: var(--orange); }
+  .dr-item-icon { font-size: 17px; flex-shrink: 0; width: 22px; text-align: center; }
+  .dr-item-info { display: flex; flex-direction: column; gap: 1px; }
+  .dr-item-name { font-family: var(--ffc); font-size: 14px; font-weight: 700; letter-spacing: .4px; }
+  .dr-item-desc { font-size: 10px; color: var(--muted); }
 
-.btn {
-  padding: 7px 14px;
-  border-radius: 8px;
-  border: 1px solid transparent;
-  cursor: pointer;
-  font-family: var(--ffc);
-  font-size: 14px;
-  font-weight: 700;
-  letter-spacing: .4px;
-  transition: all .15s;
-  display: flex;
-  align-items: center;
-  gap: 6px;
-}
-.btn-primary { background: var(--orange); color: #fff; border-color: var(--orange); }
-.btn-primary:hover { background: #ea6c10; }
-.btn-ghost { background: transparent; color: var(--subtle); border-color: var(--border); }
-.btn-ghost:hover { background: var(--card); color: var(--text); }
-.btn-sm { padding: 4px 10px; font-size: 12px; }
-.btn-teal { background: var(--teal); color: #fff; border-color: var(--teal); }
-.btn-teal:hover { background: #0f9c90; }
-.btn-red { background: transparent; color: var(--red); border-color: var(--red); }
-.btn-red:hover { background: rgba(239,68,68,.1); }
+  .dr-footer {
+    padding: 12px 16px;
+    border-top: 1px solid var(--border);
+    font-size: 10px;
+    color: var(--muted);
+    font-family: var(--ffm);
+    letter-spacing: .3px;
+  }
 
-/* ══ TICKET LIST ══ */
-.ticket-list { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+  /* ══ WELCOME ══ */
+  .welcome {
+    position: absolute;
+    inset: 0;
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 28px;
+    background-color: var(--bg);
+    background-image:
+      radial-gradient(ellipse at 30% 40%, rgba(59,130,246,.07), transparent 55%),
+      radial-gradient(ellipse at 80% 70%, rgba(20,184,166,.06), transparent 55%),
+      linear-gradient(rgba(59,130,246,.045) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(59,130,246,.045) 1px, transparent 1px);
+    background-size: auto, auto, 36px 36px, 36px 36px;
+    z-index: 10;
+    transition: opacity 0.25s;
+  }
+  .welcome.hidden { opacity: 0; pointer-events: none; }
 
-.ticket-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 12px;
-  padding: 14px 16px;
-  cursor: pointer;
-  transition: all .18s;
-  display: grid;
-  grid-template-columns: auto 1fr auto;
-  gap: 12px;
-  align-items: start;
-}
-.ticket-card:hover { border-color: var(--orange); background: var(--card); transform: translateX(2px); }
-.ticket-card.selected { border-color: var(--orange); background: var(--card); }
+  .welcome-header { display: flex; flex-direction: column; align-items: center; gap: 12px; }
+  .welcome-logo-img {
+    width: 170px;
+    height: 170px;
+    object-fit: contain;
+    filter: drop-shadow(0 0 20px rgba(59,130,246,.3));
+    animation: float 3s ease-in-out infinite;
+  }
+  @keyframes float { 0%,100%{transform:translateY(0)} 50%{transform:translateY(-7px)} }
 
-.ticket-priority-bar { width: 3px; border-radius: 3px; min-height: 48px; align-self: stretch; flex-shrink: 0; }
-.tc-body { min-width: 0; }
-.tc-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
-.tc-id { font-family: var(--ffm); font-size: 10px; color: var(--muted); }
-.tc-title { font-weight: 600; font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.tc-desc { font-size: 12px; color: var(--muted); line-height: 1.5; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
-.tc-meta { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
-.tc-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+  .welcome-title { font-family: var(--ffc); font-size: 40px; font-weight: 800; letter-spacing: 2px; }
+  .welcome-title .c1 { color: var(--blue); }
+  .welcome-title .c2 { color: var(--teal); }
+  .welcome-title .c3 { color: var(--subtle); font-weight: 500; }
+  .welcome-sub { font-size: 11px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
 
-/* Badge */
-.badge {
-  font-family: var(--ffc);
-  font-size: 11px;
-  font-weight: 700;
-  letter-spacing: .3px;
-  padding: 2px 8px;
-  border-radius: 5px;
-  border: 1px solid transparent;
-  white-space: nowrap;
-}
-.badge-stato-aperto    { background: rgba(59,130,246,.15); color: var(--blue); border-color: rgba(59,130,246,.3); }
-.badge-stato-assegnato { background: rgba(245,158,11,.15); color: var(--amber); border-color: rgba(245,158,11,.3); }
-.badge-stato-attesa    { background: rgba(139,92,246,.15); color: var(--violet); border-color: rgba(139,92,246,.3); }
-.badge-stato-risolto   { background: rgba(16,185,129,.15); color: var(--green); border-color: rgba(16,185,129,.3); }
-.badge-stato-chiuso    { background: rgba(100,116,139,.15); color: var(--muted); border-color: rgba(100,116,139,.3); }
-.badge-tipo { background: rgba(249,115,22,.1); color: var(--orange); border-color: rgba(249,115,22,.25); }
-.badge-progetto { background: rgba(148,163,184,.1); color: var(--subtle); border-color: rgba(148,163,184,.2); }
-.badge-assegnato { background: rgba(20,184,166,.1); color: var(--teal); border-color: rgba(20,184,166,.2); }
+  /* 6 card in griglia: 3 colonne */
+  .welcome-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+    max-width: 780px;
+    width: 94%;
+  }
+  .app-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 16px;
+    padding: 24px 20px;
+    cursor: pointer;
+    transition: all 0.2s;
+    display: flex;
+    flex-direction: column;
+    gap: 10px;
+    position: relative;
+    overflow: hidden;
+  }
+  .app-card::before {
+    content: '';
+    position: absolute;
+    inset: 0;
+    opacity: 0;
+    transition: opacity 0.2s;
+    border-radius: 16px;
+  }
+  .app-card:hover { transform: translateY(-3px); box-shadow: 0 14px 40px rgba(0,0,0,.45); }
+  .app-card:hover::before { opacity: 1; }
+  .card-presenze::before  { background: radial-gradient(ellipse at top left, rgba(59,130,246,.1), transparent 70%); }
+  .card-spedizioni::before { background: radial-gradient(ellipse at top left, rgba(245,158,11,.1), transparent 70%); }
+  .card-grn::before        { background: radial-gradient(ellipse at top left, rgba(16,185,129,.1), transparent 70%); }
+  .card-stock::before      { background: radial-gradient(ellipse at top left, rgba(139,92,246,.1), transparent 70%); }
+  .card-ats::before        { background: radial-gradient(ellipse at top left, rgba(244,63,94,.1),  transparent 70%); }
+  .card-tickets::before    { background: radial-gradient(ellipse at top left, rgba(249,115,22,.1), transparent 70%); }
+  .card-presenze:hover  { border-color: rgba(59,130,246,.35); }
+  .card-spedizioni:hover { border-color: rgba(245,158,11,.35); }
+  .card-grn:hover        { border-color: rgba(16,185,129,.35); }
+  .card-stock:hover      { border-color: rgba(139,92,246,.35); }
+  .card-ats:hover        { border-color: rgba(244,63,94,.35); }
+  .card-tickets:hover    { border-color: rgba(249,115,22,.35); }
 
-/* Priority colors */
-.prio-bassa    { background: var(--green); }
-.prio-media    { background: var(--amber); }
-.prio-alta     { background: var(--orange); }
-.prio-urgente  { background: var(--red); }
+  /* 6 card in griglia: 3 colonne */
+  .welcome-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr 1fr;
+    gap: 14px;
+    max-width: 780px;
+    width: 94%;
+  }
 
-.tc-date { font-family: var(--ffm); font-size: 10px; color: var(--muted); }
-.tc-assignee { font-size: 11px; color: var(--teal); }
+  .card-grn { grid-column: auto; max-width: none; justify-self: auto; }
+  .card-ats { grid-column: auto; max-width: none; justify-self: auto; }
 
-/* Empty state */
-.empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; opacity: .5; }
-.empty-icon { font-size: 48px; }
-.empty-txt { font-family: var(--ffc); font-size: 16px; color: var(--muted); letter-spacing: 1px; }
+  .card-icon { font-size: 30px; }
+  .card-title { font-family: var(--ffc); font-size: 18px; font-weight: 800; letter-spacing: .5px; }
+  .card-presenze .card-title  { color: var(--blue); }
+  .card-spedizioni .card-title { color: var(--amber); }
+  .card-grn .card-title        { color: var(--green); }
+  .card-stock .card-title      { color: var(--violet); }
+  .card-ats .card-title        { color: var(--rose); }
+  .card-tickets .card-title    { color: var(--orange); }
+  .card-desc { font-size: 11px; color: var(--muted); line-height: 1.6; }
+  .card-arrow { font-size: 15px; color: var(--muted); margin-top: 4px; transition: transform 0.18s, color 0.18s; }
+  .app-card:hover .card-arrow { transform: translateX(5px); }
+  .card-presenze:hover .card-arrow  { color: var(--blue); }
+  .card-spedizioni:hover .card-arrow { color: var(--amber); }
+  .card-grn:hover .card-arrow        { color: var(--green); }
+  .card-stock:hover .card-arrow      { color: var(--violet); }
+  .card-ats:hover .card-arrow        { color: var(--rose); }
+  .card-tickets:hover .card-arrow    { color: var(--orange); }
 
-/* ══ DETAIL PANEL ══ */
-.detail-panel {
-  width: 420px;
-  background: var(--surface);
-  border-left: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  flex-shrink: 0;
-  overflow: hidden;
-  transition: width .25s;
-}
-.detail-panel.closed { width: 0; }
-.detail-inner { width: 420px; display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+  /* ══ IFRAMES ══ */
+  .app-frame {
+    position: absolute;
+    inset: 0;
+    width: 100%;
+    height: 100%;
+    border: none;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.22s;
+    z-index: 5;
+    /* visibility:hidden mantiene il frame vivo in memoria senza resettarlo */
+    visibility: hidden;
+  }
+  .app-frame.active { opacity: 1; pointer-events: all; visibility: visible; }
 
-.dp-header {
-  padding: 14px 16px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-  flex-shrink: 0;
-}
-.dp-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; padding: 2px 6px; border-radius: 6px; transition: background .15s; }
-.dp-close:hover { background: var(--card); color: var(--text); }
-.dp-id { font-family: var(--ffm); font-size: 11px; color: var(--muted); }
-.dp-title { font-family: var(--ffc); font-size: 18px; font-weight: 700; color: var(--text); line-height: 1.3; }
+  /* ══ LOADER ══ */
+  .frame-loader {
+    position: absolute;
+    inset: 0;
+    background: var(--bg);
+    display: flex;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    z-index: 20;
+    opacity: 0;
+    pointer-events: none;
+    transition: opacity 0.18s;
+  }
+  .frame-loader.show { opacity: 1; pointer-events: all; }
+  .loader-spinner {
+    width: 32px;
+    height: 32px;
+    border: 3px solid var(--border);
+    border-top-color: var(--teal);
+    border-radius: 50%;
+    animation: spin 0.8s linear infinite;
+  }
+  .loader-text { font-family: var(--ffc); font-size: 12px; color: var(--muted); letter-spacing: 1px; }
+  @keyframes spin { to { transform: rotate(360deg); } }
 
-.dp-body { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
+  /* ══ FRAME WRAP (per overlay desktop-only) ══ */
+  .frame-wrap {
+    position: absolute;
+    inset: 0;
+    display: none; /* mostrato via JS come gli altri app-frame */
+  }
+  .frame-wrap.active { display: block; }
+  .frame-wrap .app-frame {
+    position: absolute; inset: 0; width: 100%; height: 100%; border: none;
+    opacity: 0; pointer-events: none; transition: opacity 0.22s;
+    visibility: hidden;
+  }
+  .frame-wrap.active .app-frame { opacity: 1; pointer-events: all; visibility: visible; }
 
-.dp-field { display: flex; flex-direction: column; gap: 4px; }
-.dp-label { font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
-.dp-value { font-size: 13px; color: var(--subtle); line-height: 1.6; }
-.dp-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+  /* ══ OROLOGIO ══ */
+  .hub-clock {
+    position: fixed;
+    top: 10px;
+    right: 12px;
+    z-index: 400;
+    font-family: var(--ffm);
+    font-size: 13px;
+    font-weight: 500;
+    color: #22d3ee;
+    letter-spacing: 1.5px;
+    padding: 5px 11px;
+    border-radius: 8px;
+    /* sfondo squadrettato */
+    background-color: #0b1220;
+    background-image:
+      linear-gradient(rgba(34,211,238,.07) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(34,211,238,.07) 1px, transparent 1px);
+    background-size: 10px 10px;
+    border: 1px solid rgba(34,211,238,.18);
+    box-shadow: 0 0 12px rgba(34,211,238,.08), inset 0 0 8px rgba(34,211,238,.03);
+    pointer-events: none;
+    user-select: none;
+  }
 
-.dp-desc { background: var(--card); border-radius: 8px; padding: 10px 12px; font-size: 13px; color: var(--text); line-height: 1.7; border: 1px solid var(--border); white-space: pre-wrap; }
+  /* ══ DESKTOP-ONLY OVERLAY (Spedizioni + GRN su mobile) ══ */
+  .desktop-only-overlay {
+    display: none;
+    position: absolute;
+    inset: 0;
+    background: var(--bg);
+    z-index: 50;
+    flex-direction: column;
+    align-items: center;
+    justify-content: center;
+    gap: 14px;
+    text-align: center;
+    padding: 32px;
+  }
+  .desktop-only-overlay .do-icon { font-size: 48px; opacity: .5; }
+  .desktop-only-overlay .do-title { font-family: var(--ffc); font-size: 20px; font-weight: 700; color: var(--subtle); letter-spacing: 1px; }
+  .desktop-only-overlay .do-sub { font-size: 13px; color: var(--muted); max-width: 280px; line-height: 1.7; }
 
-/* Note */
-.notes-list { display: flex; flex-direction: column; gap: 8px; }
-.note-item { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
-.note-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
-.note-author { font-family: var(--ffc); font-size: 12px; font-weight: 700; color: var(--text); }
-.note-date { font-family: var(--ffm); font-size: 10px; color: var(--muted); }
-.note-text { font-size: 12px; color: var(--subtle); line-height: 1.6; white-space: pre-wrap; }
+  /* ══ MOBILE HUB ══ */
+  @media (max-width: 768px) {
+    html, body { overflow: hidden; height: 100%; }
 
-.dp-footer {
-  padding: 12px 16px;
-  border-top: 1px solid var(--border);
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  flex-shrink: 0;
-}
-.dp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+    /* .main resta fixed — gli iframe collassano a 0 se diventa relative */
+    .main { position: fixed; inset: 0; }
 
-textarea.mi {
-  width: 100%;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 10px;
-  color: var(--text);
-  font-family: var(--ff);
-  font-size: 13px;
-  outline: none;
-  resize: vertical;
-  min-height: 60px;
-  transition: border-color .2s;
-}
-textarea.mi:focus { border-color: var(--orange); }
-textarea.mi::placeholder { color: var(--muted); }
+    /* Drawer invariato */
+    .drawer { width: 280px; }
 
-/* ══ MODAL ══ */
-.modal-overlay {
-  position: fixed;
-  inset: 0;
-  background: rgba(0,0,0,.7);
-  backdrop-filter: blur(4px);
-  z-index: 1000;
-  display: flex;
-  align-items: center;
-  justify-content: center;
-  opacity: 0;
-  pointer-events: none;
-  transition: opacity .2s;
-}
-.modal-overlay.show { opacity: 1; pointer-events: all; }
+    /* Iframe attivo: full screen fixed sopra tutto */
+    .app-frame.active {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+      visibility: visible;
+    }
+    .frame-wrap.active {
+      position: fixed;
+      inset: 0;
+      width: 100%;
+      height: 100%;
+      z-index: 10;
+    }
+    .frame-wrap.active .app-frame {
+      position: absolute;
+      inset: 0;
+    }
 
-.modal {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  width: 580px;
-  max-width: 95vw;
-  max-height: 90vh;
-  display: flex;
-  flex-direction: column;
-  box-shadow: 0 32px 80px rgba(0,0,0,.6);
-  transform: translateY(10px);
-  transition: transform .2s;
-}
-.modal-overlay.show .modal { transform: translateY(0); }
-.modal-header {
-  padding: 18px 20px 14px;
-  border-bottom: 1px solid var(--border);
-  display: flex;
-  align-items: center;
-  gap: 10px;
-}
-.modal-title { font-family: var(--ffc); font-size: 20px; font-weight: 800; color: var(--text); letter-spacing: .5px; }
-.modal-close { margin-left: auto; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 20px; padding: 2px 6px; border-radius: 6px; transition: background .15s; }
-.modal-close:hover { background: var(--card); color: var(--text); }
-.modal-body { padding: 18px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
-.modal-footer { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+    /* Mostra overlay desktop-only su mobile */
+    .desktop-only-overlay { display: flex; }
 
-.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
-.fg { display: flex; flex-direction: column; gap: 5px; }
-.fl { font-size: 11px; font-weight: 600; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
-.fl .req { color: var(--red); }
-.mi {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 12px;
-  color: var(--text);
-  font-family: var(--ff);
-  font-size: 13px;
-  outline: none;
-  transition: border-color .2s;
-  width: 100%;
-}
-.mi:focus { border-color: var(--orange); }
-.mi::placeholder { color: var(--muted); }
-select.mi { cursor: pointer; }
+    /* Home: scroll normale */
+    #homeScreen { overflow-y: auto; height: 100vh; padding-bottom: 24px; }
 
-/* ══ LOGIN SCREEN ══ */
-.login-screen {
-  position: fixed;
-  inset: 0;
-  background: var(--bg);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 24px;
-  z-index: 2000;
-}
-.login-icon { font-size: 48px; }
-.login-title { font-family: var(--ffc); font-size: 32px; font-weight: 800; color: var(--orange); letter-spacing: 2px; }
-.login-sub { font-size: 12px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; }
-.login-card {
-  background: var(--surface);
-  border: 1px solid var(--border);
-  border-radius: 16px;
-  padding: 28px 32px;
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  gap: 16px;
-  box-shadow: 0 20px 60px rgba(0,0,0,.5);
-}
+    /* Card home: 1 colonna */
+    .welcome-grid { grid-template-columns: 1fr !important; max-width: 420px; margin: 0 auto; }
+  }
 
-/* ══ SPINNER ══ */
-.spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--orange); border-radius: 50%; animation: spin .7s linear infinite; }
-@keyframes spin { to { transform: rotate(360deg); } }
+  /* ── AUTH ── */
+  #loginScreen {
+    position:fixed; inset:0; background:var(--bg);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:20px; z-index:9000;
+  }
+  #loginScreen.hidden { display:none; }
+  .ls-logo { font-family:var(--ffc); font-size:36px; font-weight:800; letter-spacing:2px; }
+  .ls-logo .c1{color:var(--blue);} .ls-logo .c2{color:var(--teal);} .ls-logo .c3{color:var(--text);}
+  .ls-sub { font-size:12px; color:var(--muted); letter-spacing:1.5px; text-transform:uppercase; }
+  .ls-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    padding:28px 36px; display:flex; flex-direction:column; align-items:center; gap:14px;
+    box-shadow:0 20px 60px rgba(0,0,0,.5);
+  }
+  .ls-desc { font-size:13px; color:var(--muted); text-align:center; max-width:280px; line-height:1.6; }
+  .btn-gsign {
+    background:var(--blue); color:#fff; border:none; border-radius:10px;
+    padding:12px 28px; font-size:14px; font-weight:700; cursor:pointer;
+    font-family:var(--ffc); letter-spacing:.8px; transition:background .15s;
+  }
+  .btn-gsign:hover { background:#2563eb; }
+  #loginErr { font-size:12px; color:var(--red); display:none; }
 
-/* ══ TOAST ══ */
-.toast-wrap { position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
-.toast {
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 10px;
-  padding: 10px 16px;
-  font-size: 13px;
-  color: var(--text);
-  box-shadow: 0 8px 24px rgba(0,0,0,.4);
-  animation: fadeIn .2s ease;
-  max-width: 320px;
-}
-.toast.ok { border-color: var(--green); color: var(--green); }
-.toast.err { border-color: var(--red); color: var(--red); }
-@keyframes fadeIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
+  #accessDenied {
+    position:fixed; inset:0; background:var(--bg);
+    display:none; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; z-index:8999;
+  }
+  .ad-icon { font-size:48px; }
+  .ad-title { font-family:var(--ffc); font-size:24px; font-weight:800; color:var(--red); }
+  .ad-msg { font-size:13px; color:var(--muted); text-align:center; max-width:340px; line-height:1.6; }
+  .ad-out { background:transparent; color:var(--muted); border:1px solid var(--border);
+    border-radius:8px; padding:8px 18px; cursor:pointer; font-size:13px; margin-top:8px; }
 
-/* ══ IMPOSTAZIONI ══ */
-.settings-tabs { display: flex; gap: 4px; padding: 0 20px; border-bottom: 1px solid var(--border); margin-bottom: 0; }
-.stab {
-  padding: 10px 14px;
-  font-family: var(--ffc);
-  font-size: 13px;
-  font-weight: 700;
-  color: var(--muted);
-  cursor: pointer;
-  border-bottom: 2px solid transparent;
-  transition: color .15s, border-color .15s;
-  letter-spacing: .3px;
-}
-.stab.active { color: var(--orange); border-color: var(--orange); }
-.stab-panel { display: none; flex-direction: column; gap: 10px; }
-.stab-panel.active { display: flex; }
+  /* User info nel drawer */
+  .dr-user {
+    display:flex; align-items:center; gap:10px;
+    padding:10px 14px; border-top:1px solid var(--border); margin-top:auto;
+  }
+  .dr-uavatar { width:32px; height:32px; border-radius:50%; border:1px solid var(--border); }
+  .dr-uavatar-fb { width:32px; height:32px; border-radius:50%; background:var(--blue);
+    display:flex; align-items:center; justify-content:center; font-size:14px;
+    font-weight:700; color:#fff; flex-shrink:0; }
+  .dr-uinfo { flex:1; min-width:0; }
+  .dr-uname { font-size:12px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dr-urole { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; }
+  .dr-uout { background:none; border:none; color:var(--muted); cursor:pointer; font-size:16px; padding:4px; border-radius:6px; }
+  .dr-uout:hover { background:var(--card); color:var(--red); }
 
-.list-editor { display: flex; flex-direction: column; gap: 6px; }
-.list-item {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-  background: var(--card);
-  border: 1px solid var(--border);
-  border-radius: 8px;
-  padding: 8px 12px;
-}
-.list-item-name { flex: 1; font-size: 13px; color: var(--text); }
-.list-item-extra { font-size: 11px; color: var(--muted); font-family: var(--ffm); }
-.list-add { display: flex; gap: 8px; }
-.list-add .mi { flex: 1; }
+  /* Card modulo locked */
+  .app-card.locked { opacity:.35; cursor:not-allowed; pointer-events:none; }
+  .app-card.locked::after {
+    content:'🔒'; position:absolute; top:10px; right:12px; font-size:16px;
+  }
+  .app-card { position:relative; }
 
-/* color dot picker */
-.color-opts { display: flex; gap: 6px; flex-wrap: wrap; }
-.color-opt {
-  width: 22px;
-  height: 22px;
-  border-radius: 50%;
-  cursor: pointer;
-  border: 2px solid transparent;
-  transition: border-color .15s, transform .15s;
-}
-.color-opt.sel { border-color: #fff; transform: scale(1.2); }
+  /* Badge ruolo nel drawer */
+  .dr-badge {
+    font-size:9px; font-weight:700; letter-spacing:.8px; text-transform:uppercase;
+    padding:2px 6px; border-radius:4px; background:var(--card); color:var(--muted);
+    border:1px solid var(--border);
+  }
+  .dr-badge.super { background:rgba(249,115,22,.15); color:var(--orange); border-color:rgba(249,115,22,.3); }
+  .dr-badge.dev   { background:rgba(20,184,166,.15);  color:var(--teal);   border-color:rgba(20,184,166,.3); }
+  .dr-badge.user  { background:rgba(148,163,184,.1);  color:var(--subtle); border-color:var(--border); }
 
-/* ══ LOADING OVERLAY ══ */
-.loading-overlay {
-  position: fixed;
-  inset: 0;
-  background: var(--bg);
-  display: flex;
-  flex-direction: column;
-  align-items: center;
-  justify-content: center;
-  gap: 14px;
-  z-index: 1500;
-  transition: opacity .3s;
-}
-.loading-overlay.hidden { opacity: 0; pointer-events: none; }
-.lo-txt { font-family: var(--ffc); font-size: 13px; color: var(--muted); letter-spacing: 1px; }
-
-@media (max-width: 768px) {
-  .sidebar { display: none; }
-  .detail-panel { display: none; }
-}
+  /* Nav item nascosto */
+  .dr-item.hidden-mod { display:none; }
 </style>
 </head>
 <body>
 
-<!-- Loading -->
-<div class="loading-overlay" id="loadingOverlay">
-  <div class="spinner" style="width:32px;height:32px;border-width:3px"></div>
-  <div class="lo-txt" id="loadingTxt">Inizializzazione...</div>
-</div>
-
-<!-- Login -->
-<div class="login-screen" id="loginScreen" style="display:none">
-  <div class="login-icon">🎫</div>
-  <div class="login-title">TICKET MANAGER</div>
-  <div class="login-sub">WMS Hub · ATS</div>
-  <div class="login-card">
-    <div style="font-size:13px;color:var(--muted);text-align:center">Accedi con il tuo account Google ATS</div>
-    <button onclick="tcl.requestAccessToken({prompt:'select_account'})" style="background:#f97316;color:#fff;border:none;border-radius:10px;padding:12px 28px;font-size:15px;font-weight:700;cursor:pointer;font-family:'Segoe UI',sans-serif;letter-spacing:.5px">Accedi con Google</button>
-    <div id="loginErr" style="font-size:12px;color:var(--red);display:none"></div>
+<!-- ══ LOGIN SCREEN ══ -->
+<div id="loginScreen">
+  <div class="ls-logo"><span class="c1">WM</span><span class="c2">S</span><span class="c3"> Hub</span></div>
+  <div class="ls-sub">ATS Logistics Platform</div>
+  <div class="ls-card">
+    <div class="ls-desc">Accedi con il tuo account Google ATS per accedere ai moduli autorizzati.</div>
+    <button class="btn-gsign" onclick="signIn()">🔑 Accedi con Google</button>
+    <div id="loginErr"></div>
   </div>
 </div>
 
-<!-- Toast -->
-<div class="toast-wrap" id="toastWrap"></div>
-
-<!-- ══ APP ══ -->
-<div id="appRoot" style="display:none;height:100vh;display:none;flex-direction:column">
-
-  <!-- Topbar -->
-  <div class="topbar">
-    <span style="font-size:20px">🎫</span>
-    <span class="topbar-title">TICKET MANAGER</span>
-    <span class="topbar-badge" id="tbVersion">v1.0</span>
-    <div class="topbar-right" id="topbarRight">
-      <button class="btn btn-ghost btn-sm" id="btnSettings" onclick="openSettings()" style="display:none">⚙ Impostazioni</button>
-      <div class="topbar-user" id="topbarUser" style="display:none">
-        <img class="topbar-avatar" id="uAvatar" src="" alt="">
-        <div>
-          <div class="topbar-uname" id="uNameTop"></div>
-          <div class="topbar-urole" id="uRoleTop"></div>
-        </div>
-        <button class="btn btn-ghost btn-sm" onclick="doLogout()">Esci</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- Layout -->
-  <div class="layout">
-
-    <!-- Sidebar -->
-    <div class="sidebar" id="sidebar">
-      <div class="sb-sect">Visualizza</div>
-      <div class="sb-item active" id="sb-tutti" onclick="setFilter('tutti')">
-        <div class="sb-item-left"><span>📋</span> Tutti</div>
-        <span class="sb-count" id="cnt-tutti">0</span>
-      </div>
-      <div class="sb-item" id="sb-miei" onclick="setFilter('miei')">
-        <div class="sb-item-left"><span>👤</span> I Miei</div>
-        <span class="sb-count" id="cnt-miei">0</span>
-      </div>
-      <div class="sb-item" id="sb-nonassegnati" onclick="setFilter('nonassegnati')">
-        <div class="sb-item-left"><span>🔓</span> Non assegnati</div>
-        <span class="sb-count" id="cnt-nonassegnati">0</span>
-      </div>
-
-      <div class="sb-divider"></div>
-      <div class="sb-sect">Stato</div>
-      <div id="sbStatiWrap"></div>
-
-      <div class="sb-divider"></div>
-      <div class="sb-sect">Progetto</div>
-      <div id="sbProgettiWrap"></div>
-    </div>
-
-    <!-- Content -->
-    <div class="content">
-      <!-- Toolbar -->
-      <div class="toolbar">
-        <input class="toolbar-search" type="text" id="searchInput" placeholder="🔍 Cerca ticket..." oninput="renderTickets()">
-        <select class="sel" id="filterPrio" onchange="renderTickets()">
-          <option value="">Tutte le priorità</option>
-        </select>
-        <select class="sel" id="filterTipo" onchange="renderTickets()">
-          <option value="">Tutti i tipi</option>
-        </select>
-        <div style="margin-left:auto">
-          <button class="btn btn-primary" onclick="openNewTicket()">+ Nuovo Ticket</button>
-        </div>
-      </div>
-
-      <!-- List -->
-      <div class="ticket-list" id="ticketList">
-        <div class="empty-state">
-          <div class="empty-icon">🎫</div>
-          <div class="empty-txt">Nessun ticket</div>
-        </div>
-      </div>
-    </div>
-
-    <!-- Detail Panel -->
-    <div class="detail-panel closed" id="detailPanel">
-      <div class="detail-inner" id="detailInner"></div>
-    </div>
-  </div>
+<!-- ══ ACCESSO NEGATO ══ -->
+<div id="accessDenied">
+  <div class="ad-icon">🚫</div>
+  <div class="ad-title">Accesso Negato</div>
+  <div class="ad-msg" id="adMsg">Il tuo account non è autorizzato ad accedere a WMS Hub. Contatta l'amministratore.</div>
+  <button class="ad-out" onclick="signOut()">← Esci e cambia account</button>
 </div>
 
-<!-- ══ MODAL NUOVO TICKET ══ -->
-<div class="modal-overlay" id="moNew">
-  <div class="modal">
-    <div class="modal-header">
-      <span style="font-size:20px">🎫</span>
-      <span class="modal-title">Nuovo Ticket</span>
-      <button class="modal-close" onclick="closeModal('moNew')">✕</button>
-    </div>
-    <div class="modal-body">
-      <div class="fg">
-        <div class="fl">Titolo <span class="req">*</span></div>
-        <input class="mi" id="newTitle" type="text" placeholder="Descrivi brevemente il problema o la richiesta...">
-      </div>
-      <div class="form-row">
-        <div class="fg">
-          <div class="fl">Progetto <span class="req">*</span></div>
-          <select class="mi" id="newProgetto"></select>
-        </div>
-        <div class="fg">
-          <div class="fl">Tipo <span class="req">*</span></div>
-          <select class="mi" id="newTipo"></select>
-        </div>
-      </div>
-      <div class="fg">
-        <div class="fl">Priorità</div>
-        <select class="mi" id="newPrio"></select>
-      </div>
-      <div class="fg">
-        <div class="fl">Descrizione</div>
-        <textarea class="mi" id="newDesc" rows="4" placeholder="Dettagli aggiuntivi, passi per riprodurre il problema, screenshot allegati..."></textarea>
-      </div>
-      <div class="fg">
-        <div class="fl">Email richiedente</div>
-        <input class="mi" id="newEmail" type="email" placeholder="tua.email@atsgruppo.eu" readonly>
-        <div style="font-size:11px;color:var(--muted);margin-top:2px">Precompilata dal tuo account Google</div>
-      </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('moNew')">Annulla</button>
-      <button class="btn btn-primary" onclick="submitNewTicket()">🎫 Invia Ticket</button>
-    </div>
+<!-- ══ HAMBURGER ══ -->
+<button class="menu-btn" id="menuBtn" onclick="toggleDrawer()" title="Menu">
+  <span class="bar"></span>
+  <span class="bar"></span>
+  <span class="bar"></span>
+</button>
+
+<!-- ══ OVERLAY ══ -->
+<div class="overlay" id="overlay" onclick="closeDrawer()"></div>
+
+<!-- ══ DRAWER ══ -->
+<div class="drawer" id="drawer">
+  <div class="dr-header">
+    <img class="dr-logo-img" src="https://ats-spa.github.io/Hub-WMS/ATS-Logo.png" alt="ATS">
+    <span class="dr-logo-text">
+      <span class="c1">WM</span><span class="c2">S</span><span class="c3"> Hub</span>
+    </span>
   </div>
+
+  <div class="dr-nav">
+    <div class="dr-sect">Navigazione</div>
+
+    <div class="dr-item app-home" id="nav-home" onclick="showHome()">
+      <span class="dr-item-icon">🏠</span>
+      <div class="dr-item-info">
+        <span class="dr-item-name">Home</span>
+        <span class="dr-item-desc">Pannello principale</span>
+      </div>
+    </div>
+
+    <div class="dr-sect">Moduli</div>
+
+    <div class="dr-item app-presenze" id="nav-presenze" onclick="openApp('presenze')">
+      <span class="dr-item-icon">📋</span>
+      <div class="dr-item-info">
+        <span class="dr-item-name">Presenze</span>
+        <span class="dr-item-desc">Turni e assenze</span>
+      </div>
+    </div>
+
+    <div class="dr-item app-spedizioni" id="nav-spedizioni" onclick="openApp('spedizioni')">
+      <span class="dr-item-icon">📦</span>
+      <div class="dr-item-info">
+        <span class="dr-item-name">Spedizioni AWB</span>
+        <span class="dr-item-desc">Tracking AWB</span>
+      </div>
+    </div>
+
+    <div class="dr-item app-grn" id="nav-grn" onclick="openApp('grn')">
+      <span class="dr-item-icon">🟢</span>
+      <div class="dr-item-info">
+        <span class="dr-item-name">GRN Manager</span>
+        <span class="dr-item-desc">Entrate merci · SAP B1</span>
+      </div>
+    </div>
+
+    <div class="dr-item app-stock" id="nav-stock" onclick="openApp('stock')">
+      <span class="dr-item-icon">📦</span>
+      <div class="dr-item-info">
+        <span class="dr-item-name">Etichetta Stock</span>
+        <span class="dr-item-desc">Stampa etichette merce stock</span>
+      </div>
+    </div>
+
+    <div class="dr-item app-ats" id="nav-ats" onclick="openApp('ats')">
+      <span class="dr-item-icon">🏷️</span>
+      <div class="dr-item-info">
+        <span class="dr-item-name">Etichetta ATS</span>
+        <span class="dr-item-desc">Stampa etichette logistica ATS</span>
+      </div>
+    </div>
+
+    <div class="dr-item app-tickets" id="nav-tickets" onclick="openApp('tickets')">
+      <span class="dr-item-icon">🎫</span>
+      <div class="dr-item-info">
+        <span class="dr-item-name">Ticket Manager</span>
+        <span class="dr-item-desc">Segnalazioni e richieste</span>
+      </div>
+    </div>
+
+    <div class="dr-sect" id="sectAdmin" style="display:none">Admin</div>
+    <div class="dr-item" id="nav-admin" style="display:none" onclick="openAdminPanel()">
+      <span class="dr-item-icon">👥</span>
+      <div class="dr-item-info">
+        <span class="dr-item-name">Gestione Utenti</span>
+        <span class="dr-item-desc">Permessi e accessi</span>
+      </div>
+    </div>
+    <div class="dr-sect">Risorse</div>
+
+    <div class="dr-item app-guida" id="nav-guida" onclick="openApp('guida')">
+      <span class="dr-item-icon">📖</span>
+      <div class="dr-item-info">
+        <span class="dr-item-name">Guida</span>
+        <span class="dr-item-desc">Documentazione moduli</span>
+      </div>
+    </div>
+
+  </div>
+
+  <div class="dr-user" id="drUser" style="display:none">
+    <div id="drAvatarWrap"></div>
+    <div class="dr-uinfo">
+      <div class="dr-uname" id="drUName">—</div>
+      <div class="dr-urole"><span class="dr-badge" id="drBadge">user</span></div>
+    </div>
+    <button class="dr-uout" onclick="signOut()" title="Esci">⏻</button>
+  </div>
+  <div class="dr-footer">WMS Hub · ATS v1.0</div>
 </div>
 
-<!-- ══ MODAL IMPOSTAZIONI ══ -->
-<div class="modal-overlay" id="moSettings">
-  <div class="modal" style="width:660px">
-    <div class="modal-header">
-      <span style="font-size:20px">⚙</span>
-      <span class="modal-title">Impostazioni</span>
-      <button class="modal-close" onclick="closeModal('moSettings')">✕</button>
+<!-- ══ MAIN ══ -->
+<main class="main">
+
+  <div class="welcome" id="welcome">
+    <div class="welcome-header">
+      <img class="welcome-logo-img" src="https://ats-spa.github.io/Hub-WMS/ATS-Logo.png" alt="ATS">
+      <div class="welcome-title"><span class="c1">WM</span><span class="c2">S</span><span class="c3"> Hub</span></div>
+      <div class="welcome-sub">Seleziona un modulo per iniziare</div>
     </div>
-    <div class="modal-body" style="padding:0">
-      <div class="settings-tabs">
-        <div class="stab active" onclick="switchStab(this,'s-progetti')">Progetti</div>
-        <div class="stab" onclick="switchStab(this,'s-tipi')">Tipi</div>
-        <div class="stab" onclick="switchStab(this,'s-priorita')">Priorità</div>
-        <div class="stab" onclick="switchStab(this,'s-stati')">Stati</div>
-        <div class="stab" onclick="switchStab(this,'s-utenti')">Utenti</div>
-        <div class="stab" onclick="switchStab(this,'s-generale')">Generale</div>
+    <div class="welcome-grid">
+      <div class="app-card card-presenze" onclick="openApp('presenze')">
+        <div class="card-icon">📋</div>
+        <div class="card-title">Presenze</div>
+        <div class="card-desc">Gestione turni, assenze e straordinari per cooperativa e ATS.</div>
+        <div class="card-arrow">→</div>
       </div>
-      <div style="padding:16px 20px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;max-height:55vh">
-
-        <!-- Progetti -->
-        <div class="stab-panel active" id="s-progetti">
-          <div style="font-size:12px;color:var(--muted)">Progetti tracciati nel sistema di ticketing</div>
-          <div class="list-editor" id="leProgetti"></div>
-          <div class="list-add">
-            <input class="mi" id="addProgNome" placeholder="Nome progetto (es. PallexTool)">
-            <button class="btn btn-teal btn-sm" onclick="addListItem('progetti')">+ Aggiungi</button>
-          </div>
-        </div>
-
-        <!-- Tipi -->
-        <div class="stab-panel" id="s-tipi">
-          <div style="font-size:12px;color:var(--muted)">Categorie di ticket disponibili</div>
-          <div class="list-editor" id="leTipi"></div>
-          <div class="list-add">
-            <input class="mi" id="addTipoNome" placeholder="Tipo (es. Bug, Feature...)">
-            <input class="mi" id="addTipoEmoji" placeholder="Emoji" style="max-width:80px">
-            <button class="btn btn-teal btn-sm" onclick="addListItem('tipi')">+ Aggiungi</button>
-          </div>
-        </div>
-
-        <!-- Priorità -->
-        <div class="stab-panel" id="s-priorita">
-          <div style="font-size:12px;color:var(--muted)">Livelli di priorità e colori</div>
-          <div class="list-editor" id="lePriorita"></div>
-          <div class="list-add">
-            <input class="mi" id="addPrioNome" placeholder="Nome priorità">
-            <input class="mi" id="addPrioColore" placeholder="Colore (es. #ef4444)" style="max-width:130px">
-            <button class="btn btn-teal btn-sm" onclick="addListItem('priorita')">+ Aggiungi</button>
-          </div>
-        </div>
-
-        <!-- Stati -->
-        <div class="stab-panel" id="s-stati">
-          <div style="font-size:12px;color:var(--muted)">Flusso degli stati del ticket</div>
-          <div class="list-editor" id="leStati"></div>
-          <div class="list-add">
-            <input class="mi" id="addStatoNome" placeholder="Nome stato">
-            <input class="mi" id="addStatoColore" placeholder="Colore (es. #3b82f6)" style="max-width:130px">
-            <button class="btn btn-teal btn-sm" onclick="addListItem('stati')">+ Aggiungi</button>
-          </div>
-        </div>
-
-        <!-- Utenti -->
-        <div class="stab-panel" id="s-utenti">
-          <div style="font-size:12px;color:var(--muted)">Utenti del sistema. Il ruolo determina i permessi.</div>
-          <div class="list-editor" id="leUtenti"></div>
-          <div class="list-add" style="flex-wrap:wrap;gap:8px">
-            <input class="mi" id="addUtNome" placeholder="Nome" style="flex:1;min-width:120px">
-            <input class="mi" id="addUtEmail" placeholder="email@atsgruppo.eu" style="flex:2;min-width:180px">
-            <select class="mi" id="addUtRuolo" style="flex:1;min-width:120px">
-              <option value="user">User</option>
-              <option value="developer">Developer</option>
-              <option value="superadmin">Superadmin</option>
-            </select>
-            <button class="btn btn-teal btn-sm" onclick="addListItem('utenti')">+ Aggiungi</button>
-          </div>
-        </div>
-
-        <!-- Generale -->
-        <div class="stab-panel" id="s-generale">
-          <div class="fg">
-            <div class="fl">Email notifiche IT</div>
-            <input class="mi" id="cfgEmailIT" type="email" placeholder="itlogisticsata@atsgruppo.eu">
-            <div style="font-size:11px;color:var(--muted);margin-top:2px">Tutti i nuovi ticket vengono notificati a questo indirizzo</div>
-          </div>
-          <div class="fg">
-            <div class="fl">ID Cartella Drive (Gestione Ticketing)</div>
-            <input class="mi" id="cfgFolderData" placeholder="ID cartella Google Drive">
-          </div>
-          <div class="fg">
-            <div class="fl">ID Foglio Google Sheet (dati ticket)</div>
-            <input class="mi" id="cfgSheetId" placeholder="Lascia vuoto per creazione automatica">
-            <div style="font-size:11px;color:var(--muted);margin-top:2px">Verrà creato automaticamente al primo salvataggio se non specificato</div>
-          </div>
-          <div class="fg">
-            <div class="fl">Versione</div>
-            <input class="mi" id="cfgVersion" placeholder="1.0">
-          </div>
-        </div>
-
+      <div class="app-card card-spedizioni" onclick="openApp('spedizioni')">
+        <div class="card-icon">📦</div>
+        <div class="card-title">Spedizioni AWB</div>
+        <div class="card-desc">Tracking e gestione spedizioni WMS con codici AWB.</div>
+        <div class="card-arrow">→</div>
       </div>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('moSettings')">Annulla</button>
-      <button class="btn btn-primary" onclick="saveSettings()">💾 Salva Configurazione</button>
+      <div class="app-card card-grn" onclick="openApp('grn')">
+        <div class="card-icon">🟢</div>
+        <div class="card-title">GRN Manager</div>
+        <div class="card-desc">Entrate merci WMS da web app · integrazione SAP B1.</div>
+        <div class="card-arrow">→</div>
+      </div>
+      <div class="app-card card-stock" onclick="openApp('stock')">
+        <div class="card-icon">📦</div>
+        <div class="card-title">Etichetta Stock</div>
+        <div class="card-desc">Generazione e stampa etichette per merce in stock.</div>
+        <div class="card-arrow">→</div>
+      </div>
+      <div class="app-card card-ats" onclick="openApp('ats')">
+        <div class="card-icon">🏷️</div>
+        <div class="card-title">Etichetta ATS</div>
+        <div class="card-desc">Stampa etichette logistica ATS con QR e barcode.</div>
+        <div class="card-arrow">→</div>
+      </div>
+      <div class="app-card card-tickets" onclick="openApp('tickets')">
+        <div class="card-icon">🎫</div>
+        <div class="card-title">Ticket Manager</div>
+        <div class="card-desc">Segnalazioni, bug e richieste di modifica per tutti i moduli.</div>
+        <div class="card-arrow">→</div>
+      </div>
     </div>
   </div>
-</div>
 
+  <div class="frame-loader" id="loader">
+    <div class="loader-spinner"></div>
+    <div class="loader-text" id="loader-text">Caricamento...</div>
+  </div>
+
+  <iframe class="app-frame" id="frame-presenze"   src="" data-src="index_Presenze.html"      title="Presenze"></iframe>
+
+  <div class="frame-wrap" id="wrap-spedizioni">
+    <iframe class="app-frame" id="frame-spedizioni" src="" data-src="index_Spedizioni-awb.html" title="Spedizioni AWB"></iframe>
+    <div class="desktop-only-overlay" id="doo-spedizioni">
+      <div class="do-icon">🖥️</div>
+      <div class="do-title">Solo Desktop</div>
+      <div class="do-sub">Spedizioni AWB è ottimizzato per schermi grandi. Aprilo da PC o tablet orizzontale.</div>
+    </div>
+  </div>
+
+  <div class="frame-wrap" id="wrap-grn">
+    <iframe class="app-frame" id="frame-grn"        src="" data-src="index_Grn.html"            title="GRN Manager"></iframe>
+    <div class="desktop-only-overlay" id="doo-grn">
+      <div class="do-icon">🖥️</div>
+      <div class="do-title">Solo Desktop</div>
+      <div class="do-sub">GRN Manager è ottimizzato per schermi grandi. Aprilo da PC o tablet orizzontale.</div>
+    </div>
+  </div>
+
+  <iframe class="app-frame" id="frame-guida"      src="" data-src="guida_hub.html"            title="Guida"></iframe>
+
+  <iframe class="app-frame" id="frame-stock" src="" data-src="Etichetta-Logistica-Merce-Stock.html" title="Etichetta Stock"></iframe>
+  <iframe class="app-frame" id="frame-ats"   src="" data-src="Etichetta-Logistica-ATS.html"        title="Etichetta ATS"></iframe>
+  <iframe class="app-frame" id="frame-tickets" src="" data-src="index_Tickets.html"                title="Ticket Manager"></iframe>
+
+</main>
+
+<!-- ══ OROLOGIO ══ -->
+<div class="hub-clock" id="hubClock">00:00:00</div>
 
 <script>
-// ══════════════════════════════════════════════════════
-// CONFIG
-// ══════════════════════════════════════════════════════
-var CLIENT_ID = '256693770433-b1pjdpaglrh7827o6ln2s24802rcnshd.apps.googleusercontent.com';
-var CONFIG_FOLDER_ID = '16VQGMVwhW4p8u6mbCDLGlQRx8afG_m7p'; // Cartella config_tickets
-var DATA_FOLDER_ID   = '11ocsebXn-EPfhiIxTf3J6kZ3fH3xQYmf';  // Cartella Gestione Ticketing
-var CONFIG_FNAME     = 'config_tickets.json';
-var SHEET_NAME       = 'Tickets';
+  // ══════════════════════════════════════════════════════
+  // CONFIG AUTH
+  // ══════════════════════════════════════════════════════
+  var CLIENT_ID   = '256693770433-b1pjdpaglrh7827o6ln2s24802rcnshd.apps.googleusercontent.com';
+  var CONFIG_HUB_FOLDER = '1LGoR9SKDthz1tUDLxbZhClqA-xhkjoNY'; // cartella config hub
+  var CONFIG_HUB_FNAME  = 'config_hub.json';
+  var SUPER_USER        = 'daniele.izzo.ats@gmail.com';
 
-// ══ TOKEN DAL HUB (localStorage condiviso) ══
-var TOKEN = null, uEmail = '', uName = '', uPic = '', uRole = 'user';
-var tcl = null; // mantenuto per compatibilità ma non usato
+  var TOKEN = null, uEmail = '', uName = '', uPic = '', uRole = 'user';
+  var hubConfig = null, configHubFileId = null;
+  var tcl;
 
-function _hubLsGet(k){ try{ var s=localStorage.getItem(k); return s?JSON.parse(s):null; }catch(e){ return null; } }
+  // Moduli disponibili e loro chiavi
+  var ALL_MODULI = ['presenze','spedizioni','grn','stock','ats','tickets','guida'];
 
-function initFromHub(){
-  var hubToken = _hubLsGet('wms_hub_token');
-  var hubUser  = _hubLsGet('wms_hub_user');
-  if(!hubToken || !hubUser){
-    // Non autenticato → schermata accesso negato
-    hideLoading();
-    document.getElementById('loginScreen').style.display = 'none';
-    var denied = document.getElementById('hubDenied');
-    if(denied) denied.style.display = 'flex';
-    return false;
-  }
-  TOKEN  = hubToken;
-  uEmail = hubUser.email || '';
-  uName  = hubUser.name  || '';
-  uPic   = hubUser.picture || hubUser.pic || '';
-  uRole  = hubUser.role  || 'user';
-  // Auto-refresh token quando l'hub lo aggiorna
-  window.addEventListener('storage', function(e){
-    if(e.key === 'wms_hub_token' && e.newValue){
-      try{ TOKEN = JSON.parse(e.newValue); }catch(ex){}
-    }
-  });
-  return true;
-}
-var configFileId = null, sheetId = null, configData = null;
-var allTickets = [];
-var currentFilter = 'tutti';
-var currentFilterProg = null;
-var currentFilterStato = null;
-var selectedTicketId = null;
-
-
-// Config default
-var DEFAULT_CONFIG = {
-  versione: '1.0',
-  email_notifiche: 'itlogisticsata@atsgruppo.eu',
-  folder_data: '11ocsebXn-EPfhiIxTf3J6kZ3fH3xQYmf',
-  sheet_id: '',
-  progetti: [
-    { nome: 'WMS Presenze', attivo: true },
-    { nome: 'WMS GRN', attivo: true },
-    { nome: 'WMS Spedizioni AWB', attivo: true },
-    { nome: 'PallexTool', attivo: true },
-    { nome: 'SAP B1 BOM', attivo: true },
-    { nome: 'Fatture Viewer', attivo: true },
-    { nome: 'Altro', attivo: true }
-  ],
-  tipi: [
-    { nome: 'Bug', emoji: '🐛' },
-    { nome: 'Nuova Feature', emoji: '✨' },
-    { nome: 'Modifica', emoji: '🔧' },
-    { nome: 'Domanda', emoji: '❓' },
-    { nome: 'Urgente', emoji: '🚨' }
-  ],
-  priorita: [
-    { nome: 'Bassa', colore: '#10b981' },
-    { nome: 'Media', colore: '#f59e0b' },
-    { nome: 'Alta', colore: '#f97316' },
-    { nome: 'Urgente', colore: '#ef4444' }
-  ],
-  stati: [
-    { nome: 'Aperto', colore: '#3b82f6' },
-    { nome: 'Assegnato', colore: '#f59e0b' },
-    { nome: 'In attesa', colore: '#8b5cf6' },
-    { nome: 'Risolto', colore: '#10b981' },
-    { nome: 'Chiuso', colore: '#64748b' }
-  ],
-  utenti: [
-    { nome: 'Daniele Izzo', email: 'daniele.izzo.ats@gmail.com', ruolo: 'superadmin' }
-  ]
-};
-
-// ══════════════════════════════════════════════════════
-// INIT
-// ══════════════════════════════════════════════════════
-window.onload = function(){
-  setLoading('Caricamento...');
-  // Leggi token dall'hub (no OAuth proprio)
-  if(!initFromHub()) return;
-  afterLogin();
-};
-
-function initOAuth(){
-  tcl = google.accounts.oauth2.initTokenClient({
-    client_id: CLIENT_ID,
-    scope: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
-    callback: onToken
-  });
-  // Riusa sessione salvata → refresh silenzioso senza popup
-  var saved = lsGet('tkt_sess');
-  if(saved && saved.email){
-    uEmail = saved.email; uName = saved.name; uPic = saved.pic; uRole = saved.role||'user';
-    tcl.requestAccessToken({prompt:'', login_hint: uEmail});
-  } else {
-    hideLoading();
-    showEl('loginScreen');
-  }
-}
-
-function onToken(r){
-  if(r.error){ hideLoading(); showEl('loginScreen'); showLoginErr(r.error); return; }
-  TOKEN = r.access_token;
-  if(!uEmail){
-    fetch('https://www.googleapis.com/oauth2/v2/userinfo',{headers:{Authorization:'Bearer '+TOKEN}})
-      .then(function(res){ return res.json(); }).then(function(u){
-        uEmail = u.email; uName = u.name||u.email; uPic = u.picture||'';
-        afterLogin();
-      }).catch(function(e){ showLoginErr('Errore userinfo: '+e); hideLoading(); showEl('loginScreen'); });
-  } else {
-    afterLogin();
-  }
-}
-
-function afterLogin(){
-  // Recupera sheetId da sessionStorage (evita reload a freddo)
-  var cachedSheet = sessionStorage.getItem('tkt_sheet_id');
-  if(cachedSheet) sheetId = cachedSheet;
-  setLoading('Caricamento configurazione...');
-  loadConfig().then(function(){
-    determineRole();
-    // Sessione gestita dall'hub
-    setLoading('Caricamento ticket...');
-    return loadTickets();
-  }).then(function(){
-    hideLoading();
-    hideEl('loginScreen');
-    showEl('appRoot');
-    document.getElementById('appRoot').style.display = 'flex';
-    renderUI();
-    renderTickets();
-  }).catch(function(e){
-    console.error(e);
-    toast('Errore durante il caricamento: '+e.message,'err');
-    hideLoading();
-    showEl('loginScreen');
-  });
-}
-
-function determineRole(){
-  if(!configData) return;
-  var utenti = configData.utenti || [];
-  var me = utenti.find(function(u){ return u.email && u.email.toLowerCase()===uEmail.toLowerCase(); });
-  uRole = me ? (me.ruolo||'user') : 'user';
-}
-
-function doLogout(){
-  // Redirect all'hub per il logout centrale
-  window.top.location.href = 'index.html';
-}
-
-// ══════════════════════════════════════════════════════
-// CONFIG DRIVE
-// ══════════════════════════════════════════════════════
-function loadConfig(){
-  return listFiles('"'+CONFIG_FOLDER_ID+'" in parents and name="'+CONFIG_FNAME+'" and trashed=false').then(function(files){
-    if(files.length>0){
-      configFileId = files[0].id;
-      return gFetchRaw('https://www.googleapis.com/drive/v3/files/'+configFileId+'?alt=media').then(function(r){ return r.json(); }).then(function(d){
-        configData = Object.assign({}, DEFAULT_CONFIG, d);
-        // merge arrays se mancano
-        if(!configData.progetti || !configData.progetti.length) configData.progetti = DEFAULT_CONFIG.progetti;
-        if(!configData.tipi || !configData.tipi.length) configData.tipi = DEFAULT_CONFIG.tipi;
-        if(!configData.priorita || !configData.priorita.length) configData.priorita = DEFAULT_CONFIG.priorita;
-        if(!configData.stati || !configData.stati.length) configData.stati = DEFAULT_CONFIG.stati;
-        if(!configData.utenti || !configData.utenti.length) configData.utenti = DEFAULT_CONFIG.utenti;
-        sheetId = configData.sheet_id || null;
-        DATA_FOLDER_ID = configData.folder_data || DATA_FOLDER_ID;
-        // Salva sheetId in sessionStorage per accesso rapido al reload
-        if(sheetId) sessionStorage.setItem('tkt_sheet_id', sheetId);
-      });
-    } else {
-      // Primo avvio: crea config di default
-      configData = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
-      return saveConfig().then(function(){
-        toast('Config creata con valori default','ok');
-      });
-    }
-  });
-}
-
-function saveConfig(){
-  var body = JSON.stringify(configData, null, 2);
-  var bnd = 'boundary_cfg_'+Date.now();
-  var meta = configFileId
-    ? JSON.stringify({name:CONFIG_FNAME})
-    : JSON.stringify({name:CONFIG_FNAME, parents:[CONFIG_FOLDER_ID]});
-  var multipart = '--'+bnd+'\r\nContent-Type: application/json\r\n\r\n'+meta+'\r\n--'+bnd+'\r\nContent-Type: application/json\r\n\r\n'+body+'\r\n--'+bnd+'--';
-  var method = configFileId ? 'PATCH' : 'POST';
-  var url = configFileId
-    ? 'https://www.googleapis.com/upload/drive/v3/files/'+configFileId+'?uploadType=multipart'
-    : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
-  return fetch(url,{method:method,headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'multipart/related; boundary='+bnd},body:multipart})
-    .then(function(r){ return r.json(); }).then(function(d){
-      if(d.id) configFileId = d.id;
-    });
-}
-
-// ══════════════════════════════════════════════════════
-// SHEET (dati ticket)
-// ══════════════════════════════════════════════════════
-var SHEET_HEADERS = ['ID','Titolo','Progetto','Tipo','Priorita','Stato','Descrizione','Autore','AutoreEmail','Assegnato','AssegnatoEmail','DataApertura','DataAggiornamento','Note'];
-
-function ensureSheet(){
-  if(sheetId) return Promise.resolve(sheetId);
-  // Crea nuovo sheet
-  return fetch('https://sheets.googleapis.com/v4/spreadsheets',{
-    method:'POST',
-    headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
-    body:JSON.stringify({properties:{title:'Ticket WMS Hub'},sheets:[{properties:{title:SHEET_NAME}}]})
-  }).then(function(r){
-    if(r.status===401) throw new Error('Token scaduto — ricarica la pagina e rifai il login');
-    if(!r.ok) throw new Error('Errore creazione Sheet: '+r.status);
-    return r.json();
-  }).then(function(d){
-    if(!d.spreadsheetId) throw new Error('Sheet ID non ricevuto da Google (risposta: '+JSON.stringify(d)+')');
-    sheetId = d.spreadsheetId;
-    // Sposta nella cartella dati
-    return fetch('https://www.googleapis.com/drive/v3/files/'+sheetId+'?addParents='+DATA_FOLDER_ID+'&removeParents=root&fields=id',{
-      method:'PATCH',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},body:JSON.stringify({})
-    }).then(function(r2){
-      if(!r2.ok) console.warn('Spostamento cartella fallito (non bloccante):', r2.status);
-      // Scrivi header
-      return sheetUpdate([[SHEET_HEADERS]],SHEET_NAME+'!A1');
-    }).then(function(){
-      configData.sheet_id = sheetId;
-      return saveConfig();
-    }).then(function(){ return sheetId; });
-  });
-}
-
-function loadTickets(){
-  if(!sheetId) return Promise.resolve([]);
-  return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+sheetId+'/values/'+SHEET_NAME+'!A2:Z',{
-    headers:{Authorization:'Bearer '+TOKEN}
-  }).then(function(r){ return r.json(); }).then(function(d){
-    var rows = d.values || [];
-    allTickets = rows.map(function(r){
-      return {
-        id:r[0]||'', titolo:r[1]||'', progetto:r[2]||'', tipo:r[3]||'', priorita:r[4]||'',
-        stato:r[5]||'', descrizione:r[6]||'', autore:r[7]||'', autoreEmail:r[8]||'',
-        assegnato:r[9]||'', assegnatoEmail:r[10]||'',
-        dataApertura:r[11]||'', dataAggiornamento:r[12]||'',
-        note: r[13] ? tryParseJSON(r[13]) : []
-      };
-    }).filter(function(t){ return t.id; });
-  });
-}
-
-function saveTicket(ticket){
-  return ensureSheet().then(function(){
-    // Cerca riga esistente
-    var idx = allTickets.findIndex(function(t){ return t.id===ticket.id; });
-    var row = [
-      ticket.id, ticket.titolo, ticket.progetto, ticket.tipo, ticket.priorita,
-      ticket.stato, ticket.descrizione, ticket.autore, ticket.autoreEmail,
-      ticket.assegnato||'', ticket.assegnatoEmail||'',
-      ticket.dataApertura, ticket.dataAggiornamento,
-      JSON.stringify(ticket.note||[])
-    ];
-    if(idx>=0){
-      // Update riga esistente (idx+2 perché header è riga 1)
-      return sheetUpdate([row], SHEET_NAME+'!A'+(idx+2));
-    } else {
-      // Append
-      return sheetAppend([row]);
-    }
-  });
-}
-
-function sheetUpdate(values, range){
-  return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+sheetId+'/values/'+encodeURIComponent(range)+'?valueInputOption=RAW',{
-    method:'PUT',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
-    body:JSON.stringify({values:values})
-  }).then(function(r){ return r.json(); });
-}
-
-function sheetAppend(values){
-  return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+sheetId+'/values/'+SHEET_NAME+'!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS',{
-    method:'POST',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
-    body:JSON.stringify({values:values})
-  }).then(function(r){ return r.json(); });
-}
-
-// ══════════════════════════════════════════════════════
-// UI RENDER
-// ══════════════════════════════════════════════════════
-function renderUI(){
-  // Topbar
-  document.getElementById('uAvatar').src = uPic || '';
-  document.getElementById('uNameTop').textContent = uName;
-  document.getElementById('uRoleTop').textContent = uRole;
-  document.getElementById('topbarUser').style.display = 'flex';
-  if(uRole==='superadmin' || uRole==='developer'){
-    document.getElementById('btnSettings').style.display = uRole==='superadmin' ? 'flex' : 'none';
-  }
-
-  // Sidebar stati
-  renderSbStati();
-  renderSbProgetti();
-
-  // Filtri toolbar
-  renderFilterSelects();
-}
-
-function renderSbStati(){
-  var cfg = configData.stati||[];
-  var html = '';
-  html += '<div class="sb-item" id="sb-stato-all" onclick="setFilterStato(null)"><div class="sb-item-left"><span style="width:8px;height:8px;border-radius:50%;background:var(--subtle);display:inline-block"></span> &nbsp;Tutti gli stati</div></div>';
-  cfg.forEach(function(s){
-    var slug = s.nome.toLowerCase().replace(/\s+/g,'-');
-    html += '<div class="sb-item" id="sb-stato-'+slug+'" onclick="setFilterStato(\''+s.nome+'\')"><div class="sb-item-left"><span class="dot" style="background:'+s.colore+'"></span> '+s.nome+'</div><span class="sb-count" id="cnt-stato-'+slug+'">0</span></div>';
-  });
-  document.getElementById('sbStatiWrap').innerHTML = html;
-}
-
-function renderSbProgetti(){
-  var cfg = (configData.progetti||[]).filter(function(p){ return p.attivo!==false; });
-  var html = '';
-  html += '<div class="sb-item" id="sb-prog-all" onclick="setFilterProg(null)"><div class="sb-item-left"><span>🗂</span> Tutti</div></div>';
-  cfg.forEach(function(p){
-    var slug = slugify(p.nome);
-    html += '<div class="sb-item" id="sb-prog-'+slug+'" onclick="setFilterProg(\''+escAttr(p.nome)+'\')"><div class="sb-item-left"><span>▸</span> '+esc(p.nome)+'</div><span class="sb-count" id="cnt-prog-'+slug+'">0</span></div>';
-  });
-  document.getElementById('sbProgettiWrap').innerHTML = html;
-}
-
-function renderFilterSelects(){
-  var pSel = document.getElementById('filterPrio');
-  var tSel = document.getElementById('filterTipo');
-  pSel.innerHTML = '<option value="">Tutte le priorità</option>';
-  (configData.priorita||[]).forEach(function(p){
-    pSel.innerHTML += '<option value="'+esc(p.nome)+'">'+esc(p.nome)+'</option>';
-  });
-  tSel.innerHTML = '<option value="">Tutti i tipi</option>';
-  (configData.tipi||[]).forEach(function(t){
-    tSel.innerHTML += '<option value="'+esc(t.nome)+'">'+(t.emoji?t.emoji+' ':'')+esc(t.nome)+'</option>';
-  });
-  // Modal selects
-  fillSelect('newProgetto', (configData.progetti||[]).filter(function(p){return p.attivo!==false;}).map(function(p){return {v:p.nome,l:p.nome};}));
-  fillSelect('newTipo', (configData.tipi||[]).map(function(t){return {v:t.nome,l:(t.emoji?t.emoji+' ':'')+t.nome};}));
-  fillSelect('newPrio', (configData.priorita||[]).map(function(p){return {v:p.nome,l:p.nome};}));
-}
-
-function fillSelect(id, opts){
-  var el = document.getElementById(id);
-  if(!el) return;
-  el.innerHTML = '';
-  opts.forEach(function(o){ el.innerHTML += '<option value="'+esc(o.v)+'">'+esc(o.l)+'</option>'; });
-}
-
-function renderTickets(){
-  var search = (document.getElementById('searchInput').value||'').toLowerCase();
-  var filterPrio = document.getElementById('filterPrio').value;
-  var filterTipo = document.getElementById('filterTipo').value;
-
-  var filtered = allTickets.filter(function(t){
-    if(currentFilter==='miei' && t.assegnatoEmail.toLowerCase()!==uEmail.toLowerCase()) return false;
-    if(currentFilter==='nonassegnati' && t.assegnato) return false;
-    if(currentFilterStato && t.stato!==currentFilterStato) return false;
-    if(currentFilterProg && t.progetto!==currentFilterProg) return false;
-    if(filterPrio && t.priorita!==filterPrio) return false;
-    if(filterTipo && t.tipo!==filterTipo) return false;
-    if(search && !((t.titolo+t.descrizione+t.autore+t.progetto).toLowerCase().includes(search))) return false;
-    return true;
-  });
-
-  // Conteggi sidebar
-  document.getElementById('cnt-tutti').textContent = allTickets.length;
-  document.getElementById('cnt-miei').textContent = allTickets.filter(function(t){ return t.assegnatoEmail.toLowerCase()===uEmail.toLowerCase(); }).length;
-  document.getElementById('cnt-nonassegnati').textContent = allTickets.filter(function(t){ return !t.assegnato; }).length;
-  (configData.stati||[]).forEach(function(s){
-    var slug = s.nome.toLowerCase().replace(/\s+/g,'-');
-    var el = document.getElementById('cnt-stato-'+slug);
-    if(el) el.textContent = allTickets.filter(function(t){ return t.stato===s.nome; }).length;
-  });
-  (configData.progetti||[]).forEach(function(p){
-    var slug = slugify(p.nome);
-    var el = document.getElementById('cnt-prog-'+slug);
-    if(el) el.textContent = allTickets.filter(function(t){ return t.progetto===p.nome; }).length;
-  });
-
-  var list = document.getElementById('ticketList');
-  if(!filtered.length){
-    list.innerHTML = '<div class="empty-state"><div class="empty-icon">🎫</div><div class="empty-txt">Nessun ticket trovato</div></div>';
-    return;
-  }
-
-  // Ordina: aperti/assegnati prima, poi per data desc
-  filtered.sort(function(a,b){
-    var closed = ['Risolto','Chiuso'];
-    var aClosed = closed.includes(a.stato)?1:0;
-    var bClosed = closed.includes(b.stato)?1:0;
-    if(aClosed!==bClosed) return aClosed-bClosed;
-    return new Date(b.dataApertura)-new Date(a.dataApertura);
-  });
-
-  list.innerHTML = filtered.map(function(t){ return renderTicketCard(t); }).join('');
-}
-
-function renderTicketCard(t){
-  var prio = (configData.priorita||[]).find(function(p){ return p.nome===t.priorita; });
-  var prioColor = prio ? prio.colore : 'var(--muted)';
-  var statoSlug = t.stato.toLowerCase().replace(/\s+/g,'-');
-  var tipo = (configData.tipi||[]).find(function(tp){ return tp.nome===t.tipo; });
-  var tipoLabel = tipo ? (tipo.emoji?tipo.emoji+' ':'')+tipo.nome : t.tipo;
-
-  return '<div class="ticket-card'+(selectedTicketId===t.id?' selected':'')+'" onclick="selectTicket(\''+t.id+'\')">'+
-    '<div class="ticket-priority-bar" style="background:'+prioColor+'"></div>'+
-    '<div class="tc-body">'+
-      '<div class="tc-header">'+
-        '<span class="tc-id">#'+t.id+'</span>'+
-        '<span class="badge badge-stato-'+statoSlug+'">'+esc(t.stato)+'</span>'+
-        '<span class="badge badge-tipo">'+tipoLabel+'</span>'+
-      '</div>'+
-      '<div class="tc-title">'+esc(t.titolo)+'</div>'+
-      (t.descrizione?'<div class="tc-desc">'+esc(t.descrizione)+'</div>':'')+
-      '<div class="tc-meta">'+
-        '<span class="badge badge-progetto">'+esc(t.progetto)+'</span>'+
-        (t.assegnato?'<span class="badge badge-assegnato">👤 '+esc(t.assegnato)+'</span>':
-          '<span style="font-size:11px;color:var(--muted)">Non assegnato</span>')+
-        '<span style="font-size:11px;color:var(--muted)">'+esc(t.autore)+'</span>'+
-      '</div>'+
-    '</div>'+
-    '<div class="tc-right">'+
-      '<span class="tc-date">'+formatDate(t.dataApertura)+'</span>'+
-      (t.priorita?'<span style="font-size:11px;color:'+prioColor+'">● '+esc(t.priorita)+'</span>':'')+
-    '</div>'+
-  '</div>';
-}
-
-// ══════════════════════════════════════════════════════
-// DETAIL PANEL
-// ══════════════════════════════════════════════════════
-function selectTicket(id){
-  selectedTicketId = id;
-  var t = allTickets.find(function(x){ return x.id===id; });
-  if(!t) return;
-  renderTickets(); // aggiorna selected
-  renderDetail(t);
-  document.getElementById('detailPanel').classList.remove('closed');
-}
-
-function renderDetail(t){
-  var prio = (configData.priorita||[]).find(function(p){ return p.nome===t.priorita; });
-  var prioColor = prio ? prio.colore : 'var(--muted)';
-  var tipo = (configData.tipi||[]).find(function(tp){ return tp.nome===t.tipo; });
-  var tipoLabel = tipo ? (tipo.emoji?tipo.emoji+' ':'')+tipo.nome : t.tipo;
-  var statoSlug = t.stato.toLowerCase().replace(/\s+/g,'-');
-
-  var canAssign = (uRole==='developer'||uRole==='superadmin') && !t.assegnato;
-  var canChangeStatus = uRole==='developer'||uRole==='superadmin';
-  var canAddNote = true;
-
-  // Selects stati
-  var statiOpts = (configData.stati||[]).map(function(s){
-    return '<option value="'+esc(s.nome)+'"'+(s.nome===t.stato?' selected':'')+'>'+esc(s.nome)+'</option>';
-  }).join('');
-
-  var notes = (t.note||[]).map(function(n){
-    return '<div class="note-item"><div class="note-meta"><span class="note-author">'+esc(n.autore)+'</span><span class="note-date">'+formatDate(n.data)+'</span></div><div class="note-text">'+esc(n.testo)+'</div></div>';
-  }).join('') || '<div style="font-size:12px;color:var(--muted)">Nessuna nota ancora.</div>';
-
-  var html =
-    '<div class="dp-header">'+
-      '<button class="dp-close" onclick="closeDetail()">←</button>'+
-      '<div>'+
-        '<div class="dp-id">#'+t.id+' · '+formatDate(t.dataApertura)+'</div>'+
-        '<div class="dp-title">'+esc(t.titolo)+'</div>'+
-      '</div>'+
-    '</div>'+
-    '<div class="dp-body">'+
-      '<div class="dp-row">'+
-        '<div class="dp-field"><div class="dp-label">Stato</div>'+
-          (canChangeStatus
-            ? '<select class="mi" id="dpStato" onchange="changeStato(this.value)">'+statiOpts+'</select>'
-            : '<span class="badge badge-stato-'+statoSlug+'">'+esc(t.stato)+'</span>')+
-        '</div>'+
-        '<div class="dp-field"><div class="dp-label">Priorità</div><div class="dp-value" style="color:'+prioColor+'">● '+esc(t.priorita)+'</div></div>'+
-      '</div>'+
-      '<div class="dp-row">'+
-        '<div class="dp-field"><div class="dp-label">Progetto</div><div class="dp-value">'+esc(t.progetto)+'</div></div>'+
-        '<div class="dp-field"><div class="dp-label">Tipo</div><div class="dp-value">'+tipoLabel+'</div></div>'+
-      '</div>'+
-      '<div class="dp-row">'+
-        '<div class="dp-field"><div class="dp-label">Aperto da</div><div class="dp-value">'+esc(t.autore)+'<br><span style="font-size:11px;color:var(--muted)">'+esc(t.autoreEmail)+'</span></div></div>'+
-        '<div class="dp-field"><div class="dp-label">Assegnato a</div><div class="dp-value">'+
-          (t.assegnato ? esc(t.assegnato) : '<span style="color:var(--muted)">Non assegnato</span>')+
-          (canAssign ? '<br><button class="btn btn-teal btn-sm" style="margin-top:6px" onclick="assignToMe()">👤 Assegna a me</button>' : '')+
-        '</div></div>'+
-      '</div>'+
-      (t.descrizione?'<div class="dp-field"><div class="dp-label">Descrizione</div><div class="dp-desc">'+esc(t.descrizione)+'</div></div>':'')+
-      '<div class="dp-field"><div class="dp-label">Note ('+( t.note?t.note.length:0)+')</div><div class="notes-list">'+notes+'</div></div>'+
-    '</div>'+
-    '<div class="dp-footer">'+
-      (canAddNote?'<textarea class="mi" id="dpNoteInput" rows="2" placeholder="Aggiungi una nota..."></textarea>':'') +
-      '<div class="dp-actions">'+
-        (canAddNote?'<button class="btn btn-ghost btn-sm" onclick="addNote()">💬 Aggiungi nota</button>':'')+
-        
-        ((uRole==='superadmin')?'<button class="btn btn-red btn-sm" onclick="deleteTicket(\''+t.id+'\')">🗑 Elimina</button>':'')+
-      '</div>'+
-    '</div>';
-
-  document.getElementById('detailInner').innerHTML = html;
-}
-
-function closeDetail(){
-  selectedTicketId = null;
-  document.getElementById('detailPanel').classList.add('closed');
-  renderTickets();
-}
-
-// ══════════════════════════════════════════════════════
-// AZIONI TICKET
-// ══════════════════════════════════════════════════════
-function openNewTicket(){
-  if(!TOKEN){ toast('Effettua il login prima','err'); return; }
-  document.getElementById('newTitle').value = '';
-  document.getElementById('newDesc').value = '';
-  document.getElementById('newEmail').value = uEmail;
-  renderFilterSelects();
-  openModal('moNew');
-}
-
-function submitNewTicket(){
-  var titolo = document.getElementById('newTitle').value.trim();
-  var progetto = document.getElementById('newProgetto').value;
-  var tipo = document.getElementById('newTipo').value;
-  var prio = document.getElementById('newPrio').value;
-  var desc = document.getElementById('newDesc').value.trim();
-  if(!titolo||!progetto||!tipo){ toast('Compila i campi obbligatori','err'); return; }
-
-  var now = new Date().toISOString();
-  var id = 'TKT-'+Date.now().toString(36).toUpperCase();
-  var ticket = {
-    id: id, titolo: titolo, progetto: progetto, tipo: tipo,
-    priorita: prio, stato: (configData.stati&&configData.stati[0]?configData.stati[0].nome:'Aperto'),
-    descrizione: desc, autore: uName, autoreEmail: uEmail,
-    assegnato: '', assegnatoEmail: '',
-    dataApertura: now, dataAggiornamento: now, note: []
+  // Config default
+  var DEFAULT_HUB_CONFIG = {
+    super_users: [SUPER_USER],
+    utenti: []
   };
 
-  saveTicket(ticket).then(function(){
-    allTickets.push(ticket);
-    closeModal('moNew');
-    renderTickets();
-    selectTicket(id);
-    toast('Ticket creato: '+id,'ok');
-    toast('📧 Notifica mail in partenza entro 2 minuti via servizio automatico','ok');
-      }).catch(function(e){ toast('Errore salvataggio: '+e.message,'err'); });
-}
-
-function assignToMe(){
-  var t = allTickets.find(function(x){ return x.id===selectedTicketId; });
-  if(!t) return;
-  t.assegnato = uName;
-  t.assegnatoEmail = uEmail;
-  t.stato = (configData.stati&&configData.stati[1]?configData.stati[1].nome:'Assegnato');
-  t.dataAggiornamento = new Date().toISOString();
-  saveTicket(t).then(function(){
-    renderDetail(t);
-    renderTickets();
-    toast('Ticket assegnato a te','ok');
-  }).catch(function(e){ toast('Errore: '+e.message,'err'); });
-}
-
-function changeStato(stato){
-  var t = allTickets.find(function(x){ return x.id===selectedTicketId; });
-  if(!t) return;
-  t.stato = stato;
-  t.dataAggiornamento = new Date().toISOString();
-  saveTicket(t).then(function(){
-    renderDetail(t);
-    renderTickets();
-    toast('Stato aggiornato: '+stato,'ok');
-  }).catch(function(e){ toast('Errore: '+e.message,'err'); });
-}
-
-function addNote(){
-  var t = allTickets.find(function(x){ return x.id===selectedTicketId; });
-  if(!t) return;
-  var txt = (document.getElementById('dpNoteInput').value||'').trim();
-  if(!txt){ toast('Scrivi una nota prima','err'); return; }
-  if(!t.note) t.note = [];
-  t.note.push({ autore: uName, data: new Date().toISOString(), testo: txt });
-  t.dataAggiornamento = new Date().toISOString();
-  saveTicket(t).then(function(){
-    renderDetail(t);
-    renderTickets();
-    toast('Nota aggiunta','ok');
-  }).catch(function(e){ toast('Errore: '+e.message,'err'); });
-}
-
-function deleteTicket(id){
-  if(!confirm('Eliminare questo ticket? L\'operazione non è reversibile.')) return;
-  var idx = allTickets.findIndex(function(t){ return t.id===id; });
-  if(idx<0) return;
-  allTickets.splice(idx,1);
-  // Riscrivi tutto il sheet
-  rewriteSheet().then(function(){
-    closeDetail();
-    renderTickets();
-    toast('Ticket eliminato','ok');
-  }).catch(function(e){ toast('Errore: '+e.message,'err'); });
-}
-
-function rewriteSheet(){
-  var rows = [SHEET_HEADERS].concat(allTickets.map(function(t){
-    return [t.id,t.titolo,t.progetto,t.tipo,t.priorita,t.stato,t.descrizione,t.autore,t.autoreEmail,t.assegnato,t.assegnatoEmail,t.dataApertura,t.dataAggiornamento,JSON.stringify(t.note||[])];
-  }));
-  return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+sheetId+'/values/'+SHEET_NAME+'!A1?valueInputOption=RAW',{
-    method:'PUT',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
-    body:JSON.stringify({values:rows})
-  }).then(function(r){ return r.json(); });
-}
-
-// ══════════════════════════════════════════════════════
-// FILTRI
-// ══════════════════════════════════════════════════════
-function setFilter(f){
-  currentFilter = f;
-  ['tutti','miei','nonassegnati'].forEach(function(k){
-    document.getElementById('sb-'+k).classList.toggle('active', k===f);
-  });
-  renderTickets();
-}
-
-function setFilterStato(s){
-  currentFilterStato = s;
-  renderTickets();
-}
-
-function setFilterProg(p){
-  currentFilterProg = p;
-  renderTickets();
-}
-
-// ══════════════════════════════════════════════════════
-// MAIL
-// ══════════════════════════════════════════════════════
-// Mail gestite automaticamente dal servizio Python
-
-// ══════════════════════════════════════════════════════
-// IMPOSTAZIONI
-// ══════════════════════════════════════════════════════
-function openSettings(){
-  if(uRole!=='superadmin'){ toast('Solo il superadmin può accedere alle impostazioni','err'); return; }
-  // Populate
-  renderLeEditor('leProgetti', configData.progetti||[], 'progetti');
-  renderLeEditor('leTipi', configData.tipi||[], 'tipi');
-  renderLeEditor('lePriorita', configData.priorita||[], 'priorita');
-  renderLeEditor('leStati', configData.stati||[], 'stati');
-  renderLeEditor('leUtenti', configData.utenti||[], 'utenti');
-  document.getElementById('cfgEmailIT').value = configData.email_notifiche||'';
-  document.getElementById('cfgFolderData').value = configData.folder_data||DATA_FOLDER_ID;
-  document.getElementById('cfgSheetId').value = configData.sheet_id||'';
-  document.getElementById('cfgVersion').value = configData.versione||'1.0';
-  openModal('moSettings');
-}
-
-function renderLeEditor(containerId, items, type){
-  var c = document.getElementById(containerId);
-  if(!c) return;
-  c.innerHTML = items.map(function(item, i){
-    var label = item.nome || item.email || '';
-    var extra = '';
-    if(type==='tipi') extra = '<span class="list-item-extra">'+(item.emoji||'')+'</span>';
-    if(type==='priorita'||type==='stati') extra = '<span class="dot" style="background:'+(item.colore||'#888')+'"></span>';
-    if(type==='utenti') extra = '<span class="list-item-extra badge '+(item.ruolo==='superadmin'?'badge-tipo':item.ruolo==='developer'?'badge-assegnato':'badge-progetto')+'">'+esc(item.ruolo)+'</span>';
-    return '<div class="list-item">'+extra+'<span class="list-item-name">'+esc(label)+(type==='utenti'?' · '+esc(item.email||''):'')+'</span>'+
-      '<button class="btn btn-red btn-sm" onclick="removeListItem(\''+type+'\','+i+')">✕</button>'+
-    '</div>';
-  }).join('') || '<div style="font-size:12px;color:var(--muted);padding:4px 0">Nessun elemento</div>';
-}
-
-function addListItem(type){
-  var cfg = configData;
-  if(type==='progetti'){
-    var nome = document.getElementById('addProgNome').value.trim();
-    if(!nome) return;
-    cfg.progetti = cfg.progetti||[];
-    cfg.progetti.push({nome:nome, attivo:true});
-    document.getElementById('addProgNome').value='';
-  } else if(type==='tipi'){
-    var nome = document.getElementById('addTipoNome').value.trim();
-    var emoji = document.getElementById('addTipoEmoji').value.trim();
-    if(!nome) return;
-    cfg.tipi = cfg.tipi||[];
-    cfg.tipi.push({nome:nome, emoji:emoji});
-    document.getElementById('addTipoNome').value=''; document.getElementById('addTipoEmoji').value='';
-  } else if(type==='priorita'){
-    var nome = document.getElementById('addPrioNome').value.trim();
-    var colore = document.getElementById('addPrioColore').value.trim()||'#94a3b8';
-    if(!nome) return;
-    cfg.priorita = cfg.priorita||[];
-    cfg.priorita.push({nome:nome, colore:colore});
-    document.getElementById('addPrioNome').value=''; document.getElementById('addPrioColore').value='';
-  } else if(type==='stati'){
-    var nome = document.getElementById('addStatoNome').value.trim();
-    var colore = document.getElementById('addStatoColore').value.trim()||'#64748b';
-    if(!nome) return;
-    cfg.stati = cfg.stati||[];
-    cfg.stati.push({nome:nome, colore:colore});
-    document.getElementById('addStatoNome').value=''; document.getElementById('addStatoColore').value='';
-  } else if(type==='utenti'){
-    var nome = document.getElementById('addUtNome').value.trim();
-    var email = document.getElementById('addUtEmail').value.trim();
-    var ruolo = document.getElementById('addUtRuolo').value;
-    if(!nome||!email) return;
-    cfg.utenti = cfg.utenti||[];
-    cfg.utenti.push({nome:nome, email:email, ruolo:ruolo});
-    document.getElementById('addUtNome').value=''; document.getElementById('addUtEmail').value='';
+  // ── OAuth ──────────────────────────────────────────────
+  function waitGsi(){
+    if(typeof google==='undefined'){ setTimeout(waitGsi,150); return; }
+    tcl = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+      callback: onToken
+    });
+    var s = lsG('hub_sess');
+    if(s && s.email){ uEmail=s.email; uName=s.name||''; uPic=s.pic||'';
+      tcl.requestAccessToken({prompt:'', login_hint:uEmail});
+    } else {
+      showLogin();
+    }
   }
-  renderLeEditor('le'+capitalize(type), cfg[type]||[], type);
-}
+  window.onload = waitGsi;
 
-function removeListItem(type, idx){
-  if(!configData[type]) return;
-  configData[type].splice(idx,1);
-  renderLeEditor('le'+capitalize(type), configData[type]||[], type);
-}
+  function signIn(){ tcl.requestAccessToken({prompt:'select_account'}); }
 
-function saveSettings(){
-  configData.email_notifiche = document.getElementById('cfgEmailIT').value.trim();
-  configData.folder_data = document.getElementById('cfgFolderData').value.trim();
-  configData.sheet_id = document.getElementById('cfgSheetId').value.trim();
-  configData.versione = document.getElementById('cfgVersion').value.trim();
-  if(configData.sheet_id) sheetId = configData.sheet_id;
-  DATA_FOLDER_ID = configData.folder_data || DATA_FOLDER_ID;
-  saveConfig().then(function(){
-    closeModal('moSettings');
-    renderUI();
-    renderTickets();
-    toast('Configurazione salvata','ok');
-  }).catch(function(e){ toast('Errore salvataggio config: '+e.message,'err'); });
-}
+  function signOut(){
+    if(TOKEN) try{ google.accounts.oauth2.revoke(TOKEN,function(){}); }catch(e){}
+    TOKEN=null; uEmail=''; uName=''; uPic=''; uRole='user'; hubConfig=null;
+    lsDel('hub_sess'); lsDel('hub_token');
+    showLogin();
+    // Nasconde tutto
+    document.getElementById('accessDenied').style.display='none';
+    document.getElementById('drUser').style.display='none';
+  }
 
-function switchStab(el, panelId){
-  document.querySelectorAll('.stab').forEach(function(t){ t.classList.remove('active'); });
-  document.querySelectorAll('.stab-panel').forEach(function(p){ p.classList.remove('active'); });
-  el.classList.add('active');
-  document.getElementById(panelId).classList.add('active');
-}
-
-// ══════════════════════════════════════════════════════
-// HELPERS
-// ══════════════════════════════════════════════════════
-function gFetch(url, opts){
-  var headers = Object.assign({Authorization:'Bearer '+TOKEN}, (opts&&opts.headers)||{});
-  return fetch(url, Object.assign({}, opts||{}, {headers:headers})).then(function(r){
-    if(r.status===401){
-      // Token scaduto: rileggi dall'hub
-      var fresh = _hubLsGet('wms_hub_token');
-      if(fresh && fresh !== TOKEN){ TOKEN = fresh; return gFetch(url, opts); }
-      toast('Sessione scaduta — torna all\'hub','err');
-      throw new Error('401 Unauthorized');
+  function onToken(r){
+    if(r.error){
+      if(!lsG('hub_sess')) showLogin();
+      showLoginErr(r.error);
+      return;
     }
-    return r.json();
-  });
-}
-function gFetchRaw(url, opts){
-  var headers = Object.assign({Authorization:'Bearer '+TOKEN}, (opts&&opts.headers)||{});
-  return fetch(url, Object.assign({}, opts||{}, {headers:headers})).then(function(r){
-    if(r.status===401){
-      var fresh = _hubLsGet('wms_hub_token');
-      if(fresh && fresh !== TOKEN){ TOKEN = fresh; return gFetchRaw(url, opts); }
-      throw new Error('401 Unauthorized');
+    TOKEN = r.access_token;
+    window.TOKEN = TOKEN; // rendi globale per script multipli
+    lsS('hub_token', TOKEN);
+    // Auto-refresh ogni 50 minuti
+    clearTimeout(window._hubRefresh);
+    window._hubRefresh = setTimeout(function(){
+      var s=lsG('hub_sess');
+      tcl.requestAccessToken({prompt:'', login_hint:s?s.email||'':''});
+    }, 50*60*1000);
+    // Carica userinfo
+    fetch('https://www.googleapis.com/oauth2/v2/userinfo',{headers:{Authorization:'Bearer '+TOKEN}})
+      .then(function(res){ return res.json(); })
+      .then(function(u){
+        if(u.error){ showLogin(); return; }
+        uEmail = u.email||''; uName = u.name||u.email||''; uPic = u.picture||'';
+        lsS('hub_sess',{email:uEmail,name:uName,pic:uPic});
+        // Salva token in localStorage per i moduli figli
+        lsS('hub_token', TOKEN);
+        lsS('hub_user', {email:uEmail,name:uName,pic:uPic});
+        loadHubConfig();
+      }).catch(function(){ showLogin(); });
+  }
+
+  function showLogin(){
+    document.getElementById('loginScreen').classList.remove('hidden');
+  }
+  function hideLogin(){
+    document.getElementById('loginScreen').classList.add('hidden');
+  }
+  function showLoginErr(msg){
+    var e=document.getElementById('loginErr');
+    e.textContent=msg; e.style.display='block';
+  }
+
+  // ── Carica config hub da Drive ─────────────────────────
+  function loadHubConfig(){
+    gFetch('https://www.googleapis.com/drive/v3/files?q='+
+      encodeURIComponent('"'+CONFIG_HUB_FOLDER+'" in parents and name="'+CONFIG_HUB_FNAME+'" and trashed=false')+
+      '&fields=files(id,name)')
+    .then(function(d){
+      var files = d.files||[];
+      if(files.length){
+        configHubFileId = files[0].id;
+        return fetch('https://www.googleapis.com/drive/v3/files/'+configHubFileId+'?alt=media',
+          {headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){ return r.json(); });
+      } else {
+        // Primo avvio: crea config default
+        hubConfig = JSON.parse(JSON.stringify(DEFAULT_HUB_CONFIG));
+        saveHubConfig();
+        return hubConfig;
+      }
+    }).then(function(cfg){
+      if(cfg) hubConfig = Object.assign({}, DEFAULT_HUB_CONFIG, cfg);
+      applyHubPerm();
+    }).catch(function(e){
+      console.warn('Config hub non caricata, uso default:', e);
+      hubConfig = JSON.parse(JSON.stringify(DEFAULT_HUB_CONFIG));
+      applyHubPerm();
+    });
+  }
+
+  function saveHubConfig(){
+    var body = JSON.stringify(hubConfig, null, 2);
+    var bnd  = 'bnd_hub_'+Date.now();
+    var meta = configHubFileId
+      ? JSON.stringify({name:CONFIG_HUB_FNAME})
+      : JSON.stringify({name:CONFIG_HUB_FNAME, parents:[CONFIG_HUB_FOLDER]});
+    var CRLF='\r\n'; var multipart='--'+bnd+CRLF+'Content-Type: application/json'+CRLF+CRLF+meta+CRLF+'--'+bnd+CRLF+'Content-Type: application/json'+CRLF+CRLF+body+CRLF+'--'+bnd+'--';
+    var method = configHubFileId ? 'PATCH' : 'POST';
+    var url    = configHubFileId
+      ? 'https://www.googleapis.com/upload/drive/v3/files/'+configHubFileId+'?uploadType=multipart'
+      : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+    var _tok = window.TOKEN || TOKEN;
+    if(!_tok){ return Promise.reject(new Error('Token non disponibile')); }
+    return fetch(url,{method:method,
+      headers:{Authorization:'Bearer '+_tok,'Content-Type':'multipart/related; boundary='+bnd},
+      body:multipart}).then(function(r){
+        if(!r.ok) return r.text().then(function(t){ throw new Error('HTTP '+r.status+': '+t); });
+        return r.json();
+      }).then(function(d){
+        if(d.id) configHubFileId = d.id;
+      });
+  }
+
+  // ── Applica permessi ───────────────────────────────────
+  function applyHubPerm(){
+    if(!hubConfig){ showLogin(); return; }
+    var em = uEmail.toLowerCase().trim();
+    var superUsers = (hubConfig.super_users||[SUPER_USER]).map(function(s){ return s.toLowerCase(); });
+    var isSuperAdmin = superUsers.includes(em);
+
+    var moduli_consentiti = ALL_MODULI; // default: tutto
+
+    if(isSuperAdmin){
+      uRole = 'superadmin';
+      moduli_consentiti = ALL_MODULI;
+    } else {
+      // Cerca utente nella lista
+      var utente = (hubConfig.utenti||[]).find(function(u){ return (u.email||'').toLowerCase()===em; });
+      if(!utente){
+        // Non in lista → accesso negato
+        document.getElementById('loginScreen').classList.add('hidden');
+        document.getElementById('accessDenied').style.display='flex';
+        document.getElementById('adMsg').textContent = 'Il tuo account ('+uEmail+') non è autorizzato. Contatta l\'amministratore.';
+        return;
+      }
+      uRole = utente.ruolo || 'user';
+      moduli_consentiti = utente.moduli || [];
     }
-    return r;
+
+    // Tutto ok → mostra hub
+    hideLogin();
+    document.getElementById('accessDenied').style.display='none';
+    renderUserDrawer();
+    applyModuliPermessi(moduli_consentiti);
+    // Salva ruolo e moduli nel localStorage per i figli
+    lsS('hub_user', {email:uEmail, name:uName, pic:uPic, role:uRole, moduli:moduli_consentiti});
+    // Riapri ultimo modulo usato (se autorizzato)
+    var pending = window._pendingApp || localStorage.getItem('wms_lastApp');
+    if(pending && frames[pending] && canAccessMod(pending)){
+      setTimeout(function(){ openApp(pending); }, 100);
+    } else {
+      showHome();
+    }
+  }
+
+  function renderUserDrawer(){
+    document.getElementById('drUser').style.display='flex';
+    if(uRole==='superadmin'){
+      document.getElementById('sectAdmin').style.display='';
+      document.getElementById('nav-admin').style.display='';
+    }
+    document.getElementById('drUName').textContent = uName;
+    var badge = document.getElementById('drBadge');
+    badge.textContent = uRole;
+    badge.className = 'dr-badge '+(uRole==='superadmin'?'super':uRole==='developer'?'dev':'user');
+    // Avatar
+    var wrap = document.getElementById('drAvatarWrap');
+    if(uPic){
+      var img = document.createElement('img');
+      img.className='dr-uavatar'; img.src=uPic; img.referrerPolicy='no-referrer';
+      img.onerror=function(){ wrap.innerHTML=mkFb(uName); };
+      wrap.innerHTML=''; wrap.appendChild(img);
+    } else {
+      wrap.innerHTML = mkFb(uName);
+    }
+  }
+
+  function mkFb(name){
+    var c=(name||'?').charAt(0).toUpperCase();
+    return '<div class="dr-uavatar-fb">'+c+'</div>';
+  }
+
+  function applyModuliPermessi(moduli){
+    // Mostra/nasconde card e nav item
+    ALL_MODULI.forEach(function(mod){
+      var allowed = moduli.includes('*') || moduli.includes(mod);
+      // Card welcome
+      var card = document.querySelector('.card-'+mod);
+      if(card) card.classList.toggle('locked', !allowed);
+      // Nav drawer
+      var nav = document.getElementById('nav-'+mod);
+      if(nav) nav.classList.toggle('hidden-mod', !allowed);
+    });
+  }
+
+  // ── Override openApp per check permessi ───────────────
+  function canAccessMod(app){
+    var u = lsG('hub_user');
+    if(!u) return false;
+    if(u.role==='superadmin') return true;
+    return (u.moduli||[]).includes(app);
+  }
+
+  // ── gFetch helper ──────────────────────────────────────
+  function gFetch(url){
+    return fetch(url,{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){ return r.json(); });
+  }
+  function lsG(k){ try{ var s=localStorage.getItem('wms_'+k); return s?JSON.parse(s):null; }catch(e){ return null; } }
+  function lsS(k,v){ try{ localStorage.setItem('wms_'+k,JSON.stringify(v)); }catch(e){} }
+  function lsDel(k){ try{ localStorage.removeItem('wms_'+k); }catch(e){} }
+
+  // ══════════════════════════════════════════════════════
+  // HUB LOGIC (originale)
+  // ══════════════════════════════════════════════════════
+  const frames = {
+    presenze:   document.getElementById('frame-presenze'),
+    spedizioni: document.getElementById('wrap-spedizioni'),   // wrapper div
+    grn:        document.getElementById('wrap-grn'),          // wrapper div
+    guida:      document.getElementById('frame-guida'),
+    stock:      document.getElementById('frame-stock'),
+    ats:        document.getElementById('frame-ats'),
+    tickets:    document.getElementById('frame-tickets'),
+  };
+  // Iframe reali (per lazy-load src)
+  const iframes = {
+    presenze:   document.getElementById('frame-presenze'),
+    spedizioni: document.getElementById('frame-spedizioni'),
+    grn:        document.getElementById('frame-grn'),
+    guida:      document.getElementById('frame-guida'),
+    stock:      document.getElementById('frame-stock'),
+    ats:        document.getElementById('frame-ats'),
+    tickets:    document.getElementById('frame-tickets'),
+  };
+  const navItems = {
+    home:       document.getElementById('nav-home'),
+    presenze:   document.getElementById('nav-presenze'),
+    spedizioni: document.getElementById('nav-spedizioni'),
+    grn:        document.getElementById('nav-grn'),
+    guida:      document.getElementById('nav-guida'),
+    stock:      document.getElementById('nav-stock'),
+    ats:        document.getElementById('nav-ats'),
+    tickets:    document.getElementById('nav-tickets'),
+  };
+  let currentApp = null;
+  let drawerOpen = false;
+
+  function toggleDrawer() { drawerOpen ? closeDrawer() : openDrawer(); }
+
+  function openDrawer() {
+    drawerOpen = true;
+    document.getElementById('drawer').classList.add('open');
+    document.getElementById('overlay').classList.add('show');
+    document.getElementById('menuBtn').classList.add('open');
+  }
+  function closeDrawer() {
+    drawerOpen = false;
+    document.getElementById('drawer').classList.remove('open');
+    document.getElementById('overlay').classList.remove('show');
+    document.getElementById('menuBtn').classList.remove('open');
+  }
+
+  function setActiveNav(key) {
+    Object.values(navItems).forEach(el => el.classList.remove('active'));
+    if (navItems[key]) navItems[key].classList.add('active');
+  }
+
+  // Mostra/nasconde tutti i "pannelli" (iframe + wrapper div)
+  function hideAllPanels() {
+    document.querySelectorAll('.app-frame, .frame-wrap').forEach(el => el.classList.remove('active'));
+  }
+
+  function showHome() {
+    closeDrawer();
+    hideAllPanels();
+    document.getElementById('welcome').classList.remove('hidden');
+    document.getElementById('hubClock').style.display = '';
+    setActiveNav('home');
+    currentApp = null;
+    localStorage.removeItem('wms_lastApp');
+  }
+
+  function openApp(app) {
+    closeDrawer();
+    document.getElementById('hubClock').style.display = 'none';
+    const panel = frames[app];
+    if (!panel) return;
+    setActiveNav(app);
+    document.getElementById('welcome').classList.add('hidden');
+    if (currentApp === app) return;
+    hideAllPanels();
+
+    const loader = document.getElementById('loader');
+    const labels = {
+      presenze:   'Caricamento Presenze...',
+      spedizioni: 'Caricamento Spedizioni AWB...',
+      grn:        'Caricamento GRN Manager...',
+      guida:      'Caricamento Guida...',
+    };
+    document.getElementById('loader-text').textContent = labels[app] || 'Caricamento...';
+
+    // Lazy-load: carica solo al primo accesso, poi mantieni vivo
+    const frame = iframes[app];
+    if (frame && (!frame.src || frame.src === window.location.href)) {
+      // Prima volta: carica il src
+      loader.classList.add('show');
+      frame.src = frame.dataset.src;
+      frame.onload  = () => { loader.classList.remove('show'); panel.classList.add('active'); };
+      frame.onerror = () => { loader.classList.remove('show'); panel.classList.add('active'); };
+    } else {
+      // Già caricato: mostra subito senza ricaricare
+      panel.classList.add('active');
+    }
+
+    currentApp = app;
+    localStorage.setItem('wms_lastApp', app);
+  }
+
+  // Ripristina ultima app aperta solo se siamo nella stessa sessione browser.
+  // sessionStorage viene svuotato alla chiusura del browser (a differenza di localStorage),
+  // quindi se 'wms_session_active' non c'è significa apertura fresca → home.
+  if (!sessionStorage.getItem('wms_session_active')) {
+    sessionStorage.setItem('wms_session_active', '1');
+    localStorage.removeItem('wms_lastApp');
+    setActiveNav('home');
+  } else {
+    // Passa token ai moduli figli ogni volta che cambiano
+    window.addEventListener('storage', function(e){
+      if(e.key==='wms_hub_token') {
+        // token aggiornato, notifica iframe attivi
+      }
+    });
+    const lastApp = localStorage.getItem('wms_lastApp');
+    if (lastApp && frames[lastApp]) {
+      openApp(lastApp);
+    } else {
+      setActiveNav('home');
+    }
+  }
+  // Shortcuts
+  document.addEventListener('keydown', e => {
+    if (e.key === 'Escape') closeDrawer();
+    if (e.altKey && e.key === '1') openApp('presenze');
+    if (e.altKey && e.key === '2') openApp('spedizioni');
+    if (e.altKey && e.key === '3') openApp('grn');
+    if (e.altKey && e.key === '4') openApp('stock');
+    if (e.altKey && e.key === '5') openApp('ats');
+    if (e.altKey && e.key === '6') openApp('tickets');
+    if (e.altKey && e.key === '0') showHome();
   });
-}
-// refreshToken rimosso: gestito dall'hub
 
-function listFiles(q){
-  return gFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name)').then(function(d){ return d.files||[]; });
-}
+  // Orologio
+  function tickClock() {
+    const now = new Date();
+    const hh = String(now.getHours()).padStart(2,'0');
+    const mm = String(now.getMinutes()).padStart(2,'0');
+    const ss = String(now.getSeconds()).padStart(2,'0');
+    document.getElementById('hubClock').textContent = hh + ':' + mm + ':' + ss;
+  }
+  tickClock();
+  setInterval(tickClock, 1000);
+</script>
 
-function openModal(id){ document.getElementById(id).classList.add('show'); }
-function closeModal(id){ document.getElementById(id).classList.remove('show'); }
-function showEl(id){ document.getElementById(id).style.display=''; }
-function hideEl(id){ document.getElementById(id).style.display='none'; }
-function setLoading(txt){ document.getElementById('loadingTxt').textContent=txt; document.getElementById('loadingOverlay').classList.remove('hidden'); }
-function hideLoading(){ document.getElementById('loadingOverlay').classList.add('hidden'); }
-function showLoginErr(msg){ var e=document.getElementById('loginErr'); e.textContent=msg; e.style.display=''; }
+<!-- ══ MODAL GESTIONE UTENTI ══ -->
+<div id="moAdmin" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:5000;align-items:center;justify-content:center;">
+  <div style="background:#131929;border:1px solid #243048;border-radius:16px;width:620px;max-width:95vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 32px 80px rgba(0,0,0,.6);">
+    <div style="padding:18px 20px;border-bottom:1px solid #243048;display:flex;align-items:center;gap:10px;">
+      <span style="font-size:20px">👥</span>
+      <span style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:800;color:#e2e8f0;letter-spacing:.5px">Gestione Utenti</span>
+      <button onclick="closeAdmin()" style="margin-left:auto;background:none;border:none;color:#64748b;cursor:pointer;font-size:20px;padding:2px 6px;border-radius:6px;">✕</button>
+    </div>
+    <div style="padding:16px 20px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:14px;">
+      <div style="font-size:12px;color:#64748b;">Gli utenti qui sotto possono accedere all'hub. Il superadmin vede sempre tutto. Puoi specificare quali moduli ogni utente può aprire.</div>
+      <div id="adminUserList" style="display:flex;flex-direction:column;gap:8px;"></div>
+      <!-- Aggiungi utente -->
+      <div style="background:#1a2236;border:1px solid #243048;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#64748b;">Aggiungi utente</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <input id="addUNome" placeholder="Nome" style="background:#0b0f18;border:1px solid #243048;border-radius:7px;padding:7px 10px;color:#e2e8f0;font-size:13px;outline:none;">
+          <input id="addUEmail" placeholder="email@atsgruppo.eu" style="background:#0b0f18;border:1px solid #243048;border-radius:7px;padding:7px 10px;color:#e2e8f0;font-size:13px;outline:none;">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <select id="addURuolo" style="background:#0b0f18;border:1px solid #243048;border-radius:7px;padding:7px 10px;color:#e2e8f0;font-size:13px;outline:none;cursor:pointer;">
+            <option value="user">User</option>
+            <option value="developer">Developer</option>
+            <option value="superadmin">Superadmin</option>
+          </select>
+          <button onclick="addAdminUser()" style="background:#14b8a6;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-weight:700;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:14px;">+ Aggiungi</button>
+        </div>
+        <div style="font-size:11px;color:#64748b;">Moduli (lascia vuoto = tutti):</div>
+        <div id="addUModuliWrap" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+      </div>
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid #243048;display:flex;justify-content:flex-end;gap:8px;">
+      <button onclick="closeAdmin()" style="background:transparent;color:#94a3b8;border:1px solid #243048;border-radius:8px;padding:7px 16px;cursor:pointer;font-size:13px;">Annulla</button>
+      <button onclick="saveAdminConfig()" style="background:#f97316;color:#fff;border:none;border-radius:8px;padding:7px 18px;font-weight:700;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:14px;">💾 Salva</button>
+    </div>
+  </div>
+</div>
 
-function toast(msg, type){
-  var w = document.getElementById('toastWrap');
-  var d = document.createElement('div');
-  d.className = 'toast'+(type?' '+type:'');
-  d.textContent = msg;
-  w.appendChild(d);
-  setTimeout(function(){ d.remove(); }, 3200);
-}
+<script>
+  var MODULI_LABELS = {
+    presenze:'Presenze', spedizioni:'Spedizioni AWB', grn:'GRN Manager',
+    stock:'Etichetta Stock', ats:'Etichetta ATS', tickets:'Ticket Manager', guida:'Guida'
+  };
+  var _addUModuli = [];
 
-function lsGet(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } }
-function lsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
-function lsDel(k){ try{ localStorage.removeItem(k); }catch(e){} }
+  function openAdminPanel(){
+    closeDrawer();
+    renderAdminModal();
+    document.getElementById('moAdmin').style.display='flex';
+    renderAddModuli();
+  }
+  function closeAdmin(){ document.getElementById('moAdmin').style.display='none'; }
 
-function tryParseJSON(s){ try{ return JSON.parse(s); }catch(e){ return []; } }
-function esc(s){ return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
-function escAttr(s){ return (s||'').toString().replace(/'/g,"\\'"); }
-function slugify(s){ return (s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-'); }
-function capitalize(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
-function formatDate(iso){
-  if(!iso) return '';
-  try{
-    var d = new Date(iso);
-    return d.getDate().toString().padStart(2,'0')+'/'+(d.getMonth()+1).toString().padStart(2,'0')+'/'+d.getFullYear()+' '+d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');
-  }catch(e){ return iso; }
-}
+  function renderAdminModal(){
+    var list = document.getElementById('adminUserList');
+    var utenti = (hubConfig&&hubConfig.utenti)||[];
+    if(!utenti.length){
+      list.innerHTML='<div style="font-size:12px;color:#64748b;padding:8px 0;">Nessun utente configurato. Il superadmin accede sempre.</div>';
+      return;
+    }
+    list.innerHTML = utenti.map(function(u,i){
+      var modStr = (u.moduli||[]).includes('*') ? 'Tutti' : (u.moduli||[]).join(', ')||'—';
+      var roleColor = u.ruolo==='superadmin'?'#f97316':u.ruolo==='developer'?'#14b8a6':'#94a3b8';
+      return '<div style="background:#1a2236;border:1px solid #243048;border-radius:9px;padding:10px 14px;display:flex;align-items:center;gap:10px;">'+
+        '<div style="flex:1;min-width:0;">'+
+          '<div style="font-size:13px;font-weight:600;color:#e2e8f0;">'+esc(u.nome||u.email)+'</div>'+
+          '<div style="font-size:11px;color:#64748b;">'+esc(u.email)+'</div>'+
+          '<div style="font-size:11px;color:#94a3b8;margin-top:2px;">Moduli: '+esc(modStr)+'</div>'+
+        '</div>'+
+        '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(0,0,0,.3);color:'+roleColor+';">'+esc(u.ruolo)+'</span>'+
+        '<button onclick="editAdminUser('+i+')" style="background:none;border:1px solid #243048;color:#94a3b8;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;">✏</button>'+
+        '<button onclick="removeAdminUser('+i+')" style="background:none;border:1px solid #ef4444;color:#ef4444;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;">✕</button>'+
+      '</div>';
+    }).join('');
+  }
+
+  function renderAddModuli(){
+    _addUModuli = [];
+    var wrap = document.getElementById('addUModuliWrap');
+    wrap.innerHTML = ALL_MODULI.map(function(m){
+      return '<label style="display:flex;align-items:center;gap:4px;font-size:12px;color:#94a3b8;cursor:pointer;">'+
+        '<input type="checkbox" value="'+m+'" onchange="toggleAddModulo(this)" style="accent-color:#f97316;">'+
+        (MODULI_LABELS[m]||m)+'</label>';
+    }).join('');
+  }
+
+  function toggleAddModulo(el){
+    if(el.checked) _addUModuli.push(el.value);
+    else _addUModuli = _addUModuli.filter(function(m){ return m!==el.value; });
+  }
+
+  function addAdminUser(){
+    var nome  = document.getElementById('addUNome').value.trim();
+    var email = document.getElementById('addUEmail').value.trim().toLowerCase();
+    var ruolo = document.getElementById('addURuolo').value;
+    if(!email){ alert('Inserisci email'); return; }
+    if(!hubConfig.utenti) hubConfig.utenti=[];
+    var moduli = _addUModuli.length ? _addUModuli : ['*'];
+    hubConfig.utenti.push({nome:nome||email, email:email, ruolo:ruolo, moduli:moduli});
+    document.getElementById('addUNome').value='';
+    document.getElementById('addUEmail').value='';
+    renderAdminModal();
+    renderAddModuli();
+  }
+
+  function removeAdminUser(i){
+    if(!confirm('Rimuovere questo utente?')) return;
+    hubConfig.utenti.splice(i,1);
+    renderAdminModal();
+  }
+
+  function editAdminUser(i){
+    var u = hubConfig.utenti[i];
+    var newModuli = prompt('Moduli (separati da virgola, * per tutti). Disponibili: '+ALL_MODULI.join(', '), (u.moduli||[]).join(', '));
+    if(newModuli===null) return;
+    hubConfig.utenti[i].moduli = newModuli.trim()==='*' ? ['*'] : newModuli.split(',').map(function(m){ return m.trim(); }).filter(Boolean);
+    renderAdminModal();
+  }
+
+  function saveAdminConfig(){
+    if(!TOKEN){ alert('Token non disponibile. Ricarica la pagina.'); return; }
+    if(!hubConfig){ alert('Config non caricata.'); return; }
+    hubToast('⏳ Salvataggio...');
+    saveHubConfig().then(function(){
+      closeAdmin();
+      applyModuliPermessi(uRole==='superadmin'?['*']:(hubConfig.utenti.find(function(u){return u.email===uEmail;})||{moduli:[]}).moduli);
+      hubToast('✅ Configurazione salvata');
+    }).catch(function(e){ 
+      console.error('Errore saveHubConfig:', e);
+      alert('Errore salvataggio: '+e.message+'. Controlla console (F12).'); 
+    });
+  }
+
+  function esc(s){ return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function hubToast(msg){
+    var d=document.createElement('div');
+    d.textContent=msg;
+    d.style.cssText='position:fixed;bottom:20px;right:20px;background:#1a2236;border:1px solid #10b981;color:#10b981;border-radius:10px;padding:10px 18px;font-size:13px;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,.4);';
+    document.body.appendChild(d);
+    setTimeout(function(){ d.remove(); },3000);
+  }
 </script>
 </body>
 </html>
