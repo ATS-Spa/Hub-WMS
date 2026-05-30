@@ -960,7 +960,7 @@ function saveConfig(){
 // ══════════════════════════════════════════════════════
 // SHEET (dati ticket)
 // ══════════════════════════════════════════════════════
-var SHEET_HEADERS = ['ID','Titolo','Progetto','Tipo','Priorita','Stato','Descrizione','Autore','AutoreEmail','Assegnato','AssegnatoEmail','DataApertura','DataAggiornamento','Note'];
+var SHEET_HEADERS = ['ID','Titolo','Progetto','Tipo','Priorita','Stato','Descrizione','Autore','AutoreEmail','Assegnato','AssegnatoEmail','DataApertura','DataAggiornamento','Note','MailInviata','MessageID'];
 
 function ensureSheet(){
   if(sheetId) return Promise.resolve(sheetId);
@@ -1002,7 +1002,8 @@ function loadTickets(){
         stato:r[5]||'', descrizione:r[6]||'', autore:r[7]||'', autoreEmail:r[8]||'',
         assegnato:r[9]||'', assegnatoEmail:r[10]||'',
         dataApertura:r[11]||'', dataAggiornamento:r[12]||'',
-        note: r[13] ? tryParseJSON(r[13]) : []
+        note: r[13] ? tryParseJSON(r[13]) : [],
+        mailInviata: r[14]||'', messageId: r[15]||''
       };
     }).filter(function(t){ return t.id; });
   });
@@ -1017,7 +1018,8 @@ function saveTicket(ticket){
       ticket.stato, ticket.descrizione, ticket.autore, ticket.autoreEmail,
       ticket.assegnato||'', ticket.assegnatoEmail||'',
       ticket.dataApertura, ticket.dataAggiornamento,
-      JSON.stringify(ticket.note||[])
+      JSON.stringify(ticket.note||[]),
+      ticket.mailInviata||'', ticket.messageId||''
     ];
     if(idx>=0){
       // Update riga esistente (idx+2 perché header è riga 1)
@@ -1318,6 +1320,7 @@ function assignToMe(){
   t.assegnatoEmail = uEmail;
   t.stato = (configData.stati&&configData.stati[1]?configData.stati[1].nome:'Assegnato');
   t.dataAggiornamento = new Date().toISOString();
+  t.mailInviata = 'PENDING_UPDATE'; // notifica il servizio Python
   saveTicket(t).then(function(){
     renderDetail(t);
     renderTickets();
@@ -1330,6 +1333,7 @@ function changeStato(stato){
   if(!t) return;
   t.stato = stato;
   t.dataAggiornamento = new Date().toISOString();
+  t.mailInviata = 'PENDING_UPDATE'; // notifica il servizio Python
   saveTicket(t).then(function(){
     renderDetail(t);
     renderTickets();
@@ -1345,10 +1349,11 @@ function addNote(){
   if(!t.note) t.note = [];
   t.note.push({ autore: uName, data: new Date().toISOString(), testo: txt });
   t.dataAggiornamento = new Date().toISOString();
+  t.mailInviata = 'PENDING_UPDATE'; // notifica il servizio Python
   saveTicket(t).then(function(){
     renderDetail(t);
     renderTickets();
-    toast('Nota aggiunta','ok');
+    toast('Nota aggiunta — notifica in partenza','ok');
   }).catch(function(e){ toast('Errore: '+e.message,'err'); });
 }
 
@@ -1367,7 +1372,7 @@ function deleteTicket(id){
 
 function rewriteSheet(){
   var rows = [SHEET_HEADERS].concat(allTickets.map(function(t){
-    return [t.id,t.titolo,t.progetto,t.tipo,t.priorita,t.stato,t.descrizione,t.autore,t.autoreEmail,t.assegnato,t.assegnatoEmail,t.dataApertura,t.dataAggiornamento,JSON.stringify(t.note||[])];
+    return [t.id,t.titolo,t.progetto,t.tipo,t.priorita,t.stato,t.descrizione,t.autore,t.autoreEmail,t.assegnato,t.assegnatoEmail,t.dataApertura,t.dataAggiornamento,JSON.stringify(t.note||[]),t.mailInviata||'',t.messageId||''];
   }));
   return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+sheetId+'/values/'+SHEET_NAME+'!A1?valueInputOption=RAW',{
     method:'PUT',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
