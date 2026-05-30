@@ -280,6 +280,9 @@ body.copy-mode td:not(.awb-empty):hover{background:rgba(245,158,11,.1);color:var
 </head>
 <body>
 
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">Spedizioni <span>WMS</span></div>
     <div class="login-sub">Bollettazione AWB · Gestione Consegne</div>
     <p class="login-desc">Accedi con il tuo account Google per visualizzare e gestire le spedizioni dalla cartella Drive condivisa.</p>
     <button class="btn-google" onclick="signIn()">
@@ -470,6 +473,7 @@ body.copy-mode td:not(.awb-empty):hover{background:rgba(245,158,11,.1);color:var
 <div id="copyToast">✓ Copiato!</div>
 <div id="printArea" style="display:none"></div>
 
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
 var CLIENT_ID   = '256693770433-b1pjdpaglrh7827o6ln2s24802rcnshd.apps.googleusercontent.com';
 var FOLDER_ID   = '1dSm4qSDB2cZ5WhwDf_40TF-K7sjwStg4';
@@ -510,9 +514,23 @@ function scheduleFilter(){ clearTimeout(filterTimer); filterTimer=setTimeout(fun
 
 // ── INIT ──────────────────────────────────────
 window.onload=function(){
-  if(!initHubAuth(function(u){ setUserUI(u.name||'',u.email||'',u.picture||u.pic||''); })) return;
-  document.getElementById('appShell').style.display='flex';
-  loadDates();
+  // Se aperto dall'hub: usa token hub direttamente
+  if(window._HUB_TOKEN){
+    TOKEN = window._HUB_TOKEN;
+    document.getElementById('loginScreen').style.display='none';
+    document.getElementById('appShell').style.display='flex';
+    var u = window._HUB_USER||{};
+    setUserUI(u.name||'',u.email||'',u.picture||u.pic||'');
+    loadDates();
+    return;
+  }
+  var saved=getSavedSession();
+  if(saved){
+    document.getElementById('loginScreen').style.display='none';
+    document.getElementById('appShell').style.display='flex';
+    setUserUI(saved.name,saved.email,saved.picture);
+  }
+  waitGsi();
   document.addEventListener('click',function(e){
     if(!e.target.closest('.date-input-wrap')) closeDateDropdowns();
   });
@@ -556,33 +574,65 @@ function closeDateDropdowns(){
   document.querySelectorAll('.date-dropdown').forEach(function(d){ d.classList.remove('open'); });
 }
 
-
-// ══ AUTH HUB — token condiviso via localStorage ══
-function _hlsGet(k){ try{ var s=localStorage.getItem(k); return s?JSON.parse(s):null; }catch(e){ return null; } }
-function initHubAuth(onSuccess){
-  var hubToken = _hlsGet('wms_hub_token');
-  var hubUser  = _hlsGet('wms_hub_user');
-  if(!hubToken || !hubUser){
-    document.body.innerHTML='<div style="position:fixed;inset:0;background:#0b0f18;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;font-family:Segoe UI,sans-serif;">'
-      +'<div style="font-size:48px">🔒</div>'
-      +'<div style="font-size:20px;font-weight:700;color:#e2e8f0;">Accesso non autorizzato</div>'
-      +'<div style="font-size:13px;color:#64748b;">Accedi prima dall\'hub WMS.</div>'
-      +'<a href="index.html" style="background:#f97316;color:#fff;border-radius:8px;padding:10px 24px;text-decoration:none;font-weight:700;font-size:14px;">← Vai all\'Hub</a>'
-      +'</div>';
-    return false;
-  }
-  TOKEN = hubToken;
-  if(typeof uName !== 'undefined') uName = hubUser.name||'';
-  if(typeof uEmail !== 'undefined') uEmail = hubUser.email||'';
-  if(typeof uPic !== 'undefined') uPic = hubUser.picture||hubUser.pic||'';
-  // Aggiorna token se l'hub lo rinnova
-  window.addEventListener('storage', function(e){
-    if(e.key==='wms_hub_token' && e.newValue) try{ TOKEN=JSON.parse(e.newValue); }catch(ex){}
+// ── GSI / AUTH ────────────────────────────────
+var tokenClient;
+function waitGsi(){
+  if(typeof google==='undefined'){setTimeout(waitGsi,150);return;}
+  tokenClient=google.accounts.oauth2.initTokenClient({
+    client_id:CLIENT_ID,
+    scope:'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+    callback:onToken
   });
-  if(onSuccess) onSuccess(hubUser);
-  return true;
+  var saved=getSavedSession();
+  if(saved) tokenClient.requestAccessToken({prompt:'',login_hint:saved.email||''});
 }
 
+function signIn(){ tokenClient.requestAccessToken({prompt:'select_account'}); }
+function signOut(){
+  if(TOKEN) google.accounts.oauth2.revoke(TOKEN,function(){});
+  TOKEN=null; currentData=null; clearSavedSession();
+  document.getElementById('appShell').style.display='none';
+  document.getElementById('loginScreen').style.display='flex';
+}
+function onToken(resp){
+  if(resp.error){
+    if(!getSavedSession()){ document.getElementById('loginScreen').style.display='flex'; document.getElementById('appShell').style.display='none'; }
+    return;
+  }
+  TOKEN=resp.access_token; window._HUB_TOKEN=TOKEN;
+  clearTimeout(window._tokenRefreshTimer);
+  window._tokenRefreshTimer=setTimeout(function(){
+    var saved=getSavedSession();
+    tokenClient.requestAccessToken({prompt:'',login_hint:saved?saved.email||'':''});
+  }, 50*60*1000);
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('appShell').style.display='flex';
+  loadUserInfo(); loadDates();
+}
+
+// ── SESSION ───────────────────────────────────
+function getSavedSession(){ try{var s=localStorage.getItem('wms_session');return s?JSON.parse(s):null;}catch(e){return null;} }
+function saveSession(n,e,p){ try{localStorage.setItem('wms_session',JSON.stringify({name:n,email:e,picture:p}));}catch(e){} }
+function clearSavedSession(){ try{localStorage.removeItem('wms_session');}catch(e){} }
+
+// ── USER ──────────────────────────────────────
+function loadUserInfo(){
+  gFetch('https://www.googleapis.com/oauth2/v2/userinfo').then(function(u){
+    if(u.error)return;
+    saveSession(u.name||u.email||'',u.email||'',u.picture||'');
+    setUserUI(u.name||u.email||'—',u.email||'',u.picture||'');
+  }).catch(function(){});
+}
+function setUserUI(name,email,picture){
+  document.getElementById('userName').textContent=name||'—';
+  var wrap=document.getElementById('userAvatarWrap'); wrap.innerHTML='';
+  if(picture){
+    var img=document.createElement('img');
+    img.className='user-avatar'; img.referrerPolicy='no-referrer'; img.src=picture; img.alt=name;
+    img.onerror=function(){ wrap.innerHTML=makeInitial(email||name); };
+    wrap.appendChild(img);
+  } else { wrap.innerHTML=makeInitial(email||name); }
+}
 function makeInitial(str){
   var src=(str||'?').trim();
   var ch=src.includes('@')?src.split('@')[0].charAt(0):src.charAt(0);
