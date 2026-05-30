@@ -736,27 +736,6 @@ select.mi { cursor: pointer; }
   </div>
 </div>
 
-<!-- ══ MODAL MAIL ══ -->
-<div class="modal-overlay" id="moMail">
-  <div class="modal" style="width:480px">
-    <div class="modal-header">
-      <span style="font-size:20px">✉</span>
-      <span class="modal-title">Notifica via email</span>
-      <button class="modal-close" onclick="closeModal('moMail')">✕</button>
-    </div>
-    <div class="modal-body">
-      <div style="font-size:13px;color:var(--subtle);line-height:1.6" id="moMailBody"></div>
-      <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--muted)">
-        ⚠️ Verrà aperto il tuo client email (Outlook). Se non si apre usa il link sotto.
-      </div>
-      <a id="moMailLink" href="#" style="color:var(--orange);font-size:12px;word-break:break-all"></a>
-    </div>
-    <div class="modal-footer">
-      <button class="btn btn-ghost" onclick="closeModal('moMail')">Chiudi</button>
-      <button class="btn btn-primary" onclick="doSendMail()">✉ Apri client email</button>
-    </div>
-  </div>
-</div>
 
 <script>
 // ══════════════════════════════════════════════════════
@@ -776,7 +755,7 @@ var currentFilter = 'tutti';
 var currentFilterProg = null;
 var currentFilterStato = null;
 var selectedTicketId = null;
-var _mailHref = '';
+
 
 // Config default
 var DEFAULT_CONFIG = {
@@ -1265,7 +1244,7 @@ function renderDetail(t){
       (canAddNote?'<textarea class="mi" id="dpNoteInput" rows="2" placeholder="Aggiungi una nota..."></textarea>':'') +
       '<div class="dp-actions">'+
         (canAddNote?'<button class="btn btn-ghost btn-sm" onclick="addNote()">💬 Aggiungi nota</button>':'')+
-        '<button class="btn btn-ghost btn-sm" onclick="openMailNotify()">✉ Notifica</button>'+
+        
         ((uRole==='superadmin')?'<button class="btn btn-red btn-sm" onclick="deleteTicket(\''+t.id+'\')">🗑 Elimina</button>':'')+
       '</div>'+
     '</div>';
@@ -1315,9 +1294,8 @@ function submitNewTicket(){
     renderTickets();
     selectTicket(id);
     toast('Ticket creato: '+id,'ok');
-    // Notifica mail
-    openMailNotifyFor(ticket, 'nuovo');
-  }).catch(function(e){ toast('Errore salvataggio: '+e.message,'err'); });
+    toast('📧 Notifica mail in partenza entro 2 minuti via servizio automatico','ok');
+      }).catch(function(e){ toast('Errore salvataggio: '+e.message,'err'); });
 }
 
 function assignToMe(){
@@ -1331,7 +1309,6 @@ function assignToMe(){
     renderDetail(t);
     renderTickets();
     toast('Ticket assegnato a te','ok');
-    openMailNotifyFor(t,'assegnato');
   }).catch(function(e){ toast('Errore: '+e.message,'err'); });
 }
 
@@ -1344,7 +1321,6 @@ function changeStato(stato){
     renderDetail(t);
     renderTickets();
     toast('Stato aggiornato: '+stato,'ok');
-    openMailNotifyFor(t,'stato');
   }).catch(function(e){ toast('Errore: '+e.message,'err'); });
 }
 
@@ -1410,61 +1386,7 @@ function setFilterProg(p){
 // ══════════════════════════════════════════════════════
 // MAIL
 // ══════════════════════════════════════════════════════
-function openMailNotify(){
-  var t = allTickets.find(function(x){ return x.id===selectedTicketId; });
-  if(t) openMailNotifyFor(t,'manuale');
-}
-
-function openMailNotifyFor(t, tipo){
-  var dest = configData.email_notifiche || 'itlogisticsata@atsgruppo.eu';
-  var subj, body;
-  if(tipo==='nuovo'){
-    subj = '[TICKET] Nuovo ticket '+t.id+' - '+t.titolo;
-    body = 'NUOVO TICKET APERTO\n\n'+
-      'ID: '+t.id+'\n'+
-      'Titolo: '+t.titolo+'\n'+
-      'Progetto: '+t.progetto+'\n'+
-      'Tipo: '+t.tipo+'\n'+
-      'Priorità: '+t.priorita+'\n'+
-      'Aperto da: '+t.autore+' ('+t.autoreEmail+')\n'+
-      'Data: '+formatDate(t.dataApertura)+'\n\n'+
-      (t.descrizione?'Descrizione:\n'+t.descrizione+'\n\n':'')+
-      '---\nWMS Hub · Ticket Manager';
-  } else if(tipo==='assegnato'){
-    subj = '[TICKET] '+t.id+' assegnato a '+t.assegnato;
-    body = 'TICKET ASSEGNATO\n\n'+
-      'ID: '+t.id+'\n'+
-      'Titolo: '+t.titolo+'\n'+
-      'Assegnato a: '+t.assegnato+' ('+t.assegnatoEmail+')\n'+
-      'Stato: '+t.stato+'\n\n'+
-      '---\nWMS Hub · Ticket Manager';
-    dest = t.autoreEmail || dest;
-  } else if(tipo==='stato'){
-    subj = '[TICKET] '+t.id+' → stato aggiornato: '+t.stato;
-    body = 'AGGIORNAMENTO STATO TICKET\n\n'+
-      'ID: '+t.id+'\n'+
-      'Titolo: '+t.titolo+'\n'+
-      'Nuovo stato: '+t.stato+'\n'+
-      'Aggiornato da: '+uName+'\n\n'+
-      '---\nWMS Hub · Ticket Manager';
-    dest = t.autoreEmail || dest;
-  } else {
-    subj = '[TICKET] '+t.id+' - '+t.titolo;
-    body = 'Ticket: '+t.id+'\nTitolo: '+t.titolo+'\nStato: '+t.stato+'\nProgetto: '+t.progetto+'\n\n---\nWMS Hub · Ticket Manager';
-  }
-
-  var href = 'mailto:'+encodeURIComponent(dest)+'?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(body);
-  _mailHref = href;
-  document.getElementById('moMailBody').innerHTML = 'Destinatario: <strong>'+esc(dest)+'</strong><br>Oggetto: <em>'+esc(subj)+'</em>';
-  document.getElementById('moMailLink').href = href;
-  document.getElementById('moMailLink').textContent = href.substring(0,80)+'...';
-  openModal('moMail');
-}
-
-function doSendMail(){
-  window.location.href = _mailHref;
-  setTimeout(function(){ closeModal('moMail'); }, 1500);
-}
+// Mail gestite automaticamente dal servizio Python
 
 // ══════════════════════════════════════════════════════
 // IMPOSTAZIONI
