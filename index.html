@@ -790,7 +790,8 @@
         lsS('hub_sess',{email:uEmail,name:uName,pic:uPic});
         // Salva token in localStorage per i moduli figli
         lsS('hub_token', TOKEN);
-        lsS('hub_user', {email:uEmail,name:uName,pic:uPic});
+        window.TOKEN = TOKEN;
+        // hub_user salvato dopo applyHubPerm (con role e moduli)
         loadHubConfig();
       }).catch(function(){ showLogin(); });
   }
@@ -943,7 +944,10 @@
     var u = lsG('hub_user');
     if(!u) return false;
     if(u.role==='superadmin') return true;
-    return (u.moduli||[]).includes(app);
+    // Fallback: se moduli=[] o non definiti, superadmin vede tutto
+    var moduli = u.moduli || [];
+    if(moduli.includes('*') || moduli.length===0) return true;
+    return moduli.includes(app);
   }
 
   // ── gFetch helper ──────────────────────────────────────
