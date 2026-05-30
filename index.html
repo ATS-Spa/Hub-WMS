@@ -20,6 +20,7 @@
     --red: #ef4444;
     --violet: #8b5cf6;
     --rose: #f43f5e;
+    --orange: #f97316;
     --text: #e2e8f0;
     --muted: #64748b;
     --subtle: #94a3b8;
@@ -156,6 +157,8 @@
   .dr-item.app-stock.active .dr-item-name { color: var(--violet); }
   .dr-item.app-ats.active      { border-color: rgba(244,63,94,.3); }
   .dr-item.app-ats.active .dr-item-name { color: var(--rose); }
+  .dr-item.app-tickets.active  { border-color: rgba(249,115,22,.3); }
+  .dr-item.app-tickets.active .dr-item-name { color: var(--orange); }
 
   .dr-item-icon { font-size: 17px; flex-shrink: 0; width: 22px; text-align: center; }
   .dr-item-info { display: flex; flex-direction: column; gap: 1px; }
@@ -208,13 +211,13 @@
   .welcome-title .c3 { color: var(--subtle); font-weight: 500; }
   .welcome-sub { font-size: 11px; color: var(--muted); letter-spacing: 2px; text-transform: uppercase; }
 
-  /* 3 card in griglia: 2 sopra + 1 centrata sotto */
+  /* 6 card in griglia: 3 colonne */
   .welcome-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 14px;
-    max-width: 520px;
-    width: 88%;
+    max-width: 780px;
+    width: 94%;
   }
   .app-card {
     background: var(--surface);
@@ -244,24 +247,25 @@
   .card-grn::before        { background: radial-gradient(ellipse at top left, rgba(16,185,129,.1), transparent 70%); }
   .card-stock::before      { background: radial-gradient(ellipse at top left, rgba(139,92,246,.1), transparent 70%); }
   .card-ats::before        { background: radial-gradient(ellipse at top left, rgba(244,63,94,.1),  transparent 70%); }
+  .card-tickets::before    { background: radial-gradient(ellipse at top left, rgba(249,115,22,.1), transparent 70%); }
   .card-presenze:hover  { border-color: rgba(59,130,246,.35); }
   .card-spedizioni:hover { border-color: rgba(245,158,11,.35); }
   .card-grn:hover        { border-color: rgba(16,185,129,.35); }
   .card-stock:hover      { border-color: rgba(139,92,246,.35); }
   .card-ats:hover        { border-color: rgba(244,63,94,.35); }
+  .card-tickets:hover    { border-color: rgba(249,115,22,.35); }
 
-  /* 5 card in griglia: 2+2+1 centrata */
+  /* 6 card in griglia: 3 colonne */
   .welcome-grid {
     display: grid;
-    grid-template-columns: 1fr 1fr;
+    grid-template-columns: 1fr 1fr 1fr;
     gap: 14px;
-    max-width: 520px;
-    width: 88%;
+    max-width: 780px;
+    width: 94%;
   }
 
-  /* card ATS centrata su riga intera (ultima) */
   .card-grn { grid-column: auto; max-width: none; justify-self: auto; }
-  .card-ats { grid-column: 1 / -1; max-width: 253px; justify-self: center; }
+  .card-ats { grid-column: auto; max-width: none; justify-self: auto; }
 
   .card-icon { font-size: 30px; }
   .card-title { font-family: var(--ffc); font-size: 18px; font-weight: 800; letter-spacing: .5px; }
@@ -270,6 +274,7 @@
   .card-grn .card-title        { color: var(--green); }
   .card-stock .card-title      { color: var(--violet); }
   .card-ats .card-title        { color: var(--rose); }
+  .card-tickets .card-title    { color: var(--orange); }
   .card-desc { font-size: 11px; color: var(--muted); line-height: 1.6; }
   .card-arrow { font-size: 15px; color: var(--muted); margin-top: 4px; transition: transform 0.18s, color 0.18s; }
   .app-card:hover .card-arrow { transform: translateX(5px); }
@@ -278,6 +283,7 @@
   .card-grn:hover .card-arrow        { color: var(--green); }
   .card-stock:hover .card-arrow      { color: var(--violet); }
   .card-ats:hover .card-arrow        { color: var(--rose); }
+  .card-tickets:hover .card-arrow    { color: var(--orange); }
 
   /* ══ IFRAMES ══ */
   .app-frame {
@@ -413,7 +419,7 @@
     #homeScreen { overflow-y: auto; height: 100vh; padding-bottom: 24px; }
 
     /* Card home: 1 colonna */
-    .app-grid { grid-template-columns: 1fr !important; max-width: 420px; margin: 0 auto; }
+    .welcome-grid { grid-template-columns: 1fr !important; max-width: 420px; margin: 0 auto; }
   }
 </style>
 </head>
@@ -491,6 +497,14 @@
       </div>
     </div>
 
+    <div class="dr-item app-tickets" id="nav-tickets" onclick="openApp('tickets')">
+      <span class="dr-item-icon">🎫</span>
+      <div class="dr-item-info">
+        <span class="dr-item-name">Ticket Manager</span>
+        <span class="dr-item-desc">Segnalazioni e richieste</span>
+      </div>
+    </div>
+
     <div class="dr-sect">Risorse</div>
 
     <div class="dr-item app-guida" id="nav-guida" onclick="openApp('guida')">
@@ -546,6 +560,12 @@
         <div class="card-desc">Stampa etichette logistica ATS con QR e barcode.</div>
         <div class="card-arrow">→</div>
       </div>
+      <div class="app-card card-tickets" onclick="openApp('tickets')">
+        <div class="card-icon">🎫</div>
+        <div class="card-title">Ticket Manager</div>
+        <div class="card-desc">Segnalazioni, bug e richieste di modifica per tutti i moduli.</div>
+        <div class="card-arrow">→</div>
+      </div>
     </div>
   </div>
 
@@ -578,6 +598,7 @@
 
   <iframe class="app-frame" id="frame-stock" src="" data-src="Etichetta-Logistica-Merce-Stock.html" title="Etichetta Stock"></iframe>
   <iframe class="app-frame" id="frame-ats"   src="" data-src="Etichetta-Logistica-ATS.html"        title="Etichetta ATS"></iframe>
+  <iframe class="app-frame" id="frame-tickets" src="" data-src="index_Tickets.html"                title="Ticket Manager"></iframe>
 
 </main>
 
@@ -592,6 +613,7 @@
     guida:      document.getElementById('frame-guida'),
     stock:      document.getElementById('frame-stock'),
     ats:        document.getElementById('frame-ats'),
+    tickets:    document.getElementById('frame-tickets'),
   };
   // Iframe reali (per lazy-load src)
   const iframes = {
@@ -601,6 +623,7 @@
     guida:      document.getElementById('frame-guida'),
     stock:      document.getElementById('frame-stock'),
     ats:        document.getElementById('frame-ats'),
+    tickets:    document.getElementById('frame-tickets'),
   };
   const navItems = {
     home:       document.getElementById('nav-home'),
@@ -610,6 +633,7 @@
     guida:      document.getElementById('nav-guida'),
     stock:      document.getElementById('nav-stock'),
     ats:        document.getElementById('nav-ats'),
+    tickets:    document.getElementById('nav-tickets'),
   };
   let currentApp = null;
   let drawerOpen = false;
@@ -706,6 +730,7 @@
     if (e.altKey && e.key === '3') openApp('grn');
     if (e.altKey && e.key === '4') openApp('stock');
     if (e.altKey && e.key === '5') openApp('ats');
+    if (e.altKey && e.key === '6') openApp('tickets');
     if (e.altKey && e.key === '0') showHome();
   });
 
