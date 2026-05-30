@@ -494,7 +494,7 @@ select.mi { cursor: pointer; }
   <div class="login-sub">WMS Hub · ATS</div>
   <div class="login-card">
     <div style="font-size:13px;color:var(--muted);text-align:center">Accedi con il tuo account Google ATS</div>
-    <div id="gLoginBtn"></div>
+    <button onclick="tcl.requestAccessToken({prompt:'select_account'})" style="background:#f97316;color:#fff;border:none;border-radius:10px;padding:12px 28px;font-size:15px;font-weight:700;cursor:pointer;font-family:'Segoe UI',sans-serif;letter-spacing:.5px">Accedi con Google</button>
     <div id="loginErr" style="font-size:12px;color:var(--red);display:none"></div>
   </div>
 </div>
@@ -818,69 +818,41 @@ function initOAuth(){
     scope: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
     callback: onToken
   });
-  // check sessione salvata
+  // Riusa sessione salvata → refresh silenzioso senza popup
   var saved = lsGet('tkt_sess');
-  if(saved){
-    TOKEN = saved.token;
-    uEmail = saved.email;
-    uName = saved.name;
-    uPic = saved.pic;
-    uRole = saved.role || 'user';
-    afterLogin();
+  if(saved && saved.email){
+    uEmail = saved.email; uName = saved.name; uPic = saved.pic; uRole = saved.role||'user';
+    tcl.requestAccessToken({prompt:'', login_hint: uEmail});
   } else {
     hideLoading();
     showEl('loginScreen');
-    renderLoginBtn();
   }
 }
 
-function renderLoginBtn(){
-  google.accounts.id.initialize({
-    client_id: CLIENT_ID,
-    callback: onOneTap
-  });
-  google.accounts.id.renderButton(document.getElementById('gLoginBtn'), {
-    theme: 'filled_black', size: 'large', text: 'signin_with', shape: 'rectangular', width: 280
-  });
-  // Anche click diretto per token
-  document.getElementById('gLoginBtn').addEventListener('click', function(){
-    if(!TOKEN) tcl.requestAccessToken();
-  });
-}
-
-function onOneTap(resp){
-  // decode jwt for name/pic
-  var parts = resp.credential.split('.');
-  var pay = JSON.parse(atob(parts[1]));
-  uEmail = pay.email; uName = pay.name; uPic = pay.picture;
-  tcl.requestAccessToken();
-}
-
 function onToken(r){
-  if(r.error){ showLoginErr(r.error); return; }
+  if(r.error){ hideLoading(); showEl('loginScreen'); showLoginErr(r.error); return; }
   TOKEN = r.access_token;
-  // Aggiorna sessione salvata con nuovo token
-  var saved = lsGet('tkt_sess');
-  if(saved){ saved.token = TOKEN; lsSet('tkt_sess', saved); }
   if(!uEmail){
     fetch('https://www.googleapis.com/oauth2/v2/userinfo',{headers:{Authorization:'Bearer '+TOKEN}})
-      .then(function(r){ return r.json(); }).then(function(u){
-      uEmail = u.email; uName = u.name; uPic = u.picture;
-      afterLogin();
-    });
+      .then(function(res){ return res.json(); }).then(function(u){
+        uEmail = u.email; uName = u.name||u.email; uPic = u.picture||'';
+        afterLogin();
+      }).catch(function(e){ showLoginErr('Errore userinfo: '+e); hideLoading(); showEl('loginScreen'); });
   } else {
-    // Refresh silenzioso — non rifare afterLogin se già loggato
-    afterLogin._refreshOnly = true;
     afterLogin();
   }
 }
 
 function afterLogin(){
-  if(afterLogin._refreshOnly){ afterLogin._refreshOnly = false; return; }
   setLoading('Caricamento configurazione...');
   loadConfig().then(function(){
     determineRole();
     lsSet('tkt_sess',{token:TOKEN,email:uEmail,name:uName,pic:uPic,role:uRole});
+    // Rinnova token automaticamente ogni 45 min
+    clearTimeout(window._tktRefresh);
+    window._tktRefresh = setTimeout(function(){
+      if(uEmail) tcl.requestAccessToken({prompt:'', login_hint:uEmail});
+    }, 45*60*1000);
     setLoading('Caricamento ticket...');
     return loadTickets();
   }).then(function(){
