@@ -5,6 +5,7 @@
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>WMS · Hub</title>
 <link rel="icon" href="https://ats-spa.github.io/Hub-WMS/ATS-Logo.png">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
 <style>
@@ -425,9 +426,98 @@
     /* Card home: 1 colonna */
     .welcome-grid { grid-template-columns: 1fr !important; max-width: 420px; margin: 0 auto; }
   }
+
+  /* ── AUTH ── */
+  #loginScreen {
+    position:fixed; inset:0; background:var(--bg);
+    display:flex; flex-direction:column; align-items:center; justify-content:center;
+    gap:20px; z-index:9000;
+  }
+  #loginScreen.hidden { display:none; }
+  .ls-logo { font-family:var(--ffc); font-size:36px; font-weight:800; letter-spacing:2px; }
+  .ls-logo .c1{color:var(--blue);} .ls-logo .c2{color:var(--teal);} .ls-logo .c3{color:var(--text);}
+  .ls-sub { font-size:12px; color:var(--muted); letter-spacing:1.5px; text-transform:uppercase; }
+  .ls-card {
+    background:var(--surface); border:1px solid var(--border); border-radius:16px;
+    padding:28px 36px; display:flex; flex-direction:column; align-items:center; gap:14px;
+    box-shadow:0 20px 60px rgba(0,0,0,.5);
+  }
+  .ls-desc { font-size:13px; color:var(--muted); text-align:center; max-width:280px; line-height:1.6; }
+  .btn-gsign {
+    background:var(--blue); color:#fff; border:none; border-radius:10px;
+    padding:12px 28px; font-size:14px; font-weight:700; cursor:pointer;
+    font-family:var(--ffc); letter-spacing:.8px; transition:background .15s;
+  }
+  .btn-gsign:hover { background:#2563eb; }
+  #loginErr { font-size:12px; color:var(--red); display:none; }
+
+  #accessDenied {
+    position:fixed; inset:0; background:var(--bg);
+    display:none; flex-direction:column; align-items:center; justify-content:center;
+    gap:14px; z-index:8999;
+  }
+  .ad-icon { font-size:48px; }
+  .ad-title { font-family:var(--ffc); font-size:24px; font-weight:800; color:var(--red); }
+  .ad-msg { font-size:13px; color:var(--muted); text-align:center; max-width:340px; line-height:1.6; }
+  .ad-out { background:transparent; color:var(--muted); border:1px solid var(--border);
+    border-radius:8px; padding:8px 18px; cursor:pointer; font-size:13px; margin-top:8px; }
+
+  /* User info nel drawer */
+  .dr-user {
+    display:flex; align-items:center; gap:10px;
+    padding:10px 14px; border-top:1px solid var(--border); margin-top:auto;
+  }
+  .dr-uavatar { width:32px; height:32px; border-radius:50%; border:1px solid var(--border); }
+  .dr-uavatar-fb { width:32px; height:32px; border-radius:50%; background:var(--blue);
+    display:flex; align-items:center; justify-content:center; font-size:14px;
+    font-weight:700; color:#fff; flex-shrink:0; }
+  .dr-uinfo { flex:1; min-width:0; }
+  .dr-uname { font-size:12px; font-weight:600; color:var(--text); white-space:nowrap; overflow:hidden; text-overflow:ellipsis; }
+  .dr-urole { font-size:10px; color:var(--muted); text-transform:uppercase; letter-spacing:.8px; }
+  .dr-uout { background:none; border:none; color:var(--muted); cursor:pointer; font-size:16px; padding:4px; border-radius:6px; }
+  .dr-uout:hover { background:var(--card); color:var(--red); }
+
+  /* Card modulo locked */
+  .app-card.locked { opacity:.35; cursor:not-allowed; pointer-events:none; }
+  .app-card.locked::after {
+    content:'🔒'; position:absolute; top:10px; right:12px; font-size:16px;
+  }
+  .app-card { position:relative; }
+
+  /* Badge ruolo nel drawer */
+  .dr-badge {
+    font-size:9px; font-weight:700; letter-spacing:.8px; text-transform:uppercase;
+    padding:2px 6px; border-radius:4px; background:var(--card); color:var(--muted);
+    border:1px solid var(--border);
+  }
+  .dr-badge.super { background:rgba(249,115,22,.15); color:var(--orange); border-color:rgba(249,115,22,.3); }
+  .dr-badge.dev   { background:rgba(20,184,166,.15);  color:var(--teal);   border-color:rgba(20,184,166,.3); }
+  .dr-badge.user  { background:rgba(148,163,184,.1);  color:var(--subtle); border-color:var(--border); }
+
+  /* Nav item nascosto */
+  .dr-item.hidden-mod { display:none; }
 </style>
 </head>
 <body>
+
+<!-- ══ LOGIN SCREEN ══ -->
+<div id="loginScreen">
+  <div class="ls-logo"><span class="c1">WM</span><span class="c2">S</span><span class="c3"> Hub</span></div>
+  <div class="ls-sub">ATS Logistics Platform</div>
+  <div class="ls-card">
+    <div class="ls-desc">Accedi con il tuo account Google ATS per accedere ai moduli autorizzati.</div>
+    <button class="btn-gsign" onclick="signIn()">🔑 Accedi con Google</button>
+    <div id="loginErr"></div>
+  </div>
+</div>
+
+<!-- ══ ACCESSO NEGATO ══ -->
+<div id="accessDenied">
+  <div class="ad-icon">🚫</div>
+  <div class="ad-title">Accesso Negato</div>
+  <div class="ad-msg" id="adMsg">Il tuo account non è autorizzato ad accedere a WMS Hub. Contatta l'amministratore.</div>
+  <button class="ad-out" onclick="signOut()">← Esci e cambia account</button>
+</div>
 
 <!-- ══ HAMBURGER ══ -->
 <button class="menu-btn" id="menuBtn" onclick="toggleDrawer()" title="Menu">
@@ -509,6 +599,14 @@
       </div>
     </div>
 
+    <div class="dr-sect" id="sectAdmin" style="display:none">Admin</div>
+    <div class="dr-item" id="nav-admin" style="display:none" onclick="openAdminPanel()">
+      <span class="dr-item-icon">👥</span>
+      <div class="dr-item-info">
+        <span class="dr-item-name">Gestione Utenti</span>
+        <span class="dr-item-desc">Permessi e accessi</span>
+      </div>
+    </div>
     <div class="dr-sect">Risorse</div>
 
     <div class="dr-item app-guida" id="nav-guida" onclick="openApp('guida')">
@@ -521,6 +619,14 @@
 
   </div>
 
+  <div class="dr-user" id="drUser" style="display:none">
+    <div id="drAvatarWrap"></div>
+    <div class="dr-uinfo">
+      <div class="dr-uname" id="drUName">—</div>
+      <div class="dr-urole"><span class="dr-badge" id="drBadge">user</span></div>
+    </div>
+    <button class="dr-uout" onclick="signOut()" title="Esci">⏻</button>
+  </div>
   <div class="dr-footer">WMS Hub · ATS v1.0</div>
 </div>
 
@@ -610,6 +716,250 @@
 <div class="hub-clock" id="hubClock">00:00:00</div>
 
 <script>
+  // ══════════════════════════════════════════════════════
+  // CONFIG AUTH
+  // ══════════════════════════════════════════════════════
+  var CLIENT_ID   = '256693770433-b1pjdpaglrh7827o6ln2s24802rcnshd.apps.googleusercontent.com';
+  var CONFIG_HUB_FOLDER = '1LGoR9SKDthz1tUDLxbZhClqA-xhkjoNY'; // cartella config hub
+  var CONFIG_HUB_FNAME  = 'config_hub.json';
+  var SUPER_USER        = 'daniele.izzo.ats@gmail.com';
+
+  var TOKEN = null, uEmail = '', uName = '', uPic = '', uRole = 'user';
+  var hubConfig = null, configHubFileId = null;
+  var tcl;
+
+  // Moduli disponibili e loro chiavi
+  var ALL_MODULI = ['presenze','spedizioni','grn','stock','ats','tickets','guida'];
+
+  // Config default
+  var DEFAULT_HUB_CONFIG = {
+    super_users: [SUPER_USER],
+    utenti: []
+  };
+
+  // ── OAuth ──────────────────────────────────────────────
+  function waitGsi(){
+    if(typeof google==='undefined'){ setTimeout(waitGsi,150); return; }
+    tcl = google.accounts.oauth2.initTokenClient({
+      client_id: CLIENT_ID,
+      scope: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+      callback: onToken
+    });
+    var s = lsG('hub_sess');
+    if(s && s.email){ uEmail=s.email; uName=s.name||''; uPic=s.pic||'';
+      tcl.requestAccessToken({prompt:'', login_hint:uEmail});
+    } else {
+      showLogin();
+    }
+  }
+  window.onload = waitGsi;
+
+  function signIn(){ tcl.requestAccessToken({prompt:'select_account'}); }
+
+  function signOut(){
+    if(TOKEN) try{ google.accounts.oauth2.revoke(TOKEN,function(){}); }catch(e){}
+    TOKEN=null; uEmail=''; uName=''; uPic=''; uRole='user'; hubConfig=null;
+    lsDel('hub_sess'); lsDel('hub_token');
+    showLogin();
+    // Nasconde tutto
+    document.getElementById('accessDenied').style.display='none';
+    document.getElementById('drUser').style.display='none';
+  }
+
+  function onToken(r){
+    if(r.error){
+      if(!lsG('hub_sess')) showLogin();
+      showLoginErr(r.error);
+      return;
+    }
+    TOKEN = r.access_token;
+    lsS('hub_token', TOKEN);
+    // Auto-refresh ogni 50 minuti
+    clearTimeout(window._hubRefresh);
+    window._hubRefresh = setTimeout(function(){
+      var s=lsG('hub_sess');
+      tcl.requestAccessToken({prompt:'', login_hint:s?s.email||'':''});
+    }, 50*60*1000);
+    // Carica userinfo
+    fetch('https://www.googleapis.com/oauth2/v2/userinfo',{headers:{Authorization:'Bearer '+TOKEN}})
+      .then(function(res){ return res.json(); })
+      .then(function(u){
+        if(u.error){ showLogin(); return; }
+        uEmail = u.email||''; uName = u.name||u.email||''; uPic = u.picture||'';
+        lsS('hub_sess',{email:uEmail,name:uName,pic:uPic});
+        // Salva token in localStorage per i moduli figli
+        lsS('hub_token', TOKEN);
+        lsS('hub_user', {email:uEmail,name:uName,pic:uPic});
+        loadHubConfig();
+      }).catch(function(){ showLogin(); });
+  }
+
+  function showLogin(){
+    document.getElementById('loginScreen').classList.remove('hidden');
+  }
+  function hideLogin(){
+    document.getElementById('loginScreen').classList.add('hidden');
+  }
+  function showLoginErr(msg){
+    var e=document.getElementById('loginErr');
+    e.textContent=msg; e.style.display='block';
+  }
+
+  // ── Carica config hub da Drive ─────────────────────────
+  function loadHubConfig(){
+    gFetch('https://www.googleapis.com/drive/v3/files?q='+
+      encodeURIComponent('"'+CONFIG_HUB_FOLDER+'" in parents and name="'+CONFIG_HUB_FNAME+'" and trashed=false')+
+      '&fields=files(id,name)')
+    .then(function(d){
+      var files = d.files||[];
+      if(files.length){
+        configHubFileId = files[0].id;
+        return fetch('https://www.googleapis.com/drive/v3/files/'+configHubFileId+'?alt=media',
+          {headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){ return r.json(); });
+      } else {
+        // Primo avvio: crea config default
+        hubConfig = JSON.parse(JSON.stringify(DEFAULT_HUB_CONFIG));
+        saveHubConfig();
+        return hubConfig;
+      }
+    }).then(function(cfg){
+      if(cfg) hubConfig = Object.assign({}, DEFAULT_HUB_CONFIG, cfg);
+      applyHubPerm();
+    }).catch(function(e){
+      console.warn('Config hub non caricata, uso default:', e);
+      hubConfig = JSON.parse(JSON.stringify(DEFAULT_HUB_CONFIG));
+      applyHubPerm();
+    });
+  }
+
+  function saveHubConfig(){
+    var body = JSON.stringify(hubConfig, null, 2);
+    var bnd  = 'bnd_hub_'+Date.now();
+    var meta = configHubFileId
+      ? JSON.stringify({name:CONFIG_HUB_FNAME})
+      : JSON.stringify({name:CONFIG_HUB_FNAME, parents:[CONFIG_HUB_FOLDER]});
+    var multipart = '--'+bnd+'
+Content-Type: application/json
+
+'+meta+
+      '
+--'+bnd+'
+Content-Type: application/json
+
+'+body+'
+--'+bnd+'--';
+    var method = configHubFileId ? 'PATCH' : 'POST';
+    var url    = configHubFileId
+      ? 'https://www.googleapis.com/upload/drive/v3/files/'+configHubFileId+'?uploadType=multipart'
+      : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+    return fetch(url,{method:method,
+      headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'multipart/related; boundary='+bnd},
+      body:multipart}).then(function(r){ return r.json(); }).then(function(d){
+        if(d.id) configHubFileId = d.id;
+      });
+  }
+
+  // ── Applica permessi ───────────────────────────────────
+  function applyHubPerm(){
+    if(!hubConfig){ showLogin(); return; }
+    var em = uEmail.toLowerCase().trim();
+    var superUsers = (hubConfig.super_users||[SUPER_USER]).map(function(s){ return s.toLowerCase(); });
+    var isSuperAdmin = superUsers.includes(em);
+
+    var moduli_consentiti = ALL_MODULI; // default: tutto
+
+    if(isSuperAdmin){
+      uRole = 'superadmin';
+      moduli_consentiti = ALL_MODULI;
+    } else {
+      // Cerca utente nella lista
+      var utente = (hubConfig.utenti||[]).find(function(u){ return (u.email||'').toLowerCase()===em; });
+      if(!utente){
+        // Non in lista → accesso negato
+        document.getElementById('loginScreen').classList.add('hidden');
+        document.getElementById('accessDenied').style.display='flex';
+        document.getElementById('adMsg').textContent = 'Il tuo account ('+uEmail+') non è autorizzato. Contatta l'amministratore.';
+        return;
+      }
+      uRole = utente.ruolo || 'user';
+      moduli_consentiti = utente.moduli || [];
+    }
+
+    // Tutto ok → mostra hub
+    hideLogin();
+    document.getElementById('accessDenied').style.display='none';
+    renderUserDrawer();
+    applyModuliPermessi(moduli_consentiti);
+    // Salva ruolo e moduli nel localStorage per i figli
+    lsS('hub_user', {email:uEmail, name:uName, pic:uPic, role:uRole, moduli:moduli_consentiti});
+    // Riapri ultimo modulo usato (se autorizzato)
+    var pending = window._pendingApp || localStorage.getItem('wms_lastApp');
+    if(pending && frames[pending] && canAccessMod(pending)){
+      setTimeout(function(){ openApp(pending); }, 100);
+    } else {
+      showHome();
+    }
+  }
+
+  function renderUserDrawer(){
+    document.getElementById('drUser').style.display='flex';
+    if(uRole==='superadmin'){
+      document.getElementById('sectAdmin').style.display='';
+      document.getElementById('nav-admin').style.display='';
+    }
+    document.getElementById('drUName').textContent = uName;
+    var badge = document.getElementById('drBadge');
+    badge.textContent = uRole;
+    badge.className = 'dr-badge '+(uRole==='superadmin'?'super':uRole==='developer'?'dev':'user');
+    // Avatar
+    var wrap = document.getElementById('drAvatarWrap');
+    if(uPic){
+      var img = document.createElement('img');
+      img.className='dr-uavatar'; img.src=uPic; img.referrerPolicy='no-referrer';
+      img.onerror=function(){ wrap.innerHTML=mkFb(uName); };
+      wrap.innerHTML=''; wrap.appendChild(img);
+    } else {
+      wrap.innerHTML = mkFb(uName);
+    }
+  }
+
+  function mkFb(name){
+    var c=(name||'?').charAt(0).toUpperCase();
+    return '<div class="dr-uavatar-fb">'+c+'</div>';
+  }
+
+  function applyModuliPermessi(moduli){
+    // Mostra/nasconde card e nav item
+    ALL_MODULI.forEach(function(mod){
+      var allowed = moduli.includes('*') || moduli.includes(mod);
+      // Card welcome
+      var card = document.querySelector('.card-'+mod);
+      if(card) card.classList.toggle('locked', !allowed);
+      // Nav drawer
+      var nav = document.getElementById('nav-'+mod);
+      if(nav) nav.classList.toggle('hidden-mod', !allowed);
+    });
+  }
+
+  // ── Override openApp per check permessi ───────────────
+  function canAccessMod(app){
+    var u = lsG('hub_user');
+    if(!u) return false;
+    if(u.role==='superadmin') return true;
+    return (u.moduli||[]).includes(app);
+  }
+
+  // ── gFetch helper ──────────────────────────────────────
+  function gFetch(url){
+    return fetch(url,{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){ return r.json(); });
+  }
+  function lsG(k){ try{ var s=localStorage.getItem('wms_'+k); return s?JSON.parse(s):null; }catch(e){ return null; } }
+  function lsS(k,v){ try{ localStorage.setItem('wms_'+k,JSON.stringify(v)); }catch(e){} }
+  function lsDel(k){ try{ localStorage.removeItem('wms_'+k); }catch(e){} }
+
+  // ══════════════════════════════════════════════════════
+  // HUB LOGIC (originale)
+  // ══════════════════════════════════════════════════════
   const frames = {
     presenze:   document.getElementById('frame-presenze'),
     spedizioni: document.getElementById('wrap-spedizioni'),   // wrapper div
@@ -721,6 +1071,12 @@
     localStorage.removeItem('wms_lastApp');
     setActiveNav('home');
   } else {
+    // Passa token ai moduli figli ogni volta che cambiano
+    window.addEventListener('storage', function(e){
+      if(e.key==='wms_hub_token') {
+        // token aggiornato, notifica iframe attivi
+      }
+    });
     const lastApp = localStorage.getItem('wms_lastApp');
     if (lastApp && frames[lastApp]) {
       openApp(lastApp);
@@ -750,6 +1106,144 @@
   }
   tickClock();
   setInterval(tickClock, 1000);
+</script>
+
+<!-- ══ MODAL GESTIONE UTENTI ══ -->
+<div id="moAdmin" style="display:none;position:fixed;inset:0;background:rgba(0,0,0,.75);z-index:5000;align-items:center;justify-content:center;">
+  <div style="background:#131929;border:1px solid #243048;border-radius:16px;width:620px;max-width:95vw;max-height:88vh;display:flex;flex-direction:column;box-shadow:0 32px 80px rgba(0,0,0,.6);">
+    <div style="padding:18px 20px;border-bottom:1px solid #243048;display:flex;align-items:center;gap:10px;">
+      <span style="font-size:20px">👥</span>
+      <span style="font-family:'Barlow Condensed',sans-serif;font-size:20px;font-weight:800;color:#e2e8f0;letter-spacing:.5px">Gestione Utenti</span>
+      <button onclick="closeAdmin()" style="margin-left:auto;background:none;border:none;color:#64748b;cursor:pointer;font-size:20px;padding:2px 6px;border-radius:6px;">✕</button>
+    </div>
+    <div style="padding:16px 20px;overflow-y:auto;flex:1;display:flex;flex-direction:column;gap:14px;">
+      <div style="font-size:12px;color:#64748b;">Gli utenti qui sotto possono accedere all'hub. Il superadmin vede sempre tutto. Puoi specificare quali moduli ogni utente può aprire.</div>
+      <div id="adminUserList" style="display:flex;flex-direction:column;gap:8px;"></div>
+      <!-- Aggiungi utente -->
+      <div style="background:#1a2236;border:1px solid #243048;border-radius:10px;padding:12px 14px;display:flex;flex-direction:column;gap:8px;">
+        <div style="font-size:11px;font-weight:700;letter-spacing:.8px;text-transform:uppercase;color:#64748b;">Aggiungi utente</div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <input id="addUNome" placeholder="Nome" style="background:#0b0f18;border:1px solid #243048;border-radius:7px;padding:7px 10px;color:#e2e8f0;font-size:13px;outline:none;">
+          <input id="addUEmail" placeholder="email@atsgruppo.eu" style="background:#0b0f18;border:1px solid #243048;border-radius:7px;padding:7px 10px;color:#e2e8f0;font-size:13px;outline:none;">
+        </div>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px;">
+          <select id="addURuolo" style="background:#0b0f18;border:1px solid #243048;border-radius:7px;padding:7px 10px;color:#e2e8f0;font-size:13px;outline:none;cursor:pointer;">
+            <option value="user">User</option>
+            <option value="developer">Developer</option>
+            <option value="superadmin">Superadmin</option>
+          </select>
+          <button onclick="addAdminUser()" style="background:#14b8a6;color:#fff;border:none;border-radius:7px;padding:7px 14px;font-weight:700;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:14px;">+ Aggiungi</button>
+        </div>
+        <div style="font-size:11px;color:#64748b;">Moduli (lascia vuoto = tutti):</div>
+        <div id="addUModuliWrap" style="display:flex;gap:8px;flex-wrap:wrap;"></div>
+      </div>
+    </div>
+    <div style="padding:12px 20px;border-top:1px solid #243048;display:flex;justify-content:flex-end;gap:8px;">
+      <button onclick="closeAdmin()" style="background:transparent;color:#94a3b8;border:1px solid #243048;border-radius:8px;padding:7px 16px;cursor:pointer;font-size:13px;">Annulla</button>
+      <button onclick="saveAdminConfig()" style="background:#f97316;color:#fff;border:none;border-radius:8px;padding:7px 18px;font-weight:700;cursor:pointer;font-family:'Barlow Condensed',sans-serif;font-size:14px;">💾 Salva</button>
+    </div>
+  </div>
+</div>
+
+<script>
+  var MODULI_LABELS = {
+    presenze:'Presenze', spedizioni:'Spedizioni AWB', grn:'GRN Manager',
+    stock:'Etichetta Stock', ats:'Etichetta ATS', tickets:'Ticket Manager', guida:'Guida'
+  };
+  var _addUModuli = [];
+
+  function openAdminPanel(){
+    closeDrawer();
+    renderAdminModal();
+    document.getElementById('moAdmin').style.display='flex';
+    renderAddModuli();
+  }
+  function closeAdmin(){ document.getElementById('moAdmin').style.display='none'; }
+
+  function renderAdminModal(){
+    var list = document.getElementById('adminUserList');
+    var utenti = (hubConfig&&hubConfig.utenti)||[];
+    if(!utenti.length){
+      list.innerHTML='<div style="font-size:12px;color:#64748b;padding:8px 0;">Nessun utente configurato. Il superadmin accede sempre.</div>';
+      return;
+    }
+    list.innerHTML = utenti.map(function(u,i){
+      var modStr = (u.moduli||[]).includes('*') ? 'Tutti' : (u.moduli||[]).join(', ')||'—';
+      var roleColor = u.ruolo==='superadmin'?'#f97316':u.ruolo==='developer'?'#14b8a6':'#94a3b8';
+      return '<div style="background:#1a2236;border:1px solid #243048;border-radius:9px;padding:10px 14px;display:flex;align-items:center;gap:10px;">'+
+        '<div style="flex:1;min-width:0;">'+
+          '<div style="font-size:13px;font-weight:600;color:#e2e8f0;">'+esc(u.nome||u.email)+'</div>'+
+          '<div style="font-size:11px;color:#64748b;">'+esc(u.email)+'</div>'+
+          '<div style="font-size:11px;color:#94a3b8;margin-top:2px;">Moduli: '+esc(modStr)+'</div>'+
+        '</div>'+
+        '<span style="font-size:11px;font-weight:700;padding:2px 8px;border-radius:4px;background:rgba(0,0,0,.3);color:'+roleColor+';">'+esc(u.ruolo)+'</span>'+
+        '<button onclick="editAdminUser('+i+')" style="background:none;border:1px solid #243048;color:#94a3b8;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;">✏</button>'+
+        '<button onclick="removeAdminUser('+i+')" style="background:none;border:1px solid #ef4444;color:#ef4444;border-radius:6px;padding:4px 8px;cursor:pointer;font-size:12px;">✕</button>'+
+      '</div>';
+    }).join('');
+  }
+
+  function renderAddModuli(){
+    _addUModuli = [];
+    var wrap = document.getElementById('addUModuliWrap');
+    wrap.innerHTML = ALL_MODULI.map(function(m){
+      return '<label style="display:flex;align-items:center;gap:4px;font-size:12px;color:#94a3b8;cursor:pointer;">'+
+        '<input type="checkbox" value="'+m+'" onchange="toggleAddModulo(this)" style="accent-color:#f97316;">'+
+        (MODULI_LABELS[m]||m)+'</label>';
+    }).join('');
+  }
+
+  function toggleAddModulo(el){
+    if(el.checked) _addUModuli.push(el.value);
+    else _addUModuli = _addUModuli.filter(function(m){ return m!==el.value; });
+  }
+
+  function addAdminUser(){
+    var nome  = document.getElementById('addUNome').value.trim();
+    var email = document.getElementById('addUEmail').value.trim().toLowerCase();
+    var ruolo = document.getElementById('addURuolo').value;
+    if(!email){ alert('Inserisci email'); return; }
+    if(!hubConfig.utenti) hubConfig.utenti=[];
+    var moduli = _addUModuli.length ? _addUModuli : ['*'];
+    hubConfig.utenti.push({nome:nome||email, email:email, ruolo:ruolo, moduli:moduli});
+    document.getElementById('addUNome').value='';
+    document.getElementById('addUEmail').value='';
+    renderAdminModal();
+    renderAddModuli();
+  }
+
+  function removeAdminUser(i){
+    if(!confirm('Rimuovere questo utente?')) return;
+    hubConfig.utenti.splice(i,1);
+    renderAdminModal();
+  }
+
+  function editAdminUser(i){
+    var u = hubConfig.utenti[i];
+    var newModuli = prompt('Moduli (separati da virgola, * per tutti):
+Disponibili: '+ALL_MODULI.join(', '), (u.moduli||[]).join(', '));
+    if(newModuli===null) return;
+    hubConfig.utenti[i].moduli = newModuli.trim()==='*' ? ['*'] : newModuli.split(',').map(function(m){ return m.trim(); }).filter(Boolean);
+    renderAdminModal();
+  }
+
+  function saveAdminConfig(){
+    saveHubConfig().then(function(){
+      closeAdmin();
+      applyModuliPermessi(uRole==='superadmin'?['*']:(hubConfig.utenti.find(function(u){return u.email===uEmail;})||{moduli:[]}).moduli);
+      hubToast('✅ Configurazione salvata');
+    }).catch(function(e){ alert('Errore salvataggio: '+e); });
+  }
+
+  function esc(s){ return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); }
+
+  function hubToast(msg){
+    var d=document.createElement('div');
+    d.textContent=msg;
+    d.style.cssText='position:fixed;bottom:20px;right:20px;background:#1a2236;border:1px solid #10b981;color:#10b981;border-radius:10px;padding:10px 18px;font-size:13px;z-index:9999;box-shadow:0 8px 24px rgba(0,0,0,.4);';
+    document.body.appendChild(d);
+    setTimeout(function(){ d.remove(); },3000);
+  }
 </script>
 </body>
 </html>
