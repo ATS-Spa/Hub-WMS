@@ -1012,20 +1012,33 @@ function loadTickets(){
 
 function saveTicket(ticket){
   return ensureSheet().then(function(){
-    // Cerca riga esistente
     var idx = allTickets.findIndex(function(t){ return t.id===ticket.id; });
-    var row = [
-      ticket.id, ticket.titolo, ticket.progetto, ticket.tipo, ticket.priorita,
-      ticket.stato, ticket.descrizione, ticket.autore, ticket.autoreEmail,
-      ticket.assegnato||'', ticket.assegnatoEmail||'',
-      ticket.dataApertura, ticket.dataAggiornamento,
-      ticket.mailInviata||'', ticket.messageId||''
-    ];
     if(idx>=0){
-      // Update riga esistente (idx+2 perché header è riga 1)
-      return sheetUpdate([row], SHEET_NAME+'!A'+(idx+2));
+      // Ticket esistente: aggiorna solo colonne A-M (non toccare MailInviata/MessageID)
+      // che sono gestite dal servizio Python
+      var rowData = [
+        ticket.id, ticket.titolo, ticket.progetto, ticket.tipo, ticket.priorita,
+        ticket.stato, ticket.descrizione, ticket.autore, ticket.autoreEmail,
+        ticket.assegnato||'', ticket.assegnatoEmail||'',
+        ticket.dataApertura, ticket.dataAggiornamento
+      ];
+      var rowNum = idx+2;
+      // Aggiorna A-M (dati ticket)
+      return sheetUpdate([rowData], SHEET_NAME+'!A'+rowNum).then(function(){
+        // Se PENDING_UPDATE: aggiorna solo colonna MailInviata (O)
+        if(ticket.mailInviata === 'PENDING_UPDATE'){
+          return sheetUpdate([['PENDING_UPDATE']], SHEET_NAME+'!O'+rowNum);
+        }
+      });
     } else {
-      // Append
+      // Nuovo ticket: scrivi tutto incluso MailInviata=NO
+      var row = [
+        ticket.id, ticket.titolo, ticket.progetto, ticket.tipo, ticket.priorita,
+        ticket.stato, ticket.descrizione, ticket.autore, ticket.autoreEmail,
+        ticket.assegnato||'', ticket.assegnatoEmail||'',
+        ticket.dataApertura, ticket.dataAggiornamento,
+        ticket.mailInviata||'NO', ticket.messageId||''
+      ];
       return sheetAppend([row]);
     }
   });
