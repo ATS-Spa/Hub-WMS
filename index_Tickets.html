@@ -1,0 +1,1616 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Ticket Manager · WMS Hub</title>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+:root {
+  --bg: #0b0f18;
+  --surface: #131929;
+  --card: #1a2236;
+  --border: #243048;
+  --blue: #3b82f6;
+  --teal: #14b8a6;
+  --amber: #f59e0b;
+  --green: #10b981;
+  --red: #ef4444;
+  --violet: #8b5cf6;
+  --rose: #f43f5e;
+  --orange: #f97316;
+  --text: #e2e8f0;
+  --muted: #64748b;
+  --subtle: #94a3b8;
+  --ff: 'IBM Plex Sans', sans-serif;
+  --ffm: 'IBM Plex Mono', monospace;
+  --ffc: 'Barlow Condensed', sans-serif;
+}
+*, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+html, body { height: 100%; overflow: hidden; }
+body { background: var(--bg); color: var(--text); font-family: var(--ff); font-size: 14px; }
+
+/* ══ TOPBAR ══ */
+.topbar {
+  height: 52px;
+  background: var(--surface);
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  padding: 0 16px;
+  gap: 12px;
+  flex-shrink: 0;
+  position: relative;
+  z-index: 10;
+}
+.topbar-title { font-family: var(--ffc); font-size: 18px; font-weight: 800; letter-spacing: 1px; color: var(--orange); }
+.topbar-badge { font-family: var(--ffm); font-size: 10px; color: var(--muted); background: var(--card); border: 1px solid var(--border); border-radius: 5px; padding: 2px 7px; }
+.topbar-right { margin-left: auto; display: flex; align-items: center; gap: 8px; }
+.topbar-user { display: flex; align-items: center; gap: 8px; }
+.topbar-avatar { width: 30px; height: 30px; border-radius: 50%; border: 1px solid var(--border); }
+.topbar-uname { font-size: 12px; color: var(--subtle); font-family: var(--ffm); }
+.topbar-urole { font-size: 10px; color: var(--muted); text-transform: uppercase; letter-spacing: .8px; }
+
+/* ══ LAYOUT ══ */
+.layout { display: flex; height: calc(100vh - 52px); overflow: hidden; }
+
+/* ══ SIDEBAR FILTRI ══ */
+.sidebar {
+  width: 220px;
+  background: var(--surface);
+  border-right: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow-y: auto;
+  padding: 12px 10px;
+  gap: 4px;
+}
+.sb-sect {
+  font-size: 9px;
+  font-weight: 700;
+  letter-spacing: 1.8px;
+  text-transform: uppercase;
+  color: var(--muted);
+  padding: 10px 8px 4px;
+}
+.sb-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  gap: 8px;
+  padding: 8px 10px;
+  border-radius: 8px;
+  cursor: pointer;
+  color: var(--muted);
+  border: 1px solid transparent;
+  transition: background .15s, color .15s;
+  font-size: 13px;
+}
+.sb-item:hover { background: var(--card); color: var(--subtle); }
+.sb-item.active { background: var(--card); border-color: var(--border); color: var(--text); }
+.sb-item-left { display: flex; align-items: center; gap: 8px; }
+.sb-count { font-family: var(--ffm); font-size: 10px; background: var(--bg); border: 1px solid var(--border); border-radius: 4px; padding: 1px 5px; color: var(--muted); }
+.sb-divider { height: 1px; background: var(--border); margin: 6px 4px; }
+
+/* Dot stato */
+.dot { width: 8px; height: 8px; border-radius: 50%; flex-shrink: 0; }
+.dot-aperto    { background: var(--blue); }
+.dot-assegnato { background: var(--amber); }
+.dot-attesa    { background: var(--violet); }
+.dot-risolto   { background: var(--green); }
+.dot-chiuso    { background: var(--muted); }
+
+/* ══ MAIN CONTENT ══ */
+.content { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
+
+/* Toolbar */
+.toolbar {
+  padding: 10px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+  background: var(--bg);
+}
+.toolbar-search {
+  flex: 1;
+  max-width: 320px;
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 12px;
+  color: var(--text);
+  font-family: var(--ff);
+  font-size: 13px;
+  outline: none;
+  transition: border-color .2s;
+}
+.toolbar-search:focus { border-color: var(--orange); }
+.toolbar-search::placeholder { color: var(--muted); }
+
+.sel {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 7px 10px;
+  color: var(--subtle);
+  font-family: var(--ff);
+  font-size: 13px;
+  outline: none;
+  cursor: pointer;
+  transition: border-color .2s;
+}
+.sel:focus { border-color: var(--orange); }
+
+.btn {
+  padding: 7px 14px;
+  border-radius: 8px;
+  border: 1px solid transparent;
+  cursor: pointer;
+  font-family: var(--ffc);
+  font-size: 14px;
+  font-weight: 700;
+  letter-spacing: .4px;
+  transition: all .15s;
+  display: flex;
+  align-items: center;
+  gap: 6px;
+}
+.btn-primary { background: var(--orange); color: #fff; border-color: var(--orange); }
+.btn-primary:hover { background: #ea6c10; }
+.btn-ghost { background: transparent; color: var(--subtle); border-color: var(--border); }
+.btn-ghost:hover { background: var(--card); color: var(--text); }
+.btn-sm { padding: 4px 10px; font-size: 12px; }
+.btn-teal { background: var(--teal); color: #fff; border-color: var(--teal); }
+.btn-teal:hover { background: #0f9c90; }
+.btn-red { background: transparent; color: var(--red); border-color: var(--red); }
+.btn-red:hover { background: rgba(239,68,68,.1); }
+
+/* ══ TICKET LIST ══ */
+.ticket-list { flex: 1; overflow-y: auto; padding: 12px 16px; display: flex; flex-direction: column; gap: 8px; }
+
+.ticket-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 12px;
+  padding: 14px 16px;
+  cursor: pointer;
+  transition: all .18s;
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  gap: 12px;
+  align-items: start;
+}
+.ticket-card:hover { border-color: var(--orange); background: var(--card); transform: translateX(2px); }
+.ticket-card.selected { border-color: var(--orange); background: var(--card); }
+
+.ticket-priority-bar { width: 3px; border-radius: 3px; min-height: 48px; align-self: stretch; flex-shrink: 0; }
+.tc-body { min-width: 0; }
+.tc-header { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; margin-bottom: 4px; }
+.tc-id { font-family: var(--ffm); font-size: 10px; color: var(--muted); }
+.tc-title { font-weight: 600; font-size: 14px; color: var(--text); white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.tc-desc { font-size: 12px; color: var(--muted); line-height: 1.5; overflow: hidden; display: -webkit-box; -webkit-line-clamp: 2; -webkit-box-orient: vertical; }
+.tc-meta { display: flex; align-items: center; gap: 8px; margin-top: 8px; flex-wrap: wrap; }
+.tc-right { display: flex; flex-direction: column; align-items: flex-end; gap: 6px; flex-shrink: 0; }
+
+/* Badge */
+.badge {
+  font-family: var(--ffc);
+  font-size: 11px;
+  font-weight: 700;
+  letter-spacing: .3px;
+  padding: 2px 8px;
+  border-radius: 5px;
+  border: 1px solid transparent;
+  white-space: nowrap;
+}
+.badge-stato-aperto    { background: rgba(59,130,246,.15); color: var(--blue); border-color: rgba(59,130,246,.3); }
+.badge-stato-assegnato { background: rgba(245,158,11,.15); color: var(--amber); border-color: rgba(245,158,11,.3); }
+.badge-stato-attesa    { background: rgba(139,92,246,.15); color: var(--violet); border-color: rgba(139,92,246,.3); }
+.badge-stato-risolto   { background: rgba(16,185,129,.15); color: var(--green); border-color: rgba(16,185,129,.3); }
+.badge-stato-chiuso    { background: rgba(100,116,139,.15); color: var(--muted); border-color: rgba(100,116,139,.3); }
+.badge-tipo { background: rgba(249,115,22,.1); color: var(--orange); border-color: rgba(249,115,22,.25); }
+.badge-progetto { background: rgba(148,163,184,.1); color: var(--subtle); border-color: rgba(148,163,184,.2); }
+.badge-assegnato { background: rgba(20,184,166,.1); color: var(--teal); border-color: rgba(20,184,166,.2); }
+
+/* Priority colors */
+.prio-bassa    { background: var(--green); }
+.prio-media    { background: var(--amber); }
+.prio-alta     { background: var(--orange); }
+.prio-urgente  { background: var(--red); }
+
+.tc-date { font-family: var(--ffm); font-size: 10px; color: var(--muted); }
+.tc-assignee { font-size: 11px; color: var(--teal); }
+
+/* Empty state */
+.empty-state { flex: 1; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 12px; opacity: .5; }
+.empty-icon { font-size: 48px; }
+.empty-txt { font-family: var(--ffc); font-size: 16px; color: var(--muted); letter-spacing: 1px; }
+
+/* ══ DETAIL PANEL ══ */
+.detail-panel {
+  width: 420px;
+  background: var(--surface);
+  border-left: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  flex-shrink: 0;
+  overflow: hidden;
+  transition: width .25s;
+}
+.detail-panel.closed { width: 0; }
+.detail-inner { width: 420px; display: flex; flex-direction: column; height: 100%; overflow: hidden; }
+
+.dp-header {
+  padding: 14px 16px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-shrink: 0;
+}
+.dp-close { background: none; border: none; color: var(--muted); cursor: pointer; font-size: 18px; padding: 2px 6px; border-radius: 6px; transition: background .15s; }
+.dp-close:hover { background: var(--card); color: var(--text); }
+.dp-id { font-family: var(--ffm); font-size: 11px; color: var(--muted); }
+.dp-title { font-family: var(--ffc); font-size: 18px; font-weight: 700; color: var(--text); line-height: 1.3; }
+
+.dp-body { flex: 1; overflow-y: auto; padding: 14px 16px; display: flex; flex-direction: column; gap: 14px; }
+
+.dp-field { display: flex; flex-direction: column; gap: 4px; }
+.dp-label { font-size: 10px; font-weight: 700; letter-spacing: 1.2px; text-transform: uppercase; color: var(--muted); }
+.dp-value { font-size: 13px; color: var(--subtle); line-height: 1.6; }
+.dp-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+
+.dp-desc { background: var(--card); border-radius: 8px; padding: 10px 12px; font-size: 13px; color: var(--text); line-height: 1.7; border: 1px solid var(--border); white-space: pre-wrap; }
+
+/* Note */
+.notes-list { display: flex; flex-direction: column; gap: 8px; }
+.note-item { background: var(--card); border: 1px solid var(--border); border-radius: 8px; padding: 10px 12px; }
+.note-meta { display: flex; align-items: center; gap: 8px; margin-bottom: 6px; }
+.note-author { font-family: var(--ffc); font-size: 12px; font-weight: 700; color: var(--text); }
+.note-date { font-family: var(--ffm); font-size: 10px; color: var(--muted); }
+.note-text { font-size: 12px; color: var(--subtle); line-height: 1.6; white-space: pre-wrap; }
+
+.dp-footer {
+  padding: 12px 16px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  flex-shrink: 0;
+}
+.dp-actions { display: flex; gap: 8px; flex-wrap: wrap; }
+
+textarea.mi {
+  width: 100%;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 10px;
+  color: var(--text);
+  font-family: var(--ff);
+  font-size: 13px;
+  outline: none;
+  resize: vertical;
+  min-height: 60px;
+  transition: border-color .2s;
+}
+textarea.mi:focus { border-color: var(--orange); }
+textarea.mi::placeholder { color: var(--muted); }
+
+/* ══ MODAL ══ */
+.modal-overlay {
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,.7);
+  backdrop-filter: blur(4px);
+  z-index: 1000;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity .2s;
+}
+.modal-overlay.show { opacity: 1; pointer-events: all; }
+
+.modal {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  width: 580px;
+  max-width: 95vw;
+  max-height: 90vh;
+  display: flex;
+  flex-direction: column;
+  box-shadow: 0 32px 80px rgba(0,0,0,.6);
+  transform: translateY(10px);
+  transition: transform .2s;
+}
+.modal-overlay.show .modal { transform: translateY(0); }
+.modal-header {
+  padding: 18px 20px 14px;
+  border-bottom: 1px solid var(--border);
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.modal-title { font-family: var(--ffc); font-size: 20px; font-weight: 800; color: var(--text); letter-spacing: .5px; }
+.modal-close { margin-left: auto; background: none; border: none; color: var(--muted); cursor: pointer; font-size: 20px; padding: 2px 6px; border-radius: 6px; transition: background .15s; }
+.modal-close:hover { background: var(--card); color: var(--text); }
+.modal-body { padding: 18px 20px; overflow-y: auto; display: flex; flex-direction: column; gap: 14px; }
+.modal-footer { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; gap: 8px; justify-content: flex-end; }
+
+.form-row { display: grid; grid-template-columns: 1fr 1fr; gap: 12px; }
+.fg { display: flex; flex-direction: column; gap: 5px; }
+.fl { font-size: 11px; font-weight: 600; letter-spacing: .8px; text-transform: uppercase; color: var(--muted); }
+.fl .req { color: var(--red); }
+.mi {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+  color: var(--text);
+  font-family: var(--ff);
+  font-size: 13px;
+  outline: none;
+  transition: border-color .2s;
+  width: 100%;
+}
+.mi:focus { border-color: var(--orange); }
+.mi::placeholder { color: var(--muted); }
+select.mi { cursor: pointer; }
+
+/* ══ LOGIN SCREEN ══ */
+.login-screen {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 24px;
+  z-index: 2000;
+}
+.login-icon { font-size: 48px; }
+.login-title { font-family: var(--ffc); font-size: 32px; font-weight: 800; color: var(--orange); letter-spacing: 2px; }
+.login-sub { font-size: 12px; color: var(--muted); letter-spacing: 1.5px; text-transform: uppercase; }
+.login-card {
+  background: var(--surface);
+  border: 1px solid var(--border);
+  border-radius: 16px;
+  padding: 28px 32px;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 16px;
+  box-shadow: 0 20px 60px rgba(0,0,0,.5);
+}
+
+/* ══ SPINNER ══ */
+.spinner { width: 24px; height: 24px; border: 2px solid var(--border); border-top-color: var(--orange); border-radius: 50%; animation: spin .7s linear infinite; }
+@keyframes spin { to { transform: rotate(360deg); } }
+
+/* ══ TOAST ══ */
+.toast-wrap { position: fixed; bottom: 20px; right: 20px; z-index: 9999; display: flex; flex-direction: column; gap: 8px; }
+.toast {
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 10px;
+  padding: 10px 16px;
+  font-size: 13px;
+  color: var(--text);
+  box-shadow: 0 8px 24px rgba(0,0,0,.4);
+  animation: fadeIn .2s ease;
+  max-width: 320px;
+}
+.toast.ok { border-color: var(--green); color: var(--green); }
+.toast.err { border-color: var(--red); color: var(--red); }
+@keyframes fadeIn { from { opacity:0; transform: translateY(8px); } to { opacity:1; transform: translateY(0); } }
+
+/* ══ IMPOSTAZIONI ══ */
+.settings-tabs { display: flex; gap: 4px; padding: 0 20px; border-bottom: 1px solid var(--border); margin-bottom: 0; }
+.stab {
+  padding: 10px 14px;
+  font-family: var(--ffc);
+  font-size: 13px;
+  font-weight: 700;
+  color: var(--muted);
+  cursor: pointer;
+  border-bottom: 2px solid transparent;
+  transition: color .15s, border-color .15s;
+  letter-spacing: .3px;
+}
+.stab.active { color: var(--orange); border-color: var(--orange); }
+.stab-panel { display: none; flex-direction: column; gap: 10px; }
+.stab-panel.active { display: flex; }
+
+.list-editor { display: flex; flex-direction: column; gap: 6px; }
+.list-item {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  background: var(--card);
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  padding: 8px 12px;
+}
+.list-item-name { flex: 1; font-size: 13px; color: var(--text); }
+.list-item-extra { font-size: 11px; color: var(--muted); font-family: var(--ffm); }
+.list-add { display: flex; gap: 8px; }
+.list-add .mi { flex: 1; }
+
+/* color dot picker */
+.color-opts { display: flex; gap: 6px; flex-wrap: wrap; }
+.color-opt {
+  width: 22px;
+  height: 22px;
+  border-radius: 50%;
+  cursor: pointer;
+  border: 2px solid transparent;
+  transition: border-color .15s, transform .15s;
+}
+.color-opt.sel { border-color: #fff; transform: scale(1.2); }
+
+/* ══ LOADING OVERLAY ══ */
+.loading-overlay {
+  position: fixed;
+  inset: 0;
+  background: var(--bg);
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  z-index: 1500;
+  transition: opacity .3s;
+}
+.loading-overlay.hidden { opacity: 0; pointer-events: none; }
+.lo-txt { font-family: var(--ffc); font-size: 13px; color: var(--muted); letter-spacing: 1px; }
+
+@media (max-width: 768px) {
+  .sidebar { display: none; }
+  .detail-panel { display: none; }
+}
+</style>
+</head>
+<body>
+
+<!-- Loading -->
+<div class="loading-overlay" id="loadingOverlay">
+  <div class="spinner" style="width:32px;height:32px;border-width:3px"></div>
+  <div class="lo-txt" id="loadingTxt">Inizializzazione...</div>
+</div>
+
+<!-- Login -->
+<div class="login-screen" id="loginScreen" style="display:none">
+  <div class="login-icon">🎫</div>
+  <div class="login-title">TICKET MANAGER</div>
+  <div class="login-sub">WMS Hub · ATS</div>
+  <div class="login-card">
+    <div style="font-size:13px;color:var(--muted);text-align:center">Accedi con il tuo account Google ATS</div>
+    <div id="gLoginBtn"></div>
+    <div id="loginErr" style="font-size:12px;color:var(--red);display:none"></div>
+  </div>
+</div>
+
+<!-- Toast -->
+<div class="toast-wrap" id="toastWrap"></div>
+
+<!-- ══ APP ══ -->
+<div id="appRoot" style="display:none;height:100vh;display:none;flex-direction:column">
+
+  <!-- Topbar -->
+  <div class="topbar">
+    <span style="font-size:20px">🎫</span>
+    <span class="topbar-title">TICKET MANAGER</span>
+    <span class="topbar-badge" id="tbVersion">v1.0</span>
+    <div class="topbar-right" id="topbarRight">
+      <button class="btn btn-ghost btn-sm" id="btnSettings" onclick="openSettings()" style="display:none">⚙ Impostazioni</button>
+      <div class="topbar-user" id="topbarUser" style="display:none">
+        <img class="topbar-avatar" id="uAvatar" src="" alt="">
+        <div>
+          <div class="topbar-uname" id="uNameTop"></div>
+          <div class="topbar-urole" id="uRoleTop"></div>
+        </div>
+        <button class="btn btn-ghost btn-sm" onclick="doLogout()">Esci</button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Layout -->
+  <div class="layout">
+
+    <!-- Sidebar -->
+    <div class="sidebar" id="sidebar">
+      <div class="sb-sect">Visualizza</div>
+      <div class="sb-item active" id="sb-tutti" onclick="setFilter('tutti')">
+        <div class="sb-item-left"><span>📋</span> Tutti</div>
+        <span class="sb-count" id="cnt-tutti">0</span>
+      </div>
+      <div class="sb-item" id="sb-miei" onclick="setFilter('miei')">
+        <div class="sb-item-left"><span>👤</span> I Miei</div>
+        <span class="sb-count" id="cnt-miei">0</span>
+      </div>
+      <div class="sb-item" id="sb-nonassegnati" onclick="setFilter('nonassegnati')">
+        <div class="sb-item-left"><span>🔓</span> Non assegnati</div>
+        <span class="sb-count" id="cnt-nonassegnati">0</span>
+      </div>
+
+      <div class="sb-divider"></div>
+      <div class="sb-sect">Stato</div>
+      <div id="sbStatiWrap"></div>
+
+      <div class="sb-divider"></div>
+      <div class="sb-sect">Progetto</div>
+      <div id="sbProgettiWrap"></div>
+    </div>
+
+    <!-- Content -->
+    <div class="content">
+      <!-- Toolbar -->
+      <div class="toolbar">
+        <input class="toolbar-search" type="text" id="searchInput" placeholder="🔍 Cerca ticket..." oninput="renderTickets()">
+        <select class="sel" id="filterPrio" onchange="renderTickets()">
+          <option value="">Tutte le priorità</option>
+        </select>
+        <select class="sel" id="filterTipo" onchange="renderTickets()">
+          <option value="">Tutti i tipi</option>
+        </select>
+        <div style="margin-left:auto">
+          <button class="btn btn-primary" onclick="openNewTicket()">+ Nuovo Ticket</button>
+        </div>
+      </div>
+
+      <!-- List -->
+      <div class="ticket-list" id="ticketList">
+        <div class="empty-state">
+          <div class="empty-icon">🎫</div>
+          <div class="empty-txt">Nessun ticket</div>
+        </div>
+      </div>
+    </div>
+
+    <!-- Detail Panel -->
+    <div class="detail-panel closed" id="detailPanel">
+      <div class="detail-inner" id="detailInner"></div>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL NUOVO TICKET ══ -->
+<div class="modal-overlay" id="moNew">
+  <div class="modal">
+    <div class="modal-header">
+      <span style="font-size:20px">🎫</span>
+      <span class="modal-title">Nuovo Ticket</span>
+      <button class="modal-close" onclick="closeModal('moNew')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div class="fg">
+        <div class="fl">Titolo <span class="req">*</span></div>
+        <input class="mi" id="newTitle" type="text" placeholder="Descrivi brevemente il problema o la richiesta...">
+      </div>
+      <div class="form-row">
+        <div class="fg">
+          <div class="fl">Progetto <span class="req">*</span></div>
+          <select class="mi" id="newProgetto"></select>
+        </div>
+        <div class="fg">
+          <div class="fl">Tipo <span class="req">*</span></div>
+          <select class="mi" id="newTipo"></select>
+        </div>
+      </div>
+      <div class="fg">
+        <div class="fl">Priorità</div>
+        <select class="mi" id="newPrio"></select>
+      </div>
+      <div class="fg">
+        <div class="fl">Descrizione</div>
+        <textarea class="mi" id="newDesc" rows="4" placeholder="Dettagli aggiuntivi, passi per riprodurre il problema, screenshot allegati..."></textarea>
+      </div>
+      <div class="fg">
+        <div class="fl">Email richiedente</div>
+        <input class="mi" id="newEmail" type="email" placeholder="tua.email@atsgruppo.eu" readonly>
+        <div style="font-size:11px;color:var(--muted);margin-top:2px">Precompilata dal tuo account Google</div>
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('moNew')">Annulla</button>
+      <button class="btn btn-primary" onclick="submitNewTicket()">🎫 Invia Ticket</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL IMPOSTAZIONI ══ -->
+<div class="modal-overlay" id="moSettings">
+  <div class="modal" style="width:660px">
+    <div class="modal-header">
+      <span style="font-size:20px">⚙</span>
+      <span class="modal-title">Impostazioni</span>
+      <button class="modal-close" onclick="closeModal('moSettings')">✕</button>
+    </div>
+    <div class="modal-body" style="padding:0">
+      <div class="settings-tabs">
+        <div class="stab active" onclick="switchStab(this,'s-progetti')">Progetti</div>
+        <div class="stab" onclick="switchStab(this,'s-tipi')">Tipi</div>
+        <div class="stab" onclick="switchStab(this,'s-priorita')">Priorità</div>
+        <div class="stab" onclick="switchStab(this,'s-stati')">Stati</div>
+        <div class="stab" onclick="switchStab(this,'s-utenti')">Utenti</div>
+        <div class="stab" onclick="switchStab(this,'s-generale')">Generale</div>
+      </div>
+      <div style="padding:16px 20px;display:flex;flex-direction:column;gap:14px;overflow-y:auto;max-height:55vh">
+
+        <!-- Progetti -->
+        <div class="stab-panel active" id="s-progetti">
+          <div style="font-size:12px;color:var(--muted)">Progetti tracciati nel sistema di ticketing</div>
+          <div class="list-editor" id="leProgetti"></div>
+          <div class="list-add">
+            <input class="mi" id="addProgNome" placeholder="Nome progetto (es. PallexTool)">
+            <button class="btn btn-teal btn-sm" onclick="addListItem('progetti')">+ Aggiungi</button>
+          </div>
+        </div>
+
+        <!-- Tipi -->
+        <div class="stab-panel" id="s-tipi">
+          <div style="font-size:12px;color:var(--muted)">Categorie di ticket disponibili</div>
+          <div class="list-editor" id="leTipi"></div>
+          <div class="list-add">
+            <input class="mi" id="addTipoNome" placeholder="Tipo (es. Bug, Feature...)">
+            <input class="mi" id="addTipoEmoji" placeholder="Emoji" style="max-width:80px">
+            <button class="btn btn-teal btn-sm" onclick="addListItem('tipi')">+ Aggiungi</button>
+          </div>
+        </div>
+
+        <!-- Priorità -->
+        <div class="stab-panel" id="s-priorita">
+          <div style="font-size:12px;color:var(--muted)">Livelli di priorità e colori</div>
+          <div class="list-editor" id="lePriorita"></div>
+          <div class="list-add">
+            <input class="mi" id="addPrioNome" placeholder="Nome priorità">
+            <input class="mi" id="addPrioColore" placeholder="Colore (es. #ef4444)" style="max-width:130px">
+            <button class="btn btn-teal btn-sm" onclick="addListItem('priorita')">+ Aggiungi</button>
+          </div>
+        </div>
+
+        <!-- Stati -->
+        <div class="stab-panel" id="s-stati">
+          <div style="font-size:12px;color:var(--muted)">Flusso degli stati del ticket</div>
+          <div class="list-editor" id="leStati"></div>
+          <div class="list-add">
+            <input class="mi" id="addStatoNome" placeholder="Nome stato">
+            <input class="mi" id="addStatoColore" placeholder="Colore (es. #3b82f6)" style="max-width:130px">
+            <button class="btn btn-teal btn-sm" onclick="addListItem('stati')">+ Aggiungi</button>
+          </div>
+        </div>
+
+        <!-- Utenti -->
+        <div class="stab-panel" id="s-utenti">
+          <div style="font-size:12px;color:var(--muted)">Utenti del sistema. Il ruolo determina i permessi.</div>
+          <div class="list-editor" id="leUtenti"></div>
+          <div class="list-add" style="flex-wrap:wrap;gap:8px">
+            <input class="mi" id="addUtNome" placeholder="Nome" style="flex:1;min-width:120px">
+            <input class="mi" id="addUtEmail" placeholder="email@atsgruppo.eu" style="flex:2;min-width:180px">
+            <select class="mi" id="addUtRuolo" style="flex:1;min-width:120px">
+              <option value="user">User</option>
+              <option value="developer">Developer</option>
+              <option value="superadmin">Superadmin</option>
+            </select>
+            <button class="btn btn-teal btn-sm" onclick="addListItem('utenti')">+ Aggiungi</button>
+          </div>
+        </div>
+
+        <!-- Generale -->
+        <div class="stab-panel" id="s-generale">
+          <div class="fg">
+            <div class="fl">Email notifiche IT</div>
+            <input class="mi" id="cfgEmailIT" type="email" placeholder="itlogisticsata@atsgruppo.eu">
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">Tutti i nuovi ticket vengono notificati a questo indirizzo</div>
+          </div>
+          <div class="fg">
+            <div class="fl">ID Cartella Drive (Gestione Ticketing)</div>
+            <input class="mi" id="cfgFolderData" placeholder="ID cartella Google Drive">
+          </div>
+          <div class="fg">
+            <div class="fl">ID Foglio Google Sheet (dati ticket)</div>
+            <input class="mi" id="cfgSheetId" placeholder="Lascia vuoto per creazione automatica">
+            <div style="font-size:11px;color:var(--muted);margin-top:2px">Verrà creato automaticamente al primo salvataggio se non specificato</div>
+          </div>
+          <div class="fg">
+            <div class="fl">Versione</div>
+            <input class="mi" id="cfgVersion" placeholder="1.0">
+          </div>
+        </div>
+
+      </div>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('moSettings')">Annulla</button>
+      <button class="btn btn-primary" onclick="saveSettings()">💾 Salva Configurazione</button>
+    </div>
+  </div>
+</div>
+
+<!-- ══ MODAL MAIL ══ -->
+<div class="modal-overlay" id="moMail">
+  <div class="modal" style="width:480px">
+    <div class="modal-header">
+      <span style="font-size:20px">✉</span>
+      <span class="modal-title">Notifica via email</span>
+      <button class="modal-close" onclick="closeModal('moMail')">✕</button>
+    </div>
+    <div class="modal-body">
+      <div style="font-size:13px;color:var(--subtle);line-height:1.6" id="moMailBody"></div>
+      <div style="background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 12px;font-size:12px;color:var(--muted)">
+        ⚠️ Verrà aperto il tuo client email (Outlook). Se non si apre usa il link sotto.
+      </div>
+      <a id="moMailLink" href="#" style="color:var(--orange);font-size:12px;word-break:break-all"></a>
+    </div>
+    <div class="modal-footer">
+      <button class="btn btn-ghost" onclick="closeModal('moMail')">Chiudi</button>
+      <button class="btn btn-primary" onclick="doSendMail()">✉ Apri client email</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ══════════════════════════════════════════════════════
+// CONFIG
+// ══════════════════════════════════════════════════════
+var CLIENT_ID = '256693770433-b1pjdpaglrh7827o6ln2s24802rcnshd.apps.googleusercontent.com';
+var CONFIG_FOLDER_ID = '16VQGMVwhW4p8u6mbCDLGlQRx8afG_m7p'; // Cartella config_tickets
+var DATA_FOLDER_ID   = '11ocsebXn-EPfhiIxTf3J6kZ3fH3xQYmf';  // Cartella Gestione Ticketing
+var CONFIG_FNAME     = 'config_tickets.json';
+var SHEET_NAME       = 'Tickets';
+
+var TOKEN = null, uEmail = '', uName = '', uPic = '', uRole = 'user';
+var tcl = null;
+var configFileId = null, sheetId = null, configData = null;
+var allTickets = [];
+var currentFilter = 'tutti';
+var currentFilterProg = null;
+var currentFilterStato = null;
+var selectedTicketId = null;
+var _mailHref = '';
+
+// Config default
+var DEFAULT_CONFIG = {
+  versione: '1.0',
+  email_notifiche: 'itlogisticsata@atsgruppo.eu',
+  folder_data: '11ocsebXn-EPfhiIxTf3J6kZ3fH3xQYmf',
+  sheet_id: '',
+  progetti: [
+    { nome: 'WMS Presenze', attivo: true },
+    { nome: 'WMS GRN', attivo: true },
+    { nome: 'WMS Spedizioni AWB', attivo: true },
+    { nome: 'PallexTool', attivo: true },
+    { nome: 'SAP B1 BOM', attivo: true },
+    { nome: 'Fatture Viewer', attivo: true },
+    { nome: 'Altro', attivo: true }
+  ],
+  tipi: [
+    { nome: 'Bug', emoji: '🐛' },
+    { nome: 'Nuova Feature', emoji: '✨' },
+    { nome: 'Modifica', emoji: '🔧' },
+    { nome: 'Domanda', emoji: '❓' },
+    { nome: 'Urgente', emoji: '🚨' }
+  ],
+  priorita: [
+    { nome: 'Bassa', colore: '#10b981' },
+    { nome: 'Media', colore: '#f59e0b' },
+    { nome: 'Alta', colore: '#f97316' },
+    { nome: 'Urgente', colore: '#ef4444' }
+  ],
+  stati: [
+    { nome: 'Aperto', colore: '#3b82f6' },
+    { nome: 'Assegnato', colore: '#f59e0b' },
+    { nome: 'In attesa', colore: '#8b5cf6' },
+    { nome: 'Risolto', colore: '#10b981' },
+    { nome: 'Chiuso', colore: '#64748b' }
+  ],
+  utenti: [
+    { nome: 'Daniele Izzo', email: 'daniele.izzo.ats@gmail.com', ruolo: 'superadmin' }
+  ]
+};
+
+// ══════════════════════════════════════════════════════
+// INIT
+// ══════════════════════════════════════════════════════
+window.onload = function(){
+  setLoading('Caricamento...');
+  if(window.google && google.accounts){
+    initOAuth();
+  } else {
+    var s = document.createElement('script');
+    s.src = 'https://accounts.google.com/gsi/client';
+    s.onload = initOAuth;
+    document.head.appendChild(s);
+  }
+};
+
+function initOAuth(){
+  tcl = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+    callback: onToken
+  });
+  // check sessione salvata
+  var saved = lsGet('tkt_sess');
+  if(saved){
+    TOKEN = saved.token;
+    uEmail = saved.email;
+    uName = saved.name;
+    uPic = saved.pic;
+    uRole = saved.role || 'user';
+    afterLogin();
+  } else {
+    hideLoading();
+    showEl('loginScreen');
+    renderLoginBtn();
+  }
+}
+
+function renderLoginBtn(){
+  google.accounts.id.initialize({
+    client_id: CLIENT_ID,
+    callback: onOneTap
+  });
+  google.accounts.id.renderButton(document.getElementById('gLoginBtn'), {
+    theme: 'filled_black', size: 'large', text: 'signin_with', shape: 'rectangular', width: 280
+  });
+  // Anche click diretto per token
+  document.getElementById('gLoginBtn').addEventListener('click', function(){
+    if(!TOKEN) tcl.requestAccessToken();
+  });
+}
+
+function onOneTap(resp){
+  // decode jwt for name/pic
+  var parts = resp.credential.split('.');
+  var pay = JSON.parse(atob(parts[1]));
+  uEmail = pay.email; uName = pay.name; uPic = pay.picture;
+  tcl.requestAccessToken();
+}
+
+function onToken(r){
+  if(r.error){ showLoginErr(r.error); return; }
+  TOKEN = r.access_token;
+  if(!uEmail){
+    gFetch('https://www.googleapis.com/oauth2/v2/userinfo').then(function(u){
+      uEmail = u.email; uName = u.name; uPic = u.picture;
+      afterLogin();
+    });
+  } else {
+    afterLogin();
+  }
+}
+
+function afterLogin(){
+  setLoading('Caricamento configurazione...');
+  loadConfig().then(function(){
+    determineRole();
+    lsSet('tkt_sess',{token:TOKEN,email:uEmail,name:uName,pic:uPic,role:uRole});
+    setLoading('Caricamento ticket...');
+    return loadTickets();
+  }).then(function(){
+    hideLoading();
+    hideEl('loginScreen');
+    showEl('appRoot');
+    document.getElementById('appRoot').style.display = 'flex';
+    renderUI();
+    renderTickets();
+  }).catch(function(e){
+    console.error(e);
+    toast('Errore durante il caricamento: '+e.message,'err');
+    hideLoading();
+    showEl('loginScreen');
+  });
+}
+
+function determineRole(){
+  if(!configData) return;
+  var utenti = configData.utenti || [];
+  var me = utenti.find(function(u){ return u.email && u.email.toLowerCase()===uEmail.toLowerCase(); });
+  uRole = me ? (me.ruolo||'user') : 'user';
+}
+
+function doLogout(){
+  if(TOKEN) try{ google.accounts.oauth2.revoke(TOKEN,function(){}); }catch(e){}
+  TOKEN = null; uEmail=''; uName=''; uPic=''; uRole='user';
+  lsDel('tkt_sess');
+  location.reload();
+}
+
+// ══════════════════════════════════════════════════════
+// CONFIG DRIVE
+// ══════════════════════════════════════════════════════
+function loadConfig(){
+  return listFiles('"'+CONFIG_FOLDER_ID+'" in parents and name="'+CONFIG_FNAME+'" and trashed=false').then(function(files){
+    if(files.length>0){
+      configFileId = files[0].id;
+      return gFetchRaw('https://www.googleapis.com/drive/v3/files/'+configFileId+'?alt=media').then(function(r){ return r.json(); }).then(function(d){
+        configData = Object.assign({}, DEFAULT_CONFIG, d);
+        // merge arrays se mancano
+        if(!configData.progetti || !configData.progetti.length) configData.progetti = DEFAULT_CONFIG.progetti;
+        if(!configData.tipi || !configData.tipi.length) configData.tipi = DEFAULT_CONFIG.tipi;
+        if(!configData.priorita || !configData.priorita.length) configData.priorita = DEFAULT_CONFIG.priorita;
+        if(!configData.stati || !configData.stati.length) configData.stati = DEFAULT_CONFIG.stati;
+        if(!configData.utenti || !configData.utenti.length) configData.utenti = DEFAULT_CONFIG.utenti;
+        sheetId = configData.sheet_id || null;
+        DATA_FOLDER_ID = configData.folder_data || DATA_FOLDER_ID;
+      });
+    } else {
+      // Primo avvio: crea config di default
+      configData = JSON.parse(JSON.stringify(DEFAULT_CONFIG));
+      return saveConfig().then(function(){
+        toast('Config creata con valori default','ok');
+      });
+    }
+  });
+}
+
+function saveConfig(){
+  var body = JSON.stringify(configData, null, 2);
+  var bnd = 'boundary_cfg_'+Date.now();
+  var meta = configFileId
+    ? JSON.stringify({name:CONFIG_FNAME})
+    : JSON.stringify({name:CONFIG_FNAME, parents:[CONFIG_FOLDER_ID]});
+  var multipart = '--'+bnd+'\r\nContent-Type: application/json\r\n\r\n'+meta+'\r\n--'+bnd+'\r\nContent-Type: application/json\r\n\r\n'+body+'\r\n--'+bnd+'--';
+  var method = configFileId ? 'PATCH' : 'POST';
+  var url = configFileId
+    ? 'https://www.googleapis.com/upload/drive/v3/files/'+configFileId+'?uploadType=multipart'
+    : 'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+  return fetch(url,{method:method,headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'multipart/related; boundary='+bnd},body:multipart})
+    .then(function(r){ return r.json(); }).then(function(d){
+      if(d.id) configFileId = d.id;
+    });
+}
+
+// ══════════════════════════════════════════════════════
+// SHEET (dati ticket)
+// ══════════════════════════════════════════════════════
+var SHEET_HEADERS = ['ID','Titolo','Progetto','Tipo','Priorita','Stato','Descrizione','Autore','AutoreEmail','Assegnato','AssegnatoEmail','DataApertura','DataAggiornamento','Note'];
+
+function ensureSheet(){
+  if(sheetId) return Promise.resolve(sheetId);
+  // Crea nuovo sheet
+  return fetch('https://sheets.googleapis.com/v4/spreadsheets',{
+    method:'POST',
+    headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+    body:JSON.stringify({properties:{title:'Ticket WMS Hub'},sheets:[{properties:{title:SHEET_NAME}}]})
+  }).then(function(r){ return r.json(); }).then(function(d){
+    sheetId = d.spreadsheetId;
+    // Sposta nella cartella dati
+    return fetch('https://www.googleapis.com/drive/v3/files/'+sheetId+'?addParents='+DATA_FOLDER_ID+'&removeParents=root&fields=id',{
+      method:'PATCH',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},body:JSON.stringify({})
+    }).then(function(){
+      // Scrivi header
+      return sheetUpdate([[SHEET_HEADERS]],SHEET_NAME+'!A1');
+    }).then(function(){
+      configData.sheet_id = sheetId;
+      return saveConfig();
+    }).then(function(){ return sheetId; });
+  });
+}
+
+function loadTickets(){
+  if(!sheetId) return Promise.resolve([]);
+  return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+sheetId+'/values/'+SHEET_NAME+'!A2:Z',{
+    headers:{Authorization:'Bearer '+TOKEN}
+  }).then(function(r){ return r.json(); }).then(function(d){
+    var rows = d.values || [];
+    allTickets = rows.map(function(r){
+      return {
+        id:r[0]||'', titolo:r[1]||'', progetto:r[2]||'', tipo:r[3]||'', priorita:r[4]||'',
+        stato:r[5]||'', descrizione:r[6]||'', autore:r[7]||'', autoreEmail:r[8]||'',
+        assegnato:r[9]||'', assegnatoEmail:r[10]||'',
+        dataApertura:r[11]||'', dataAggiornamento:r[12]||'',
+        note: r[13] ? tryParseJSON(r[13]) : []
+      };
+    }).filter(function(t){ return t.id; });
+  });
+}
+
+function saveTicket(ticket){
+  return ensureSheet().then(function(){
+    // Cerca riga esistente
+    var idx = allTickets.findIndex(function(t){ return t.id===ticket.id; });
+    var row = [
+      ticket.id, ticket.titolo, ticket.progetto, ticket.tipo, ticket.priorita,
+      ticket.stato, ticket.descrizione, ticket.autore, ticket.autoreEmail,
+      ticket.assegnato||'', ticket.assegnatoEmail||'',
+      ticket.dataApertura, ticket.dataAggiornamento,
+      JSON.stringify(ticket.note||[])
+    ];
+    if(idx>=0){
+      // Update riga esistente (idx+2 perché header è riga 1)
+      return sheetUpdate([row], SHEET_NAME+'!A'+(idx+2));
+    } else {
+      // Append
+      return sheetAppend([row]);
+    }
+  });
+}
+
+function sheetUpdate(values, range){
+  return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+sheetId+'/values/'+encodeURIComponent(range)+'?valueInputOption=RAW',{
+    method:'PUT',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+    body:JSON.stringify({values:values})
+  }).then(function(r){ return r.json(); });
+}
+
+function sheetAppend(values){
+  return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+sheetId+'/values/'+SHEET_NAME+'!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS',{
+    method:'POST',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+    body:JSON.stringify({values:values})
+  }).then(function(r){ return r.json(); });
+}
+
+// ══════════════════════════════════════════════════════
+// UI RENDER
+// ══════════════════════════════════════════════════════
+function renderUI(){
+  // Topbar
+  document.getElementById('uAvatar').src = uPic || '';
+  document.getElementById('uNameTop').textContent = uName;
+  document.getElementById('uRoleTop').textContent = uRole;
+  document.getElementById('topbarUser').style.display = 'flex';
+  if(uRole==='superadmin' || uRole==='developer'){
+    document.getElementById('btnSettings').style.display = uRole==='superadmin' ? 'flex' : 'none';
+  }
+
+  // Sidebar stati
+  renderSbStati();
+  renderSbProgetti();
+
+  // Filtri toolbar
+  renderFilterSelects();
+}
+
+function renderSbStati(){
+  var cfg = configData.stati||[];
+  var html = '';
+  html += '<div class="sb-item" id="sb-stato-all" onclick="setFilterStato(null)"><div class="sb-item-left"><span style="width:8px;height:8px;border-radius:50%;background:var(--subtle);display:inline-block"></span> &nbsp;Tutti gli stati</div></div>';
+  cfg.forEach(function(s){
+    var slug = s.nome.toLowerCase().replace(/\s+/g,'-');
+    html += '<div class="sb-item" id="sb-stato-'+slug+'" onclick="setFilterStato(\''+s.nome+'\')"><div class="sb-item-left"><span class="dot" style="background:'+s.colore+'"></span> '+s.nome+'</div><span class="sb-count" id="cnt-stato-'+slug+'">0</span></div>';
+  });
+  document.getElementById('sbStatiWrap').innerHTML = html;
+}
+
+function renderSbProgetti(){
+  var cfg = (configData.progetti||[]).filter(function(p){ return p.attivo!==false; });
+  var html = '';
+  html += '<div class="sb-item" id="sb-prog-all" onclick="setFilterProg(null)"><div class="sb-item-left"><span>🗂</span> Tutti</div></div>';
+  cfg.forEach(function(p){
+    var slug = slugify(p.nome);
+    html += '<div class="sb-item" id="sb-prog-'+slug+'" onclick="setFilterProg(\''+escAttr(p.nome)+'\')"><div class="sb-item-left"><span>▸</span> '+esc(p.nome)+'</div><span class="sb-count" id="cnt-prog-'+slug+'">0</span></div>';
+  });
+  document.getElementById('sbProgettiWrap').innerHTML = html;
+}
+
+function renderFilterSelects(){
+  var pSel = document.getElementById('filterPrio');
+  var tSel = document.getElementById('filterTipo');
+  pSel.innerHTML = '<option value="">Tutte le priorità</option>';
+  (configData.priorita||[]).forEach(function(p){
+    pSel.innerHTML += '<option value="'+esc(p.nome)+'">'+esc(p.nome)+'</option>';
+  });
+  tSel.innerHTML = '<option value="">Tutti i tipi</option>';
+  (configData.tipi||[]).forEach(function(t){
+    tSel.innerHTML += '<option value="'+esc(t.nome)+'">'+(t.emoji?t.emoji+' ':'')+esc(t.nome)+'</option>';
+  });
+  // Modal selects
+  fillSelect('newProgetto', (configData.progetti||[]).filter(function(p){return p.attivo!==false;}).map(function(p){return {v:p.nome,l:p.nome};}));
+  fillSelect('newTipo', (configData.tipi||[]).map(function(t){return {v:t.nome,l:(t.emoji?t.emoji+' ':'')+t.nome};}));
+  fillSelect('newPrio', (configData.priorita||[]).map(function(p){return {v:p.nome,l:p.nome};}));
+}
+
+function fillSelect(id, opts){
+  var el = document.getElementById(id);
+  if(!el) return;
+  el.innerHTML = '';
+  opts.forEach(function(o){ el.innerHTML += '<option value="'+esc(o.v)+'">'+esc(o.l)+'</option>'; });
+}
+
+function renderTickets(){
+  var search = (document.getElementById('searchInput').value||'').toLowerCase();
+  var filterPrio = document.getElementById('filterPrio').value;
+  var filterTipo = document.getElementById('filterTipo').value;
+
+  var filtered = allTickets.filter(function(t){
+    if(currentFilter==='miei' && t.assegnatoEmail.toLowerCase()!==uEmail.toLowerCase()) return false;
+    if(currentFilter==='nonassegnati' && t.assegnato) return false;
+    if(currentFilterStato && t.stato!==currentFilterStato) return false;
+    if(currentFilterProg && t.progetto!==currentFilterProg) return false;
+    if(filterPrio && t.priorita!==filterPrio) return false;
+    if(filterTipo && t.tipo!==filterTipo) return false;
+    if(search && !((t.titolo+t.descrizione+t.autore+t.progetto).toLowerCase().includes(search))) return false;
+    return true;
+  });
+
+  // Conteggi sidebar
+  document.getElementById('cnt-tutti').textContent = allTickets.length;
+  document.getElementById('cnt-miei').textContent = allTickets.filter(function(t){ return t.assegnatoEmail.toLowerCase()===uEmail.toLowerCase(); }).length;
+  document.getElementById('cnt-nonassegnati').textContent = allTickets.filter(function(t){ return !t.assegnato; }).length;
+  (configData.stati||[]).forEach(function(s){
+    var slug = s.nome.toLowerCase().replace(/\s+/g,'-');
+    var el = document.getElementById('cnt-stato-'+slug);
+    if(el) el.textContent = allTickets.filter(function(t){ return t.stato===s.nome; }).length;
+  });
+  (configData.progetti||[]).forEach(function(p){
+    var slug = slugify(p.nome);
+    var el = document.getElementById('cnt-prog-'+slug);
+    if(el) el.textContent = allTickets.filter(function(t){ return t.progetto===p.nome; }).length;
+  });
+
+  var list = document.getElementById('ticketList');
+  if(!filtered.length){
+    list.innerHTML = '<div class="empty-state"><div class="empty-icon">🎫</div><div class="empty-txt">Nessun ticket trovato</div></div>';
+    return;
+  }
+
+  // Ordina: aperti/assegnati prima, poi per data desc
+  filtered.sort(function(a,b){
+    var closed = ['Risolto','Chiuso'];
+    var aClosed = closed.includes(a.stato)?1:0;
+    var bClosed = closed.includes(b.stato)?1:0;
+    if(aClosed!==bClosed) return aClosed-bClosed;
+    return new Date(b.dataApertura)-new Date(a.dataApertura);
+  });
+
+  list.innerHTML = filtered.map(function(t){ return renderTicketCard(t); }).join('');
+}
+
+function renderTicketCard(t){
+  var prio = (configData.priorita||[]).find(function(p){ return p.nome===t.priorita; });
+  var prioColor = prio ? prio.colore : 'var(--muted)';
+  var statoSlug = t.stato.toLowerCase().replace(/\s+/g,'-');
+  var tipo = (configData.tipi||[]).find(function(tp){ return tp.nome===t.tipo; });
+  var tipoLabel = tipo ? (tipo.emoji?tipo.emoji+' ':'')+tipo.nome : t.tipo;
+
+  return '<div class="ticket-card'+(selectedTicketId===t.id?' selected':'')+'" onclick="selectTicket(\''+t.id+'\')">'+
+    '<div class="ticket-priority-bar" style="background:'+prioColor+'"></div>'+
+    '<div class="tc-body">'+
+      '<div class="tc-header">'+
+        '<span class="tc-id">#'+t.id+'</span>'+
+        '<span class="badge badge-stato-'+statoSlug+'">'+esc(t.stato)+'</span>'+
+        '<span class="badge badge-tipo">'+tipoLabel+'</span>'+
+      '</div>'+
+      '<div class="tc-title">'+esc(t.titolo)+'</div>'+
+      (t.descrizione?'<div class="tc-desc">'+esc(t.descrizione)+'</div>':'')+
+      '<div class="tc-meta">'+
+        '<span class="badge badge-progetto">'+esc(t.progetto)+'</span>'+
+        (t.assegnato?'<span class="badge badge-assegnato">👤 '+esc(t.assegnato)+'</span>':
+          '<span style="font-size:11px;color:var(--muted)">Non assegnato</span>')+
+        '<span style="font-size:11px;color:var(--muted)">'+esc(t.autore)+'</span>'+
+      '</div>'+
+    '</div>'+
+    '<div class="tc-right">'+
+      '<span class="tc-date">'+formatDate(t.dataApertura)+'</span>'+
+      (t.priorita?'<span style="font-size:11px;color:'+prioColor+'">● '+esc(t.priorita)+'</span>':'')+
+    '</div>'+
+  '</div>';
+}
+
+// ══════════════════════════════════════════════════════
+// DETAIL PANEL
+// ══════════════════════════════════════════════════════
+function selectTicket(id){
+  selectedTicketId = id;
+  var t = allTickets.find(function(x){ return x.id===id; });
+  if(!t) return;
+  renderTickets(); // aggiorna selected
+  renderDetail(t);
+  document.getElementById('detailPanel').classList.remove('closed');
+}
+
+function renderDetail(t){
+  var prio = (configData.priorita||[]).find(function(p){ return p.nome===t.priorita; });
+  var prioColor = prio ? prio.colore : 'var(--muted)';
+  var tipo = (configData.tipi||[]).find(function(tp){ return tp.nome===t.tipo; });
+  var tipoLabel = tipo ? (tipo.emoji?tipo.emoji+' ':'')+tipo.nome : t.tipo;
+  var statoSlug = t.stato.toLowerCase().replace(/\s+/g,'-');
+
+  var canAssign = (uRole==='developer'||uRole==='superadmin') && !t.assegnato;
+  var canChangeStatus = uRole==='developer'||uRole==='superadmin';
+  var canAddNote = true;
+
+  // Selects stati
+  var statiOpts = (configData.stati||[]).map(function(s){
+    return '<option value="'+esc(s.nome)+'"'+(s.nome===t.stato?' selected':'')+'>'+esc(s.nome)+'</option>';
+  }).join('');
+
+  var notes = (t.note||[]).map(function(n){
+    return '<div class="note-item"><div class="note-meta"><span class="note-author">'+esc(n.autore)+'</span><span class="note-date">'+formatDate(n.data)+'</span></div><div class="note-text">'+esc(n.testo)+'</div></div>';
+  }).join('') || '<div style="font-size:12px;color:var(--muted)">Nessuna nota ancora.</div>';
+
+  var html =
+    '<div class="dp-header">'+
+      '<button class="dp-close" onclick="closeDetail()">←</button>'+
+      '<div>'+
+        '<div class="dp-id">#'+t.id+' · '+formatDate(t.dataApertura)+'</div>'+
+        '<div class="dp-title">'+esc(t.titolo)+'</div>'+
+      '</div>'+
+    '</div>'+
+    '<div class="dp-body">'+
+      '<div class="dp-row">'+
+        '<div class="dp-field"><div class="dp-label">Stato</div>'+
+          (canChangeStatus
+            ? '<select class="mi" id="dpStato" onchange="changeStato(this.value)">'+statiOpts+'</select>'
+            : '<span class="badge badge-stato-'+statoSlug+'">'+esc(t.stato)+'</span>')+
+        '</div>'+
+        '<div class="dp-field"><div class="dp-label">Priorità</div><div class="dp-value" style="color:'+prioColor+'">● '+esc(t.priorita)+'</div></div>'+
+      '</div>'+
+      '<div class="dp-row">'+
+        '<div class="dp-field"><div class="dp-label">Progetto</div><div class="dp-value">'+esc(t.progetto)+'</div></div>'+
+        '<div class="dp-field"><div class="dp-label">Tipo</div><div class="dp-value">'+tipoLabel+'</div></div>'+
+      '</div>'+
+      '<div class="dp-row">'+
+        '<div class="dp-field"><div class="dp-label">Aperto da</div><div class="dp-value">'+esc(t.autore)+'<br><span style="font-size:11px;color:var(--muted)">'+esc(t.autoreEmail)+'</span></div></div>'+
+        '<div class="dp-field"><div class="dp-label">Assegnato a</div><div class="dp-value">'+
+          (t.assegnato ? esc(t.assegnato) : '<span style="color:var(--muted)">Non assegnato</span>')+
+          (canAssign ? '<br><button class="btn btn-teal btn-sm" style="margin-top:6px" onclick="assignToMe()">👤 Assegna a me</button>' : '')+
+        '</div></div>'+
+      '</div>'+
+      (t.descrizione?'<div class="dp-field"><div class="dp-label">Descrizione</div><div class="dp-desc">'+esc(t.descrizione)+'</div></div>':'')+
+      '<div class="dp-field"><div class="dp-label">Note ('+( t.note?t.note.length:0)+')</div><div class="notes-list">'+notes+'</div></div>'+
+    '</div>'+
+    '<div class="dp-footer">'+
+      (canAddNote?'<textarea class="mi" id="dpNoteInput" rows="2" placeholder="Aggiungi una nota..."></textarea>':'') +
+      '<div class="dp-actions">'+
+        (canAddNote?'<button class="btn btn-ghost btn-sm" onclick="addNote()">💬 Aggiungi nota</button>':'')+
+        '<button class="btn btn-ghost btn-sm" onclick="openMailNotify()">✉ Notifica</button>'+
+        ((uRole==='superadmin')?'<button class="btn btn-red btn-sm" onclick="deleteTicket(\''+t.id+'\')">🗑 Elimina</button>':'')+
+      '</div>'+
+    '</div>';
+
+  document.getElementById('detailInner').innerHTML = html;
+}
+
+function closeDetail(){
+  selectedTicketId = null;
+  document.getElementById('detailPanel').classList.add('closed');
+  renderTickets();
+}
+
+// ══════════════════════════════════════════════════════
+// AZIONI TICKET
+// ══════════════════════════════════════════════════════
+function openNewTicket(){
+  if(!TOKEN){ toast('Effettua il login prima','err'); return; }
+  document.getElementById('newTitle').value = '';
+  document.getElementById('newDesc').value = '';
+  document.getElementById('newEmail').value = uEmail;
+  renderFilterSelects();
+  openModal('moNew');
+}
+
+function submitNewTicket(){
+  var titolo = document.getElementById('newTitle').value.trim();
+  var progetto = document.getElementById('newProgetto').value;
+  var tipo = document.getElementById('newTipo').value;
+  var prio = document.getElementById('newPrio').value;
+  var desc = document.getElementById('newDesc').value.trim();
+  if(!titolo||!progetto||!tipo){ toast('Compila i campi obbligatori','err'); return; }
+
+  var now = new Date().toISOString();
+  var id = 'TKT-'+Date.now().toString(36).toUpperCase();
+  var ticket = {
+    id: id, titolo: titolo, progetto: progetto, tipo: tipo,
+    priorita: prio, stato: (configData.stati&&configData.stati[0]?configData.stati[0].nome:'Aperto'),
+    descrizione: desc, autore: uName, autoreEmail: uEmail,
+    assegnato: '', assegnatoEmail: '',
+    dataApertura: now, dataAggiornamento: now, note: []
+  };
+
+  saveTicket(ticket).then(function(){
+    allTickets.push(ticket);
+    closeModal('moNew');
+    renderTickets();
+    selectTicket(id);
+    toast('Ticket creato: '+id,'ok');
+    // Notifica mail
+    openMailNotifyFor(ticket, 'nuovo');
+  }).catch(function(e){ toast('Errore salvataggio: '+e.message,'err'); });
+}
+
+function assignToMe(){
+  var t = allTickets.find(function(x){ return x.id===selectedTicketId; });
+  if(!t) return;
+  t.assegnato = uName;
+  t.assegnatoEmail = uEmail;
+  t.stato = (configData.stati&&configData.stati[1]?configData.stati[1].nome:'Assegnato');
+  t.dataAggiornamento = new Date().toISOString();
+  saveTicket(t).then(function(){
+    renderDetail(t);
+    renderTickets();
+    toast('Ticket assegnato a te','ok');
+    openMailNotifyFor(t,'assegnato');
+  }).catch(function(e){ toast('Errore: '+e.message,'err'); });
+}
+
+function changeStato(stato){
+  var t = allTickets.find(function(x){ return x.id===selectedTicketId; });
+  if(!t) return;
+  t.stato = stato;
+  t.dataAggiornamento = new Date().toISOString();
+  saveTicket(t).then(function(){
+    renderDetail(t);
+    renderTickets();
+    toast('Stato aggiornato: '+stato,'ok');
+    openMailNotifyFor(t,'stato');
+  }).catch(function(e){ toast('Errore: '+e.message,'err'); });
+}
+
+function addNote(){
+  var t = allTickets.find(function(x){ return x.id===selectedTicketId; });
+  if(!t) return;
+  var txt = (document.getElementById('dpNoteInput').value||'').trim();
+  if(!txt){ toast('Scrivi una nota prima','err'); return; }
+  if(!t.note) t.note = [];
+  t.note.push({ autore: uName, data: new Date().toISOString(), testo: txt });
+  t.dataAggiornamento = new Date().toISOString();
+  saveTicket(t).then(function(){
+    renderDetail(t);
+    renderTickets();
+    toast('Nota aggiunta','ok');
+  }).catch(function(e){ toast('Errore: '+e.message,'err'); });
+}
+
+function deleteTicket(id){
+  if(!confirm('Eliminare questo ticket? L\'operazione non è reversibile.')) return;
+  var idx = allTickets.findIndex(function(t){ return t.id===id; });
+  if(idx<0) return;
+  allTickets.splice(idx,1);
+  // Riscrivi tutto il sheet
+  rewriteSheet().then(function(){
+    closeDetail();
+    renderTickets();
+    toast('Ticket eliminato','ok');
+  }).catch(function(e){ toast('Errore: '+e.message,'err'); });
+}
+
+function rewriteSheet(){
+  var rows = [SHEET_HEADERS].concat(allTickets.map(function(t){
+    return [t.id,t.titolo,t.progetto,t.tipo,t.priorita,t.stato,t.descrizione,t.autore,t.autoreEmail,t.assegnato,t.assegnatoEmail,t.dataApertura,t.dataAggiornamento,JSON.stringify(t.note||[])];
+  }));
+  return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+sheetId+'/values/'+SHEET_NAME+'!A1?valueInputOption=RAW',{
+    method:'PUT',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+    body:JSON.stringify({values:rows})
+  }).then(function(r){ return r.json(); });
+}
+
+// ══════════════════════════════════════════════════════
+// FILTRI
+// ══════════════════════════════════════════════════════
+function setFilter(f){
+  currentFilter = f;
+  ['tutti','miei','nonassegnati'].forEach(function(k){
+    document.getElementById('sb-'+k).classList.toggle('active', k===f);
+  });
+  renderTickets();
+}
+
+function setFilterStato(s){
+  currentFilterStato = s;
+  renderTickets();
+}
+
+function setFilterProg(p){
+  currentFilterProg = p;
+  renderTickets();
+}
+
+// ══════════════════════════════════════════════════════
+// MAIL
+// ══════════════════════════════════════════════════════
+function openMailNotify(){
+  var t = allTickets.find(function(x){ return x.id===selectedTicketId; });
+  if(t) openMailNotifyFor(t,'manuale');
+}
+
+function openMailNotifyFor(t, tipo){
+  var dest = configData.email_notifiche || 'itlogisticsata@atsgruppo.eu';
+  var subj, body;
+  if(tipo==='nuovo'){
+    subj = '[TICKET] Nuovo ticket '+t.id+' - '+t.titolo;
+    body = 'NUOVO TICKET APERTO\n\n'+
+      'ID: '+t.id+'\n'+
+      'Titolo: '+t.titolo+'\n'+
+      'Progetto: '+t.progetto+'\n'+
+      'Tipo: '+t.tipo+'\n'+
+      'Priorità: '+t.priorita+'\n'+
+      'Aperto da: '+t.autore+' ('+t.autoreEmail+')\n'+
+      'Data: '+formatDate(t.dataApertura)+'\n\n'+
+      (t.descrizione?'Descrizione:\n'+t.descrizione+'\n\n':'')+
+      '---\nWMS Hub · Ticket Manager';
+  } else if(tipo==='assegnato'){
+    subj = '[TICKET] '+t.id+' assegnato a '+t.assegnato;
+    body = 'TICKET ASSEGNATO\n\n'+
+      'ID: '+t.id+'\n'+
+      'Titolo: '+t.titolo+'\n'+
+      'Assegnato a: '+t.assegnato+' ('+t.assegnatoEmail+')\n'+
+      'Stato: '+t.stato+'\n\n'+
+      '---\nWMS Hub · Ticket Manager';
+    dest = t.autoreEmail || dest;
+  } else if(tipo==='stato'){
+    subj = '[TICKET] '+t.id+' → stato aggiornato: '+t.stato;
+    body = 'AGGIORNAMENTO STATO TICKET\n\n'+
+      'ID: '+t.id+'\n'+
+      'Titolo: '+t.titolo+'\n'+
+      'Nuovo stato: '+t.stato+'\n'+
+      'Aggiornato da: '+uName+'\n\n'+
+      '---\nWMS Hub · Ticket Manager';
+    dest = t.autoreEmail || dest;
+  } else {
+    subj = '[TICKET] '+t.id+' - '+t.titolo;
+    body = 'Ticket: '+t.id+'\nTitolo: '+t.titolo+'\nStato: '+t.stato+'\nProgetto: '+t.progetto+'\n\n---\nWMS Hub · Ticket Manager';
+  }
+
+  var href = 'mailto:'+encodeURIComponent(dest)+'?subject='+encodeURIComponent(subj)+'&body='+encodeURIComponent(body);
+  _mailHref = href;
+  document.getElementById('moMailBody').innerHTML = 'Destinatario: <strong>'+esc(dest)+'</strong><br>Oggetto: <em>'+esc(subj)+'</em>';
+  document.getElementById('moMailLink').href = href;
+  document.getElementById('moMailLink').textContent = href.substring(0,80)+'...';
+  openModal('moMail');
+}
+
+function doSendMail(){
+  window.location.href = _mailHref;
+  setTimeout(function(){ closeModal('moMail'); }, 1500);
+}
+
+// ══════════════════════════════════════════════════════
+// IMPOSTAZIONI
+// ══════════════════════════════════════════════════════
+function openSettings(){
+  if(uRole!=='superadmin'){ toast('Solo il superadmin può accedere alle impostazioni','err'); return; }
+  // Populate
+  renderLeEditor('leProgetti', configData.progetti||[], 'progetti');
+  renderLeEditor('leTipi', configData.tipi||[], 'tipi');
+  renderLeEditor('lePriorita', configData.priorita||[], 'priorita');
+  renderLeEditor('leStati', configData.stati||[], 'stati');
+  renderLeEditor('leUtenti', configData.utenti||[], 'utenti');
+  document.getElementById('cfgEmailIT').value = configData.email_notifiche||'';
+  document.getElementById('cfgFolderData').value = configData.folder_data||DATA_FOLDER_ID;
+  document.getElementById('cfgSheetId').value = configData.sheet_id||'';
+  document.getElementById('cfgVersion').value = configData.versione||'1.0';
+  openModal('moSettings');
+}
+
+function renderLeEditor(containerId, items, type){
+  var c = document.getElementById(containerId);
+  if(!c) return;
+  c.innerHTML = items.map(function(item, i){
+    var label = item.nome || item.email || '';
+    var extra = '';
+    if(type==='tipi') extra = '<span class="list-item-extra">'+(item.emoji||'')+'</span>';
+    if(type==='priorita'||type==='stati') extra = '<span class="dot" style="background:'+(item.colore||'#888')+'"></span>';
+    if(type==='utenti') extra = '<span class="list-item-extra badge '+(item.ruolo==='superadmin'?'badge-tipo':item.ruolo==='developer'?'badge-assegnato':'badge-progetto')+'">'+esc(item.ruolo)+'</span>';
+    return '<div class="list-item">'+extra+'<span class="list-item-name">'+esc(label)+(type==='utenti'?' · '+esc(item.email||''):'')+'</span>'+
+      '<button class="btn btn-red btn-sm" onclick="removeListItem(\''+type+'\','+i+')">✕</button>'+
+    '</div>';
+  }).join('') || '<div style="font-size:12px;color:var(--muted);padding:4px 0">Nessun elemento</div>';
+}
+
+function addListItem(type){
+  var cfg = configData;
+  if(type==='progetti'){
+    var nome = document.getElementById('addProgNome').value.trim();
+    if(!nome) return;
+    cfg.progetti = cfg.progetti||[];
+    cfg.progetti.push({nome:nome, attivo:true});
+    document.getElementById('addProgNome').value='';
+  } else if(type==='tipi'){
+    var nome = document.getElementById('addTipoNome').value.trim();
+    var emoji = document.getElementById('addTipoEmoji').value.trim();
+    if(!nome) return;
+    cfg.tipi = cfg.tipi||[];
+    cfg.tipi.push({nome:nome, emoji:emoji});
+    document.getElementById('addTipoNome').value=''; document.getElementById('addTipoEmoji').value='';
+  } else if(type==='priorita'){
+    var nome = document.getElementById('addPrioNome').value.trim();
+    var colore = document.getElementById('addPrioColore').value.trim()||'#94a3b8';
+    if(!nome) return;
+    cfg.priorita = cfg.priorita||[];
+    cfg.priorita.push({nome:nome, colore:colore});
+    document.getElementById('addPrioNome').value=''; document.getElementById('addPrioColore').value='';
+  } else if(type==='stati'){
+    var nome = document.getElementById('addStatoNome').value.trim();
+    var colore = document.getElementById('addStatoColore').value.trim()||'#64748b';
+    if(!nome) return;
+    cfg.stati = cfg.stati||[];
+    cfg.stati.push({nome:nome, colore:colore});
+    document.getElementById('addStatoNome').value=''; document.getElementById('addStatoColore').value='';
+  } else if(type==='utenti'){
+    var nome = document.getElementById('addUtNome').value.trim();
+    var email = document.getElementById('addUtEmail').value.trim();
+    var ruolo = document.getElementById('addUtRuolo').value;
+    if(!nome||!email) return;
+    cfg.utenti = cfg.utenti||[];
+    cfg.utenti.push({nome:nome, email:email, ruolo:ruolo});
+    document.getElementById('addUtNome').value=''; document.getElementById('addUtEmail').value='';
+  }
+  renderLeEditor('le'+capitalize(type), cfg[type]||[], type);
+}
+
+function removeListItem(type, idx){
+  if(!configData[type]) return;
+  configData[type].splice(idx,1);
+  renderLeEditor('le'+capitalize(type), configData[type]||[], type);
+}
+
+function saveSettings(){
+  configData.email_notifiche = document.getElementById('cfgEmailIT').value.trim();
+  configData.folder_data = document.getElementById('cfgFolderData').value.trim();
+  configData.sheet_id = document.getElementById('cfgSheetId').value.trim();
+  configData.versione = document.getElementById('cfgVersion').value.trim();
+  if(configData.sheet_id) sheetId = configData.sheet_id;
+  DATA_FOLDER_ID = configData.folder_data || DATA_FOLDER_ID;
+  saveConfig().then(function(){
+    closeModal('moSettings');
+    renderUI();
+    renderTickets();
+    toast('Configurazione salvata','ok');
+  }).catch(function(e){ toast('Errore salvataggio config: '+e.message,'err'); });
+}
+
+function switchStab(el, panelId){
+  document.querySelectorAll('.stab').forEach(function(t){ t.classList.remove('active'); });
+  document.querySelectorAll('.stab-panel').forEach(function(p){ p.classList.remove('active'); });
+  el.classList.add('active');
+  document.getElementById(panelId).classList.add('active');
+}
+
+// ══════════════════════════════════════════════════════
+// HELPERS
+// ══════════════════════════════════════════════════════
+function gFetch(url){ return fetch(url,{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){ return r.json(); }); }
+function gFetchRaw(url){ return fetch(url,{headers:{Authorization:'Bearer '+TOKEN}}); }
+
+function listFiles(q){
+  return gFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name)').then(function(d){ return d.files||[]; });
+}
+
+function openModal(id){ document.getElementById(id).classList.add('show'); }
+function closeModal(id){ document.getElementById(id).classList.remove('show'); }
+function showEl(id){ document.getElementById(id).style.display=''; }
+function hideEl(id){ document.getElementById(id).style.display='none'; }
+function setLoading(txt){ document.getElementById('loadingTxt').textContent=txt; document.getElementById('loadingOverlay').classList.remove('hidden'); }
+function hideLoading(){ document.getElementById('loadingOverlay').classList.add('hidden'); }
+function showLoginErr(msg){ var e=document.getElementById('loginErr'); e.textContent=msg; e.style.display=''; }
+
+function toast(msg, type){
+  var w = document.getElementById('toastWrap');
+  var d = document.createElement('div');
+  d.className = 'toast'+(type?' '+type:'');
+  d.textContent = msg;
+  w.appendChild(d);
+  setTimeout(function(){ d.remove(); }, 3200);
+}
+
+function lsGet(k){ try{ return JSON.parse(localStorage.getItem(k)); }catch(e){ return null; } }
+function lsSet(k,v){ try{ localStorage.setItem(k,JSON.stringify(v)); }catch(e){} }
+function lsDel(k){ try{ localStorage.removeItem(k); }catch(e){} }
+
+function tryParseJSON(s){ try{ return JSON.parse(s); }catch(e){ return []; } }
+function esc(s){ return (s||'').toString().replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escAttr(s){ return (s||'').toString().replace(/'/g,"\\'"); }
+function slugify(s){ return (s||'').toLowerCase().replace(/[^a-z0-9]+/g,'-'); }
+function capitalize(s){ return s.charAt(0).toUpperCase()+s.slice(1); }
+function formatDate(iso){
+  if(!iso) return '';
+  try{
+    var d = new Date(iso);
+    return d.getDate().toString().padStart(2,'0')+'/'+(d.getMonth()+1).toString().padStart(2,'0')+'/'+d.getFullYear()+' '+d.getHours().toString().padStart(2,'0')+':'+d.getMinutes().toString().padStart(2,'0');
+  }catch(e){ return iso; }
+}
+</script>
+</body>
+</html>
