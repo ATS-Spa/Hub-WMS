@@ -154,6 +154,9 @@ td.editing input,td.editing select{width:100%;height:100%;min-height:30px;backgr
 <body>
 
 <!-- LOGIN -->
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">GRN <span>Manager</span></div>
     <div class="login-sub">Gestione Bolle di Consegna</div>
     <p class="login-desc">Visualizza, modifica e aggiorna i file DDT dalla cartella Drive condivisa.</p>
     <button class="btn-google" onclick="signIn()">
@@ -334,6 +337,7 @@ td.editing input,td.editing select{width:100%;height:100%;min-height:30px;backgr
 
 <div id="toast"></div>
 
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
 var CLIENT_ID    = '256693770433-b1pjdpaglrh7827o6ln2s24802rcnshd.apps.googleusercontent.com';
 var FOLDER_TODAY = '1oXhZ0VR0tPjxa_bbIw2kOQ7FVKa1I1xM';
@@ -342,6 +346,25 @@ var STATO_COL    = 'Stato_File';
 var COL_HIDE_KEY = 'grn_hidden_cols';
 
 var TOKEN = null;
+
+// ── Inject token dall'hub (se aperto dentro l'hub) ──
+(function(){
+  try{
+    var ht = localStorage.getItem('wms_hub_token');
+    var hu = localStorage.getItem('wms_hub_user');
+    if(ht && hu){
+      // Token hub disponibile: pre-imposta TOKEN e nascondi login
+      window._HUB_TOKEN = JSON.parse(ht);
+      window._HUB_USER  = JSON.parse(hu);
+      // Aggiorna se l'hub rinnova il token
+      window.addEventListener('storage',function(e){
+        if(e.key==='wms_hub_token'&&e.newValue)
+          try{window._HUB_TOKEN=JSON.parse(e.newValue);}catch(x){}
+      });
+    }
+  }catch(ex){}
+})();
+
 var allRows = [];       // tutte le righe (raw)
 var filteredRows = [];  // dopo filtro
 var fileRegistry = {};  // fileId -> { name, commessa, sep, sepLine, header, rows[] }
@@ -373,7 +396,18 @@ var NOTE_COL  = 'NOTE';
 // ── INIT ─────────────────────────────────────────────────────────────────────
 window.onload = function(){
   restoreFilterState();
-  if(!initHubAuth(function(u){ showApp(); setUserUI(u.name||'',u.email||'',u.picture||u.pic||''); })) return;
+  // Se aperto dall'hub: usa token hub direttamente
+  if(window._HUB_TOKEN){
+    TOKEN = window._HUB_TOKEN;
+    var u = window._HUB_USER||{};
+    showApp();
+    setUserUI(u.name||'',u.email||'',u.picture||u.pic||'');
+    loadVltSheet(); loadAvailableDates(); initBroadcastChannel();
+    return;
+  }
+  var s = getSavedSession();
+  if(s){ showApp(); setUserUI(s.name,s.email,s.picture); }
+  waitGsi();
 };
 
 var FILTER_STATE_KEY='grn_filter_state';
@@ -419,37 +453,130 @@ function applyPendingFilterState(){
 
 // ── GSI ──────────────────────────────────────────────────────────────────────
 var tokenClient;
-
-// ══ AUTH HUB — token condiviso via localStorage ══
-function _hlsGet(k){ try{ var s=localStorage.getItem(k); return s?JSON.parse(s):null; }catch(e){ return null; } }
-function initHubAuth(onSuccess){
-  var hubToken = _hlsGet('wms_hub_token');
-  var hubUser  = _hlsGet('wms_hub_user');
-  if(!hubToken || !hubUser){
-    document.body.innerHTML='<div style="position:fixed;inset:0;background:#0b0f18;display:flex;flex-direction:column;align-items:center;justify-content:center;gap:16px;font-family:Segoe UI,sans-serif;">'
-      +'<div style="font-size:48px">🔒</div>'
-      +'<div style="font-size:20px;font-weight:700;color:#e2e8f0;">Accesso non autorizzato</div>'
-      +'<div style="font-size:13px;color:#64748b;">Accedi prima dall\'hub WMS.</div>'
-      +'<a href="index.html" style="background:#f97316;color:#fff;border-radius:8px;padding:10px 24px;text-decoration:none;font-weight:700;font-size:14px;">← Vai all\'Hub</a>'
-      +'</div>';
-    return false;
-  }
-  TOKEN = hubToken;
-  if(typeof uName !== 'undefined') uName = hubUser.name||'';
-  if(typeof uEmail !== 'undefined') uEmail = hubUser.email||'';
-  window.addEventListener('storage', function(e){
-    if(e.key==='wms_hub_token' && e.newValue) try{ TOKEN=JSON.parse(e.newValue); }catch(ex){}
+function waitGsi(){
+  if(typeof google==='undefined'){setTimeout(waitGsi,150);return;}
+  tokenClient = google.accounts.oauth2.initTokenClient({
+    client_id: CLIENT_ID,
+    scope:'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
+    callback: onToken
   });
-  if(onSuccess) onSuccess(hubUser);
-  return true;
+  var s = getSavedSession();
+  if(s) tokenClient.requestAccessToken({prompt:'',login_hint:s.email||''});
+}
+function signIn(){ tokenClient.requestAccessToken({prompt:'select_account'}); }
+function signOut(){
+  if(TOKEN) google.accounts.oauth2.revoke(TOKEN,function(){});
+  TOKEN=null; allRows=[]; clearSavedSession();
+  document.getElementById('appShell').style.display='none';
+  document.getElementById('loginScreen').style.display='flex';
+}
+function onToken(resp){
+  if(resp.error){ if(!getSavedSession()){document.getElementById('loginScreen').style.display='flex';document.getElementById('appShell').style.display='none';} return; }
+  TOKEN=resp.access_token;
+  clearTimeout(window._trTimer);
+  window._trTimer=setTimeout(function(){ var s=getSavedSession(); tokenClient.requestAccessToken({prompt:'',login_hint:s?s.email||'':''}); },50*60*1000);
+  showApp(); loadUserInfo(); loadVltSheet(); loadAvailableDates(); initBroadcastChannel();
 }
 
-// ── SESSION (gestita dall'hub) ───────────────────────────────────────────────
+// ── VLT SHEET LOAD ────────────────────────────────────────────────────────────
+function loadVltSheet(){
+  vltLoaded=false;
+  fetch(VLT_CSV_URL)
+  .then(function(r){ if(!r.ok) throw new Error('HTTP '+r.status); return r.text(); })
+  .then(function(txt){
+    vltMap={};
+    var lines=txt.replace(/\r\n/g,'\n').replace(/\r/g,'\n').split('\n');
+    if(!lines.length) return;
+    var hdr=splitLineVlt(lines[0],',');
+    var normalize=function(h){ return h.replace(/^=+/,'').replace(/"/g,'').trim().toLowerCase(); };
+    hdr=hdr.map(normalize);
+    var idxId    = hdr.indexOf('fr_id');
+    var idxStato = hdr.indexOf('stato');
+    var idxSN    = hdr.indexOf('f_mat_serial_no');
+    var idxPN    = hdr.indexOf('f_mat_tmpn');
+    var idxDepot = hdr.indexOf('depot_origine');
+    if(idxId===-1){ console.warn('VLT sheet: colonna fr_id non trovata. Headers:', hdr); }
+    for(var i=1;i<lines.length;i++){
+      var line=lines[i]; if(!line.trim()) continue;
+      var cells=splitLineVlt(line,',');
+      var key=(cells[idxId]||'').replace(/^=/,'').replace(/"/g,'').trim().toLowerCase();
+      if(!key) continue;
+      vltMap[key]={
+        stato:       (cells[idxStato]||'').replace(/^=/,'').replace(/"/g,'').trim(),
+        sn:          (cells[idxSN]||'').replace(/^=/,'').replace(/"/g,'').trim(),
+        pn:          (cells[idxPN]||'').replace(/^=/,'').replace(/"/g,'').trim(),
+        depot:       (cells[idxDepot]||'').replace(/^=/,'').replace(/"/g,'').trim()
+      };
+    }
+    vltLoaded=true;
+    console.log('VLT sheet caricato: '+Object.keys(vltMap).length+' record');
+    showToast('✓ VLT sheet caricato ('+Object.keys(vltMap).length+' record)','ok');
+    if(allRows.length) renderTable();
+  })
+  .catch(function(e){ console.warn('VLT sheet non caricabile:',e.message); showToast('⚠ VLT sheet non raggiungibile','err'); });
+}
+
+function splitLineVlt(line,sep){
+  var res=[],cur='',inQ=false;
+  for(var i=0;i<line.length;i++){
+    var c=line[i];
+    if(c==='"'){inQ=!inQ;}
+    else if(c===sep&&!inQ){res.push(cur);cur='';}
+    else{cur+=c;}
+  }
+  res.push(cur);
+  return res;
+}
+
+// Calcola i valori VLT per una riga DDT
+function getVlt(row){
+  var rifOrd = (row['Riferimento Ordine']||row['RIFERIMENTO_ORDINE']||row['RiferimentoOrdine']||row['Rif. Ordine']||'').trim().toLowerCase();
+  return vltMap[rifOrd]||null;
+}
+
+// Calcola il testo NOTE automatico per una riga
+function calcNote(row){
+  var v=getVlt(row);
+  if(!v) return row[NOTE_COL]||'';
+  var stato=v.stato||'';
+  var parts=[];
+  if(stato==='Failure Report Sent'){
+    // Solo depot_origine
+    parts.push(v.depot||'');
+  } else {
+    // Prefisso OPEN o SCRAP
+    if(stato==='Open') parts.push('OPEN');
+    else if(stato==='Close for Scrap material') parts.push('SCRAP');
+    // Confronto SERIALE
+    var sn     =(row['Seriale']||row['SERIALE']||'').trim();
+    var snVlt  =v.sn||'';
+    if(sn && snVlt && sn.toLowerCase()!==snVlt.toLowerCase()){
+      parts.push('INSERIRE SERIALE CORRETTO: '+sn);
+    }
+    // Confronto PART NUMBER
+    var pn     =(row['Part Number']||row['PART_NUMBER']||row['PartNumber']||'').trim();
+    var pnVlt  =v.pn||'';
+    if(pn && pnVlt && pn.toLowerCase()!==pnVlt.toLowerCase()){
+      parts.push('INSERIRE TPN CORRETTO: '+pn);
+    }
+  }
+  return parts.filter(Boolean).join(' ');
+}
+function showApp(){
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('appShell').style.display='flex';
+}
+
+// ── SESSION ───────────────────────────────────────────────────────────────────
+function getSavedSession(){ try{var s=localStorage.getItem('grn_sess');return s?JSON.parse(s):null;}catch(e){return null;} }
+function saveSession(n,e,p){ try{localStorage.setItem('grn_sess',JSON.stringify({name:n,email:e,picture:p}));}catch(e){} }
+function clearSavedSession(){ try{localStorage.removeItem('grn_sess');}catch(e){} }
 
 // ── USER ─────────────────────────────────────────────────────────────────────
 function loadUserInfo(){
   gFetch('https://www.googleapis.com/oauth2/v2/userinfo').then(function(u){
     if(u.error)return;
+    saveSession(u.name||u.email||'',u.email||'',u.picture||'');
     setUserUI(u.name||u.email||'—',u.email||'',u.picture||'');
     configEmail=u.email||'';
     loadUserConfig(u.email||'');
