@@ -929,22 +929,25 @@
   function applyModuliPermessi(moduli){
     // Mostra/nasconde card e nav item
     ALL_MODULI.forEach(function(mod){
-      var allowed = moduli.includes('*') || moduli.includes(mod);
-      // Card welcome
+      var isOpen = OPEN_MODS.includes(mod);
+      var allowed = isOpen || moduli.includes('*') || moduli.includes(mod);
       var card = document.querySelector('.card-'+mod);
       if(card) card.classList.toggle('locked', !allowed);
-      // Nav drawer
       var nav = document.getElementById('nav-'+mod);
       if(nav) nav.classList.toggle('hidden-mod', !allowed);
     });
   }
 
   // ── Override openApp per check permessi ───────────────
+  // Moduli che non richiedono token Google (passano sempre se loggato)
+  var OPEN_MODS = ['stock','ats','guida'];
+
   function canAccessMod(app){
+    // Moduli senza auth propria: accessibili a chiunque sia loggato sull'hub
+    if(OPEN_MODS.includes(app)) return true;
     var u = lsG('hub_user');
     if(!u) return false;
     if(u.role==='superadmin') return true;
-    // Fallback: se moduli=[] o non definiti, superadmin vede tutto
     var moduli = u.moduli || [];
     if(moduli.includes('*') || moduli.length===0) return true;
     return moduli.includes(app);
