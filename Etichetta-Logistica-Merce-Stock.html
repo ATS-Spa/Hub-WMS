@@ -381,7 +381,7 @@ function creaEtichetta10x10(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO,
    ETICHETTA 10x5
    Struttura: [vert] [QR] [testo] [logo]
    ============================================================ */
-function creaEtichetta10x5(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO, Posizione, bcId){
+function creaEtichetta10x5(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO, Posizione, Ubicazione, CDC, bcId){
   const qrBP = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(CodiceBP)}`;
   const qrSN = `https://api.qrserver.com/v1/create-qr-code/?size=100x100&data=${encodeURIComponent(SerialNumber)}`;
   const logo = `https://raw.githubusercontent.com/Daniele1995-design/WebAppSap/refs/heads/main/logo%20ats.jpg`;
@@ -410,7 +410,9 @@ function creaEtichetta10x5(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO, 
       <div class="et5-info">
         PO Nr°: ${PO} / Pos: ${Posizione}<br>
         Part Number: ${PartNumber}<br>
-        Seriale: ${SerialNumber}
+        Seriale: ${SerialNumber}<br>
+        CDC: ${CDC}<br>
+        Ubicazione: ${Ubicazione}
       </div>
     </div>
 
@@ -477,7 +479,7 @@ function aggiungiEtichettaManuale(){
     const bcId = 'bc-manual-'+(etichettaCounter++);
     const html = formato==='10x10'
       ? creaEtichetta10x10(CodiceBP, PartNumber, serial, ArticoloWMS, PO, Posizione, Ubicazione, CDC, bcId)
-      : creaEtichetta10x5(CodiceBP, PartNumber, serial, ArticoloWMS, PO, Posizione, bcId);
+      : creaEtichetta10x5(CodiceBP, PartNumber, serial, ArticoloWMS, PO, Posizione, Ubicazione, CDC, bcId);
     document.getElementById('output').innerHTML += html;
     setTimeout(()=>{
       if(document.getElementById(bcId))
@@ -506,7 +508,7 @@ document.getElementById('excelFile').addEventListener('change', e=>{
       const bcId = 'bc-'+i;
       html += formato==='10x10'
         ? creaEtichetta10x10(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO, Posizione, Ubicazione, CDC, bcId)
-        : creaEtichetta10x5(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO, Posizione, bcId);
+        : creaEtichetta10x5(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO, Posizione, Ubicazione, CDC, bcId);
     }
     document.getElementById('output').innerHTML = html;
     setTimeout(()=>{
