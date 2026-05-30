@@ -859,17 +859,24 @@ function onOneTap(resp){
 function onToken(r){
   if(r.error){ showLoginErr(r.error); return; }
   TOKEN = r.access_token;
+  // Aggiorna sessione salvata con nuovo token
+  var saved = lsGet('tkt_sess');
+  if(saved){ saved.token = TOKEN; lsSet('tkt_sess', saved); }
   if(!uEmail){
-    gFetch('https://www.googleapis.com/oauth2/v2/userinfo').then(function(u){
+    fetch('https://www.googleapis.com/oauth2/v2/userinfo',{headers:{Authorization:'Bearer '+TOKEN}})
+      .then(function(r){ return r.json(); }).then(function(u){
       uEmail = u.email; uName = u.name; uPic = u.picture;
       afterLogin();
     });
   } else {
+    // Refresh silenzioso — non rifare afterLogin se già loggato
+    afterLogin._refreshOnly = true;
     afterLogin();
   }
 }
 
 function afterLogin(){
+  if(afterLogin._refreshOnly){ afterLogin._refreshOnly = false; return; }
   setLoading('Caricamento configurazione...');
   loadConfig().then(function(){
     determineRole();
@@ -962,12 +969,18 @@ function ensureSheet(){
     method:'POST',
     headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
     body:JSON.stringify({properties:{title:'Ticket WMS Hub'},sheets:[{properties:{title:SHEET_NAME}}]})
-  }).then(function(r){ return r.json(); }).then(function(d){
+  }).then(function(r){
+    if(r.status===401) throw new Error('Token scaduto — ricarica la pagina e rifai il login');
+    if(!r.ok) throw new Error('Errore creazione Sheet: '+r.status);
+    return r.json();
+  }).then(function(d){
+    if(!d.spreadsheetId) throw new Error('Sheet ID non ricevuto da Google (risposta: '+JSON.stringify(d)+')');
     sheetId = d.spreadsheetId;
     // Sposta nella cartella dati
     return fetch('https://www.googleapis.com/drive/v3/files/'+sheetId+'?addParents='+DATA_FOLDER_ID+'&removeParents=root&fields=id',{
       method:'PATCH',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},body:JSON.stringify({})
-    }).then(function(){
+    }).then(function(r2){
+      if(!r2.ok) console.warn('Spostamento cartella fallito (non bloccante):', r2.status);
       // Scrivi header
       return sheetUpdate([[SHEET_HEADERS]],SHEET_NAME+'!A1');
     }).then(function(){
@@ -1493,8 +1506,32 @@ function switchStab(el, panelId){
 // ══════════════════════════════════════════════════════
 // HELPERS
 // ══════════════════════════════════════════════════════
-function gFetch(url){ return fetch(url,{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){ return r.json(); }); }
-function gFetchRaw(url){ return fetch(url,{headers:{Authorization:'Bearer '+TOKEN}}); }
+function gFetch(url, opts){
+  var headers = Object.assign({Authorization:'Bearer '+TOKEN}, (opts&&opts.headers)||{});
+  return fetch(url, Object.assign({}, opts||{}, {headers:headers})).then(function(r){
+    if(r.status===401){ return refreshToken().then(function(){ return gFetch(url, opts); }); }
+    return r.json();
+  });
+}
+function gFetchRaw(url, opts){
+  var headers = Object.assign({Authorization:'Bearer '+TOKEN}, (opts&&opts.headers)||{});
+  return fetch(url, Object.assign({}, opts||{}, {headers:headers})).then(function(r){
+    if(r.status===401){ return refreshToken().then(function(){ return gFetchRaw(url, opts); }); }
+    return r;
+  });
+}
+function refreshToken(){
+  return new Promise(function(resolve, reject){
+    tcl.requestAccessToken();
+    // aspetta che onToken aggiorni TOKEN
+    var attempts = 0;
+    var check = setInterval(function(){
+      attempts++;
+      if(TOKEN && attempts < 30){ clearInterval(check); resolve(); }
+      if(attempts >= 30){ clearInterval(check); reject(new Error('Token refresh timeout')); }
+    }, 300);
+  });
+}
 
 function listFiles(q){
   return gFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name)').then(function(d){ return d.files||[]; });
