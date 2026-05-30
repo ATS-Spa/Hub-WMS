@@ -838,16 +838,7 @@
     var meta = configHubFileId
       ? JSON.stringify({name:CONFIG_HUB_FNAME})
       : JSON.stringify({name:CONFIG_HUB_FNAME, parents:[CONFIG_HUB_FOLDER]});
-    var multipart = '--'+bnd+'
-Content-Type: application/json
-
-'+meta+
-      '
---'+bnd+'
-Content-Type: application/json
-
-'+body+'
---'+bnd+'--';
+    var CRLF='\r\n'; var multipart='--'+bnd+CRLF+'Content-Type: application/json'+CRLF+CRLF+meta+CRLF+'--'+bnd+CRLF+'Content-Type: application/json'+CRLF+CRLF+body+CRLF+'--'+bnd+'--';
     var method = configHubFileId ? 'PATCH' : 'POST';
     var url    = configHubFileId
       ? 'https://www.googleapis.com/upload/drive/v3/files/'+configHubFileId+'?uploadType=multipart'
@@ -878,7 +869,7 @@ Content-Type: application/json
         // Non in lista → accesso negato
         document.getElementById('loginScreen').classList.add('hidden');
         document.getElementById('accessDenied').style.display='flex';
-        document.getElementById('adMsg').textContent = 'Il tuo account ('+uEmail+') non è autorizzato. Contatta l'amministratore.';
+        document.getElementById('adMsg').textContent = 'Il tuo account ('+uEmail+') non è autorizzato. Contatta l\'amministratore.';
         return;
       }
       uRole = utente.ruolo || 'user';
@@ -1220,8 +1211,7 @@ Content-Type: application/json
 
   function editAdminUser(i){
     var u = hubConfig.utenti[i];
-    var newModuli = prompt('Moduli (separati da virgola, * per tutti):
-Disponibili: '+ALL_MODULI.join(', '), (u.moduli||[]).join(', '));
+    var newModuli = prompt('Moduli (separati da virgola, * per tutti). Disponibili: '+ALL_MODULI.join(', '), (u.moduli||[]).join(', '));
     if(newModuli===null) return;
     hubConfig.utenti[i].moduli = newModuli.trim()==='*' ? ['*'] : newModuli.split(',').map(function(m){ return m.trim(); }).filter(Boolean);
     renderAdminModal();
