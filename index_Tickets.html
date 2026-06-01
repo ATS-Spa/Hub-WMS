@@ -1025,9 +1025,10 @@ function saveTicket(ticket){
       var rowNum = idx+2;
       // Aggiorna A-M (dati ticket)
       return sheetUpdate([rowData], SHEET_NAME+'!A'+rowNum).then(function(){
-        // Se PENDING_UPDATE: aggiorna solo colonna MailInviata (O)
+        // Se PENDING_UPDATE: aggiorna solo colonna N (MailInviata, indice 13)
+        // NON toccare O (MessageID) che contiene l'EntryID Outlook
         if(ticket.mailInviata === 'PENDING_UPDATE'){
-          return sheetUpdate([['PENDING_UPDATE']], SHEET_NAME+'!O'+rowNum);
+          return sheetUpdate([['PENDING_UPDATE']], SHEET_NAME+'!N'+rowNum);
         }
       });
     } else {
