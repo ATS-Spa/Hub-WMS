@@ -1567,12 +1567,12 @@ function refreshToken(){
 
 function loadNotes(ticketId){
   if(!sheetId) return Promise.resolve([]);
-  return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+sheetId+'/values/'+NOTES_NAME+'!A2:D',{
+  return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+sheetId+'/values/'+NOTES_NAME+'!A2:E',{
     headers:{Authorization:'Bearer '+TOKEN}
   }).then(function(r){ return r.json(); }).then(function(d){
     var rows = d.values||[];
     return rows.filter(function(r){ return r[0]===ticketId; }).map(function(r){
-      return { autore:r[1]||'', data:r[2]||'', testo:r[3]||'' };
+      return { autore:r[1]||'', data:r[2]||'', testo:r[3]||'', mailInviata:r[4]||'' };
     });
   });
 }
@@ -1582,7 +1582,7 @@ function appendNote(ticketId, autore, testo){
   return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+sheetId+'/values/'+NOTES_NAME+'!A1:append?valueInputOption=RAW&insertDataOption=INSERT_ROWS',{
     method:'POST',
     headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
-    body:JSON.stringify({values:[[ticketId, autore, now, testo]]})
+    body:JSON.stringify({values:[[ticketId, autore, now, testo, 'NO']]})
   }).then(function(r){ return r.json(); });
 }
 
