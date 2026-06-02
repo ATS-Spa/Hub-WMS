@@ -158,13 +158,11 @@ td.editing input,td.editing select{width:100%;height:100%;min-height:30px;backgr
   <div class="login-card">
     <div class="login-logo">GRN <span>Manager</span></div>
     <div class="login-sub">Gestione Bolle di Consegna</div>
-    <p class="login-desc">Visualizza, modifica e aggiorna i file DDT dalla cartella Drive condivisa.</p>
-    <button class="btn-google" onclick="signIn()">
-      <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
-      Accedi con Google
-    </button>
-    <p class="login-note">Richiede accesso a Google Drive per leggere e modificare i file nella cartella GRN.</p>
-
+    <p class="login-desc">Questo modulo è accessibile solo tramite <strong>WMS Hub</strong>. Effettua il login dal portale centrale.</p>
+    <a href="../index.html" class="btn-google" style="text-decoration:none;justify-content:center;">
+      🏠 Vai a WMS Hub
+    </a>
+    <p class="login-note">L'autenticazione è gestita centralmente da WMS Hub.</p>
   </div>
 </div>
 
@@ -337,9 +335,9 @@ td.editing input,td.editing select{width:100%;height:100%;min-height:30px;backgr
 
 <div id="toast"></div>
 
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<!-- GSI rimosso: auth gestita da WMS Hub -->
 <script>
-var CLIENT_ID    = '256693770433-b1pjdpaglrh7827o6ln2s24802rcnshd.apps.googleusercontent.com';
+// CLIENT_ID rimosso: auth delegata a WMS Hub
 var FOLDER_TODAY = '1oXhZ0VR0tPjxa_bbIw2kOQ7FVKa1I1xM';
 var FOLDER_HIST  = '1v2hlsXWFPjTrpye1I38FXRbOq_KquTEw';
 var STATO_COL    = 'Stato_File';
@@ -396,17 +394,6 @@ var NOTE_COL  = 'NOTE';
 // ── INIT ─────────────────────────────────────────────────────────────────────
 window.onload = function(){
   restoreFilterState();
-  // Se aperto dall'hub: usa token hub direttamente
-  if(window._HUB_TOKEN){
-    TOKEN = window._HUB_TOKEN;
-    var u = window._HUB_USER||{};
-    showApp();
-    setUserUI(u.name||'',u.email||'',u.picture||u.pic||'');
-    loadVltSheet(); loadAvailableDates(); initBroadcastChannel();
-    return;
-  }
-  var s = getSavedSession();
-  if(s){ showApp(); setUserUI(s.name,s.email,s.picture); }
   waitGsi();
 };
 
@@ -451,31 +438,27 @@ function applyPendingFilterState(){
   window._pendingStato       =s.stato||'';
 }
 
-// ── GSI ──────────────────────────────────────────────────────────────────────
-var tokenClient;
+// ── AUTH — gestita esclusivamente da WMS Hub ──────────────────────────────────
+var _gsiRetry = 0;
 function waitGsi(){
-  if(typeof google==='undefined'){setTimeout(waitGsi,150);return;}
-  tokenClient = google.accounts.oauth2.initTokenClient({
-    client_id: CLIENT_ID,
-    scope:'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
-    callback: onToken
-  });
-  var s = getSavedSession();
-  if(s) tokenClient.requestAccessToken({prompt:'',login_hint:s.email||''});
+  if(!window._HUB_TOKEN){
+    if(_gsiRetry < 20){ _gsiRetry++; setTimeout(waitGsi,100); return; }
+    document.getElementById('loginScreen').style.display='flex';
+    document.getElementById('appShell').style.display='none';
+    return;
+  }
+  TOKEN = window._HUB_TOKEN;
+  var u = window._HUB_USER||{};
+  showApp();
+  setUserUI(u.name||'',u.email||'',u.picture||u.pic||'');
+  loadVltSheet(); loadAvailableDates(); initBroadcastChannel();
 }
-function signIn(){ tokenClient.requestAccessToken({prompt:'select_account'}); }
+function getToken(){ if(window._HUB_TOKEN) TOKEN=window._HUB_TOKEN; return TOKEN; }
+function signIn(){} // no-op: auth delegata al Hub
 function signOut(){
-  if(TOKEN) google.accounts.oauth2.revoke(TOKEN,function(){});
-  TOKEN=null; allRows=[]; clearSavedSession();
+  TOKEN=null;
   document.getElementById('appShell').style.display='none';
   document.getElementById('loginScreen').style.display='flex';
-}
-function onToken(resp){
-  if(resp.error){ if(!getSavedSession()){document.getElementById('loginScreen').style.display='flex';document.getElementById('appShell').style.display='none';} return; }
-  TOKEN=resp.access_token;
-  clearTimeout(window._trTimer);
-  window._trTimer=setTimeout(function(){ var s=getSavedSession(); tokenClient.requestAccessToken({prompt:'',login_hint:s?s.email||'':''}); },50*60*1000);
-  showApp(); loadUserInfo(); loadVltSheet(); loadAvailableDates(); initBroadcastChannel();
 }
 
 // ── VLT SHEET LOAD ────────────────────────────────────────────────────────────
@@ -1292,7 +1275,7 @@ function uploadText(fileId,blob,name,contentType){
     });
   }).then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
 }
-function gFetch(url){ if(!TOKEN)return Promise.reject(new Error('No token')); return fetch(url,{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){return r.json();}); }
+function gFetch(url){ var tok=getToken(); if(!tok)return Promise.reject(new Error('No token')); return fetch(url,{headers:{Authorization:'Bearer '+tok}}).then(function(r){return r.json();}); }
 
 // ── UTILITY ───────────────────────────────────────────────────────────────────
 function setContent(h){ document.getElementById('content').innerHTML=h; }
