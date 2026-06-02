@@ -773,7 +773,7 @@
       return;
     }
     TOKEN = r.access_token;
-    window.TOKEN = TOKEN; // rendi globale per script multipli
+    window.TOKEN = TOKEN;
     lsS('hub_token', TOKEN);
     // Auto-refresh ogni 50 minuti
     clearTimeout(window._hubRefresh);
@@ -788,12 +788,27 @@
         if(u.error){ showLogin(); return; }
         uEmail = u.email||''; uName = u.name||u.email||''; uPic = u.picture||'';
         lsS('hub_sess',{email:uEmail,name:uName,pic:uPic});
-        // Salva token in localStorage per i moduli figli
         lsS('hub_token', TOKEN);
         window.TOKEN = TOKEN;
-        // hub_user salvato dopo applyHubPerm (con role e moduli)
         loadHubConfig();
+        // Se il token viene rinnovato mentre un modulo è già aperto,
+        // aggiorna _HUB_TOKEN nell'iframe attivo senza ricaricare la pagina
+        injectTokenIntoActiveFrames();
       }).catch(function(){ showLogin(); });
+  }
+
+  // Inietta TOKEN e USER in tutti gli iframe già caricati
+  function injectTokenIntoActiveFrames(){
+    var hubUser = {email:uEmail, name:uName, pic:uPic, role:uRole};
+    Object.keys(iframes).forEach(function(key){
+      var fr = iframes[key];
+      if(fr && fr.contentWindow && fr.src && fr.src !== window.location.href){
+        try{
+          fr.contentWindow._HUB_TOKEN = TOKEN;
+          fr.contentWindow._HUB_USER  = hubUser;
+        }catch(e){ /* cross-origin: ignorato */ }
+      }
+    });
   }
 
   function showLogin(){
@@ -1050,16 +1065,29 @@
     };
     document.getElementById('loader-text').textContent = labels[app] || 'Caricamento...';
 
-    // Lazy-load: carica solo al primo accesso, poi mantieni vivo
     const frame = iframes[app];
+    const hubUser = {email:uEmail, name:uName, pic:uPic, role:uRole};
+
     if (frame && (!frame.src || frame.src === window.location.href)) {
-      // Prima volta: carica il src
+      // Prima volta: inietta variabili PRIMA del caricamento della pagina
       loader.classList.add('show');
       frame.src = frame.dataset.src;
-      frame.onload  = () => { loader.classList.remove('show'); panel.classList.add('active'); };
+      frame.onload = () => {
+        // Iniezione dopo il load (il contentWindow è ora accessibile)
+        try{
+          frame.contentWindow._HUB_TOKEN = TOKEN;
+          frame.contentWindow._HUB_USER  = hubUser;
+        }catch(e){}
+        loader.classList.remove('show');
+        panel.classList.add('active');
+      };
       frame.onerror = () => { loader.classList.remove('show'); panel.classList.add('active'); };
     } else {
-      // Già caricato: mostra subito senza ricaricare
+      // Già caricato: aggiorna token e mostra subito
+      try{
+        frame.contentWindow._HUB_TOKEN = TOKEN;
+        frame.contentWindow._HUB_USER  = hubUser;
+      }catch(e){}
       panel.classList.add('active');
     }
 
