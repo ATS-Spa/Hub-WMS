@@ -1990,7 +1990,8 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
       </div>
       <div class="fg">
         <div class="fl">Plant *</div>
-        <select class="fc" id="setupPlant"></select>
+        <input class="mi fc" id="setupPlant" type="text" placeholder="Es. P52" autocomplete="off" list="setupPlantList" style="text-transform:uppercase">
+        <datalist id="setupPlantList"></datalist>
       </div>
       <div class="fg full" id="setupRespWrap">
         <div class="fl">Responsabile *</div>
@@ -7325,16 +7326,19 @@ var setupRole = 'dipendente';
 function showSetupWizard(){
   var wiz = document.getElementById('setupWizard');
   if(!wiz) return;
-  // Popola plant dal Drive
+  // Popola plant dal Drive (se già caricati) come suggerimenti nel datalist
   var plants = {};
   (allFiles||[]).forEach(function(f){var p=parseFileName(f.name);if(p)plants[p.plant]=true;});
-  var plSel = document.getElementById('setupPlant');
-  if(plSel){
-    plSel.innerHTML='<option value="">— seleziona —</option>';
+  var dlPlant = document.getElementById('setupPlantList');
+  if(dlPlant){
+    dlPlant.innerHTML='';
     Object.keys(plants).sort().forEach(function(pl){
-      var o=document.createElement('option');o.value=pl;o.textContent=pl;plSel.appendChild(o);
+      var o=document.createElement('option');o.value=pl;dlPlant.appendChild(o);
     });
   }
+  // Precompila il nome con quello del Hub
+  var nomeEl = document.getElementById('setupNome');
+  if(nomeEl && !nomeEl.value && uName) nomeEl.value = uName;
   // Popola responsabili dai file Drive
   var resps = {};
   (allFiles||[]).forEach(function(f){var p=parseFileName(f.name);if(p)resps[p.resp]=true;});
@@ -7370,11 +7374,15 @@ function setupSetRole(role){
 
 function setupSave(){
   var nome  = (document.getElementById('setupNome').value||'').trim();
-  var plant = (document.getElementById('setupPlant').value||'').trim();
+  var plant = (document.getElementById('setupPlant').value||'').trim().toUpperCase();
   var errEl = document.getElementById('setupErr');
   errEl.style.display='none';
 
-  if(!nome || !plant){errEl.style.display='';return;}
+  if(!nome || !plant){
+    errEl.textContent = !nome ? 'Inserisci il tuo nome e cognome.' : 'Inserisci il codice Plant (es. P52).';
+    errEl.style.display='';
+    return;
+  }
 
   if(!permConfig.dipendenti) permConfig.dipendenti=[];
   if(!permConfig.responsabili) permConfig.responsabili=[];
