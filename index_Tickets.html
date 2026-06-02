@@ -6,7 +6,7 @@
 <title>Ticket Manager · WMS Hub</title>
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Barlow+Condensed:wght@500;600;700;800&display=swap" rel="stylesheet">
-<script src="https://accounts.google.com/gsi/client" async defer></script>
+<!-- GSI rimosso: auth gestita da WMS Hub -->
 <style>
 :root {
   --bg: #0b0f18;
@@ -493,8 +493,8 @@ select.mi { cursor: pointer; }
   <div class="login-title">TICKET MANAGER</div>
   <div class="login-sub">WMS Hub · ATS</div>
   <div class="login-card">
-    <div style="font-size:13px;color:var(--muted);text-align:center">Accedi con il tuo account Google ATS</div>
-    <button onclick="tcl.requestAccessToken({prompt:'select_account'})" style="background:#f97316;color:#fff;border:none;border-radius:10px;padding:12px 28px;font-size:15px;font-weight:700;cursor:pointer;font-family:'Segoe UI',sans-serif;letter-spacing:.5px">Accedi con Google</button>
+    <div style="font-size:13px;color:var(--muted);text-align:center">Questo modulo è accessibile solo tramite <strong>WMS Hub</strong>.</div>
+    <a href="../index.html" style="background:#f97316;color:#fff;border:none;border-radius:10px;padding:12px 28px;font-size:15px;font-weight:700;cursor:pointer;font-family:'Segoe UI',sans-serif;letter-spacing:.5px;text-decoration:none;display:inline-block;text-align:center;">🏠 Vai a WMS Hub</a>
     <div id="loginErr" style="font-size:12px;color:var(--red);display:none"></div>
   </div>
 </div>
@@ -741,7 +741,7 @@ select.mi { cursor: pointer; }
 // ══════════════════════════════════════════════════════
 // CONFIG
 // ══════════════════════════════════════════════════════
-var CLIENT_ID = '256693770433-b1pjdpaglrh7827o6ln2s24802rcnshd.apps.googleusercontent.com';
+// CLIENT_ID e tcl rimossi: auth delegata a WMS Hub
 var CONFIG_FOLDER_ID = '16VQGMVwhW4p8u6mbCDLGlQRx8afG_m7p'; // Cartella config_tickets
 var DATA_FOLDER_ID   = '11ocsebXn-EPfhiIxTf3J6kZ3fH3xQYmf';  // Cartella Gestione Ticketing
 var CONFIG_FNAME     = 'config_tickets.json';
@@ -765,7 +765,7 @@ var TOKEN = null, uEmail = '', uName = '', uPic = '', uRole = 'user';
   }catch(ex){}
 })();
 
-var tcl = null;
+
 var configFileId = null, sheetId = null, configData = null;
 var allTickets = [];
 var currentFilter = 'tutti';
@@ -818,69 +818,37 @@ var DEFAULT_CONFIG = {
 // INIT
 // ══════════════════════════════════════════════════════
 window.onload = function(){
-  // Se aperto dall'hub: usa token hub direttamente
-  if(window._HUB_TOKEN){
-    TOKEN  = window._HUB_TOKEN;
-    var u  = window._HUB_USER||{};
-    uEmail = u.email||''; uName = u.name||''; uPic = u.picture||u.pic||'';
-    uRole  = u.role||'user';
-    setLoading('Caricamento...');
-    afterLogin();
-    return;
-  }
-  // Fallback: OAuth proprio (se aperto direttamente)
-  setLoading('Caricamento...');
-  if(window.google && google.accounts){
-    initOAuth();
-  } else {
-    var s = document.createElement('script');
-    s.src = 'https://accounts.google.com/gsi/client';
-    s.onload = initOAuth;
-    document.head.appendChild(s);
-  }
+  waitGsi();
 };
 
-function initOAuth(){
-  tcl = google.accounts.oauth2.initTokenClient({
-    client_id: CLIENT_ID,
-    scope: 'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',
-    callback: onToken
-  });
-  // Riusa sessione salvata → refresh silenzioso senza popup
-  var saved = lsGet('tkt_sess');
-  if(saved && saved.email){
-    uEmail = saved.email; uName = saved.name; uPic = saved.pic; uRole = saved.role||'user';
-    tcl.requestAccessToken({prompt:'', login_hint: uEmail});
-  } else {
-    hideLoading();
-    showEl('loginScreen');
+// ── AUTH — gestita esclusivamente da WMS Hub ──────────────────────────────────
+var _gsiRetry = 0;
+function waitGsi(){
+  if(!window._HUB_TOKEN){
+    if(_gsiRetry < 20){ _gsiRetry++; setTimeout(waitGsi,100); return; }
+    hideLoading(); showEl('loginScreen');
+    return;
   }
+  TOKEN  = window._HUB_TOKEN;
+  var u  = window._HUB_USER||{};
+  uEmail = u.email||''; uName = u.name||''; uPic = u.picture||u.pic||'';
+  uRole  = u.role||'user';
+  setLoading('Caricamento...');
+  afterLogin();
 }
-
-function onToken(r){
-  if(r.error){ hideLoading(); showEl('loginScreen'); showLoginErr(r.error); return; }
-  TOKEN = r.access_token;
-  if(!uEmail){
-    fetch('https://www.googleapis.com/oauth2/v2/userinfo',{headers:{Authorization:'Bearer '+TOKEN}})
-      .then(function(res){ return res.json(); }).then(function(u){
-        uEmail = u.email; uName = u.name||u.email; uPic = u.picture||'';
-        afterLogin();
-      }).catch(function(e){ showLoginErr('Errore userinfo: '+e); hideLoading(); showEl('loginScreen'); });
-  } else {
-    afterLogin();
-  }
+function getToken(){ if(window._HUB_TOKEN) TOKEN=window._HUB_TOKEN; return TOKEN; }
+function signOut(){
+  TOKEN=null; uEmail=''; uName=''; uPic='';
+  hideEl('appRoot');
+  showEl('loginScreen');
 }
 
 function afterLogin(){
   setLoading('Caricamento configurazione...');
   loadConfig().then(function(){
     determineRole();
-    lsSet('tkt_sess',{token:TOKEN,email:uEmail,name:uName,pic:uPic,role:uRole});
-    // Rinnova token automaticamente ogni 45 min
-    clearTimeout(window._tktRefresh);
-    window._tktRefresh = setTimeout(function(){
-      if(uEmail) tcl.requestAccessToken({prompt:'', login_hint:uEmail});
-    }, 45*60*1000);
+    // Rinnova token: il Hub aggiorna _HUB_TOKEN automaticamente,
+    // getToken() lo legge lazily prima di ogni chiamata API
     setLoading('Caricamento ticket...');
     return loadTickets();
   }).then(function(){
@@ -906,10 +874,9 @@ function determineRole(){
 }
 
 function doLogout(){
-  if(TOKEN) try{ google.accounts.oauth2.revoke(TOKEN,function(){}); }catch(e){}
   TOKEN = null; uEmail=''; uName=''; uPic=''; uRole='user';
-  lsDel('tkt_sess');
-  location.reload();
+  hideEl('appRoot');
+  showEl('loginScreen');
 }
 
 // ══════════════════════════════════════════════════════
@@ -1539,31 +1506,24 @@ function switchStab(el, panelId){
 // HELPERS
 // ══════════════════════════════════════════════════════
 function gFetch(url, opts){
-  var headers = Object.assign({Authorization:'Bearer '+TOKEN}, (opts&&opts.headers)||{});
+  var tok = getToken();
+  var headers = Object.assign({Authorization:'Bearer '+tok}, (opts&&opts.headers)||{});
   return fetch(url, Object.assign({}, opts||{}, {headers:headers})).then(function(r){
-    if(r.status===401){ return refreshToken().then(function(){ return gFetch(url, opts); }); }
+    if(r.status===401){ tok=getToken(); return gFetch(url, opts); }
     return r.json();
   });
 }
 function gFetchRaw(url, opts){
-  var headers = Object.assign({Authorization:'Bearer '+TOKEN}, (opts&&opts.headers)||{});
+  var tok = getToken();
+  var headers = Object.assign({Authorization:'Bearer '+tok}, (opts&&opts.headers)||{});
   return fetch(url, Object.assign({}, opts||{}, {headers:headers})).then(function(r){
-    if(r.status===401){ return refreshToken().then(function(){ return gFetchRaw(url, opts); }); }
+    if(r.status===401){ tok=getToken(); return gFetchRaw(url, opts); }
     return r;
   });
 }
-function refreshToken(){
-  return new Promise(function(resolve, reject){
-    tcl.requestAccessToken();
-    // aspetta che onToken aggiorni TOKEN
-    var attempts = 0;
-    var check = setInterval(function(){
-      attempts++;
-      if(TOKEN && attempts < 30){ clearInterval(check); resolve(); }
-      if(attempts >= 30){ clearInterval(check); reject(new Error('Token refresh timeout')); }
-    }, 300);
-  });
-}
+// refreshToken non più necessaria: il Hub aggiorna _HUB_TOKEN,
+// getToken() lo legge lazily prima di ogni richiesta
+function refreshToken(){ return Promise.resolve(); }
 
 function loadNotes(ticketId){
   if(!sheetId) return Promise.resolve([]);
