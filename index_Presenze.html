@@ -1643,16 +1643,17 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
 </head>
 <body>
 
-<!-- LOGIN — solo Hub, non si accede standalone -->
+<!-- LOGIN -->
 <div id="loginScreen">
   <div class="lcard">
     <div class="llogo"><span class="c1">WMS</span> <span class="c2">·</span> <span class="c3">Presenze</span></div>
     <div class="lchip">📋 Cooperativa &amp; Dipendenti · Gestione Mensile</div>
-    <p class="ldesc">Questo modulo è accessibile solo tramite <strong>WMS Hub</strong>. Effettua il login dal portale centrale.</p>
-    <a class="btn-google" href="../index.html" style="text-decoration:none;display:inline-flex;align-items:center;gap:10px;justify-content:center;">
-      🏠 Vai a WMS Hub
-    </a>
-    <p class="lnote">L'autenticazione è gestita centralmente da WMS Hub.</p>
+    <p class="ldesc">Accedi con Google per visualizzare e gestire i fogli presenze. L'accesso ai dati è regolato dal profilo assegnato.</p>
+    <button class="btn-google" onclick="signIn()">
+      <svg viewBox="0 0 24 24"><path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92c-.26 1.37-1.04 2.53-2.21 3.31v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.09z"/><path fill="#34A853" d="M12 23c2.97 0 5.46-.98 7.28-2.66l-3.57-2.77c-.98.66-2.23 1.06-3.71 1.06-2.86 0-5.29-1.93-6.16-4.53H2.18v2.84C3.99 20.53 7.7 23 12 23z"/><path fill="#FBBC05" d="M5.84 14.09c-.22-.66-.35-1.36-.35-2.09s.13-1.43.35-2.09V7.07H2.18C1.43 8.55 1 10.22 1 12s.43 3.45 1.18 4.93l3.66-2.84z"/><path fill="#EA4335" d="M12 5.38c1.62 0 3.06.56 4.21 1.64l3.15-3.15C17.45 2.09 14.97 1 12 1 7.7 1 3.99 3.47 2.18 7.07l3.66 2.84c.87-2.6 3.3-4.53 6.16-4.53z"/></svg>
+      Accedi con Google
+    </button>
+    <p class="lnote">L'accesso è regolato da <code>config_presenze.json</code> nella cartella Drive condivisa.</p>
   </div>
 </div>
 
@@ -1990,8 +1991,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
       </div>
       <div class="fg">
         <div class="fl">Plant *</div>
-        <input class="mi fc" id="setupPlant" type="text" placeholder="Es. P52" autocomplete="off" list="setupPlantList" style="text-transform:uppercase">
-        <datalist id="setupPlantList"></datalist>
+        <select class="fc" id="setupPlant"></select>
       </div>
       <div class="fg full" id="setupRespWrap">
         <div class="fl">Responsabile *</div>
@@ -2395,12 +2395,12 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
 
 <div id="toast"></div>
 
-<!-- GSI rimosso: auth gestita da WMS Hub -->
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <script>
 // ═══════════════════════════════════════════════════════════
 //  COSTANTI
 // ═══════════════════════════════════════════════════════════
-// CLIENT_ID rimosso: auth delegata a WMS Hub
+var CLIENT_ID  = '256693770433-b1pjdpaglrh7827o6ln2s24802rcnshd.apps.googleusercontent.com';
 var FOLDER_ID  = '1atN6jbD2-nbRsNBhCGNeq34PPvFALH6n';
 var ADMIN_PASS = 'Ats2026@';
 var CONFIG_FNAME = 'config_presenze.json';
@@ -2594,6 +2594,10 @@ window.onload=function(){
   buildYears(); buildMonths(); buildFileTabSelects();
   restoreUiState();
   buildLegend();
+  var s=lsG('wms_sess'); if(s){
+    document.getElementById('loginScreen').style.display='none';
+    showShell(s.name||'',s.email||'',s.pic||'');
+  }
   waitGsi();
   document.addEventListener('click',function(e){
     ['moAdmin','moConf','moSigla','moAddEmp','moPermUser'].forEach(function(id){
@@ -2686,41 +2690,52 @@ function updateFileNamePreview(){
 }
 
 // ═══════════════════════════════════════════════════════════
-//  AUTH — gestita esclusivamente da WMS Hub
-//  Il modulo non fa login autonomo: riceve TOKEN e USER
-//  dall'iframe parent tramite window._HUB_TOKEN / _HUB_USER.
-//  Il Hub inietta queste variabili subito dopo il frame.onload,
-//  quindi waitGsi fa un breve poll prima di arrendersi.
+//  GSI / AUTH
 // ═══════════════════════════════════════════════════════════
-var _gsiRetry = 0;
+var tcl;
 function waitGsi(){
-  if(!window._HUB_TOKEN){
-    if(_gsiRetry < 20){ _gsiRetry++; setTimeout(waitGsi,100); return; }
-    // Dopo ~2s ancora nessun token: mostra avviso Hub
-    document.getElementById('loginScreen').style.display='flex';
-    document.getElementById('appShell').style.display='none';
+  // Se token hub disponibile: usalo direttamente senza popup
+  if(window._HUB_TOKEN){
+    TOKEN=window._HUB_TOKEN;
+    document.getElementById('loginScreen').style.display='none';
+    var u=window._HUB_USER||{};
+    uEmail=u.email||'';uName=u.name||'';uPic=u.picture||u.pic||'';
+    lsS('wms_sess',{name:uName,email:uEmail,pic:uPic});
+    showShell(uName,uEmail,uPic);
+    loadConfig();
+    loadUserConfig();
+    // Aggiorna token se hub lo rinnova
+    clearTimeout(window._tt);
+    window._tt=setTimeout(function(){
+      if(window._HUB_TOKEN) TOKEN=window._HUB_TOKEN;
+    },50*60*1000);
     return;
   }
-  var u=window._HUB_USER||{};
-  TOKEN=window._HUB_TOKEN;
-  uEmail=u.email||''; uName=u.name||''; uPic=u.picture||u.pic||'';
-  document.getElementById('loginScreen').style.display='none';
-  showShell(uName,uEmail,uPic);
-  loadConfig();
-  loadUserConfig();
+  if(typeof google==='undefined'){setTimeout(waitGsi,150);return;}
+  tcl=google.accounts.oauth2.initTokenClient({client_id:CLIENT_ID,scope:'https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/userinfo.profile https://www.googleapis.com/auth/userinfo.email',callback:onToken});
+  var s=lsG('wms_sess');if(s)tcl.requestAccessToken({prompt:'',login_hint:s.email||''});
 }
-
-// Lettura lazy del token: il Hub lo aggiorna in _HUB_TOKEN ad ogni refresh
-function getToken(){
-  if(window._HUB_TOKEN) TOKEN=window._HUB_TOKEN;
-  return TOKEN;
-}
-
-function signIn(){} // no-op: auth delegata al Hub
+function signIn(){tcl.requestAccessToken({prompt:'select_account'});}
 function signOut(){
-  TOKEN=null; uEmail=''; uName=''; uPic='';
+  if(TOKEN)try{google.accounts.oauth2.revoke(TOKEN,function(){});}catch(e){}
+  TOKEN=null;lsDel('wms_sess');
   document.getElementById('appShell').style.display='none';
+  document.getElementById('accessDenied').style.display='none';
   document.getElementById('loginScreen').style.display='flex';
+}
+function onToken(r){
+  if(r.error){if(!lsG('wms_sess'))document.getElementById('loginScreen').style.display='flex';return;}
+  TOKEN=r.access_token;
+  clearTimeout(window._tt);window._tt=setTimeout(function(){var s=lsG('wms_sess');tcl.requestAccessToken({prompt:'',login_hint:s?s.email||'':''});},50*60*1000);
+  gFetch('https://www.googleapis.com/oauth2/v2/userinfo').then(function(u){
+    if(u.error)return;
+    uEmail=u.email||'';uName=u.name||u.email||'';uPic=u.picture||'';
+    lsS('wms_sess',{name:uName,email:uEmail,pic:uPic});
+    document.getElementById('loginScreen').style.display='none';
+    showShell(uName,uEmail,uPic);
+    loadConfig();
+    loadUserConfig();
+  }).catch(function(){document.getElementById('loginScreen').style.display='flex';});
 }
 function showShell(name,email,pic){
   document.getElementById('uName').textContent=name||'—';
@@ -5712,9 +5727,8 @@ async function generaUnFile(fname,resp,plant,anno,mese,emps){
 function listFiles(q){return gFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name,mimeType)&pageSize=200').then(function(r){return r.files||[];});}
 function downloadFile(id){return fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){if(!r.ok)throw new Error('Download fallito: '+r.status);return r.blob();});}
 function gFetch(url){
-  var tok=getToken();
-  if(!tok)return Promise.reject(new Error('No token'));
-  return fetch(url,{headers:{Authorization:'Bearer '+tok}}).then(function(r){
+  if(!TOKEN)return Promise.reject(new Error('No token'));
+  return fetch(url,{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){
     if(!r.ok){
       return r.json().then(function(e){
         var msg=(e.error&&e.error.message)||r.statusText;
@@ -7326,19 +7340,16 @@ var setupRole = 'dipendente';
 function showSetupWizard(){
   var wiz = document.getElementById('setupWizard');
   if(!wiz) return;
-  // Popola plant dal Drive (se già caricati) come suggerimenti nel datalist
+  // Popola plant dal Drive
   var plants = {};
   (allFiles||[]).forEach(function(f){var p=parseFileName(f.name);if(p)plants[p.plant]=true;});
-  var dlPlant = document.getElementById('setupPlantList');
-  if(dlPlant){
-    dlPlant.innerHTML='';
+  var plSel = document.getElementById('setupPlant');
+  if(plSel){
+    plSel.innerHTML='<option value="">— seleziona —</option>';
     Object.keys(plants).sort().forEach(function(pl){
-      var o=document.createElement('option');o.value=pl;dlPlant.appendChild(o);
+      var o=document.createElement('option');o.value=pl;o.textContent=pl;plSel.appendChild(o);
     });
   }
-  // Precompila il nome con quello del Hub
-  var nomeEl = document.getElementById('setupNome');
-  if(nomeEl && !nomeEl.value && uName) nomeEl.value = uName;
   // Popola responsabili dai file Drive
   var resps = {};
   (allFiles||[]).forEach(function(f){var p=parseFileName(f.name);if(p)resps[p.resp]=true;});
@@ -7374,15 +7385,11 @@ function setupSetRole(role){
 
 function setupSave(){
   var nome  = (document.getElementById('setupNome').value||'').trim();
-  var plant = (document.getElementById('setupPlant').value||'').trim().toUpperCase();
+  var plant = (document.getElementById('setupPlant').value||'').trim();
   var errEl = document.getElementById('setupErr');
   errEl.style.display='none';
 
-  if(!nome || !plant){
-    errEl.textContent = !nome ? 'Inserisci il tuo nome e cognome.' : 'Inserisci il codice Plant (es. P52).';
-    errEl.style.display='';
-    return;
-  }
+  if(!nome || !plant){errEl.style.display='';return;}
 
   if(!permConfig.dipendenti) permConfig.dipendenti=[];
   if(!permConfig.responsabili) permConfig.responsabili=[];
@@ -7395,12 +7402,15 @@ function setupSave(){
     if(!resp){errEl.style.display='';return;}
     // Cerca email responsabile nel config
     var respRecord = (permConfig.responsabili||[]).find(function(r){return r.nome===resp && !r._esempio;});
-    var respEmail  = respRecord ? respRecord.email_google : '';
+    // Usa email_lavoro se disponibile, altrimenti email_google
+    var respEmail  = respRecord ? (respRecord.email_lavoro||respRecord.email_google||'') : '';
+    var respEmailGoogle = respRecord ? (respRecord.email_google||'') : '';
     var newDip = {
       email_google: uEmail,
       nome: nome, sap: sap, plant: plant,
       responsabile_nome: resp,
       responsabile_email: respEmail,
+      responsabile_email_google: respEmailGoogle,
       contratto: {ferie_giorni: contratto.ferie_giorni, permessi_ore: contratto.permessi_ore}
     };
     // Rimuovi esempio se presente
@@ -7780,9 +7790,7 @@ function richInvia(){
     dipendente_plant: profile.plant||'',
     responsabile_nome:  respNome,
     responsabile_email: respEmail,
-    nota_resp: '',
-    mail_inviata: false,
-    mail_esito_inviata: false
+    nota_resp: ''
   };
 
   if(!richData) richData={richieste:[]};
@@ -7794,7 +7802,11 @@ function richInvia(){
   saveRichieste().then(function(){
     richUpdateBadge();
     richRender();
-    toast('✅ Richiesta inviata a '+respNome+' — notifica in partenza');
+    if(respEmail){
+      richMailtoRichiesta(req);
+    } else {
+      toast('✅ Richiesta inviata a '+respNome);
+    }
   }).catch(function(e){
     if(btn) btn.disabled=false;
     toast('✗ Errore: '+e.message,'err');
@@ -7815,14 +7827,14 @@ function richApprova(id){
     function(){
       req.stato='approvata';
       req.data_risposta=new Date().toLocaleDateString('it-IT');
-      req.mail_esito_inviata=false;
       toast('⏳ Approvazione in corso…','warn');
       richScriviSuDrive(req).then(function(){
         return saveRichieste();
       }).then(function(){
         richUpdateBadge();
         richRender();
-        toast('✅ Approvata — notifica al dipendente in partenza');
+        if(req.dipendente_email) richMailtoEsito(req);
+        else toast('✅ Approvata e scritta sul foglio presenze');
       }).catch(function(e){
         toast('✗ Errore scrittura: '+e.message,'err');
         saveRichieste().then(function(){richUpdateBadge();richRender();});
@@ -7840,11 +7852,11 @@ function richRifiuta(id){
     function(){
       req.stato='rifiutata';
       req.data_risposta=new Date().toLocaleDateString('it-IT');
-      req.mail_esito_inviata=false;
       saveRichieste().then(function(){
         richUpdateBadge();
         richRender();
-        toast('❌ Rifiutata — notifica al dipendente in partenza');
+        if(req.dipendente_email) richMailtoEsito(req);
+        else toast('Richiesta rifiutata');
       });
     }
   );
@@ -7996,7 +8008,7 @@ function richRenderAnagPanel(){
   h += '</div></div>';
   h += '<div style="overflow-x:auto">';
   h += '<table class="anag-table">';
-  h += '<thead><tr><th>Nome</th><th>Email Google</th><th>Superiore</th><th>Email Superiore</th><th></th></tr></thead>';
+  h += '<thead><tr><th>Nome</th><th>Email Google</th><th>Email Aziendale</th><th>Superiore</th><th>Email Superiore</th><th></th></tr></thead>';
   h += '<tbody id="anagRespBody">';
   resps.forEach(function(r,i){
     h += richAnagRespRow(r,i,respOpts);
@@ -8030,6 +8042,7 @@ function richAnagRespRow(r,i,respOpts){
   return '<tr>'
     +'<td><input class="anag-input" value="'+esc(r.nome||'')+'" onchange="richAnagChange(\'resp\','+i+',\'nome\',this.value)"></td>'
     +'<td><input class="anag-input" value="'+esc(r.email_google||'')+'" onchange="richAnagChange(\'resp\','+i+',\'email_google\',this.value)"></td>'
+    +'<td><input class="anag-input" placeholder="email@atsgruppo.eu" value="'+esc(r.email_lavoro||'')+'" onchange="richAnagChange(\'resp\','+i+',\'email_lavoro\',this.value)"></td>'
     +'<td><select class="anag-select" onchange="richAnagChange(\'resp\','+i+',\'superiore_nome\',this.value)"><option value="">—</option>'+respOpts+'</select></td>'
     +'<td><input class="anag-input" value="'+esc(r.superiore_email||'')+'" onchange="richAnagChange(\'resp\','+i+',\'superiore_email\',this.value)"></td>'
     +'<td><button class="anag-del-btn" onclick="richDelResp('+i+')">🗑</button></td>'
