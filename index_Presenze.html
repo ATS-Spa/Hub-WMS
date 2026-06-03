@@ -7776,6 +7776,7 @@ function richInvia(){
     data_richiesta: new Date().toLocaleDateString('it-IT'),
     dipendente_nome:  profile.nome,
     dipendente_email: uEmail,
+    dipendente_email_lavoro: profile.email_lavoro||'',
     dipendente_sap:   profile.sap||'',
     dipendente_plant: profile.plant||'',
     responsabile_nome:  respNome,
@@ -7979,7 +7980,7 @@ function richRenderAnagPanel(){
 
   h += '<div style="overflow-x:auto">';
   h += '<table class="anag-table">';
-  h += '<thead><tr><th>Nome</th><th>Email Google</th><th>SAP</th><th>Plant</th><th>Responsabile</th><th>Ferie tot.</th><th>HP ore</th><th>Pausa std</th><th></th></tr></thead>';
+  h += '<thead><tr><th>Nome</th><th>Email Google</th><th>Email Aziendale</th><th>SAP</th><th>Plant</th><th>Responsabile</th><th>Ferie tot.</th><th>HP ore</th><th>Pausa std</th><th></th></tr></thead>';
   h += '<tbody id="anagBody">';
   dips.forEach(function(d,i){
     h += richAnagRow(d,i,respOpts);
@@ -8016,6 +8017,7 @@ function richAnagRow(d,i,respOpts){
   return '<tr id="anagDip_'+i+'">'
     +'<td><input class="anag-input" value="'+esc(d.nome||'')+'" onchange="richAnagChange(\'dip\','+i+',\'nome\',this.value)"></td>'
     +'<td><input class="anag-input" value="'+esc(d.email_google||'')+'" onchange="richAnagChange(\'dip\','+i+',\'email_google\',this.value)"></td>'
+    +'<td><input class="anag-input" placeholder="email@atsgruppo.eu" value="'+esc(d.email_lavoro||'')+'" onchange="richAnagChange(\'dip\','+i+',\'email_lavoro\',this.value)"></td>'
     +'<td><input class="anag-input" value="'+esc(d.sap||'')+'" style="width:70px" onchange="richAnagChange(\'dip\','+i+',\'sap\',this.value)"></td>'
     +'<td><input class="anag-input" value="'+esc(d.plant||'')+'" style="width:60px" onchange="richAnagChange(\'dip\','+i+',\'plant\',this.value)"></td>'
     +'<td><select class="anag-select" onchange="richAnagChange(\'dip\','+i+',\'responsabile_nome\',this.value)"><option value="">—</option>'+(function(){var cur=esc(d.responsabile_nome||'');return respOpts.replace('value="'+cur+'"','value="'+cur+'" selected');})()+'</select></td>'
@@ -8057,7 +8059,7 @@ function richAnagChange(tipo,i,field,val){
 function richAddDip(){
   if(!permConfig.dipendenti) permConfig.dipendenti=[];
   permConfig.dipendenti = permConfig.dipendenti.filter(function(d){return !d._esempio;});
-  permConfig.dipendenti.push({email_google:'',nome:'',sap:'',plant:'',responsabile_nome:'',responsabile_email:'',contratto:{ferie_giorni:22,permessi_ore:32}});
+  permConfig.dipendenti.push({email_google:'',email_lavoro:'',nome:'',sap:'',plant:'',responsabile_nome:'',responsabile_email:'',contratto:{ferie_giorni:22,permessi_ore:32}});
   // Rirender il pannello permessi
   renderPermPanel();
   setTimeout(function(){switchSec('perm');},50);
