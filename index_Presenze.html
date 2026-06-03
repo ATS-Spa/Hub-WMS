@@ -2835,7 +2835,10 @@ function loadAllFiles(){
       return /^[A-Za-z]+_P\d+_\d{6}$/i.test(n)&&canSeeFile(f.name);
     });
     buildDynamicFilters();
-    buildYears(); // aggiorna anni con quelli reali dai file Drive
+    buildYears();
+    // Se il pannello permessi/anagrafica è visibile, ri-renderizza con i file aggiornati
+    var permSec = document.getElementById('secPerm');
+    if(permSec && permSec.style.display !== 'none') renderPermPanel();
   }).catch(function(e){console.error('[WMS] loadAllFiles error:',e);});
 }
 function parseFileName(name){
@@ -8029,7 +8032,9 @@ function richRenderAnagPanel(){
   var resps = (permConfig.responsabili||[]).filter(function(r){return !r._esempio;});
 
   // Responsabili: SOLO dai nomi dei file Drive
+  // Responsabili da config (principale) + da file esistenti (fallback)
   var respNomi = {};
+  (permConfig.responsabili||[]).forEach(function(r){if(r.nome&&!r._esempio)respNomi[r.nome]=true;});
   (allFiles||[]).forEach(function(f){var p=parseFileName(f.name);if(p&&p.resp)respNomi[p.resp]=true;});
   var respOpts = Object.keys(respNomi).sort().map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
 
