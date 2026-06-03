@@ -8022,6 +8022,8 @@ function richRenderAnagPanel(){
   h += '<div class="anag-hdr"><div class="anag-title">👥 Anagrafica Dipendenti</div>';
   h += '<div style="display:flex;gap:8px">';
   h += '<button class="ba bghost te" onclick="richAddDip()" style="font-size:12px;padding:5px 12px">＋ Dipendente</button>';
+  h += '<button class="ba" onclick="richImportDip()" style="font-size:12px;padding:5px 12px;margin-left:6px;background:var(--blue)">⬆ Importa Excel</button>';
+  h += '<button class="ba" onclick="richExportTemplateDip()" style="font-size:12px;padding:5px 12px;margin-left:4px;background:var(--muted)">⬇ Template</button>';
   h += '<button class="ba bteal" onclick="richSaveAnag()" style="font-size:12px;padding:5px 12px">💾 Salva</button>';
   h += '</div></div>';
 
@@ -8040,6 +8042,8 @@ function richRenderAnagPanel(){
   h += '<div class="anag-hdr"><div class="anag-title">👔 Responsabili</div>';
   h += '<div style="display:flex;gap:8px">';
   h += '<button class="ba bghost te" onclick="richAddResp()" style="font-size:12px;padding:5px 12px">＋ Responsabile</button>';
+  h += '<button class="ba" onclick="richImportResp()" style="font-size:12px;padding:5px 12px;margin-left:6px;background:var(--blue)">⬆ Importa Excel</button>';
+  h += '<button class="ba" onclick="richExportTemplateResp()" style="font-size:12px;padding:5px 12px;margin-left:4px;background:var(--muted)">⬇ Template</button>';
   h += '<button class="ba bteal" onclick="richSaveAnag()" style="font-size:12px;padding:5px 12px">💾 Salva</button>';
   h += '</div></div>';
   h += '<div style="overflow-x:auto">';
@@ -8150,6 +8154,143 @@ function richSaveAnag(){
     richIdentifyUser();
     renderPermPanel();
   }).catch(function(e){toast('✗ '+e.message,'err');});
+}
+
+// ── Import/Export Anagrafica ──────────────────────────────────────────────
+
+function richExportTemplateDip(){
+  var XLSX = window.XLSX;
+  if(!XLSX){ loadXLSX(richExportTemplateDip); return; }
+  var ws = XLSX.utils.aoa_to_sheet([
+    ['Nome','Email Google','Email Aziendale','SAP','Plant','Responsabile','Ferie tot.','HP ore','Pausa std (h)'],
+    ['Mario Rossi','mario.rossi@gmail.com','mrossi@atsgruppo.eu','123','P52','Morgillo','22','32','1']
+  ]);
+  ws['!cols'] = [{wch:20},{wch:28},{wch:28},{wch:8},{wch:8},{wch:15},{wch:10},{wch:8},{wch:12}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Dipendenti');
+  XLSX.writeFile(wb, 'template_dipendenti.xlsx');
+}
+
+function richExportTemplateResp(){
+  var XLSX = window.XLSX;
+  if(!XLSX){ loadXLSX(richExportTemplateResp); return; }
+  var ws = XLSX.utils.aoa_to_sheet([
+    ['Nome','Email Google','Email Aziendale','Superiore','Email Superiore'],
+    ['Morgillo','morgillo@gmail.com','morgillo@atsgruppo.eu','','']
+  ]);
+  ws['!cols'] = [{wch:20},{wch:28},{wch:28},{wch:15},{wch:28}];
+  var wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Responsabili');
+  XLSX.writeFile(wb, 'template_responsabili.xlsx');
+}
+
+function richImportDip(){
+  var inp = document.createElement('input');
+  inp.type='file'; inp.accept='.xlsx,.xls,.csv';
+  inp.onchange = function(e){
+    var file = e.target.files[0]; if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      var XLSX = window.XLSX;
+      if(!XLSX){ loadXLSX(function(){richImportDip();}); return; }
+      var wb = XLSX.read(ev.target.result, {type:'array'});
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if(rows.length < 2){ toast('File vuoto o senza dati','err'); return; }
+      var header = rows[0].map(function(h){return String(h).toLowerCase().trim();});
+      var iNome = header.findIndex(function(h){return h.includes('nome');});
+      var iEG   = header.findIndex(function(h){return h.includes('google');});
+      var iEL   = header.findIndex(function(h){return h.includes('aziendale');});
+      var iSap  = header.findIndex(function(h){return h==='sap';});
+      var iPlant= header.findIndex(function(h){return h==='plant';});
+      var iResp = header.findIndex(function(h){return h.includes('responsabile');});
+      var iFerie= header.findIndex(function(h){return h.includes('ferie');});
+      var iHP   = header.findIndex(function(h){return h.includes('hp') || h.includes('permessi');});
+      var iPausa= header.findIndex(function(h){return h.includes('pausa');});
+      var aggiunti=0, aggiornati=0;
+      if(!permConfig.dipendenti) permConfig.dipendenti=[];
+      var dips = permConfig.dipendenti.filter(function(d){return !d._esempio;});
+      rows.slice(1).forEach(function(row){
+        var nome = String(row[iNome]||'').trim();
+        var eg   = String(row[iEG]||'').trim().toLowerCase();
+        if(!nome && !eg) return;
+        var existing = dips.find(function(d){
+          return (d.email_google&&d.email_google.toLowerCase()===eg) || d.nome===nome;
+        });
+        var respNome = iResp>=0 ? String(row[iResp]||'').trim() : '';
+        var respRec  = (permConfig.responsabili||[]).find(function(r){return r.nome===respNome&&!r._esempio;});
+        var respEmail= respRec ? (respRec.email_lavoro||respRec.email_google||'') : '';
+        var obj = existing || {};
+        obj.nome            = nome || obj.nome || '';
+        obj.email_google    = eg   || obj.email_google || '';
+        obj.email_lavoro    = iEL>=0  ? String(row[iEL]||'').trim()  : (obj.email_lavoro||'');
+        obj.sap             = iSap>=0 ? String(row[iSap]||'').trim() : (obj.sap||'');
+        obj.plant           = iPlant>=0? String(row[iPlant]||'').trim().toUpperCase() : (obj.plant||'');
+        obj.responsabile_nome  = respNome || obj.responsabile_nome || '';
+        obj.responsabile_email = respEmail || obj.responsabile_email || '';
+        obj.contratto = obj.contratto || {};
+        if(iFerie>=0 && row[iFerie]) obj.contratto.ferie_giorni = parseInt(row[iFerie])||22;
+        if(iHP>=0    && row[iHP])    obj.contratto.permessi_ore = parseInt(row[iHP])||32;
+        if(iPausa>=0 && row[iPausa]) obj.pausa_default = parseFloat(row[iPausa])||1;
+        if(!existing){ dips.push(obj); aggiunti++; } else { aggiornati++; }
+      });
+      permConfig.dipendenti = permConfig.dipendenti.filter(function(d){return d._esempio;}).concat(dips);
+      renderPermPanel();
+      toast('✅ Importati: '+aggiunti+' nuovi, '+aggiornati+' aggiornati — premi Salva per confermare');
+    };
+    reader.readAsArrayBuffer(file);
+  };
+  inp.click();
+}
+
+function richImportResp(){
+  var inp = document.createElement('input');
+  inp.type='file'; inp.accept='.xlsx,.xls,.csv';
+  inp.onchange = function(e){
+    var file = e.target.files[0]; if(!file) return;
+    var reader = new FileReader();
+    reader.onload = function(ev){
+      var XLSX = window.XLSX;
+      if(!XLSX){ loadXLSX(function(){richImportResp();}); return; }
+      var wb = XLSX.read(ev.target.result, {type:'array'});
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(ws, {header:1, defval:''});
+      if(rows.length < 2){ toast('File vuoto o senza dati','err'); return; }
+      var header = rows[0].map(function(h){return String(h).toLowerCase().trim();});
+      var iNome = header.findIndex(function(h){return h==='nome';});
+      var iEG   = header.findIndex(function(h){return h.includes('google');});
+      var iEL   = header.findIndex(function(h){return h.includes('aziendale');});
+      var iSup  = header.findIndex(function(h){return h.includes('superiore')&&!h.includes('email');});
+      var iSupE = header.findIndex(function(h){return h.includes('superiore')&&h.includes('email');});
+      var aggiunti=0, aggiornati=0;
+      if(!permConfig.responsabili) permConfig.responsabili=[];
+      var resps = permConfig.responsabili.filter(function(r){return !r._esempio;});
+      rows.slice(1).forEach(function(row){
+        var nome = String(row[iNome]||'').trim();
+        if(!nome) return;
+        var existing = resps.find(function(r){return r.nome===nome;});
+        var obj = existing || {};
+        obj.nome          = nome;
+        obj.email_google  = iEG>=0  ? String(row[iEG]||'').trim().toLowerCase()  : (obj.email_google||'');
+        obj.email_lavoro  = iEL>=0  ? String(row[iEL]||'').trim()                : (obj.email_lavoro||'');
+        obj.superiore_nome = iSup>=0 ? String(row[iSup]||'').trim()               : (obj.superiore_nome||'');
+        obj.superiore_email= iSupE>=0? String(row[iSupE]||'').trim().toLowerCase(): (obj.superiore_email||'');
+        if(!existing){ resps.push(obj); aggiunti++; } else { aggiornati++; }
+      });
+      permConfig.responsabili = permConfig.responsabili.filter(function(r){return r._esempio;}).concat(resps);
+      renderPermPanel();
+      toast('✅ Importati: '+aggiunti+' nuovi, '+aggiornati+' aggiornati — premi Salva per confermare');
+    };
+    reader.readAsArrayBuffer(file);
+  };
+  inp.click();
+}
+
+function loadXLSX(cb){
+  if(window.XLSX){ cb(); return; }
+  var s=document.createElement('script');
+  s.src='https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js';
+  s.onload=cb; document.head.appendChild(s);
 }
 </script>
 </body>
