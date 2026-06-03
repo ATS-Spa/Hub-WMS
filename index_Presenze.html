@@ -8153,7 +8153,21 @@ function richDelResp(i){
   });
 }
 function richSaveAnag(){
-  // Sincronizza responsabile_email per tutti i dipendenti prima di salvare
+  // Leggi i valori attuali dal DOM (select responsabile) e sincronizza in memoria
+  var dipReal = (permConfig.dipendenti||[]).filter(function(d){return !d._esempio;});
+  var table = document.querySelector('#richAnagDiv table');
+  if(table){
+    var rows = table.querySelectorAll('tbody tr');
+    rows.forEach(function(row, i){
+      if(!dipReal[i]) return;
+      var sel = row.querySelector('select.anag-select');
+      if(sel) dipReal[i].responsabile_nome = sel.value;
+      // Sincronizza email aziendale dipendente
+      var inputs = row.querySelectorAll('input.anag-input');
+      if(inputs[2]) dipReal[i].email_lavoro = inputs[2].value; // Email Aziendale
+    });
+  }
+  // Sincronizza responsabile_email
   (permConfig.dipendenti||[]).forEach(function(d){
     if(d._esempio) return;
     var rn = d.responsabile_nome||'';
@@ -8163,8 +8177,9 @@ function richSaveAnag(){
   toast('⏳ Salvo anagrafica…','warn');
   savePermConfigWithDips().then(function(){
     toast('✅ Anagrafica salvata su Drive');
-    _pausaCache=null; // invalida cache pausa
+    _pausaCache=null;
     richIdentifyUser();
+    renderPermPanel(); // ri-renderizza per mostrare i valori aggiornati
   }).catch(function(e){toast('✗ '+e.message,'err');});
 }
 </script>
