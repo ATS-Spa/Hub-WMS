@@ -2833,16 +2833,19 @@ function loadAllFiles(){
   listFiles(q).then(function(files){
     allFiles=files.filter(function(f){
       var n=f.name.replace(/\.xlsx$/i,'');
-      return /^[A-Za-z]+_P\d+_\d{6}$/i.test(n)&&canSeeFile(f.name);
+      return /^.+_P\d+_\d{6}$/i.test(n)&&canSeeFile(f.name);
     });
     buildDynamicFilters();
     buildYears(); // aggiorna anni con quelli reali dai file Drive
   }).catch(function(e){console.error('[WMS] loadAllFiles error:',e);});
 }
 function parseFileName(name){
-  var m=name.replace(/\.xlsx$/i,'').match(/^([A-Za-z]+)_(P\d+)_(\d{4})(\d{2})$/i);
+  var n=name.replace(/\.xlsx$/i,'');
+  var m=n.match(/^(.+?)_(P\d+)_(\d{4})(\d{2})$/i);
   if(!m)return null;
-  return{resp:m[1],plant:m[2].toUpperCase(),year:parseInt(m[3]),month:parseInt(m[4]),full:name};
+  var resp=m[1].trim();
+  if(!resp) return null;
+  return{resp:resp,plant:m[2].toUpperCase(),year:parseInt(m[3]),month:parseInt(m[4]),full:name};
 }
 function buildDynamicFilters(){
   var parsed=allFiles.map(function(f){return parseFileName(f.name);}).filter(Boolean);
