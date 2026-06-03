@@ -4679,6 +4679,18 @@ function renderPermPanel(){
     h += '</div>';
   }
   document.getElementById('permPanel').innerHTML=h;
+  // Forza il valore del select responsabile via DOM (il replace string può fallire)
+  var dipReal=(permConfig.dipendenti||[]).filter(function(d){return !d._esempio;});
+  var sels=document.querySelectorAll('#anagBody select.anag-select');
+  sels.forEach(function(sel,idx){
+    var d=dipReal[idx];
+    if(!d||!d.responsabile_nome) return;
+    for(var i=0;i<sel.options.length;i++){
+      if(sel.options[i].value===d.responsabile_nome){
+        sel.selectedIndex=i; break;
+      }
+    }
+  });
 }
 function updateDefault(){
   var secs=[];
