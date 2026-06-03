@@ -2836,9 +2836,6 @@ function loadAllFiles(){
     });
     buildDynamicFilters();
     buildYears();
-    // Se il pannello permessi/anagrafica è visibile, ri-renderizza con i file aggiornati
-    var permSec = document.getElementById('secPerm');
-    if(permSec && permSec.style.display !== 'none') renderPermPanel();
   }).catch(function(e){console.error('[WMS] loadAllFiles error:',e);});
 }
 function parseFileName(name){
@@ -8036,6 +8033,13 @@ function richRenderAnagPanel(){
   var respNomi = {};
   (permConfig.responsabili||[]).forEach(function(r){if(r.nome&&!r._esempio)respNomi[r.nome]=true;});
   (allFiles||[]).forEach(function(f){var p=parseFileName(f.name);if(p&&p.resp)respNomi[p.resp]=true;});
+  // Se ancora nessun responsabile trovato e allFiles non è pronto, riprova tra 1s
+  if(!Object.keys(respNomi).length && (!allFiles||!allFiles.length)){
+    setTimeout(function(){
+      var permSec=document.getElementById('secPerm');
+      if(permSec&&permSec.style.display!=='none') renderPermPanel();
+    }, 1000);
+  }
   var respOpts = Object.keys(respNomi).sort().map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
 
   var h = '<div class="anag-panel">';
