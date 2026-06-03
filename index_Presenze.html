@@ -1921,7 +1921,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
       <button class="ba bghost" onclick="openMassivo('ferie')" id="fMassBtn" disabled style="border-color:rgba(59,130,246,.4);color:var(--blue)">📅 Inserimento Massivo</button>
       <div class="finfo" id="ferieInfo">Seleziona filtri e premi Carica</div>
       <div style="display:flex;gap:6px;margin-left:auto;align-items:center" id="ganttColToggles" style="display:none">
-        <button class="ba bghost" id="togSap" onclick="ganttToggleCol('sap')" style="padding:4px 10px;font-size:11px;font-family:var(--ffc);font-weight:700">SAP</button>
+        <button class="ba bghost" id="togSap" onclick="ganttToggleCol('sap')" style="padding:4px 10px;font-size:11px;font-family:var(--ffc);font-weight:700">Ext SAP</button>
         <button class="ba bghost" id="togFres" onclick="ganttToggleCol('fres')" style="padding:4px 10px;font-size:11px;font-family:var(--ffc);font-weight:700;color:var(--blue)">F.Res</button>
         <button class="ba bghost" id="togHpres" onclick="ganttToggleCol('hpres')" style="padding:4px 10px;font-size:11px;font-family:var(--ffc);font-weight:700;color:var(--purple)">HP.Res</button>
       </div>
@@ -3428,7 +3428,7 @@ function coopExport(){
   var dates=coopData?coopData.dates:getDates(y,m);
   var mName=MESI[parseInt(m)-1];
   var wb=XLSX.utils.book_new();
-  var hdr=['SAP','Nominativo','Responsabile','Plant','Tipo'];
+  var hdr=['Ext SAP','Nominativo','Responsabile','Plant','Tipo'];
   dates.forEach(function(d){hdr.push(d.day+'/'+GGS[d.weekday]);});
   var calRows=[hdr];
   coopEmps.forEach(function(e){
@@ -3445,7 +3445,7 @@ function coopExport(){
   var COOP_REP=[
     {l:'P',k:'X'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},{l:'PLT',k:'PLT'},{l:'PLT.ORE',k:'PLT_ore'},{l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'WEEK',k:'week'},{l:'H.FEST',k:'fest'}
   ];
-  var repHdr=['SAP','Nominativo','Resp.','Plant'].concat(COOP_REP.map(function(c){return c.l;}));
+  var repHdr=['Ext SAP','Nominativo','Resp.','Plant'].concat(COOP_REP.map(function(c){return c.l;}));
   var repRows=[repHdr];
   coopEmps.forEach(function(e){
     var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
@@ -3457,7 +3457,7 @@ function coopExport(){
   var commesseAllC=(permConfig&&permConfig.commesse)||[];
   var COOP_REP_C=COOP_REP.slice();
   commesseAllC.forEach(function(c){COOP_REP_C.push({l:c.code+'_h',k:'__comm_'+c.code});});
-  var repHdrC=['SAP','Nominativo','Resp.','Plant','Confermato'].concat(COOP_REP_C.map(function(c){return c.l;}));
+  var repHdrC=['Ext SAP','Nominativo','Resp.','Plant','Confermato'].concat(COOP_REP_C.map(function(c){return c.l;}));
   var repRowsC=[repHdrC];
   coopEmps.forEach(function(e){
     var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
@@ -3476,7 +3476,7 @@ function coopExport(){
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(repRowsC),mName+'_Report_Coop');
   // Sheet Commesse Coop
   if(commesseAllC.length){
-    var commHdrC=['Nominativo','SAP','Giorno'];
+    var commHdrC=['Nominativo','Ext SAP','Giorno'];
     commesseAllC.forEach(function(c){commHdrC.push(c.code);commHdrC.push(c.code+'_h');});
     var commRowsC=[commHdrC];
     coopEmps.forEach(function(e){
@@ -3499,7 +3499,7 @@ function coopPrint(){
   var y=document.getElementById('cYear').value,m=document.getElementById('cMonth').value;
   var dates=coopData?coopData.dates:getDates(parseInt(y),parseInt(m));
   var h='<style>body{font-family:Arial;font-size:8px}table{border-collapse:collapse;white-space:nowrap}th{background:#dde3ef;border:1px solid #aaa;padding:2px 4px;font-size:7px;text-align:center}td{border:1px solid #ddd;padding:2px 3px;text-align:center}.nc{text-align:left}.we{background:#f0f0f0;color:#aaa}h2{font-size:12px}</style>';
-  h+='<h2>Coop · '+MESI[m-1]+' '+y+'</h2><table><thead><tr><th>Dipendente</th><th>SAP</th><th>T</th>';
+  h+='<h2>Coop · '+MESI[m-1]+' '+y+'</h2><table><thead><tr><th>Dipendente</th><th>Ext SAP</th><th>T</th>';
   dates.forEach(function(d){h+='<th'+(d.weekday===0||d.weekday===6?' class="we"':'')+'>'+d.day+'</th>';});
   h+='<th>ORD</th><th>STR</th></tr></thead><tbody>';
   coopEmps.forEach(function(e){
@@ -3691,7 +3691,7 @@ function atsExport(){
   var dates=atsData?atsData.dates:getDates(y,m);
   var mName=MESI[parseInt(m)-1];
   var wb=XLSX.utils.book_new();
-  var hdr=['SAP','Nominativo','Responsabile','Plant','Tipo'];
+  var hdr=['Ext SAP','Nominativo','Responsabile','Plant','Tipo'];
   dates.forEach(function(d){hdr.push(d.day+'/'+GGS[d.weekday]);});
   var calRows=[hdr];
   atsEmps.forEach(function(e){
@@ -3707,7 +3707,7 @@ function atsExport(){
     {l:'H104',k:'H104'},{l:'104',k:'104'},{l:'CP',k:'CP'},{l:'HPE',k:'HPE'},{l:'PE',k:'PE'},
     {l:'SW',k:'SW'},{l:'Lutto',k:'Lutto'},{l:'TFS',k:'TFS'},{l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'WEEK',k:'week'},{l:'H.FEST',k:'fest'}
   ];
-  var atsRepHdr=['SAP','Nominativo','Resp.','Plant'].concat(ATS_REP.map(function(c){return c.l;}));
+  var atsRepHdr=['Ext SAP','Nominativo','Resp.','Plant'].concat(ATS_REP.map(function(c){return c.l;}));
   var repRows=[atsRepHdr];
   atsEmps.forEach(function(e){
     var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
@@ -3721,7 +3721,7 @@ function atsExport(){
     ATS_REP.push({l:c.code+'_h',k:'__comm_'+c.code});
   });
   // Ricalcola intestazioni con commesse
-  var atsRepHdr2=['SAP','Nominativo','Resp.','Plant'].concat(ATS_REP.map(function(c){return c.l;}));
+  var atsRepHdr2=['Ext SAP','Nominativo','Resp.','Plant'].concat(ATS_REP.map(function(c){return c.l;}));
   var repRows2=[atsRepHdr2];
   atsEmps.forEach(function(e){
     var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
@@ -3741,7 +3741,7 @@ function atsExport(){
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(repRows2),mName+'_Report_ATS');
   // Sheet Commesse
   if(commesseAll.length){
-    var commHdr=['Nominativo','SAP','Giorno'];
+    var commHdr=['Nominativo','Ext SAP','Giorno'];
     commesseAll.forEach(function(c){commHdr.push(c.code);commHdr.push(c.code+'_h');});
     var commRows=[commHdr];
     atsEmps.forEach(function(e){
@@ -4380,7 +4380,7 @@ function impDipPreview(){
     }
     var c=document.getElementById('impDipCount');
     if(c){c.style.display='';c.textContent=impDipRows.length+' trovati';}
-    var h='<table class="imp-table"><thead><tr><th>#</th><th>SAP</th><th>Nominativo</th><th>Plant</th><th>Responsabile</th></tr></thead><tbody>';
+    var h='<table class="imp-table"><thead><tr><th>#</th><th>Ext SAP</th><th>Nominativo</th><th>Plant</th><th>Responsabile</th></tr></thead><tbody>';
     if(!impDipRows.length){h+='<tr><td colspan="5" class="imp-empty">Nessun dipendente trovato — verifica le colonne</td></tr>';}
     impDipRows.slice(0,50).forEach(function(r,i){
       h+='<tr><td style="color:var(--muted);font-size:11px">'+(i+1)+'</td><td>'+esc(r.sap)+'</td><td style="font-weight:600;color:var(--text)">'+esc(r.nome)+'</td><td style="color:var(--blue)">'+esc(r.plant)+'</td><td style="color:var(--muted)">'+esc(r.resp)+'</td></tr>';
@@ -4661,7 +4661,7 @@ function renderPermPanel(){
     h+='</div>';
   });
   h+='<div style="display:flex;gap:8px;margin-top:10px;flex-wrap:wrap">';
-  h+='<input class="mi fc contratto-inp" id="newContrSap" type="text" placeholder="SAP" style="width:80px;padding:5px 8px">';
+  h+='<input class="mi fc contratto-inp" id="newContrSap" type="text" placeholder="Ext SAP" style="width:80px;padding:5px 8px">';
   h+='<input class="mi fc contratto-inp" id="newContrNome" type="text" placeholder="Nome dipendente" style="width:160px;padding:5px 8px">';
   h+='<input class="mi fc contratto-inp" id="newContrFerie" type="number" min="0" max="60" placeholder="Ferie gg" style="width:80px;padding:5px 8px">';
   h+='<input class="mi fc contratto-inp" id="newContrPerm" type="number" min="0" max="200" placeholder="Perm. h" style="width:80px;padding:5px 8px">';
@@ -4924,7 +4924,7 @@ function saveCommesseToSheet(mode, emp, di, fileId, sheetName, y, m){
   var tabName=(MESI[m-1]||m)+'_'+(mode==='ats'?'ATS':'Coop')+'_Commesse';
   var vals=emp.commesse[di]||{};
   // Build header row
-  var hdr=['Nominativo','SAP','Giorno'];
+  var hdr=['Nominativo','Ext SAP','Giorno'];
   commesse.forEach(function(c){hdr.push(c.code);hdr.push(c.code+'_h');});
   // Build data row
   var row=[nome,sap,d.day];
@@ -6305,7 +6305,7 @@ function ferieExport(){
 
   // SHEET 1: Calendario sigle
   var calRows=[];
-  var hdr1=['Dipendente','SAP'];
+  var hdr1=['Dipendente','Ext SAP'];
   var hdr2=['',''];
   for(var mi=mDa;mi<=mA;mi++){
     var nd=new Date(year,mi,0).getDate();
@@ -6343,7 +6343,7 @@ function ferieExport(){
   XLSX.utils.book_append_sheet(WB,wsCal,'Calendario');
 
   // SHEET 2: Residui
-  var repRows=[['Dipendente','SAP','Responsabile','Plant','Ferie tot.','Ferie godute','Ferie residue','Permessi tot. (h)','Permessi goduti (h)','Permessi residui (h)']];
+  var repRows=[['Dipendente','Ext SAP','Responsabile','Plant','Ferie tot.','Ferie godute','Ferie residue','Permessi tot. (h)','Permessi goduti (h)','Permessi residui (h)']];
   list.forEach(function(dip){
     var res=calcResiduo(dip.sap);
     repRows.push([dip.nome,dip.sap,dip.resp,dip.plant,res.ferieTot,res.ferieGodute,res.ferie,res.permTot,res.permGodute,res.permessi]);
@@ -6396,7 +6396,7 @@ function ganttMonthClick(sap,mese,year){
   var res=calcResiduo(sap);
 
   document.getElementById('meseDipTitle').textContent=MESI[mese-1]+' '+year+' — '+nome;
-  document.getElementById('meseDipSub').textContent='SAP '+sap;
+  document.getElementById('meseDipSub').textContent='Ext SAP '+sap;
   document.getElementById('meseDipResF').textContent='🏖 F: '+res.ferie+'/'+res.ferieTot;
   document.getElementById('meseDipResHP').textContent='⏱ HP: '+res.permessi+'h/'+res.permTot+'h';
 
@@ -8037,7 +8037,7 @@ function richRenderAnagPanel(){
 
   h += '<div style="overflow-x:auto">';
   h += '<table class="anag-table">';
-  h += '<thead><tr><th>Nome</th><th>Email Google</th><th>Email Aziendale</th><th>SAP</th><th>Plant</th><th>Responsabile</th><th>Ferie tot.</th><th>HP ore</th><th>Pausa std</th><th></th></tr></thead>';
+  h += '<thead><tr><th>Nome</th><th>Email Google</th><th>Email Aziendale</th><th>Ext SAP</th><th>Plant</th><th>Responsabile</th><th>Ferie tot.</th><th>HP ore</th><th>Pausa std</th><th></th></tr></thead>';
   h += '<tbody id="anagBody">';
   dips.forEach(function(d,i){
     h += richAnagRow(d,i,respOpts);
@@ -8170,7 +8170,7 @@ function richExportTemplateDip(){
   var XLSX = window.XLSX;
   if(!XLSX){ loadXLSX(richExportTemplateDip); return; }
   var ws = XLSX.utils.aoa_to_sheet([
-    ['Nome','Email Google','Email Aziendale','SAP','Plant','Responsabile','Ferie tot.','HP ore','Pausa std (h)'],
+    ['Nome','Email Google','Email Aziendale','Ext SAP','Plant','Responsabile','Ferie tot.','HP ore','Pausa std (h)'],
     ['Mario Rossi','mario.rossi@gmail.com','mrossi@atsgruppo.eu','123','P52','Morgillo','22','32','1']
   ]);
   ws['!cols'] = [{wch:20},{wch:28},{wch:28},{wch:8},{wch:8},{wch:15},{wch:10},{wch:8},{wch:12}];
