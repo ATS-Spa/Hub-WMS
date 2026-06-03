@@ -1,0 +1,1544 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>ATS Chart Studio</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
+<style>
+:root{
+  --bg:#0d1117;--bg2:#161b27;--bg3:#1e2535;--bg4:#252d3d;
+  --border:#2a3347;--text:#e2e8f0;--text2:#94a3b8;--text3:#64748b;
+  --accent:#3b82f6;--accent2:#60a5fa;--asoft:rgba(59,130,246,.13);
+  --ok:#10b981;--warn:#f59e0b;--err:#ef4444;
+  --r:10px;--rs:6px;--sh:0 4px 24px rgba(0,0,0,.5);
+  --sb-w:280px;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+
+/* TOPBAR */
+.topbar{display:flex;align-items:center;gap:10px;padding:9px 16px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:200;flex-wrap:wrap}
+.tb-left{display:flex;align-items:center;gap:10px}
+.logo{font-size:16px;font-weight:700;color:var(--accent2);letter-spacing:-.5px;white-space:nowrap}
+.logo span{color:var(--text3);font-weight:400;font-size:11px;margin-left:5px}
+.tb-right{display:flex;gap:6px;margin-left:auto;flex-wrap:wrap;align-items:center}
+.btn{display:inline-flex;align-items:center;gap:5px;padding:6px 12px;border-radius:var(--rs);font-size:12px;font-weight:500;cursor:pointer;border:1px solid var(--border);background:var(--bg3);color:var(--text);transition:all .15s;white-space:nowrap;user-select:none}
+.btn:hover{background:var(--bg4);border-color:var(--accent);color:var(--accent2)}
+.btn.primary{background:var(--accent);border-color:var(--accent);color:#fff}.btn.primary:hover{background:#2563eb}
+.btn.ok{background:var(--ok);border-color:var(--ok);color:#fff}.btn.ok:hover{background:#059669}
+.btn.warn{background:var(--warn);border-color:var(--warn);color:#000}
+.btn.sm{padding:4px 9px;font-size:11px}
+.btn.danger{border-color:rgba(239,68,68,.4);color:var(--err)}.btn.danger:hover{background:rgba(239,68,68,.1)}
+.btn.icon-btn{padding:6px 8px;font-size:14px}
+
+/* TAB freccia laterale — fuori dalla sidebar, posizione fissa */
+.sb-tab{
+  position:fixed;
+  top:50vh;
+  transform:translateY(-50%);
+  width:20px; height:50px;
+  background:var(--bg2);
+  border:1px solid var(--border);
+  border-left:none;
+  border-radius:0 var(--rs) var(--rs) 0;
+  display:flex; align-items:center; justify-content:center;
+  cursor:pointer;
+  z-index:300;
+  transition:background .15s, color .15s, left .3s cubic-bezier(.4,0,.2,1);
+  color:var(--text3);
+  font-size:11px;
+  user-select:none;
+  left:var(--sb-w);
+}
+.sb-tab:hover{background:var(--bg4);color:var(--accent2);border-color:var(--accent)}
+.sb-tab .arr{transition:transform .3s;display:inline-block;line-height:1}
+.sb-tab.collapsed{left:0;border-left:1px solid var(--border);border-radius:var(--rs);}
+.sb-tab.collapsed .arr{transform:rotate(180deg)}
+
+/* LAYOUT */
+.app{display:flex;height:calc(100vh - 50px);transition:none}
+
+/* SIDEBAR */
+.sidebar{
+  width:var(--sb-w);min-width:var(--sb-w);
+  background:var(--bg2);border-right:1px solid var(--border);
+  overflow-y:auto;
+  flex-shrink:0;display:flex;flex-direction:column;
+  transition:width .3s cubic-bezier(.4,0,.2,1), min-width .3s cubic-bezier(.4,0,.2,1);
+  position:relative;
+}
+.sidebar.collapsed{width:0;min-width:0;border-right:none;overflow-y:hidden}
+
+/* MAIN */
+.main{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+
+/* SIDEBAR SECTIONS */
+.s-section{border-bottom:1px solid var(--border)}
+.s-header{display:flex;align-items:center;justify-content:space-between;padding:9px 13px;cursor:pointer;user-select:none;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--text3)}
+.s-header:hover{color:var(--text2);background:rgba(255,255,255,.02)}
+.s-arr{transition:transform .2s;font-size:9px}
+.s-header.open .s-arr{transform:rotate(90deg)}
+.s-body{padding:11px 13px;display:none;flex-direction:column;gap:8px}
+.s-body.vis{display:flex}
+
+/* FORMS */
+.fl{font-size:10px;color:var(--text3);font-weight:600;text-transform:uppercase;letter-spacing:.05em;margin-bottom:3px}
+input[type=text],select,input[type=number],textarea{width:100%;padding:5px 8px;border-radius:var(--rs);background:var(--bg3);border:1px solid var(--border);color:var(--text);font-size:12px;outline:none;transition:border-color .15s}
+input[type=text]:focus,select:focus,input[type=number]:focus{border-color:var(--accent);box-shadow:0 0 0 2px rgba(59,130,246,.15)}
+select option{background:var(--bg3)}
+input[type=color]{width:28px;height:26px;border-radius:var(--rs);border:1px solid var(--border);background:none;cursor:pointer;padding:2px}
+.fld{display:flex;flex-direction:column;gap:4px}
+.frow{display:flex;gap:7px;align-items:center}
+.crow{display:flex;flex-wrap:wrap;gap:5px}
+.cswatch{position:relative}
+.cswatch input[type=color]{width:26px;height:26px}
+.cdel{position:absolute;top:-5px;right:-5px;width:13px;height:13px;background:var(--err);border-radius:50%;border:none;cursor:pointer;font-size:8px;color:#fff;display:none;align-items:center;justify-content:center;line-height:1}
+.cswatch:hover .cdel{display:flex}
+
+/* DROP ZONE */
+.dz{border:2px dashed var(--border);border-radius:var(--r);padding:22px 12px;text-align:center;cursor:pointer;transition:all .2s;background:rgba(255,255,255,.01)}
+.dz:hover,.dz.over{border-color:var(--accent);background:var(--asoft)}
+.dz-icon{font-size:28px;margin-bottom:6px;opacity:.55}
+.dz-t{font-size:13px;font-weight:600;color:var(--text);margin-bottom:3px}
+.dz-s{font-size:10px;color:var(--text3)}
+
+/* KPI GRID */
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(150px,1fr));gap:10px}
+.kpi-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:12px 14px;display:flex;flex-direction:column;gap:5px;position:relative;overflow:hidden;cursor:default}
+.kpi-card::before{content:'';position:absolute;top:0;left:0;right:0;height:3px;background:var(--kpi-color,var(--accent))}
+.kpi-label{font-size:9px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em}
+.kpi-value{font-size:24px;font-weight:700;color:var(--text);line-height:1.1}
+.kpi-sub{font-size:10px;color:var(--text3)}
+.kpi-trend{font-size:11px;font-weight:600}
+.kpi-trend.up{color:var(--ok)}.kpi-trend.dn{color:var(--err)}
+.kpi-spark{height:36px;position:relative;margin-top:2px}
+
+/* CHART CARD */
+.chart-card{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);padding:13px;display:flex;flex-direction:column;gap:9px;transition:border-color .15s}
+.chart-card.dragging{opacity:.4;border-color:var(--accent)}
+.chart-card.drop-t{border-color:var(--accent);background:var(--asoft)}
+.ch-header{display:flex;align-items:center;gap:7px}
+.ch-drag{cursor:grab;color:var(--text3);font-size:13px;padding:2px;line-height:1;flex-shrink:0;transition:color .15s}
+.ch-drag:hover{color:var(--text2)}
+.ch-title{font-size:13px;font-weight:600;color:var(--text);flex:1;min-width:0;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+.ch-badge{font-size:9px;font-weight:700;padding:2px 7px;border-radius:20px;background:var(--asoft);color:var(--accent2);border:1px solid rgba(59,130,246,.3);text-transform:uppercase;flex-shrink:0}
+.ch-wrap{position:relative;width:100%}
+.ch-actions{display:flex;gap:5px;flex-wrap:wrap;align-items:center}
+
+/* TABLE sotto grafico */
+.chart-table-wrap{overflow:auto;border-radius:var(--rs) var(--rs) 0 0;border:1px solid var(--border);position:relative}
+.tbl-resize-handle{height:9px;background:var(--bg4);border:1px solid var(--border);border-top:none;border-radius:0 0 var(--rs) var(--rs);cursor:ns-resize;display:flex;align-items:center;justify-content:center;user-select:none;transition:background .15s;margin-bottom:6px}
+.tbl-resize-handle:hover,.tbl-resize-handle.dragging{background:var(--asoft);border-color:var(--accent)}
+.tbl-resize-handle::after{content:'⋯';font-size:14px;color:var(--text3);letter-spacing:3px}
+.chart-table-wrap table{border-collapse:collapse;width:100%;font-size:11px}
+.chart-table-wrap th{background:var(--bg3);color:var(--text2);font-weight:600;padding:5px 10px;border:1px solid var(--border);position:sticky;top:0;z-index:1;text-align:left;white-space:nowrap}
+.chart-table-wrap td{padding:4px 10px;border:1px solid var(--border);color:var(--text);white-space:nowrap}
+.chart-table-wrap tr:hover td{background:var(--bg3)}
+.chart-table-wrap td.num{text-align:right;font-variant-numeric:tabular-nums}
+.chart-table-wrap .total-row td{background:var(--bg4);font-weight:700;border-top:2px solid var(--border)}
+
+/* CHARTS GRID */
+.cgrid{display:grid;grid-template-columns:1fr;gap:14px}
+.cgrid.c2{grid-template-columns:1fr 1fr}
+.cgrid.c3{grid-template-columns:1fr 1fr 1fr}
+
+/* PREVIEW TABLE */
+.tw{overflow-x:auto;max-height:180px;border-radius:var(--rs)}
+table.prev{border-collapse:collapse;width:100%;font-size:10px}
+table.prev th,table.prev td{padding:3px 7px;border:1px solid var(--border);white-space:nowrap}
+table.prev th{background:var(--bg4);color:var(--text2);font-weight:600;position:sticky;top:0;z-index:1}
+table.prev tr:hover td{background:var(--bg3)}
+
+/* FILTER TAGS */
+.ftags{display:flex;flex-wrap:wrap;gap:4px;max-height:110px;overflow-y:auto}
+.ftag{display:inline-flex;align-items:center;padding:2px 7px;border-radius:20px;font-size:10px;background:var(--bg4);border:1px solid var(--border);color:var(--text2);cursor:pointer;user-select:none;transition:all .12s}
+.ftag.on{background:var(--asoft);border-color:var(--accent);color:var(--accent2)}
+
+/* MODAL */
+.moverlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.8);z-index:400;align-items:center;justify-content:center;padding:14px}
+.moverlay.vis{display:flex}
+.modal{background:var(--bg2);border:1px solid var(--border);border-radius:var(--r);width:min(720px,100%);max-height:92vh;overflow-y:auto;box-shadow:var(--sh)}
+.mhead{padding:13px 17px;border-bottom:1px solid var(--border);display:flex;align-items:center;justify-content:space-between;position:sticky;top:0;background:var(--bg2);z-index:1}
+.mtitle{font-size:14px;font-weight:700}
+.mclose{background:none;border:none;color:var(--text3);cursor:pointer;font-size:17px;line-height:1;padding:2px 5px;border-radius:4px}
+.mclose:hover{color:var(--text);background:var(--bg4)}
+.mbody{padding:16px;display:flex;flex-direction:column;gap:13px}
+.mfoot{padding:11px 17px;border-top:1px solid var(--border);display:flex;justify-content:flex-end;gap:8px}
+.g2{display:grid;grid-template-columns:1fr 1fr;gap:9px}
+.g3{display:grid;grid-template-columns:1fr 1fr 1fr;gap:9px}
+.g4{display:grid;grid-template-columns:1fr 1fr 1fr 1fr;gap:9px}
+.sep{height:1px;background:var(--border);margin:2px 0}
+.m-section-title{font-size:11px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.07em;padding:4px 0}
+
+/* TOAST */
+.tcon{position:fixed;bottom:16px;right:16px;z-index:9999;display:flex;flex-direction:column;gap:6px;pointer-events:none}
+.toast{padding:8px 14px;border-radius:var(--rs);font-size:12px;background:var(--bg4);border:1px solid var(--border);box-shadow:var(--sh);animation:slin .2s ease;max-width:300px;pointer-events:none}
+.toast.ok{border-color:var(--ok);color:#6ee7b7}
+.toast.err{border-color:var(--err);color:#fca5a5}
+.toast.warn{border-color:var(--warn);color:#fcd34d}
+@keyframes slin{from{transform:translateX(40px);opacity:0}to{transform:translateX(0);opacity:1}}
+
+/* STATUS BAR */
+.sbar{background:var(--bg3);border-top:1px solid var(--border);padding:4px 16px;font-size:10px;color:var(--text3);display:flex;gap:16px;flex-wrap:wrap;flex-shrink:0}
+
+/* DRIVE */
+.dbadge{display:inline-flex;align-items:center;gap:5px;font-size:11px;padding:3px 9px;border-radius:20px;background:var(--bg3);border:1px solid var(--border);color:var(--text3);flex-shrink:0}
+.dbadge.on{border-color:var(--ok);color:#6ee7b7;background:rgba(16,185,129,.08)}
+.ddot{width:5px;height:5px;border-radius:50%;background:currentColor}
+
+/* MISC */
+.nodata{text-align:center;padding:70px 20px;color:var(--text3);font-size:13px}
+.htxt{font-size:10px;color:var(--text3);line-height:1.5}
+.pill{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:10px;background:var(--bg4);border:1px solid var(--border);color:var(--text2)}
+
+/* GAUGE */
+.gauge-wrap{display:flex;align-items:center;justify-content:center;width:100%;height:100%}
+
+/* FUNNEL */
+.funnel-wrap{display:flex;flex-direction:column;align-items:stretch;gap:3px;padding:6px 4px;height:100%;justify-content:center}
+.funnel-row{display:flex;align-items:center;gap:8px}
+.funnel-bar-outer{flex:1;display:flex;justify-content:center}
+.funnel-bar{height:32px;border-radius:4px;display:flex;align-items:center;justify-content:center;font-size:11px;font-weight:700;color:#fff;min-width:30px;transition:width .3s}
+.funnel-lbl{width:100px;font-size:10px;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap;text-align:right}
+.funnel-val{width:70px;font-size:10px;color:var(--text);font-variant-numeric:tabular-nums}
+
+/* HEATMAP */
+.heatmap-wrap{overflow:auto;height:100%}
+.hm-tbl{border-collapse:collapse;font-size:10px;min-width:100%}
+.hm-tbl td,.hm-tbl th{padding:4px 7px;text-align:center;min-width:32px;border:1px solid rgba(255,255,255,.04)}
+.hm-tbl th{color:var(--text3);font-weight:600;background:var(--bg3);position:sticky;top:0;z-index:1;white-space:nowrap}
+.hm-tbl .row-hd{text-align:left;color:var(--text2);font-weight:600;position:sticky;left:0;background:var(--bg3);z-index:2;white-space:nowrap}
+
+/* TREEMAP */
+.treemap-wrap{width:100%;height:100%}
+
+/* BULLET */
+.bullet-wrap{display:flex;flex-direction:column;gap:12px;padding:8px 2px;height:100%;justify-content:center}
+.bullet-row{display:flex;flex-direction:column;gap:4px}
+.bullet-lbl{font-size:11px;color:var(--text2);font-weight:500}
+.bullet-track{position:relative;height:22px;background:var(--bg4);border-radius:4px;overflow:hidden}
+.bullet-bg{position:absolute;height:100%;border-radius:4px}
+.bullet-act{position:absolute;height:65%;top:17.5%;border-radius:3px}
+.bullet-tgt{position:absolute;width:2px;height:100%;background:#fff;opacity:.8}
+.bullet-vals{display:flex;justify-content:space-between;font-size:9px;color:var(--text3)}
+
+/* WATERFALL labels */
+.wf-note{font-size:10px;color:var(--text3);padding:3px 0}
+
+/* SCROLLBAR */
+::-webkit-scrollbar{width:5px;height:5px}
+::-webkit-scrollbar-track{background:transparent}
+::-webkit-scrollbar-thumb{background:var(--bg4);border-radius:3px}
+::-webkit-scrollbar-thumb:hover{background:var(--border)}
+
+@media(max-width:820px){.sidebar.collapsed{width:0!important;min-width:0!important}.cgrid.c2,.cgrid.c3{grid-template-columns:1fr}}
+</style>
+</head>
+<body>
+
+<!-- TOPBAR -->
+<div class="topbar">
+  <div class="logo">ATS Chart Studio <span>v3.1 Pro</span></div>
+  <div class="tb-right">
+    <div id="dbadge" class="dbadge"><span class="ddot"></span>💾 —</div>
+    <button class="btn ok" onclick="driveSave()">💾 Salva Config</button>
+    <button class="btn" onclick="document.getElementById('jimp').click()">📂 Importa</button>
+    <button class="btn primary" onclick="addChart()">＋ Grafico</button>
+    <button class="btn" onclick="addKpiBlock()">📊 KPI</button>
+    <button class="btn" id="gridBtn" onclick="cycleGrid()">▦ Layout</button>
+    <button class="btn" onclick="exportAll()">🖼 Export</button>
+  </div>
+</div>
+
+<div class="app" id="app">
+<!-- SIDEBAR -->
+<div class="sidebar" id="sidebar">
+
+  <div class="s-section">
+    <div class="s-header open" onclick="tgl(this)"><span>📂 Sorgente Dati</span><span class="s-arr">▶</span></div>
+    <div class="s-body vis">
+      <div class="dz" id="dz" onclick="document.getElementById('fi').click()">
+        <div class="dz-icon">📊</div>
+        <div class="dz-t">Carica Excel / CSV</div>
+        <div class="dz-s">.xlsx · .xls · .csv · drag & drop</div>
+      </div>
+      <input type="file" id="fi" accept=".xlsx,.xls,.csv" style="display:none" onchange="handleFile(event)">
+      <div id="shSel" style="display:none" class="fld">
+        <div class="fl">Foglio</div>
+        <select id="shSelect" onchange="loadSheet()"></select>
+      </div>
+      <div id="dInfo" class="htxt" style="display:none"></div>
+    </div>
+  </div>
+
+  <div class="s-section">
+    <div class="s-header" onclick="tgl(this)"><span>🔍 Filtri</span><span class="s-arr">▶</span></div>
+    <div class="s-body">
+      <div class="fld"><div class="fl">Colonna filtro</div><select id="fCol" onchange="updateFVals()"></select></div>
+      <div class="fld"><div class="fl">Valori (click per filtrare)</div><div id="fTags" class="ftags"><span class="htxt">Carica dati prima</span></div></div>
+      <div class="fld"><div class="fl">Limite righe</div>
+        <div class="frow"><input type="number" id="rowLim" value="500" min="1" max="999999" style="width:75px"><button class="btn sm" onclick="applyF()">Applica</button></div>
+      </div>
+    </div>
+  </div>
+
+  <div class="s-section">
+    <div class="s-header" onclick="tgl(this)"><span>🎨 Stile Globale</span><span class="s-arr">▶</span></div>
+    <div class="s-body">
+      <div class="fld"><div class="fl">Palette colori</div>
+        <div id="gPal" class="crow"></div>
+        <button class="btn sm" onclick="addGC()" style="margin-top:4px">+ Colore</button>
+      </div>
+      <div class="g2">
+        <div class="fld"><div class="fl">Colore assi</div><input type="color" id="axCol" value="#94a3b8" onchange="refreshAll()"></div>
+        <div class="fld"><div class="fl">Griglia</div>
+          <select id="gridLn" onchange="refreshAll()"><option value="show">Visibile</option><option value="hide">Nascosta</option></select>
+        </div>
+      </div>
+      <div class="fld"><div class="fl">Animazione (ms)</div><input type="number" id="animMs" value="400" min="0" max="2000"></div>
+    </div>
+  </div>
+
+  <div class="s-section">
+    <div class="s-header" onclick="tgl(this)"><span>💾 Salva / Carica Config</span><span class="s-arr">▶</span></div>
+    <div class="s-body">
+      <div class="htxt">La config viene salvata in locale (localStorage) e scaricata come JSON. Per caricarla su Drive trascina il file .json qui sotto o nella chat con Claude.</div>
+      <div class="fld"><div class="fl">Nome configurazione</div><input type="text" id="cfgName" value="dashboard_config"></div>
+      <button class="btn ok" onclick="driveSave()" style="width:100%">💾 Salva + Scarica JSON</button>
+      <div style="display:flex;gap:6px">
+        <button class="btn" onclick="driveLoad()" style="flex:1">📋 Config locali</button>
+        <button class="btn" onclick="document.getElementById('jimp').click()" style="flex:1">📂 Importa JSON</button>
+      </div>
+      <input type="file" id="jimp" accept=".json" style="display:none" onchange="importJSON(event)">
+      <div id="cfgList" style="display:none" class="fld">
+        <div class="fl">Config salvate</div>
+        <select id="cfgSel"></select>
+        <div style="display:flex;gap:5px">
+          <button class="btn sm" onclick="driveLoadSel()" style="flex:1">Carica</button>
+          <button class="btn sm danger" onclick="deleteLocal()" style="flex:1">Elimina</button>
+        </div>
+      </div>
+      <div id="driveLog" class="htxt"></div>
+    </div>
+  </div>
+
+  <div class="s-section">
+    <div class="s-header open" onclick="tgl(this)"><span>📋 Anteprima Dati</span><span class="s-arr">▶</span></div>
+    <div class="s-body vis" id="prevBody"><span class="htxt">Nessun dato caricato</span></div>
+  </div>
+
+  <div class="s-section">
+    <div class="s-header open" onclick="tgl(this)"><span>📌 Grafici Attivi</span><span class="s-arr">▶</span></div>
+    <div class="s-body vis" id="chartList"><span class="htxt">Nessun grafico</span></div>
+  </div>
+
+</div><!-- /sidebar -->
+
+<!-- TAB freccia laterale (fuori dalla sidebar per evitare clipping) -->
+<div class="sb-tab" id="sbTab" onclick="toggleSidebar()" title="Mostra/Nascondi pannello">
+  <span class="arr">◀</span>
+</div>
+
+<!-- MAIN -->
+<div class="main" id="mainArea">
+  <div class="nodata" id="noData">
+    <div style="font-size:48px;margin-bottom:12px">📊</div>
+    <div style="font-size:18px;font-weight:700;margin-bottom:6px;color:var(--text)">ATS Chart Studio Pro</div>
+    <div style="margin-bottom:4px">Carica un file Excel o CSV dalla sidebar per iniziare</div>
+    <div style="font-size:11px;color:var(--text3);margin-top:14px">20 tipi di grafico · KPI Cards · Tabella dati · Filtri · Export · Google Drive</div>
+  </div>
+  <div id="kpiArea"></div>
+  <div class="cgrid" id="cgrid"></div>
+</div>
+</div><!-- /app -->
+
+<div class="sbar">
+  <span id="st-rows">Righe: —</span>
+  <span id="st-filt">Filtrate: —</span>
+  <span id="st-cols">Colonne: —</span>
+  <span id="st-file">File: nessuno</span>
+  <span id="st-charts">Grafici: 0</span>
+  <span id="st-drive">Drive: —</span>
+  <span style="margin-left:auto" id="st-time"></span>
+</div>
+
+<div class="tcon" id="tcon"></div>
+
+<!-- MODAL -->
+<div class="moverlay" id="moverlay">
+  <div class="modal">
+    <div class="mhead">
+      <div class="mtitle" id="mtitle">Configura Grafico</div>
+      <button class="mclose" onclick="closeM()">✕</button>
+    </div>
+    <div class="mbody" id="mbody"></div>
+    <div class="mfoot">
+      <button class="btn" onclick="closeM()">Annulla</button>
+      <button class="btn primary" onclick="applyM()">✓ Applica</button>
+    </div>
+  </div>
+</div>
+
+<script>
+// ================================================================
+// STATO GLOBALE
+// ================================================================
+let rawData=[], filteredData=[], columns=[], workbook=null;
+let charts=[], kpiBlocks=[];
+let editId=null, gridMode=1, chartCtr=0, kpiCtr=0;
+let filterActive={};
+let sidebarOpen=true;
+let gPal=['#3b82f6','#10b981','#f59e0b','#ef4444','#8b5cf6',
+          '#06b6d4','#ec4899','#84cc16','#f97316','#a78bfa',
+          '#22d3ee','#fb923c','#4ade80','#f472b6','#facc15'];
+
+const FOLDER_ID='1litZEq59R1vFdUJBUlXsWhoHK3XkxAwr'; // cartella Drive Chart Studio
+const CHART_TYPES=[
+  {id:'bar',l:'Barre verticali'},{id:'bar-h',l:'Barre orizzontali'},
+  {id:'line',l:'Linee'},{id:'area',l:'Area'},
+  {id:'pie',l:'Torta'},{id:'doughnut',l:'Donut'},
+  {id:'radar',l:'Radar'},{id:'polar',l:'Polare'},
+  {id:'scatter',l:'Scatter (X vs Y)'},{id:'bubble',l:'Bubble'},
+  {id:'histogram',l:'Istogramma'},{id:'waterfall',l:'Waterfall'},
+  {id:'funnel',l:'Funnel'},{id:'heatmap',l:'Heatmap'},
+  {id:'treemap',l:'Treemap'},{id:'gauge',l:'Gauge'},
+  {id:'bullet',l:'Bullet Chart'},{id:'mixed',l:'Barre + Linee'},
+  {id:'stacked',l:'Barre Impilate'},{id:'stacked-area',l:'Area Impilata'},
+];
+
+// ================================================================
+// INIT
+// ================================================================
+window.addEventListener('load',()=>{
+  renderGP();
+  setInterval(()=>{document.getElementById('st-time').textContent=new Date().toLocaleTimeString('it-IT')},1000);
+  setupDZ();
+  localInit();
+});
+
+// ================================================================
+// SIDEBAR TOGGLE
+// ================================================================
+function toggleSidebar(){
+  sidebarOpen=!sidebarOpen;
+  const sb=document.getElementById('sidebar');
+  const tab=document.getElementById('sbTab');
+  sb.classList.toggle('collapsed',!sidebarOpen);
+  if(tab) tab.classList.toggle('collapsed',!sidebarOpen);
+}
+
+// ================================================================
+// DRIVE — token ricevuto dall'HUB WMS via _HUB_TOKEN
+// Fallback: localStorage + import JSON
+// ================================================================
+const LS_PREFIX='ats_chart_studio_';
+
+function getToken(){
+  // Prima scelta: token iniettato dall'HUB genitore
+  if(window._HUB_TOKEN) return window._HUB_TOKEN;
+  // Seconda: token salvato da hub in localStorage
+  try{const s=localStorage.getItem('wms_hub_token');if(s)return JSON.parse(s);}catch(e){}
+  return null;
+}
+
+function localInit(){
+  updateLocalList();
+  const tok=getToken();
+  setBadge(!!tok);
+  document.getElementById('st-drive').textContent=tok?'Drive: ✓':'Drive: offline';
+  if(tok) toast('Drive connesso ✓','ok');
+}
+
+function setBadge(ok){
+  const el=document.getElementById('dbadge');
+  el.className='dbadge'+(ok?' on':'');
+  el.innerHTML=`<span class="ddot"></span>${ok?'☁ Drive ✓':'💾 Locale'}`;
+}
+
+async function driveReq(method,url,body=null,extraHeaders={}){
+  const tok=getToken();
+  if(!tok) throw new Error('Token non disponibile — accedi dall\' HUB WMS');
+  const opts={method,headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json',...extraHeaders}};
+  if(body) opts.body=typeof body==='string'?body:JSON.stringify(body);
+  const r=await fetch(url,opts);
+  if(!r.ok){const t=await r.text().catch(()=>'');throw new Error(`${r.status}: ${t.slice(0,120)}`);}
+  const ct=r.headers.get('content-type')||'';
+  return ct.includes('json')?r.json():r.text();
+}
+
+async function driveSave(){
+  const name=(document.getElementById('cfgName').value||'dashboard_config').replace(/\.json$/,'')+'.json';
+  const payload=buildPayload();
+  const json=JSON.stringify(payload,null,2);
+  const tok=getToken();
+
+  // Salva sempre in localStorage come backup
+  try{
+    const lk=LS_PREFIX+name.replace('.json','');
+    localStorage.setItem(lk,json);
+    updateLocalList();
+  }catch(e){}
+
+  if(!tok){
+    // Fallback: scarica JSON
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([json],{type:'application/json'}));
+    a.download=name; a.click();
+    toast('⚠ Drive non disponibile — config scaricata come JSON','warn');
+    return;
+  }
+
+  toast('Salvataggio su Drive…','warn');
+  try{
+    const q=`name='${name}' and '${FOLDER_ID}' in parents and trashed=false`;
+    const search=await driveReq('GET',`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)`);
+    const existing=(search.files||[])[0];
+    let fileId;
+    if(existing){
+      const upUrl=`https://www.googleapis.com/upload/drive/v3/files/${existing.id}?uploadType=media`;
+      const r2=await fetch(upUrl,{method:'PATCH',headers:{Authorization:'Bearer '+tok,'Content-Type':'application/json'},body:json});
+      if(!r2.ok) throw new Error(r2.status);
+      fileId=existing.id;
+    } else {
+      const meta={name,mimeType:'application/json',parents:[FOLDER_ID]};
+      const bnd='ATS_'+Date.now();
+      const mp=`--${bnd}\r\nContent-Type: application/json\r\n\r\n${JSON.stringify(meta)}\r\n--${bnd}\r\nContent-Type: application/json\r\n\r\n${json}\r\n--${bnd}--`;
+      const cr=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{
+        method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':`multipart/related; boundary=${bnd}`},body:mp});
+      if(!cr.ok) throw new Error(cr.status);
+      const cd=await cr.json(); fileId=cd.id;
+    }
+    setBadge(true);
+    document.getElementById('driveLog').textContent='Salvato: '+name+' ('+new Date().toLocaleTimeString('it-IT')+')';
+    toast('✓ Salvato su Drive: '+name,'ok');
+  }catch(e){
+    toast('Errore Drive: '+e.message+' — config scaricata localmente','err');
+    document.getElementById('driveLog').textContent='Errore: '+e.message;
+    // Fallback download
+    const a=document.createElement('a');
+    a.href=URL.createObjectURL(new Blob([json],{type:'application/json'}));
+    a.download=name; a.click();
+  }
+}
+
+async function driveLoad(){
+  const tok=getToken();
+  if(!tok){
+    // Solo lista locale
+    document.getElementById('cfgList').style.display='';
+    updateLocalList();
+    toast('Drive non disponibile — mostro config locali','warn');
+    return;
+  }
+  toast('Ricerca config su Drive…','warn');
+  try{
+    const q=`'${FOLDER_ID}' in parents and mimeType='application/json' and trashed=false`;
+    const res=await driveReq('GET',`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime+desc`);
+    const files=res.files||[];
+    const sel=document.getElementById('cfgSel');
+    // Mescola Drive + locale
+    const lsKeys=[];
+    for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(LS_PREFIX)&&!k.endsWith('__last'))lsKeys.push({id:'ls:'+k,name:k.replace(LS_PREFIX,'')+'  [locale]'});}
+    const allOpts=[...files.map(f=>({id:'dr:'+f.id,name:f.name+' ('+new Date(f.modifiedTime).toLocaleDateString('it-IT')+')'})),...lsKeys];
+    if(!allOpts.length){toast('Nessuna config trovata','warn');return;}
+    document.getElementById('cfgList').style.display='';
+    sel.innerHTML=allOpts.map(o=>`<option value="${o.id}">${o.name}</option>`).join('');
+    toast(`Config: ${files.length} su Drive, ${lsKeys.length} locali`,'ok');
+    setBadge(true);
+  }catch(e){toast('Errore Drive: '+e.message,'err');}
+}
+
+async function driveLoadSel(){
+  const val=document.getElementById('cfgSel').value; if(!val)return;
+  try{
+    if(val.startsWith('ls:')){
+      // Locale
+      const raw=localStorage.getItem(val.replace('ls:',''));
+      if(!raw){toast('Config non trovata','err');return;}
+      applyPayload(JSON.parse(raw));
+      toast('Config locale caricata ✓','ok');
+    } else {
+      // Drive
+      const fid=val.replace('dr:','');
+      const tok=getToken();
+      const r=await fetch(`https://www.googleapis.com/drive/v3/files/${fid}?alt=media`,{headers:{Authorization:'Bearer '+tok}});
+      if(!r.ok) throw new Error(r.status);
+      const obj=await r.json();
+      applyPayload(obj);
+      // Salva copia locale
+      const nm=LS_PREFIX+(document.getElementById('cfgName').value||'dashboard_config');
+      try{localStorage.setItem(nm,JSON.stringify(obj));}catch(e){}
+      updateLocalList();
+      toast('Config Drive caricata ✓','ok');
+    }
+  }catch(e){toast('Errore caricamento: '+e.message,'err');}
+}
+
+function updateLocalList(){
+  const sel=document.getElementById('cfgSel');
+  const keys=[];
+  for(let i=0;i<localStorage.length;i++){
+    const k=localStorage.key(i);
+    if(k&&k.startsWith(LS_PREFIX)&&!k.endsWith('__last')) keys.push(k.replace(LS_PREFIX,''));
+  }
+  if(keys.length&&document.getElementById('cfgList').style.display!==''){
+    sel.innerHTML=keys.map(k=>`<option value="ls:${LS_PREFIX+k}">${k} [locale]</option>`).join('');
+  }
+}
+
+function deleteLocal(){
+  const val=document.getElementById('cfgSel').value; if(!val)return;
+  if(val.startsWith('ls:')){
+    if(!confirm('Eliminare questa config locale?'))return;
+    localStorage.removeItem(val.replace('ls:',''));
+    updateLocalList(); toast('Config eliminata','ok');
+  }
+}
+
+// Import JSON da file
+function importJSON(e){
+  const file=e.target.files[0]; if(!file)return;
+  const r=new FileReader();
+  r.onload=evt=>{
+    try{
+      const obj=JSON.parse(evt.target.result);
+      applyPayload(obj);
+      const name=LS_PREFIX+file.name.replace('.json','');
+      try{localStorage.setItem(name,evt.target.result);}catch(e){}
+      updateLocalList();
+      toast('Config importata: '+file.name+' ✓','ok');
+    }catch(e){toast('File non valido: '+e.message,'err');}
+  };
+  r.readAsText(file);
+}
+
+// ================================================================
+// PAYLOAD
+// ================================================================
+function buildPayload(){
+  return{v:4,savedAt:new Date().toISOString(),
+    gPal,sidebarOpen,gridMode,chartCtr,kpiCtr,
+    globalStyle:{axCol:document.getElementById('axCol').value,
+      gridLn:document.getElementById('gridLn').value,
+      animMs:document.getElementById('animMs').value},
+    charts:charts.map(c=>({id:c.id,config:c.config,h:c.h,showTable:c.showTable,tableRows:c.tableRows,tableH:c.tableH||220})),
+    kpiBlocks:kpiBlocks.map(k=>({id:k.id,config:k.config})),
+  };
+}
+
+function applyPayload(p){
+  if(!p||p.v<3){toast('Config non compatibile (versione < 3)','err');return;}
+  gPal=p.gPal||gPal; renderGP();
+  if(p.globalStyle){
+    document.getElementById('axCol').value=p.globalStyle.axCol||'#94a3b8';
+    document.getElementById('gridLn').value=p.globalStyle.gridLn||'show';
+    document.getElementById('animMs').value=p.globalStyle.animMs||400;
+  }
+  gridMode=p.gridMode||1; chartCtr=p.chartCtr||0; kpiCtr=p.kpiCtr||0;
+  charts.forEach(c=>{if(c.inst)c.inst.destroy()});
+  charts=[]; kpiBlocks=[];
+  document.getElementById('cgrid').innerHTML='';
+  document.getElementById('kpiArea').innerHTML='';
+  if(p.kpiBlocks) p.kpiBlocks.forEach(k=>{kpiBlocks.push({id:k.id,config:k.config});renderKpiCard(k.id);});
+  if(p.charts) p.charts.forEach(c=>{charts.push({id:c.id,config:c.config,h:c.h||340,inst:null,showTable:c.showTable||false,tableRows:c.tableRows||10,tableH:c.tableH||220});renderCard(c.id);});
+  applyGrid();
+  if(rawData.length){charts.forEach(c=>refreshChart(c.id));kpiBlocks.forEach(k=>refreshKpi(k.id));}
+  else toast('Carica il file Excel per visualizzare i dati','warn');
+  updateStatus(); updateChartList();
+}
+
+// ================================================================
+// DROP ZONE & FILE
+// ================================================================
+function setupDZ(){
+  const dz=document.getElementById('dz');
+  dz.addEventListener('dragover',e=>{e.preventDefault();dz.classList.add('over')});
+  dz.addEventListener('dragleave',()=>dz.classList.remove('over'));
+  dz.addEventListener('drop',e=>{e.preventDefault();dz.classList.remove('over');processFile(e.dataTransfer.files[0])});
+}
+function handleFile(e){if(e.target.files[0])processFile(e.target.files[0]);}
+function processFile(file){
+  if(!file)return;
+  const r=new FileReader();
+  r.onload=evt=>{
+    try{
+      workbook=XLSX.read(new Uint8Array(evt.target.result),{type:'array',cellDates:true});
+      document.getElementById('shSelect').innerHTML=workbook.SheetNames.map(s=>`<option value="${s}">${s}</option>`).join('');
+      document.getElementById('shSel').style.display='';
+      document.getElementById('st-file').textContent='File: '+file.name;
+      loadSheet(); toast('📂 Caricato: '+file.name,'ok');
+    }catch(e){toast('Errore lettura file: '+e.message,'err');}
+  };
+  r.readAsArrayBuffer(file);
+}
+function loadSheet(){
+  const ws=workbook.Sheets[document.getElementById('shSelect').value];
+  const json=XLSX.utils.sheet_to_json(ws,{defval:'',header:0});
+  if(!json.length){toast('Foglio vuoto','err');return;}
+  rawData=json; columns=Object.keys(rawData[0]); filteredData=[...rawData];
+  document.getElementById('dInfo').style.display='';
+  document.getElementById('dInfo').textContent=`${rawData.length.toLocaleString('it-IT')} righe · ${columns.length} colonne`;
+  document.getElementById('noData').style.display='none';
+  populateFSel(); updatePreview(); updateStatus();
+  charts.forEach(c=>refreshChart(c.id));
+  kpiBlocks.forEach(k=>refreshKpi(k.id));
+}
+
+// ================================================================
+// FILTRI
+// ================================================================
+function populateFSel(){
+  document.getElementById('fCol').innerHTML='<option value="">— colonna —</option>'+columns.map(c=>`<option value="${c}">${c}</option>`).join('');
+}
+function updateFVals(){
+  const col=document.getElementById('fCol').value;
+  const tags=document.getElementById('fTags');
+  if(!col){tags.innerHTML='<span class="htxt">Seleziona colonna</span>';return;}
+  const vals=[...new Set(rawData.map(r=>String(r[col])))].sort().slice(0,60);
+  if(!filterActive[col]) filterActive[col]=new Set(vals);
+  tags.innerHTML=vals.map(v=>`<span class="ftag ${filterActive[col].has(v)?'on':''}" onclick="tglF('${col}','${CSS.escape(v)}',this)">${v}</span>`).join('');
+}
+function tglF(col,val,el){
+  if(!filterActive[col])filterActive[col]=new Set();
+  filterActive[col].has(val)?filterActive[col].delete(val):filterActive[col].add(val);
+  el.classList.toggle('on'); applyF();
+}
+function applyF(){
+  const lim=parseInt(document.getElementById('rowLim').value)||500;
+  filteredData=rawData.filter(row=>Object.entries(filterActive).every(([col,vals])=>!vals||vals.size===0||vals.has(String(row[col])))).slice(0,lim);
+  updateStatus(); charts.forEach(c=>refreshChart(c.id)); kpiBlocks.forEach(k=>refreshKpi(k.id));
+}
+
+// ================================================================
+// PREVIEW
+// ================================================================
+function updatePreview(){
+  const rows=rawData.slice(0,6);
+  document.getElementById('prevBody').innerHTML=`<div class="tw"><table class="prev"><thead><tr>${columns.map(c=>`<th>${c}</th>`).join('')}</tr></thead><tbody>${rows.map(r=>`<tr>${columns.map(c=>`<td>${String(r[c]??'').slice(0,30)}</td>`).join('')}</tr>`).join('')}</tbody></table></div>`;
+}
+
+// ================================================================
+// PALETTE
+// ================================================================
+function renderGP(){
+  document.getElementById('gPal').innerHTML=gPal.map((c,i)=>`<div class="cswatch"><input type="color" value="${c}" oninput="gPal[${i}]=this.value;refreshAll()"><button class="cdel" onclick="gPal.splice(${i},1);renderGP();refreshAll()">✕</button></div>`).join('');
+}
+function addGC(){gPal.push('#888888');renderGP();}
+
+// ================================================================
+// UTILITY DATI
+// ================================================================
+function isNum(col){
+  if(!rawData.length)return false;
+  const s=rawData.slice(0,40).map(r=>r[col]).filter(v=>v!==''&&v!=null);
+  return s.length>0&&s.every(v=>!isNaN(parseFloat(v)));
+}
+function getNum(col,row){return parseFloat(row[col])||0;}
+function getData(){return filteredData.length?filteredData:rawData;}
+function pal(cfg){return(cfg.colors&&cfg.colors.length)?cfg.colors:gPal;}
+function axColor(){return document.getElementById('axCol').value||'#94a3b8';}
+function showGrid(){return document.getElementById('gridLn').value!=='hide';}
+function animDur(){return parseInt(document.getElementById('animMs').value)||400;}
+
+// AGGREGAZIONE PRINCIPALE — supporta sia colonne numeriche che conteggio su qualsiasi colonna
+function aggData(cfg){
+  const data=getData();
+  const {xCol,yCol,yAgg,maxItems,sortBy}=cfg;
+  if(!xCol) return [];
+  const agg={};
+  data.forEach(row=>{
+    const k=String(row[xCol]??'N/A');
+    const rawV=row[yCol];
+    const v=(rawV!==''&&rawV!=null&&!isNaN(parseFloat(rawV)))?parseFloat(rawV):1;
+    if(!agg[k]) agg[k]={sum:0,cnt:0,min:v,max:v};
+    agg[k].sum+=v; agg[k].cnt++;
+    if(v<agg[k].min)agg[k].min=v;
+    if(v>agg[k].max)agg[k].max=v;
+  });
+  let entries=Object.entries(agg).map(([k,v])=>{
+    let y;
+    switch(yAgg){
+      case'count': y=v.cnt; break;
+      case'avg':   y=v.sum/v.cnt; break;
+      case'min':   y=v.min; break;
+      case'max':   y=v.max; break;
+      default:     y=(yCol&&isNum(yCol))?v.sum:v.cnt; // AUTO: se la colonna Y è numerica usa sum, altrimenti count
+    }
+    return[k,Math.round(y*100)/100];
+  });
+  if(sortBy==='asc') entries.sort((a,b)=>a[1]-b[1]);
+  else if(sortBy==='desc') entries.sort((a,b)=>b[1]-a[1]);
+  return entries.slice(0,maxItems||25);
+}
+
+// ================================================================
+// CHART CARDS — rendering
+// ================================================================
+function addChart(){
+  if(!columns.length){toast('Carica un file Excel prima','err');return;}
+  const id=++chartCtr;
+  // Scegli automaticamente la colonna Y migliore (preferisci numerica)
+  const numCols=columns.filter(isNum);
+  const defaultY=numCols.length?numCols[0]:columns[1]||columns[0];
+  const cfg={id,title:'Grafico '+id,type:'bar',
+    xCol:columns[0],yCol:defaultY,
+    y2Col:numCols[1]||defaultY,yAgg:'auto',y2Agg:'count',
+    colors:[...gPal.slice(0,10)],
+    showLegend:false,smooth:false,fill:false,
+    xLabel:'',yLabel:'',sortBy:'desc',maxItems:20,
+    borderR:4,pointSize:4,
+    gaugeMin:0,gaugeMax:100,targetPct:75,
+    sizeCol:defaultY,
+  };
+  charts.push({id,config:cfg,h:320,inst:null,showTable:false,tableRows:10,tableH:220});
+  renderCard(id); applyGrid(); refreshChart(id);
+  updateStatus(); updateChartList(); openM(id);
+}
+
+function renderCard(id){
+  const c=charts.find(x=>x.id===id); if(!c)return;
+  const div=document.createElement('div');
+  div.className='chart-card'; div.id='card-'+id; div.draggable=true;
+  div.innerHTML=`
+    <div class="ch-header">
+      <span class="ch-drag" title="Trascina per spostare">⠿</span>
+      <span class="ch-title" id="ct-${id}">${c.config.title}</span>
+      <span class="ch-badge" id="cb-${id}">${c.config.type}</span>
+    </div>
+    <div class="ch-wrap" id="cw-${id}" style="height:${c.h}px;min-height:80px"></div>
+    <div id="tbl-${id}"></div>
+    <div class="ch-actions">
+      <button class="btn sm" onclick="openM(${id})">⚙ Config</button>
+      <button class="btn sm" onclick="setH(${id})">↕ H</button>
+      <button class="btn sm" onclick="toggleTable(${id})" id="tbtn-${id}">📋 Tabella</button>
+      <button class="btn sm" onclick="exportPNG(${id})">📷 PNG</button>
+      <button class="btn sm" onclick="exportCSV(${id})">📄 CSV</button>
+      <button class="btn sm" onclick="dupChart(${id})">⧉</button>
+      <button class="btn sm danger" onclick="delChart(${id})">✕</button>
+    </div>`;
+  div.addEventListener('dragstart',e=>{e.dataTransfer.setData('cid',String(id));div.classList.add('dragging')});
+  div.addEventListener('dragend',()=>div.classList.remove('dragging'));
+  div.addEventListener('dragover',e=>{e.preventDefault();div.classList.add('drop-t')});
+  div.addEventListener('dragleave',()=>div.classList.remove('drop-t'));
+  div.addEventListener('drop',e=>{e.preventDefault();div.classList.remove('drop-t');swapC(parseInt(e.dataTransfer.getData('cid')),id)});
+  document.getElementById('cgrid').appendChild(div);
+}
+
+function swapC(a,b){
+  if(a===b)return;
+  const g=document.getElementById('cgrid');
+  const ca=document.getElementById('card-'+a);
+  const cb=document.getElementById('card-'+b);
+  if(!ca||!cb)return;
+  const all=[...g.children];
+  if(all.indexOf(ca)<all.indexOf(cb)) g.insertBefore(ca,cb.nextSibling);
+  else g.insertBefore(ca,cb);
+}
+
+function delChart(id){
+  const c=charts.find(x=>x.id===id);
+  if(c&&c.inst)c.inst.destroy();
+  charts=charts.filter(x=>x.id!==id);
+  document.getElementById('card-'+id)?.remove();
+  updateStatus(); updateChartList(); toast('Grafico rimosso','ok');
+}
+
+function dupChart(id){
+  const c=charts.find(x=>x.id===id); if(!c)return;
+  const nid=++chartCtr;
+  const nc=JSON.parse(JSON.stringify(c.config)); nc.id=nid; nc.title+=' (copia)';
+  charts.push({id:nid,config:nc,h:c.h,inst:null,showTable:c.showTable,tableRows:c.tableRows,tableH:c.tableH||220});
+  renderCard(nid); applyGrid(); refreshChart(nid); updateStatus(); updateChartList();
+}
+
+function setH(id){
+  const c=charts.find(x=>x.id===id); if(!c)return;
+  const h=parseInt(prompt('Altezza canvas in pixel (es. 300):',c.h));
+  if(h>=80){c.h=h; const w=document.getElementById('cw-'+id); if(w)w.style.height=h+'px'; refreshChart(id);}
+}
+
+// ================================================================
+// TABELLA DATI
+// ================================================================
+function toggleTable(id){
+  const c=charts.find(x=>x.id===id); if(!c)return;
+  c.showTable=!c.showTable;
+  const btn=document.getElementById('tbtn-'+id);
+  if(btn) btn.style.color=c.showTable?'var(--accent2)':'';
+  renderTable(id);
+}
+
+function renderTable(id){
+  const c=charts.find(x=>x.id===id); if(!c)return;
+  const el=document.getElementById('tbl-'+id); if(!el)return;
+  if(!c.showTable||!columns.length){el.innerHTML='';return;}
+  const entries=aggData(c.config);
+  if(!entries.length){el.innerHTML='<div class="htxt" style="padding:6px">Nessun dato aggregato</div>';return;}
+  const total=entries.reduce((s,e)=>s+e[1],0);
+  const allRows=entries; // mostriamo tutte, scroll interno
+  const fmt=v=>typeof v==='number'?v.toLocaleString('it-IT',{maximumFractionDigits:2}):v;
+  const pct=v=>total?((v/total)*100).toFixed(1)+'%':'—';
+  const tblH=c.tableH||220;
+  const aggLabel=c.config.yAgg==='auto'?(isNum(c.config.yCol)?'SUM':'COUNT'):c.config.yAgg.toUpperCase();
+  el.innerHTML=`
+    <div class="chart-table-wrap" id="tw-${id}" style="height:${tblH}px;margin-top:8px">
+      <table>
+        <thead><tr>
+          <th>${c.config.xCol}</th>
+          <th style="text-align:right">${c.config.yCol} (${aggLabel})</th>
+          <th style="text-align:right">%</th>
+        </tr></thead>
+        <tbody>
+          ${allRows.map(([l,v])=>`<tr><td title="${l}">${String(l).slice(0,60)}</td><td class="num">${fmt(v)}</td><td class="num">${pct(v)}</td></tr>`).join('')}
+          <tr class="total-row"><td>TOTALE (${allRows.length} righe)</td><td class="num">${fmt(Math.round(total*100)/100)}</td><td class="num">100%</td></tr>
+        </tbody>
+      </table>
+    </div>
+    <div class="tbl-resize-handle" id="trh-${id}" title="Trascina per ridimensionare"></div>
+    <div style="display:flex;align-items:center;gap:8px;flex-wrap:wrap">
+      <span class="htxt">Altezza px:</span>
+      <input type="number" value="${tblH}" min="80" max="2000" step="20" style="width:70px" onchange="setTblH(${id},this.value)" id="thi-${id}">
+      <span class="htxt" style="color:var(--text3)">·</span>
+      <span class="htxt">${allRows.length} righe · trascina il bordo per ridimensionare</span>
+      <button class="btn sm" onclick="exportTableCSV(${id})" style="margin-left:auto">📄 CSV</button>
+    </div>`;
+  // Attach drag-resize
+  initTblResize(id);
+}
+
+function setTblH(id,v){
+  const c=charts.find(x=>x.id===id); if(!c)return;
+  c.tableH=Math.max(80,parseInt(v)||220);
+  const tw=document.getElementById('tw-'+id);
+  if(tw) tw.style.height=c.tableH+'px';
+  const inp=document.getElementById('thi-'+id);
+  if(inp) inp.value=c.tableH;
+}
+
+function initTblResize(id){
+  const handle=document.getElementById('trh-'+id);
+  const wrap=document.getElementById('tw-'+id);
+  if(!handle||!wrap)return;
+  let startY=0, startH=0;
+  handle.addEventListener('mousedown',e=>{
+    e.preventDefault();
+    startY=e.clientY;
+    startH=wrap.offsetHeight;
+    handle.classList.add('dragging');
+    const onMove=ev=>{
+      const delta=ev.clientY-startY;
+      const newH=Math.max(80,startH+delta);
+      wrap.style.height=newH+'px';
+      const inp=document.getElementById('thi-'+id);
+      if(inp) inp.value=newH;
+      const c=charts.find(x=>x.id===id);
+      if(c) c.tableH=newH;
+    };
+    const onUp=()=>{
+      handle.classList.remove('dragging');
+      document.removeEventListener('mousemove',onMove);
+      document.removeEventListener('mouseup',onUp);
+    };
+    document.addEventListener('mousemove',onMove);
+    document.addEventListener('mouseup',onUp);
+  });
+  // Touch support
+  handle.addEventListener('touchstart',e=>{
+    startY=e.touches[0].clientY;
+    startH=wrap.offsetHeight;
+    handle.classList.add('dragging');
+    const onMove=ev=>{
+      const delta=ev.touches[0].clientY-startY;
+      const newH=Math.max(80,startH+delta);
+      wrap.style.height=newH+'px';
+      const inp=document.getElementById('thi-'+id);
+      if(inp) inp.value=newH;
+      const c=charts.find(x=>x.id===id);
+      if(c) c.tableH=newH;
+    };
+    const onUp=()=>{handle.classList.remove('dragging');handle.removeEventListener('touchmove',onMove);handle.removeEventListener('touchend',onUp);};
+    handle.addEventListener('touchmove',onMove,{passive:true});
+    handle.addEventListener('touchend',onUp);
+  },{passive:true});
+}
+
+function exportTableCSV(id){
+  const c=charts.find(x=>x.id===id); if(!c)return;
+  const entries=aggData(c.config);
+  const total=entries.reduce((s,e)=>s+e[1],0);
+  const rows=[`${c.config.xCol},Valore,Percentuale`];
+  entries.forEach(([l,v])=>rows.push(`"${l}",${v},${total?(v/total*100).toFixed(2)+'%':''}%`));
+  const a=document.createElement('a');
+  a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));
+  a.download=(c.config.title||'tabella')+'.csv'; a.click();
+  toast('CSV tabella esportato','ok');
+}
+
+// ================================================================
+// CHART RENDERING — CORE
+// ================================================================
+function refreshChart(id){
+  const c=charts.find(x=>x.id===id); if(!c)return;
+  const cfg=c.config;
+  const wrap=document.getElementById('cw-'+id); if(!wrap)return;
+  if(c.inst){try{c.inst.destroy();}catch(e){} c.inst=null;}
+  wrap.innerHTML='';
+  const type=cfg.type;
+  const p=pal(cfg);
+  const ax=axColor(); const sg=showGrid(); const dur=animDur();
+
+  // Custom renderers
+  if(type==='funnel'){renderFunnel(id,wrap,cfg,p);upHdr(id);renderTable(id);return;}
+  if(type==='heatmap'){renderHeatmap(id,wrap,cfg,p);upHdr(id);renderTable(id);return;}
+  if(type==='treemap'){renderTreemap(id,wrap,cfg,p);upHdr(id);renderTable(id);return;}
+  if(type==='gauge'){renderGauge(id,wrap,cfg,p);upHdr(id);renderTable(id);return;}
+  if(type==='bullet'){renderBullet(id,wrap,cfg,p);upHdr(id);renderTable(id);return;}
+
+  renderChartJS(id,wrap,cfg,p,ax,sg,dur);
+  upHdr(id); renderTable(id);
+}
+
+function upHdr(id){
+  const c=charts.find(x=>x.id===id); if(!c)return;
+  const t=document.getElementById('ct-'+id); const b=document.getElementById('cb-'+id);
+  if(t)t.textContent=c.config.title; if(b)b.textContent=c.config.type;
+}
+
+function mkCanvas(wrap){
+  const cv=document.createElement('canvas');
+  cv.style.cssText='width:100%;height:100%;display:block';
+  wrap.appendChild(cv); return cv;
+}
+
+function renderChartJS(id,wrap,cfg,p,ax,sg,dur){
+  const cv=mkCanvas(wrap); cv.setAttribute('role','img');
+  const entries=aggData(cfg);
+  const labels=entries.map(e=>e[0]);
+  const values=entries.map(e=>e[1]);
+
+  const type=cfg.type;
+  const isPie=type==='pie'||type==='doughnut'||type==='polar';
+  const isRadar=type==='radar';
+  const isScatter=type==='scatter';
+  const isBubble=type==='bubble';
+  const isHBar=type==='bar-h';
+  const isMixed=type==='mixed';
+  const isStacked=type==='stacked'||type==='stacked-area';
+  const isArea=type==='area'||type==='stacked-area';
+  const isWF=type==='waterfall';
+
+  let cjsType=type;
+  if(isHBar||type==='histogram'||type==='waterfall'||isStacked) cjsType='bar';
+  if(isArea) cjsType='line';
+
+  let datasets, wfBases=null;
+
+  if(isWF){
+    // Waterfall: barre floating [base, base+val]
+    let run=0;
+    const bases=values.map(v=>{const b=run;run+=v;return b;});
+    wfBases=bases;
+    const colors=values.map(v=>v>=0?p[1]||'#10b981':p[3]||'#ef4444');
+    datasets=[{label:'Waterfall',
+      data:values.map((v,i)=>[bases[i],bases[i]+v]),
+      backgroundColor:colors.map(c=>c+'cc'),borderColor:colors,
+      borderWidth:1.5,borderRadius:cfg.borderR||4,borderSkipped:false}];
+    cjsType='bar';
+  } else if(isScatter){
+    const d=getData().slice(0,cfg.maxItems||300).map(r=>({x:getNum(cfg.xCol,r),y:getNum(cfg.yCol,r)}));
+    datasets=[{label:cfg.yCol+' vs '+cfg.xCol,data:d,backgroundColor:p[0]+'99',borderColor:p[0],pointRadius:cfg.pointSize||4,pointHoverRadius:6}];
+    cjsType='scatter';
+  } else if(isBubble){
+    const sc=cfg.sizeCol||cfg.yCol;
+    const rawSizes=getData().slice(0,cfg.maxItems||100).map(r=>getNum(sc,r));
+    const maxS=Math.max(...rawSizes)||1;
+    const d=getData().slice(0,cfg.maxItems||100).map((r,i)=>({x:getNum(cfg.xCol,r),y:getNum(cfg.yCol,r),r:Math.max(3,Math.min(25,rawSizes[i]/maxS*20))}));
+    datasets=[{label:'Bubble',data:d,backgroundColor:p[0]+'77',borderColor:p[0],borderWidth:1}];
+    cjsType='bubble';
+  } else if(isMixed){
+    const e2=aggData({...cfg,yCol:cfg.y2Col,yAgg:cfg.y2Agg});
+    datasets=[
+      {type:'bar',label:cfg.yCol,data:values,backgroundColor:labels.map((_,i)=>p[i%p.length]+'cc'),borderColor:labels.map((_,i)=>p[i%p.length]),borderWidth:1.5,borderRadius:cfg.borderR||4,order:2},
+      {type:'line',label:cfg.y2Col,data:e2.map(e=>e[1]),borderColor:p[4]||'#8b5cf6',backgroundColor:'transparent',borderWidth:2.5,pointRadius:4,tension:cfg.smooth?0.4:0,order:1,yAxisID:'y2'},
+    ];
+    cjsType='bar';
+  } else if(isPie||isRadar){
+    const bgColors=labels.map((_,i)=>p[i%p.length]+'cc');
+    const bdColors=labels.map((_,i)=>p[i%p.length]);
+    datasets=[{label:cfg.yCol,data:values,backgroundColor:bgColors,borderColor:bdColors,borderWidth:2}];
+  } else {
+    const fill=cfg.fill||isArea;
+    const isLine=cjsType==='line';
+    const bgCol=isLine?(fill?p[0]+'44':p[0]+'11'):labels.map((_,i)=>p[i%p.length]+'cc');
+    const bdCol=isLine?p[0]:labels.map((_,i)=>p[i%p.length]);
+    datasets=[{label:cfg.yCol,data:values,
+      backgroundColor:bgCol,borderColor:bdCol,
+      borderWidth:isLine?2:1.5,borderRadius:isLine?0:(cfg.borderR||4),
+      fill:fill,tension:cfg.smooth?0.4:0,
+      pointRadius:isLine?(cfg.pointSize||4):0,pointHoverRadius:6,
+      stack:isStacked?'s1':undefined}];
+  }
+
+  const opts={responsive:true,maintainAspectRatio:false,animation:{duration:dur},
+    plugins:{
+      legend:{display:cfg.showLegend&&(isPie||isRadar||isMixed),
+        labels:{color:ax,boxWidth:10,font:{size:10},padding:12}},
+      tooltip:{backgroundColor:'#1e2535',borderColor:'#2a3347',borderWidth:1,
+        titleColor:'#e2e8f0',bodyColor:'#94a3b8',padding:8,
+        callbacks:isWF?{label:ctx=>{const v=values[ctx.dataIndex];return(v>=0?'+':'')+v.toLocaleString('it-IT');}}:{}},
+    }
+  };
+
+  if(!isPie&&!isRadar){
+    const xAxis={ticks:{color:ax,maxRotation:45,autoSkip:true,maxTicksLimit:16},
+      grid:{display:sg,color:'rgba(255,255,255,0.04)'},
+      title:{display:!!cfg.xLabel,text:cfg.xLabel,color:ax,font:{size:11}}};
+    if(isHBar) xAxis.indexAxis='y';
+    const yAxis={ticks:{color:ax,callback:(v)=>Number.isInteger(v)?v.toLocaleString('it-IT'):v},
+      grid:{display:sg,color:'rgba(255,255,255,0.04)'},
+      title:{display:!!cfg.yLabel,text:cfg.yLabel,color:ax,font:{size:11}},
+      stacked:isStacked};
+    opts.scales={x:{...xAxis,stacked:isStacked},y:yAxis};
+    if(isMixed) opts.scales.y2={position:'right',ticks:{color:ax},grid:{display:false}};
+    if(isScatter||isBubble){
+      opts.scales.x={ticks:{color:ax},grid:{display:sg,color:'rgba(255,255,255,0.04)'}};
+      opts.scales.y={ticks:{color:ax},grid:{display:sg,color:'rgba(255,255,255,0.04)'}};
+    }
+  } else if(isRadar){
+    opts.scales={r:{ticks:{color:ax,backdropColor:'transparent'},grid:{color:'rgba(255,255,255,0.08)'},pointLabels:{color:ax,font:{size:10}}}};
+  }
+
+  try{
+    const chartInst=new Chart(cv,{type:cjsType,data:{labels,datasets},options:opts});
+    const chartRef=charts.find(x=>x.id===id);
+    if(chartRef) chartRef.inst=chartInst;
+  }catch(err){console.error('Chart error:',err);wrap.innerHTML=`<div style="color:var(--err);padding:16px;font-size:12px">Errore rendering: ${err.message}</div>`;}
+}
+
+// ================================================================
+// CUSTOM RENDERS
+// ================================================================
+function renderFunnel(id,wrap,cfg,p){
+  const entries=aggData({...cfg,sortBy:'desc'});
+  const max=entries[0]?entries[0][1]:1;
+  let html=`<div class="funnel-wrap" style="height:${wrap.style.height}">`;
+  entries.forEach(([l,v],i)=>{
+    const pct=Math.max(8,Math.round(v/max*100));
+    html+=`<div class="funnel-row">
+      <div class="funnel-lbl" title="${l}">${l}</div>
+      <div class="funnel-bar-outer"><div class="funnel-bar" style="width:${pct}%;background:${p[i%p.length]}">${pct}%</div></div>
+      <div class="funnel-val">${v.toLocaleString('it-IT')}</div>
+    </div>`;
+  });
+  wrap.innerHTML=html+'</div>';
+}
+
+function renderHeatmap(id,wrap,cfg,p){
+  const data=getData();
+  const xVals=[...new Set(data.map(r=>String(r[cfg.xCol])))].slice(0,cfg.maxItems||20);
+  const yVals=[...new Set(data.map(r=>String(r[cfg.yCol])))].slice(0,15);
+  const mat={};
+  data.forEach(r=>{
+    const x=String(r[cfg.xCol]),y=String(r[cfg.yCol]);
+    if(!mat[y])mat[y]={};
+    mat[y][x]=(mat[y][x]||0)+1;
+  });
+  const vals=Object.values(mat).flatMap(row=>Object.values(row));
+  const minV=Math.min(...vals)||0, maxV=Math.max(...vals)||1;
+  const heat=v=>{const t=(v-minV)/(maxV-minV);return `rgb(${Math.round(30+t*209)},${Math.round(30+t*38)},${Math.round(80-t*12)})`;};
+  let html=`<div class="heatmap-wrap"><table class="hm-tbl"><thead><tr><th class="row-hd">↓Y / X→</th>${xVals.map(x=>`<th>${x}</th>`).join('')}</tr></thead><tbody>`;
+  yVals.forEach(y=>{
+    html+=`<tr><td class="row-hd">${y}</td>`;
+    xVals.forEach(x=>{const v=mat[y]?.[x]||0;html+=`<td style="background:${heat(v)};color:#fff">${v||''}</td>`;});
+    html+='</tr>';
+  });
+  wrap.innerHTML=html+'</tbody></table></div>';
+}
+
+function renderTreemap(id,wrap,cfg,p){
+  const entries=aggData({...cfg,sortBy:'desc'}).filter(e=>e[1]>0);
+  const total=entries.reduce((s,e)=>s+e[1],0)||1;
+  const W=wrap.clientWidth||500, H=parseInt(wrap.style.height)||300;
+  const svg=document.createElementNS('http://www.w3.org/2000/svg','svg');
+  svg.setAttribute('viewBox',`0 0 ${W} ${H}`);svg.setAttribute('width','100%');svg.setAttribute('height','100%');
+  const slice=(items,x,y,w,h)=>{
+    if(!items.length||w<=0||h<=0)return;
+    const tot=items.reduce((s,e)=>s+e[1],0)||1;
+    let cx=x,cy=y;
+    if(w>=h){
+      items.forEach((e,i)=>{const bw=e[1]/tot*w;addRect(svg,cx,y,bw,h,e[0],e[1],p[i%p.length]);cx+=bw;});
+    } else {
+      items.forEach((e,i)=>{const bh=e[1]/tot*h;addRect(svg,x,cy,w,bh,e[0],e[1],p[i%p.length]);cy+=bh;});
+    }
+  };
+  slice(entries,0,0,W,H);
+  wrap.innerHTML=''; wrap.appendChild(svg);
+}
+function addRect(svg,x,y,w,h,label,val,color){
+  const r=document.createElementNS('http://www.w3.org/2000/svg','rect');
+  r.setAttribute('x',x+1);r.setAttribute('y',y+1);
+  r.setAttribute('width',Math.max(0,w-2));r.setAttribute('height',Math.max(0,h-2));
+  r.setAttribute('fill',color+'cc');r.setAttribute('stroke','#0d1117');r.setAttribute('stroke-width','1');r.setAttribute('rx','3');
+  r.setAttribute('title',label+': '+val);
+  svg.appendChild(r);
+  if(w>50&&h>24){
+    const addT=(dy,txt,fs,fw)=>{const t=document.createElementNS('http://www.w3.org/2000/svg','text');t.setAttribute('x',x+w/2);t.setAttribute('y',dy);t.setAttribute('text-anchor','middle');t.setAttribute('fill','#fff');t.setAttribute('font-size',fs);t.setAttribute('font-weight',fw);t.textContent=txt;svg.appendChild(t);};
+    addT(y+h/2-4,String(label).slice(0,Math.max(4,Math.floor(w/7))),Math.min(12,w/6,h/3),'600');
+    if(h>40) addT(y+h/2+12,val.toLocaleString('it-IT'),Math.min(10,w/7,h/4),'400');
+  }
+}
+
+function renderGauge(id,wrap,cfg,p){
+  const data=getData(); if(!data.length)return;
+  const vals=data.map(r=>getNum(cfg.yCol,r));
+  let val;
+  switch(cfg.yAgg){case'count':val=vals.length;break;case'avg':val=vals.reduce((s,v)=>s+v,0)/vals.length;break;case'min':val=Math.min(...vals);break;case'max':val=Math.max(...vals);break;default:val=vals.reduce((s,v)=>s+v,0);}
+  const minV=cfg.gaugeMin||0, maxV=cfg.gaugeMax||Math.max(...vals,100);
+  const pct=Math.min(1,Math.max(0,(val-minV)/(maxV-minV)));
+  const angle=-Math.PI+pct*Math.PI;
+  const cx=200,cy=165,r=130;
+  const x2=cx+r*Math.cos(angle), y2=cy+r*Math.sin(angle);
+  const c1=p[3]||'#ef4444', c2=p[2]||'#f59e0b', c3=p[1]||'#10b981';
+  wrap.innerHTML=`<div class="gauge-wrap"><svg viewBox="0 0 400 210" width="100%" height="100%">
+    <defs>
+      <linearGradient id="gg${id}" x1="0%" y1="0%" x2="100%" y2="0%">
+        <stop offset="0%" stop-color="${c1}"/><stop offset="50%" stop-color="${c2}"/><stop offset="100%" stop-color="${c3}"/>
+      </linearGradient>
+    </defs>
+    <path d="M${cx-r},${cy} A${r},${r} 0 0,1 ${cx+r},${cy}" fill="none" stroke="url(#gg${id})" stroke-width="26" stroke-linecap="round" opacity="0.2"/>
+    <path d="M${cx-r},${cy} A${r},${r} 0 0,1 ${x2},${y2}" fill="none" stroke="url(#gg${id})" stroke-width="26" stroke-linecap="round"/>
+    <circle cx="${cx}" cy="${cy}" r="8" fill="${p[0]}"/>
+    <line x1="${cx}" y1="${cy}" x2="${x2}" y2="${y2}" stroke="#fff" stroke-width="2.5" stroke-linecap="round" opacity="0.9"/>
+    <text x="${cx}" y="${cy+40}" text-anchor="middle" fill="#e2e8f0" font-size="30" font-weight="700">${Math.round(val).toLocaleString('it-IT')}</text>
+    <text x="${cx}" y="${cy+60}" text-anchor="middle" fill="#64748b" font-size="12">${cfg.yCol} · ${cfg.yAgg==='auto'?'SUM':cfg.yAgg.toUpperCase()}</text>
+    <text x="${cx-r-4}" y="${cy+18}" fill="#64748b" font-size="10" text-anchor="end">${minV}</text>
+    <text x="${cx+r+4}" y="${cy+18}" fill="#64748b" font-size="10">${maxV}</text>
+  </svg></div>`;
+}
+
+function renderBullet(id,wrap,cfg,p){
+  const entries=aggData(cfg); if(!entries.length)return;
+  const maxV=Math.max(...entries.map(e=>e[1]),1);
+  const tp=Math.min(100,cfg.targetPct||75);
+  wrap.innerHTML=`<div class="bullet-wrap">${entries.map(([l,v],i)=>{
+    const pct=Math.round(v/maxV*100);
+    return `<div class="bullet-row">
+      <div class="bullet-lbl">${l}</div>
+      <div class="bullet-track">
+        <div class="bullet-bg" style="width:100%;background:${p[i%p.length]}22"></div>
+        <div class="bullet-act" style="width:${pct}%;background:${p[i%p.length]}"></div>
+        <div class="bullet-tgt" style="left:${tp}%"></div>
+      </div>
+      <div class="bullet-vals"><span>${v.toLocaleString('it-IT')}</span><span>target ${tp}%</span></div>
+    </div>`;
+  }).join('')}</div>`;
+}
+
+function refreshAll(){charts.forEach(c=>refreshChart(c.id));kpiBlocks.forEach(k=>refreshKpi(k.id));}
+
+// ================================================================
+// KPI BLOCKS
+// ================================================================
+function addKpiBlock(){
+  if(!columns.length){toast('Carica dati prima','err');return;}
+  const id=++kpiCtr;
+  const numC=columns.filter(isNum);
+  const cols=(numC.length?numC:columns).slice(0,5).map((c,i)=>({col:c,label:c,agg:'auto',prefix:'',suffix:'',color:gPal[i%gPal.length],spark:true}));
+  kpiBlocks.push({id,config:{id,cols}});
+  renderKpiCard(id); refreshKpi(id); updateChartList();
+}
+
+function renderKpiCard(id){
+  const k=kpiBlocks.find(x=>x.id===id); if(!k)return;
+  const div=document.createElement('div'); div.id='kpi-'+id;
+  div.innerHTML=`<div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+    <span style="font-size:10px;font-weight:700;color:var(--text3);text-transform:uppercase;letter-spacing:.08em">📊 KPI Block ${id}</span>
+    <div style="display:flex;gap:5px">
+      <button class="btn sm" onclick="openKpiM(${id})">⚙ Config</button>
+      <button class="btn sm danger" onclick="delKpi(${id})">✕</button>
+    </div>
+  </div>
+  <div class="kpi-grid" id="kpig-${id}"></div>`;
+  document.getElementById('kpiArea').appendChild(div);
+}
+
+function refreshKpi(id){
+  const k=kpiBlocks.find(x=>x.id===id); if(!k)return;
+  const data=getData();
+  const grid=document.getElementById('kpig-'+id); if(!grid)return;
+  grid.innerHTML='';
+  k.config.cols.forEach((cc,i)=>{
+    const vals=data.map(r=>getNum(cc.col,r));
+    let val;
+    const effAgg=(cc.agg==='auto')?(isNum(cc.col)?'sum':'count'):cc.agg;
+    switch(effAgg){case'count':val=data.length;break;case'avg':val=vals.reduce((s,v)=>s+v,0)/vals.length;break;case'min':val=Math.min(...vals);break;case'max':val=Math.max(...vals);break;default:val=vals.reduce((s,v)=>s+v,0);}
+    const fmt=v=>cc.prefix+Math.round(v).toLocaleString('it-IT')+cc.suffix;
+    const half=Math.floor(vals.length/2);
+    const s1=vals.slice(0,half).reduce((s,v)=>s+v,0);
+    const s2=vals.slice(half).reduce((s,v)=>s+v,0);
+    const up=s2>=s1;
+    const tpct=s1?Math.abs(Math.round((s2-s1)/s1*100)):0;
+    const color=cc.color||gPal[i%gPal.length];
+    const card=document.createElement('div'); card.className='kpi-card';
+    card.style.setProperty('--kpi-color',color);
+    card.innerHTML=`<div class="kpi-label">${cc.label||cc.col}</div>
+      <div class="kpi-value">${fmt(val)}</div>
+      <div class="kpi-trend ${up?'up':'dn'}">${up?'▲':'▼'} ${tpct}%</div>
+      <div class="kpi-sub">${effAgg.toUpperCase()} · ${data.length.toLocaleString('it-IT')} righe</div>
+      ${cc.spark?`<div class="kpi-spark"><canvas id="sp-${id}-${i}" role="img" aria-label="sparkline" style="width:100%;height:100%;display:block"></canvas></div>`:''}`;
+    grid.appendChild(card);
+    if(cc.spark){
+      requestAnimationFrame(()=>{
+        const cv=document.getElementById(`sp-${id}-${i}`); if(!cv)return;
+        try{new Chart(cv,{type:'line',
+          data:{labels:vals.slice(0,40).map((_,j)=>j),datasets:[{data:vals.slice(0,40),borderColor:color,borderWidth:1.5,fill:true,backgroundColor:color+'22',pointRadius:0,tension:0.4}]},
+          options:{responsive:true,maintainAspectRatio:false,animation:{duration:0},
+            plugins:{legend:{display:false},tooltip:{enabled:false}},
+            scales:{x:{display:false},y:{display:false}}}});}catch(e){}
+      });
+    }
+  });
+}
+
+function delKpi(id){
+  kpiBlocks=kpiBlocks.filter(x=>x.id!==id);
+  document.getElementById('kpi-'+id)?.remove();
+  updateChartList();
+}
+
+let _kRC=200;
+function openKpiM(id){
+  const k=kpiBlocks.find(x=>x.id===id); if(!k)return;
+  editId='kpi-'+id;
+  document.getElementById('mtitle').textContent='⚙ KPI Block '+id;
+  const mkRow=(cc,ri)=>`<div id="kr-${ri}" style="display:flex;gap:6px;align-items:center;padding:7px;background:var(--bg3);border-radius:var(--rs);flex-wrap:wrap">
+    <div class="fld" style="flex:1;min-width:90px"><div class="fl">Colonna</div><select id="kcc-${ri}">${columns.map(c=>`<option value="${c}" ${c===cc.col?'selected':''}>${c}</option>`).join('')}</select></div>
+    <div class="fld" style="width:80px"><div class="fl">Label</div><input type="text" value="${cc.label||cc.col}" id="kcl-${ri}"></div>
+    <div class="fld" style="width:65px"><div class="fl">Agg.</div><select id="kca-${ri}">${['auto','sum','count','avg','min','max'].map(a=>`<option value="${a}" ${a===cc.agg?'selected':''}>${a}</option>`).join('')}</select></div>
+    <div class="fld" style="width:40px"><div class="fl">Pref.</div><input type="text" value="${cc.prefix||''}" id="kcp-${ri}"></div>
+    <div class="fld" style="width:40px"><div class="fl">Suff.</div><input type="text" value="${cc.suffix||''}" id="kcs-${ri}"></div>
+    <div class="fld"><div class="fl">Col.</div><input type="color" value="${cc.color||gPal[0]}" id="kco-${ri}"></div>
+    <label style="display:flex;align-items:center;gap:4px;font-size:11px;white-space:nowrap"><input type="checkbox" ${cc.spark?'checked':''} id="kck-${ri}"> Spark</label>
+    <button class="btn sm danger" onclick="document.getElementById('kr-${ri}').remove()">✕</button>
+  </div>`;
+  document.getElementById('mbody').innerHTML=`
+    <div class="htxt">Configura le metriche KPI. Usa "auto" per aggregazione automatica.</div>
+    <div id="krows" style="display:flex;flex-direction:column;gap:6px">${k.config.cols.map((cc,i)=>mkRow(cc,i)).join('')}</div>
+    <button class="btn sm" onclick="addKRow()">＋ Metrica</button>`;
+  document.getElementById('moverlay').classList.add('vis');
+}
+
+function addKRow(){
+  _kRC++;
+  const div=document.createElement('div'); div.id='kr-'+_kRC;
+  div.style.cssText='display:flex;gap:6px;align-items:center;padding:7px;background:var(--bg3);border-radius:var(--rs);flex-wrap:wrap';
+  div.innerHTML=`<div class="fld" style="flex:1;min-width:90px"><div class="fl">Colonna</div><select id="kcc-${_kRC}">${columns.map(c=>`<option>${c}</option>`).join('')}</select></div>
+    <div class="fld" style="width:80px"><div class="fl">Label</div><input type="text" id="kcl-${_kRC}"></div>
+    <div class="fld" style="width:65px"><div class="fl">Agg.</div><select id="kca-${_kRC}"><option>auto</option><option>sum</option><option>count</option><option>avg</option><option>min</option><option>max</option></select></div>
+    <div class="fld" style="width:40px"><div class="fl">Pref.</div><input type="text" id="kcp-${_kRC}"></div>
+    <div class="fld" style="width:40px"><div class="fl">Suff.</div><input type="text" id="kcs-${_kRC}"></div>
+    <div class="fld"><div class="fl">Col.</div><input type="color" value="${gPal[0]}" id="kco-${_kRC}"></div>
+    <label style="display:flex;align-items:center;gap:4px;font-size:11px"><input type="checkbox" checked id="kck-${_kRC}"> Spark</label>
+    <button class="btn sm danger" onclick="this.parentElement.remove()">✕</button>`;
+  document.getElementById('krows').appendChild(div);
+}
+
+// ================================================================
+// CHART CONFIG MODAL
+// ================================================================
+function openM(id){
+  editId=id;
+  const c=charts.find(x=>x.id===id); if(!c)return;
+  const cfg=c.config;
+  const numC=columns.filter(isNum);
+  document.getElementById('mtitle').textContent='⚙ Config: '+cfg.title;
+  document.getElementById('mbody').innerHTML=`
+    <div class="g2">
+      <div class="fld"><div class="fl">Titolo</div><input type="text" id="mc-title" value="${cfg.title}"></div>
+      <div class="fld"><div class="fl">Tipo grafico</div>
+        <select id="mc-type">${CHART_TYPES.map(t=>`<option value="${t.id}" ${cfg.type===t.id?'selected':''}>${t.l}</option>`).join('')}</select>
+      </div>
+    </div>
+
+    <div class="m-section-title">📊 Dati</div>
+    <div class="g3">
+      <div class="fld"><div class="fl">Colonna X (categorie)</div><select id="mc-xcol">${columns.map(c=>`<option value="${c}" ${cfg.xCol===c?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="fld"><div class="fl">Colonna Y (valori)</div><select id="mc-ycol">${columns.map(c=>`<option value="${c}" ${cfg.yCol===c?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="fld"><div class="fl">Aggregazione Y</div>
+        <select id="mc-yagg">
+          <option value="auto" ${cfg.yAgg==='auto'?'selected':''}>AUTO (sum se num, count altr.)</option>
+          ${['sum','count','avg','min','max'].map(a=>`<option value="${a}" ${cfg.yAgg===a?'selected':''}>${a.toUpperCase()}</option>`).join('')}
+        </select>
+      </div>
+    </div>
+    <div class="g3">
+      <div class="fld"><div class="fl">Y2 (Mixed)</div><select id="mc-y2col">${columns.map(c=>`<option value="${c}" ${cfg.y2Col===c?'selected':''}>${c}</option>`).join('')}</select></div>
+      <div class="fld"><div class="fl">Agg. Y2</div><select id="mc-y2agg">${['sum','count','avg','min','max'].map(a=>`<option value="${a}" ${cfg.y2Agg===a?'selected':''}>${a.toUpperCase()}</option>`).join('')}</select></div>
+      <div class="fld"><div class="fl">Size col. (Bubble)</div><select id="mc-scol">${columns.map(c=>`<option value="${c}" ${cfg.sizeCol===c?'selected':''}>${c}</option>`).join('')}</select></div>
+    </div>
+    <div class="g4">
+      <div class="fld"><div class="fl">Ordina</div><select id="mc-sort"><option value="none" ${cfg.sortBy==='none'?'selected':''}>Nessuno</option><option value="desc" ${cfg.sortBy==='desc'?'selected':''}>↓ Decr.</option><option value="asc" ${cfg.sortBy==='asc'?'selected':''}>↑ Cresc.</option></select></div>
+      <div class="fld"><div class="fl">Max elementi</div><input type="number" id="mc-max" value="${cfg.maxItems||25}" min="1" max="2000"></div>
+      <div class="fld"><div class="fl">Border radius</div><input type="number" id="mc-br" value="${cfg.borderR||4}" min="0" max="40"></div>
+      <div class="fld"><div class="fl">Point size</div><input type="number" id="mc-ps" value="${cfg.pointSize||4}" min="1" max="20"></div>
+    </div>
+    <div class="g2">
+      <div class="fld"><div class="fl">Label asse X</div><input type="text" id="mc-xl" value="${cfg.xLabel||''}"></div>
+      <div class="fld"><div class="fl">Label asse Y</div><input type="text" id="mc-yl" value="${cfg.yLabel||''}"></div>
+    </div>
+
+    <div class="m-section-title">🎛️ Opzioni speciali</div>
+    <div class="g3">
+      <div class="fld"><div class="fl">Gauge Min</div><input type="number" id="mc-gmin" value="${cfg.gaugeMin||0}"></div>
+      <div class="fld"><div class="fl">Gauge Max</div><input type="number" id="mc-gmax" value="${cfg.gaugeMax||100}"></div>
+      <div class="fld"><div class="fl">Bullet Target %</div><input type="number" id="mc-tp" value="${cfg.targetPct||75}" min="0" max="100"></div>
+    </div>
+
+    <div class="sep"></div>
+    <div class="g3">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="mc-leg" ${cfg.showLegend?'checked':''}> Mostra legenda</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="mc-sm" ${cfg.smooth?'checked':''}> Linea morbida</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="mc-fi" ${cfg.fill?'checked':''}> Fill area</label>
+    </div>
+
+    <div class="m-section-title">🎨 Colori</div>
+    <div class="fld">
+      <div id="mc-cols" class="crow">${cfg.colors.map((c,i)=>`<div class="cswatch"><input type="color" value="${c}" id="mcc-${i}"><button class="cdel" onclick="this.parentElement.remove()">✕</button></div>`).join('')}</div>
+      <div style="display:flex;gap:6px;margin-top:5px">
+        <button class="btn sm" onclick="addMC()">＋ Colore</button>
+        <button class="btn sm" onclick="resetMC()">↺ Palette globale</button>
+      </div>
+    </div>`;
+  document.getElementById('moverlay').classList.add('vis');
+}
+
+let _mcc=50;
+function addMC(){_mcc++;const r=document.getElementById('mc-cols');const d=document.createElement('div');d.className='cswatch';d.innerHTML=`<input type="color" value="${gPal[_mcc%gPal.length]}" id="mcc-${_mcc}"><button class="cdel" onclick="this.parentElement.remove()">✕</button>`;r.appendChild(d);}
+function resetMC(){document.getElementById('mc-cols').innerHTML=gPal.map((c,i)=>`<div class="cswatch"><input type="color" value="${c}" id="mcc-r${i}"><button class="cdel" onclick="this.parentElement.remove()">✕</button></div>`).join('');}
+
+function applyM(){
+  if(typeof editId==='string'&&editId.startsWith('kpi-')){applyKpiM();return;}
+  const c=charts.find(x=>x.id===editId); if(!c)return;
+  const cols=[...document.getElementById('mc-cols').querySelectorAll('input[type=color]')].map(e=>e.value);
+  c.config={...c.config,
+    title:document.getElementById('mc-title').value,
+    type:document.getElementById('mc-type').value,
+    xCol:document.getElementById('mc-xcol').value,
+    yCol:document.getElementById('mc-ycol').value,
+    yAgg:document.getElementById('mc-yagg').value,
+    y2Col:document.getElementById('mc-y2col').value,
+    y2Agg:document.getElementById('mc-y2agg').value,
+    sizeCol:document.getElementById('mc-scol').value,
+    sortBy:document.getElementById('mc-sort').value,
+    maxItems:parseInt(document.getElementById('mc-max').value)||25,
+    borderR:parseInt(document.getElementById('mc-br').value)||4,
+    pointSize:parseInt(document.getElementById('mc-ps').value)||4,
+    xLabel:document.getElementById('mc-xl').value,
+    yLabel:document.getElementById('mc-yl').value,
+    gaugeMin:parseFloat(document.getElementById('mc-gmin').value)||0,
+    gaugeMax:parseFloat(document.getElementById('mc-gmax').value)||100,
+    targetPct:parseFloat(document.getElementById('mc-tp').value)||75,
+    showLegend:document.getElementById('mc-leg').checked,
+    smooth:document.getElementById('mc-sm').checked,
+    fill:document.getElementById('mc-fi').checked,
+    colors:cols.length?cols:[...gPal],
+  };
+  refreshChart(editId); closeM(); toast('Configurazione applicata ✓','ok'); updateChartList();
+}
+
+function applyKpiM(){
+  const id=parseInt(editId.replace('kpi-',''));
+  const k=kpiBlocks.find(x=>x.id===id); if(!k)return;
+  const rows=[...document.getElementById('krows').children];
+  k.config.cols=rows.map(r=>{
+    const ri=r.id.replace('kr-','');
+    const g=s=>document.getElementById(s+ri);
+    return{col:g('kcc-')?.value||columns[0],label:g('kcl-')?.value||'',agg:g('kca-')?.value||'auto',
+      prefix:g('kcp-')?.value||'',suffix:g('kcs-')?.value||'',
+      color:g('kco-')?.value||gPal[0],spark:g('kck-')?.checked??true};
+  });
+  refreshKpi(id); closeM(); toast('KPI aggiornato ✓','ok');
+}
+
+function closeM(){document.getElementById('moverlay').classList.remove('vis');editId=null;}
+
+// ================================================================
+// EXPORT
+// ================================================================
+function exportPNG(id){
+  const c=charts.find(x=>x.id===id);
+  if(c?.inst){
+    const a=document.createElement('a');a.href=c.inst.toBase64Image();a.download=(c.config.title||'grafico')+'.png';a.click();
+    toast('PNG esportato','ok'); return;
+  }
+  // SVG custom
+  const svg=document.getElementById('cw-'+id)?.querySelector('svg');
+  if(svg){const d=new XMLSerializer().serializeToString(svg);const a=document.createElement('a');a.href='data:image/svg+xml;charset=utf-8,'+encodeURIComponent(d);a.download=(c?.config.title||'grafico')+'.svg';a.click();toast('SVG esportato','ok');}
+  else toast('Export non disponibile per questo tipo','warn');
+}
+
+function exportCSV(id){
+  const c=charts.find(x=>x.id===id); if(!c)return;
+  const entries=aggData(c.config);
+  const total=entries.reduce((s,e)=>s+e[1],0);
+  const rows=[`${c.config.xCol},Valore,Percentuale`,...entries.map(([l,v])=>`"${l}",${v},${total?(v/total*100).toFixed(2):'0'}%`)];
+  const a=document.createElement('a');a.href=URL.createObjectURL(new Blob([rows.join('\n')],{type:'text/csv'}));a.download=(c.config.title||'grafico')+'.csv';a.click();toast('CSV esportato','ok');
+}
+
+function exportAll(){
+  charts.forEach((c,i)=>setTimeout(()=>exportPNG(c.id),i*250));
+}
+
+// ================================================================
+// LAYOUT
+// ================================================================
+function cycleGrid(){
+  gridMode=gridMode>=3?1:gridMode+1;
+  applyGrid();
+  document.getElementById('gridBtn').textContent=['▦','▦▦','▦▦▦'][gridMode-1]+' Layout';
+}
+function applyGrid(){
+  document.getElementById('cgrid').className='cgrid'+(gridMode>1?' c'+gridMode:'');
+}
+
+// ================================================================
+// CHART LIST SIDEBAR
+// ================================================================
+function updateChartList(){
+  const el=document.getElementById('chartList');
+  const all=[
+    ...kpiBlocks.map(k=>`<div style="display:flex;align-items:center;gap:5px;padding:4px 2px;border-bottom:1px solid var(--border)">
+      <span style="font-size:9px;color:var(--text3)">KPI</span>
+      <span style="font-size:11px;flex:1;color:var(--text2)">Block ${k.id}</span>
+      <button class="btn sm" onclick="openKpiM(${k.id})" style="padding:2px 6px">⚙</button>
+      <button class="btn sm danger" onclick="delKpi(${k.id})" style="padding:2px 5px">✕</button>
+    </div>`),
+    ...charts.map(c=>`<div style="display:flex;align-items:center;gap:5px;padding:4px 2px;border-bottom:1px solid var(--border)">
+      <span class="pill" style="font-size:9px;padding:1px 5px">${c.config.type}</span>
+      <span style="font-size:11px;flex:1;color:var(--text2);overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${c.config.title}">${c.config.title}</span>
+      <button class="btn sm" onclick="openM(${c.id})" style="padding:2px 6px">⚙</button>
+    </div>`)
+  ];
+  el.innerHTML=all.length?all.join(''):'<span class="htxt">Nessun grafico</span>';
+}
+
+// ================================================================
+// STATUS & UTILS
+// ================================================================
+function updateStatus(){
+  document.getElementById('st-rows').textContent='Totale: '+rawData.length.toLocaleString('it-IT');
+  document.getElementById('st-filt').textContent='Filtrate: '+filteredData.length.toLocaleString('it-IT');
+  document.getElementById('st-cols').textContent='Colonne: '+columns.length;
+  document.getElementById('st-charts').textContent='Grafici: '+charts.length+' · KPI: '+kpiBlocks.length;
+}
+function tgl(h){h.classList.toggle('open');h.nextElementSibling.classList.toggle('vis');}
+function toast(msg,type='ok'){
+  const c=document.getElementById('tcon');const el=document.createElement('div');
+  el.className='toast '+type;el.textContent=msg;c.appendChild(el);
+  setTimeout(()=>el.remove(),3200);
+}
+</script>
+</body>
+</html>
