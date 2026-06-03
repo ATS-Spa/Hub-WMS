@@ -2401,8 +2401,8 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
 //  COSTANTI
 // ═══════════════════════════════════════════════════════════
 // CLIENT_ID rimosso: auth delegata a WMS Hub
-var FOLDER_ID      = '1atN6jbD2-nbRsNBhCGNeq34PPvFALH6n';  // cartella file presenze xlsx
-var FOLDER_ID_JSON = '1IDwOTQmrhvHsZ1hsfS9jCZZm1I0XRbNA';  // cartella JSON (config, richieste)
+var FOLDER_ID      = '1atN6jbD2-nbRsNBhCGNeq34PPvFALH6n';  // file presenze xlsx
+var FOLDER_ID_JSON = '1IDwOTQmrhvHsZ1hsfS9jCZZm1I0XRbNA';  // JSON config/richieste
 var ADMIN_PASS = 'Ats2026@';
 var CONFIG_FNAME = 'config_presenze.json';
 var SUPER_USER = 'atssegnalazioni@gmail.com';
@@ -2836,7 +2836,7 @@ function loadAllFiles(){
       return /^[A-Za-z]+_P\d+_\d{6}$/i.test(n)&&canSeeFile(f.name);
     });
     buildDynamicFilters();
-    buildYears();
+    buildYears(); // aggiorna anni con quelli reali dai file Drive
   }).catch(function(e){console.error('[WMS] loadAllFiles error:',e);});
 }
 function parseFileName(name){
@@ -7784,6 +7784,8 @@ function richInvia(){
     responsabile_email: respEmail,
     nota_resp: '',
     mail_inviata: false,
+    mail_esito_inviata: false,
+    mail_inviata: false,
     mail_esito_inviata: false
   };
 
@@ -7899,69 +7901,50 @@ function richScriviSuDrive(req){
         (!plant||p.plant.toLowerCase()===plant.toLowerCase());
     });
     if(!fnames.length){
-      // File mese non esiste: crealo automaticamente
       var mm2=('0'+info.month).slice(-2);
       var fname2=respNome+'_'+plant+'_'+info.year+mm2;
       var mName2=MESI[info.month-1];
       var dates2=getDates(info.year,info.month);
       var h0_2=['Resp. '+respNome,'Dipendenti','Plant','Data'];
-      var h1_2=['ExtEmpN_SAP','Nominativo','Plant '+plant,
-                mName2.substring(0,3).toLowerCase()+'-'+String(info.year).slice(2)];
+      var h1_2=['ExtEmpN_SAP','Nominativo','Plant '+plant,mName2.substring(0,3).toLowerCase()+'-'+String(info.year).slice(2)];
       dates2.forEach(function(d){h0_2.push(d.day);h1_2.push(GGS[d.weekday]||'');});
       var sig2=[req.dipendente_sap||'',nome,'Sigla'];dates2.forEach(function(){sig2.push('');});
       var ing2=[req.dipendente_sap||'',nome,'Ingresso'];dates2.forEach(function(){ing2.push('');});
       var usc2=[req.dipendente_sap||'',nome,'Uscita'];dates2.forEach(function(){usc2.push('');});
-
       return fetch('https://sheets.googleapis.com/v4/spreadsheets',{
         method:'POST',
         headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
-        body:JSON.stringify({
-          properties:{title:fname2},
-          sheets:[
-            {properties:{title:mName2+'_Coop'}},
-            {properties:{title:mName2+'_ATS'}},
-            {properties:{title:'Leggenda'}}
-          ]
-        })
+        body:JSON.stringify({properties:{title:fname2},sheets:[
+          {properties:{title:mName2+'_Coop'}},
+          {properties:{title:mName2+'_ATS'}},
+          {properties:{title:'Leggenda'}}
+        ]})
       }).then(function(r){return r.json();}).then(function(ss){
         var ssId=ss.spreadsheetId;
-        if(!ssId) throw new Error('Errore creazione file '+fname2);
-        // Sposta nella cartella giusta
-        return fetch('https://www.googleapis.com/drive/v3/files/'+ssId+
-                     '?addParents='+FOLDER_ID+'&removeParents=root&fields=id',{
-          method:'PATCH',
-          headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
-          body:JSON.stringify({})
+        if(!ssId) throw new Error('Errore creazione '+fname2);
+        return fetch('https://www.googleapis.com/drive/v3/files/'+ssId+'?addParents='+FOLDER_ID+'&removeParents=root&fields=id',{
+          method:'PATCH',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},body:JSON.stringify({})
         }).then(function(){return ssId;});
       }).then(function(ssId){
-        // Scrivi intestazioni
         return sheetsBatchUpdate(ssId,[
           {range:mName2+'_Coop!A1',values:[h0_2,h1_2]},
           {range:mName2+'_ATS!A1', values:[h0_2,h1_2,sig2,ing2,usc2,[]]},
         ]).then(function(){return ssId;});
       }).then(function(ssId){
-        // Ora scrivi le sigle
         var sname2=mName2+'_ATS';
-        var updates2=[];
-        var DST2=3;
+        var updates2=[];var DST2=3;
         info.giorni.forEach(function(giorno){
           var di2=dates2.findIndex(function(dt){return dt.day===giorno;});
           if(di2<0) return;
-          // Riga del dipendente = riga 3 (0-based: index 2 = riga 3 nello sheet)
-          var col2=colToLetter(DST2+di2);
-          updates2.push({range:sname2+'!'+col2+'3',values:[[sigla]]});
+          updates2.push({range:sname2+'!'+colToLetter(DST2+di2)+'3',values:[[sigla]]});
         });
-        if(updates2.length){
-          return sheetsBatchUpdate(ssId,updates2).then(function(){
-            toast('✅ File '+fname2+' creato e ferie scritte');
-            loadAllFiles();
-          });
-        }
-        toast('✅ File '+fname2+' creato');
-        loadAllFiles();
+        if(updates2.length) return sheetsBatchUpdate(ssId,updates2).then(function(){
+          toast('✅ File '+fname2+' creato e ferie scritte'); loadAllFiles();
+        });
+        toast('✅ File '+fname2+' creato'); loadAllFiles();
       }).catch(function(e){
-        console.error('[WMS RICH] Errore creazione file '+fname2+':',e);
-        toast('⚠ File '+fname2+' non trovato e creazione fallita: '+e.message,'warn');
+        console.error('[WMS RICH] Creazione fallita:',e);
+        toast('⚠ File '+fname2+' non trovato','warn');
       });
     }
     var f=fnames[0];
@@ -8030,17 +8013,9 @@ function richRenderAnagPanel(){
   var resps = (permConfig.responsabili||[]).filter(function(r){return !r._esempio;});
 
   // Responsabili: SOLO dai nomi dei file Drive
-  // Responsabili da config (principale) + da file esistenti (fallback)
   var respNomi = {};
   (permConfig.responsabili||[]).forEach(function(r){if(r.nome&&!r._esempio)respNomi[r.nome]=true;});
   (allFiles||[]).forEach(function(f){var p=parseFileName(f.name);if(p&&p.resp)respNomi[p.resp]=true;});
-  // Se ancora nessun responsabile trovato e allFiles non è pronto, riprova tra 1s
-  if(!Object.keys(respNomi).length && (!allFiles||!allFiles.length)){
-    setTimeout(function(){
-      var permSec=document.getElementById('secPerm');
-      if(permSec&&permSec.style.display!=='none') renderPermPanel();
-    }, 1000);
-  }
   var respOpts = Object.keys(respNomi).sort().map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
 
   var h = '<div class="anag-panel">';
@@ -8092,7 +8067,7 @@ function richAnagRow(d,i,respOpts){
     +'<td><input class="anag-input" placeholder="email@atsgruppo.eu" value="'+esc(d.email_lavoro||'')+'" onchange="richAnagChange(\'dip\','+i+',\'email_lavoro\',this.value)"></td>'
     +'<td><input class="anag-input" value="'+esc(d.sap||'')+'" style="width:70px" onchange="richAnagChange(\'dip\','+i+',\'sap\',this.value)"></td>'
     +'<td><input class="anag-input" value="'+esc(d.plant||'')+'" style="width:60px" onchange="richAnagChange(\'dip\','+i+',\'plant\',this.value)"></td>'
-    +'<td><select class="anag-select" onchange="richAnagChange(\'dip\','+i+',\'responsabile_nome\',this.value)"><option value="">—</option>'+(function(){var cur=d.responsabile_nome||'';return Object.keys(respNomi).sort().map(function(n){return '<option value="'+esc(n)+'"'+(n===cur?' selected':'')+'>'+esc(n)+'</option>';}).join('');})()+'</select></td>'
+    +'<td><select class="anag-select" onchange="richAnagChange(\'dip\','+i+',\'responsabile_nome\',this.value)"><option value="">—</option>'+(function(){var cur=d.responsabile_nome||'';return respOpts.replace('value="'+esc(cur)+'"','value="'+esc(cur)+'" selected');})()+'</select></td>'
     +'<td><input class="anag-input" type="number" value="'+(c.ferie_giorni||22)+'" style="width:55px" onchange="richAnagChange(\'dip\','+i+',\'contratto_ferie\',this.value)"></td>'
     +'<td><input class="anag-input" type="number" value="'+(c.permessi_ore||32)+'" style="width:55px" onchange="richAnagChange(\'dip\','+i+',\'contratto_hp\',this.value)"></td>'
     +'<td><select class="anag-select" style="width:70px" onchange="richAnagChange(\'dip\','+i+',\'pausa_default\',parseFloat(this.value))">'+pausaOpts+'</select></td>'
@@ -8121,10 +8096,9 @@ function richAnagChange(tipo,i,field,val){
   else if(field==='pausa_default'){arr[i].pausa_default=parseFloat(val);}
   else {
     arr[i][field]=val;
-    // Quando cambia responsabile_nome in un dipendente, aggiorna anche responsabile_email
     if(tipo==='dip' && field==='responsabile_nome'){
-      var respRec = (permConfig.responsabili||[]).find(function(r){return r.nome===val && !r._esempio;});
-      arr[i].responsabile_email = respRec ? (respRec.email_lavoro||respRec.email_google||'') : '';
+      var rr=(permConfig.responsabili||[]).find(function(r){return r.nome===val&&!r._esempio;});
+      arr[i].responsabile_email=rr?(rr.email_lavoro||rr.email_google||''):'';
     }
   }
 }
@@ -8140,7 +8114,7 @@ function richAddDip(){
 function richAddResp(){
   if(!permConfig.responsabili) permConfig.responsabili=[];
   permConfig.responsabili = permConfig.responsabili.filter(function(r){return !r._esempio;});
-  permConfig.responsabili.push({email_google:'',nome:'',email_lavoro:'',superiore_nome:'',superiore_email:''});
+  permConfig.responsabili.push({email_google:'',email_lavoro:'',nome:'',superiore_nome:'',superiore_email:''});
   renderPermPanel();
   setTimeout(function(){switchSec('perm');},50);
 }
@@ -8163,33 +8137,18 @@ function richDelResp(i){
   });
 }
 function richSaveAnag(){
-  // Leggi i valori attuali dal DOM (select responsabile) e sincronizza in memoria
-  var dipReal = (permConfig.dipendenti||[]).filter(function(d){return !d._esempio;});
-  var table = document.querySelector('#richAnagDiv table');
-  if(table){
-    var rows = table.querySelectorAll('tbody tr');
-    rows.forEach(function(row, i){
-      if(!dipReal[i]) return;
-      var sel = row.querySelector('select.anag-select');
-      if(sel) dipReal[i].responsabile_nome = sel.value;
-      // Sincronizza email aziendale dipendente
-      var inputs = row.querySelectorAll('input.anag-input');
-      if(inputs[2]) dipReal[i].email_lavoro = inputs[2].value; // Email Aziendale
-    });
-  }
-  // Sincronizza responsabile_email
+  // Sincronizza responsabile_email per tutti i dipendenti
   (permConfig.dipendenti||[]).forEach(function(d){
     if(d._esempio) return;
-    var rn = d.responsabile_nome||'';
-    var rr = (permConfig.responsabili||[]).find(function(r){return r.nome===rn && !r._esempio;});
-    d.responsabile_email = rr ? (rr.email_lavoro||rr.email_google||'') : '';
+    var rr=(permConfig.responsabili||[]).find(function(r){return r.nome===d.responsabile_nome&&!r._esempio;});
+    d.responsabile_email=rr?(rr.email_lavoro||rr.email_google||''):'';
   });
   toast('⏳ Salvo anagrafica…','warn');
   savePermConfigWithDips().then(function(){
     toast('✅ Anagrafica salvata su Drive');
     _pausaCache=null;
     richIdentifyUser();
-    renderPermPanel(); // ri-renderizza per mostrare i valori aggiornati
+    renderPermPanel();
   }).catch(function(e){toast('✗ '+e.message,'err');});
 }
 </script>
