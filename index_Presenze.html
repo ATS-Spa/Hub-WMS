@@ -2401,7 +2401,8 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
 //  COSTANTI
 // ═══════════════════════════════════════════════════════════
 // CLIENT_ID rimosso: auth delegata a WMS Hub
-var FOLDER_ID  = '1IDwOTQmrhvHsZ1hsfS9jCZZm1I0XRbNA';
+var FOLDER_ID      = '1atN6jbD2-nbRsNBhCGNeq34PPvFALH6n';  // cartella file presenze xlsx
+var FOLDER_ID_JSON = '1IDwOTQmrhvHsZ1hsfS9jCZZm1I0XRbNA';  // cartella JSON (config, richieste)
 var ADMIN_PASS = 'Ats2026@';
 var CONFIG_FNAME = 'config_presenze.json';
 var SUPER_USER = 'atssegnalazioni@gmail.com';
@@ -2736,7 +2737,7 @@ function mkI(s){var c=(s||'?').replace(/@.*/,'').charAt(0).toUpperCase();return 
 //  CONFIG / PERMISSIONS
 // ═══════════════════════════════════════════════════════════
 function loadConfig(){
-  listFiles('"'+FOLDER_ID+'" in parents and name="'+CONFIG_FNAME+'" and trashed=false')
+  listFiles('"'+FOLDER_ID_JSON+'" in parents and name="'+CONFIG_FNAME+'" and trashed=false')
   .then(function(files){
     if(!files.length){
       permConfig={super_users:[SUPER_USER],admins:[],users:{},default:{sections:['coop','ats']}};
@@ -5047,7 +5048,7 @@ function savePermConfig(){
   var blob=new Blob([json],{type:'application/json'});
   function doUpload(method,url){
     var bnd='cfg_'+Date.now(),enc=new TextEncoder();
-    var meta=method==='POST'?JSON.stringify({name:CONFIG_FNAME,parents:[FOLDER_ID]}):JSON.stringify({name:CONFIG_FNAME});
+    var meta=method==='POST'?JSON.stringify({name:CONFIG_FNAME,parents:[FOLDER_ID_JSON]}):JSON.stringify({name:CONFIG_FNAME});
     var pre='--'+bnd+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+meta+'\r\n--'+bnd+'\r\nContent-Type: application/json\r\n\r\n';
     var post='\r\n--'+bnd+'--';
     return blob.arrayBuffer().then(function(buf){
@@ -5937,7 +5938,7 @@ function ferieResiduoFname(year){ return 'residuo_ats_'+year+'.json'; }
 
 function loadFerieResiduo(year){
   var fname=ferieResiduoFname(year);
-  return listFiles('"'+FOLDER_ID+'" in parents and name="'+fname+'" and trashed=false')
+  return listFiles('"'+FOLDER_ID_JSON+'" in parents and name="'+fname+'" and trashed=false')
     .then(function(files){
       if(!files.length){ferieFileId=null;ferieData={anno:year,dipendenti:[]};return ferieData;}
       ferieFileId=files[0].id;
@@ -5952,7 +5953,7 @@ function saveFerieResiduo(){
   var json=JSON.stringify(ferieData,null,2);
   var blob=new Blob([json],{type:'application/json'});
   var bnd='ferie_'+Date.now(),enc=new TextEncoder();
-  var meta=ferieFileId?JSON.stringify({name:fname}):JSON.stringify({name:fname,parents:[FOLDER_ID]});
+  var meta=ferieFileId?JSON.stringify({name:fname}):JSON.stringify({name:fname,parents:[FOLDER_ID_JSON]});
   var pre='--'+bnd+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+meta+'\r\n--'+bnd+'\r\nContent-Type: application/json\r\n\r\n';
   var post='\r\n--'+bnd+'--';
   var method=ferieFileId?'PATCH':'POST';
@@ -7189,7 +7190,7 @@ var RICH_TIPI = [
 
 // ── Carica file richieste da Drive ──────────────────────────────────────────
 function loadRichieste(){
-  return listFiles('"'+FOLDER_ID+'" in parents and name="'+RICH_FNAME+'" and trashed=false')
+  return listFiles('"'+FOLDER_ID_JSON+'" in parents and name="'+RICH_FNAME+'" and trashed=false')
   .then(function(files){
     if(!files.length){
       richFileId=null;
@@ -7212,7 +7213,7 @@ function saveRichieste(){
   var bnd = 'rich_'+Date.now(), enc = new TextEncoder();
   var meta = richFileId
     ? JSON.stringify({name:RICH_FNAME})
-    : JSON.stringify({name:RICH_FNAME, parents:[FOLDER_ID]});
+    : JSON.stringify({name:RICH_FNAME, parents:[FOLDER_ID_JSON]});
   var pre  = '--'+bnd+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+meta+'\r\n--'+bnd+'\r\nContent-Type: application/json\r\n\r\n';
   var post = '\r\n--'+bnd+'--';
   var method = richFileId ? 'PATCH' : 'POST';
