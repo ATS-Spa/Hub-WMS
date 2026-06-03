@@ -7741,7 +7741,7 @@ function richInvia(){
 
   if(!dal||!al){toast('Seleziona le date','warn');return;}
 
-  var d1=new Date(dal),d2=new Date(al);
+  var d1=parseLocalDate(dal),d2=parseLocalDate(al);
   if(d2<d1){toast('Data fine prima di data inizio','warn');return;}
 
   // Calcola giorni lavorativi
@@ -7866,6 +7866,14 @@ function richAnnulla(id){
 
 // ── Scrittura automatica su Drive all'approvazione ───────────────────────────
 // Riusa la logica dell'inserimento massivo: gestisce multi-mese
+
+function parseLocalDate(s){
+  // Evita problema timezone: '2026-06-09' con new Date() diventa giorno precedente
+  if(!s) return new Date();
+  var p=String(s).split('-');
+  if(p.length===3) return new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));
+  return new Date(s);
+}
 function richScriviSuDrive(req){
   var sap   = req.dipendente_sap||'';
   var nome  = req.dipendente_nome||'';
@@ -7874,8 +7882,8 @@ function richScriviSuDrive(req){
   // Trova il responsabile (nome) dal nome del file
   var respNome = req.responsabile_nome||'';
 
-  var d1 = new Date(req.data_dal);
-  var d2 = new Date(req.data_al);
+  var d1 = parseLocalDate(req.data_dal);
+  var d2 = parseLocalDate(req.data_al);
 
   // Raggruppa per mese
   var mesi = {};
