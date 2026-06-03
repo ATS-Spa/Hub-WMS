@@ -7898,8 +7898,70 @@ function richScriviSuDrive(req){
         (!plant||p.plant.toLowerCase()===plant.toLowerCase());
     });
     if(!fnames.length){
-      console.warn('[WMS RICH] File non trovato per '+key+' resp='+respNome+' plant='+plant);
-      return Promise.resolve();
+      // File mese non esiste: crealo automaticamente
+      var mm2=('0'+info.month).slice(-2);
+      var fname2=respNome+'_'+plant+'_'+info.year+mm2;
+      var mName2=MESI[info.month-1];
+      var dates2=getDates(info.year,info.month);
+      var h0_2=['Resp. '+respNome,'Dipendenti','Plant','Data'];
+      var h1_2=['ExtEmpN_SAP','Nominativo','Plant '+plant,
+                mName2.substring(0,3).toLowerCase()+'-'+String(info.year).slice(2)];
+      dates2.forEach(function(d){h0_2.push(d.day);h1_2.push(GGS[d.weekday]||'');});
+      var sig2=[req.dipendente_sap||'',nome,'Sigla'];dates2.forEach(function(){sig2.push('');});
+      var ing2=[req.dipendente_sap||'',nome,'Ingresso'];dates2.forEach(function(){ing2.push('');});
+      var usc2=[req.dipendente_sap||'',nome,'Uscita'];dates2.forEach(function(){usc2.push('');});
+
+      return fetch('https://sheets.googleapis.com/v4/spreadsheets',{
+        method:'POST',
+        headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+        body:JSON.stringify({
+          properties:{title:fname2},
+          sheets:[
+            {properties:{title:mName2+'_Coop'}},
+            {properties:{title:mName2+'_ATS'}},
+            {properties:{title:'Leggenda'}}
+          ]
+        })
+      }).then(function(r){return r.json();}).then(function(ss){
+        var ssId=ss.spreadsheetId;
+        if(!ssId) throw new Error('Errore creazione file '+fname2);
+        // Sposta nella cartella giusta
+        return fetch('https://www.googleapis.com/drive/v3/files/'+ssId+
+                     '?addParents='+FOLDER_ID+'&removeParents=root&fields=id',{
+          method:'PATCH',
+          headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+          body:JSON.stringify({})
+        }).then(function(){return ssId;});
+      }).then(function(ssId){
+        // Scrivi intestazioni
+        return sheetsBatchUpdate(ssId,[
+          {range:mName2+'_Coop!A1',values:[h0_2,h1_2]},
+          {range:mName2+'_ATS!A1', values:[h0_2,h1_2,sig2,ing2,usc2,[]]},
+        ]).then(function(){return ssId;});
+      }).then(function(ssId){
+        // Ora scrivi le sigle
+        var sname2=mName2+'_ATS';
+        var updates2=[];
+        var DST2=3;
+        info.giorni.forEach(function(giorno){
+          var di2=dates2.findIndex(function(dt){return dt.day===giorno;});
+          if(di2<0) return;
+          // Riga del dipendente = riga 3 (0-based: index 2 = riga 3 nello sheet)
+          var col2=colToLetter(DST2+di2);
+          updates2.push({range:sname2+'!'+col2+'3',values:[[sigla]]});
+        });
+        if(updates2.length){
+          return sheetsBatchUpdate(ssId,updates2).then(function(){
+            toast('✅ File '+fname2+' creato e ferie scritte');
+            loadAllFiles();
+          });
+        }
+        toast('✅ File '+fname2+' creato');
+        loadAllFiles();
+      }).catch(function(e){
+        console.error('[WMS RICH] Errore creazione file '+fname2+':',e);
+        toast('⚠ File '+fname2+' non trovato e creazione fallita: '+e.message,'warn');
+      });
     }
     var f=fnames[0];
     var sname=MESI[info.month-1]+'_ATS';
