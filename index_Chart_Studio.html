@@ -1072,7 +1072,7 @@ function loadSheet(){
   const ws=workbook.Sheets[document.getElementById('shSelect').value];
   const json=XLSX.utils.sheet_to_json(ws,{defval:'',header:0});
   if(!json.length){toast('Foglio vuoto','err');return;}
-  rawData=json; columns=Object.keys(rawData[0]); filteredData=[...rawData];
+  rawData=json; columns=cleanCols(Object.keys(rawData[0])); filteredData=[...rawData];
   document.getElementById('dInfo').style.display='';
   document.getElementById('dInfo').textContent=`${rawData.length.toLocaleString('it-IT')} righe · ${columns.length} colonne`;
   document.getElementById('noData').style.display='none';
@@ -1127,8 +1127,13 @@ function addGC(){gPal.push('#888888');renderGP();}
 // ================================================================
 function isNum(col){
   if(!rawData.length)return false;
+  if(!col||String(col).startsWith('__EMPTY'))return false;
   const s=rawData.slice(0,40).map(r=>r[col]).filter(v=>v!==''&&v!=null);
   return s.length>0&&s.every(v=>!isNaN(parseFloat(v)));
+}
+// Filtra colonne senza nome reale (__EMPTY = SheetJS per celle senza header)
+function cleanCols(cols){
+  return (cols||[]).filter(c=>c&&!String(c).startsWith('__EMPTY')&&String(c).trim()!=='');
 }
 function getNum(col,row){return parseFloat(row[col])||0;}
 // Converte lettera colonna Excel → indice 0-based (A=0, B=1, AA=26 ...)
@@ -2403,6 +2408,7 @@ function resetMC(){document.getElementById('mc-cols').innerHTML=gPal.map((c,i)=>
 function applyM(){
   if(typeof editId==='string'&&editId.startsWith('kpi-')){applyKpiM();return;}
   const c=charts.find(x=>x.id===editId); if(!c)return;
+  const cfg=c.config; // fix: cfg deve essere definito prima di usarlo
   const cols=[...document.getElementById('mc-cols').querySelectorAll('input[type=color]')].map(e=>e.value);
   const newYCols=readYCols();
   const firstY=newYCols[0]||{col:cfg.yCol,agg:cfg.yAgg};
