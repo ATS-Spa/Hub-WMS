@@ -3305,8 +3305,10 @@ function coopLoad(){
     }
     coopFileId=files.length===1?files[0].id:null;
     coopData=merged;coopEmps=merged.employees;
+    var _coopFileForComm=coopFileId||merged.fileId;
     // Carica note dalle celle
-    loadNotesForEmps(coopEmps,coopFileId||merged.fileId,merged.sheetName,merged.dayStart||3,merged.nd||merged.dates.length)
+    loadNotesForEmps(coopEmps,_coopFileForComm,merged.sheetName,merged.dayStart||3,merged.nd||merged.dates.length)
+    .then(function(){return loadCommesseForEmps(coopEmps,_coopFileForComm,'coop',y,m);})
     .then(function(){coopRender();});
     ['cRef','cExp','cPrt','cBulkBtn','cMassBtn'].forEach(function(id){document.getElementById(id).disabled=false;});
     document.getElementById('cInfo').textContent=MESI[m-1]+' '+y+' · '+merged.employees.length+' dip.'+(files.length>1?' ('+files.length+' file)':'');
@@ -3618,7 +3620,9 @@ function atsLoad(){
     }
     atsFileId=files.length===1?files[0].id:null;
     atsData=merged;atsEmps=merged.employees;
-    loadNotesForEmps(atsEmps,atsFileId||merged.fileId,merged.sheetName,merged.dayStart||3,merged.nd||merged.dates.length)
+    var _atsFileForComm=atsFileId||merged.fileId;
+    loadNotesForEmps(atsEmps,_atsFileForComm,merged.sheetName,merged.dayStart||3,merged.nd||merged.dates.length)
+    .then(function(){return loadCommesseForEmps(atsEmps,_atsFileForComm,'ats',y,m);})
     .then(function(){atsRender();});
     ['aRef','aExp','aPrt','aBulkBtn','aMassBtn'].forEach(function(id){document.getElementById(id).disabled=false;});
     document.getElementById('aInfo').textContent=MESI[m-1]+' '+y+' · '+merged.employees.length+' dip.'+(files.length>1?' ('+files.length+' file)':'');
@@ -6007,6 +6011,55 @@ function loadNotesForEmps(emps, fileId, sheetName, dayStart, nd){
     });
   }).catch(function(e){console.warn('[WMS] loadNotes error:',e.message);});
 }
+function loadCommesseForEmps(emps, fileId, mode, y, m){
+  if(!fileId||!emps.length)return Promise.resolve();
+  var tabName=(MESI[m-1]||m)+'_'+(mode==='ats'?'ATS':'Coop')+'_Commesse';
+  var commesse=(permConfig&&permConfig.commesse)||[];
+  if(!commesse.length)return Promise.resolve();
+  return sheetsRead(fileId,tabName+'!A1:AZ500')
+  .then(function(rows){
+    if(!rows||rows.length<2)return;
+    var hdr=rows[0]||[];
+    // Mappa nome_colonna -> indice
+    var colIdx={};
+    hdr.forEach(function(h,i){if(h)colIdx[String(h).trim()]=i;});
+    var nomeIdx=colIdx['Nominativo']!==undefined?colIdx['Nominativo']:0;
+    var giornIdx=colIdx['Giorno']!==undefined?colIdx['Giorno']:2;
+    // Indici ore per ogni commessa: colonna "<CODE>_h"
+    var commCols={};
+    commesse.forEach(function(c){
+      var k=c.code+'_h';
+      if(colIdx[k]!==undefined)commCols[c.code]=colIdx[k];
+    });
+    // Mappa nome -> emp
+    var empByName={};
+    emps.forEach(function(e){
+      var k=(e.nom2||e.nome||'').trim().toLowerCase();
+      empByName[k]=e;
+    });
+    for(var ri=1;ri<rows.length;ri++){
+      var row=rows[ri]||[];
+      var nome=String(row[nomeIdx]||'').trim();
+      var giorno=parseInt(row[giornIdx]||'0');
+      if(!nome||!giorno)continue;
+      var emp=empByName[nome.toLowerCase()];
+      if(!emp)continue;
+      // nd = numero giorni del mese
+      var nd=new Date(y,m,0).getDate();
+      var di=giorno-1; // 0-based
+      if(di<0||di>=nd)continue;
+      if(!emp.commesse)emp.commesse=[];
+      while(emp.commesse.length<=di)emp.commesse.push(null);
+      var vals={};
+      Object.keys(commCols).forEach(function(code){
+        var v=parseFloat(row[commCols[code]]);
+        if(v>0)vals[code]=v;
+      });
+      if(Object.keys(vals).length)emp.commesse[di]=vals;
+    }
+  }).catch(function(e){console.warn('[WMS] loadCommesse error:',e.message);});
+}
+
 function mClose(id){document.getElementById(id).classList.add('hide');}
 function showConf(t,m,cb){document.getElementById('confTitle').textContent=t;document.getElementById('confMsg').textContent=m;confCb=cb;mOpen('moConf');}
 document.getElementById('confOk').addEventListener('click',function(){var cb=confCb;mClose('moConf');if(cb)cb();});
