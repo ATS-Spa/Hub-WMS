@@ -198,71 +198,89 @@ input[type=color]{width:28px;height:26px;border-radius:var(--rs);border:1px soli
 
 /* ── RANGE PICKER MODAL ──────────────────────────────────── */
 .rpicker-overlay{
-  display:none;position:fixed;inset:0;background:rgba(0,0,0,.85);
-  z-index:600;align-items:flex-start;justify-content:center;padding:10px;
-  overflow:auto;
+  display:none;position:fixed;inset:0;background:rgba(0,0,0,.88);
+  z-index:600;align-items:flex-start;justify-content:center;
+  padding:8px;
 }
 .rpicker-overlay.vis{display:flex}
 .rpicker-box{
   background:var(--bg2);border:1px solid var(--border);
-  border-radius:var(--r);width:min(98vw,1200px);
-  box-shadow:var(--sh);display:flex;flex-direction:column;
-  max-height:96vh;
+  border-radius:var(--r);
+  width:calc(100vw - 16px);   /* occupa quasi tutto lo schermo in larghezza */
+  height:calc(100vh - 16px);  /* e anche in altezza */
+  box-shadow:var(--sh);
+  display:flex;flex-direction:column;
+  overflow:hidden;            /* il contenuto scrolla dentro */
 }
 .rpicker-head{
-  padding:10px 16px;border-bottom:1px solid var(--border);
-  display:flex;align-items:center;gap:10px;flex-wrap:wrap;
-  position:sticky;top:0;background:var(--bg2);z-index:2;
+  padding:8px 14px;border-bottom:1px solid var(--border);
+  display:flex;align-items:center;gap:8px;flex-wrap:wrap;
+  flex-shrink:0;
+  background:var(--bg2);z-index:2;
 }
-.rpicker-title{font-size:13px;font-weight:700;flex:1}
+.rpicker-title{font-size:13px;font-weight:700;flex:1;white-space:nowrap}
 .rpicker-sel-badge{
   font-size:11px;font-weight:700;color:var(--accent2);
   background:var(--asoft);border:1px solid var(--accent);
   border-radius:20px;padding:3px 10px;font-family:monospace;
   min-width:120px;text-align:center;
 }
-.rpicker-body{overflow:auto;flex:1;padding:0}
-.rpicker-tbl-wrap{overflow:auto}
+/* IL BODY è l'unico container che scrolla — risolve il problema sticky */
+.rpicker-body{
+  flex:1;
+  overflow:auto;       /* sia X che Y */
+  min-height:0;        /* fondamentale per flex+overflow */
+  position:relative;
+}
+.rpicker-tbl-wrap{
+  /* Non serve overflow qui — lo gestisce .rpicker-body */
+  display:inline-block;
+  min-width:100%;
+}
 .rpicker-tbl{border-collapse:collapse;font-size:11px}
 .rp-corner{
-  background:var(--bg4);position:sticky;top:0;left:0;z-index:4;
-  min-width:44px;height:26px;border:1px solid var(--border);
+  background:var(--bg4);
+  position:sticky;top:0;left:0;z-index:5;   /* z-index alto per angolo */
+  min-width:40px;height:26px;
+  border:1px solid var(--border);
 }
 .rp-col-hdr{
   background:var(--bg4);color:var(--text3);font-weight:700;
-  padding:3px 8px;border:1px solid var(--border);
-  position:sticky;top:0;z-index:3;text-align:center;
-  min-width:70px;white-space:nowrap;cursor:pointer;
+  padding:3px 6px;border:1px solid var(--border);
+  position:sticky;top:0;z-index:3;          /* sticky verticale */
+  text-align:center;
+  min-width:65px;white-space:nowrap;cursor:pointer;
   font-size:10px;user-select:none;
 }
 .rp-col-hdr:hover{background:var(--bg3);color:var(--text)}
-.rp-col-hdr.rp-hl{background:rgba(59,130,246,.2);color:var(--accent2)}
+.rp-col-hdr.rp-hl{background:rgba(59,130,246,.25);color:var(--accent2)}
 .rp-row-hdr{
   background:var(--bg4);color:var(--text3);font-weight:700;
   padding:2px 6px;border:1px solid var(--border);
-  position:sticky;left:0;z-index:2;text-align:right;
+  position:sticky;left:0;z-index:2;         /* sticky orizzontale */
+  text-align:right;
   font-size:10px;user-select:none;cursor:pointer;white-space:nowrap;
+  min-width:36px;
 }
 .rp-row-hdr:hover{background:var(--bg3);color:var(--text)}
-.rp-row-hdr.rp-hl{background:rgba(59,130,246,.2);color:var(--accent2)}
+.rp-row-hdr.rp-hl{background:rgba(59,130,246,.25);color:var(--accent2)}
 .rp-cell{
   padding:2px 6px;border:1px solid rgba(255,255,255,0.04);
-  white-space:nowrap;max-width:110px;overflow:hidden;
+  white-space:nowrap;width:70px;max-width:100px;overflow:hidden;
   text-overflow:ellipsis;cursor:cell;color:var(--text2);
   font-size:10px;
 }
 .rp-cell:hover{background:rgba(59,130,246,.15)}
-.rp-cell.rp-sel{background:rgba(59,130,246,.35)!important;color:var(--text)!important}
+.rp-cell.rp-sel{background:rgba(59,130,246,.32)!important;color:var(--text)!important}
 .rp-cell.rp-sel-start{outline:2px solid var(--accent);outline-offset:-1px}
 .rp-cell.rp-num{text-align:right;color:var(--text)}
-.rp-cell.rp-hdr-cell{background:rgba(16,185,129,.2)!important;color:#6ee7b7!important;font-weight:600}
+.rp-cell.rp-hdr-cell{background:rgba(16,185,129,.22)!important;color:#6ee7b7!important;font-weight:600}
 .rpicker-foot{
-  padding:10px 16px;border-top:1px solid var(--border);
+  padding:8px 14px;border-top:1px solid var(--border);
   display:flex;gap:8px;align-items:center;flex-wrap:wrap;
-  background:var(--bg2);
+  background:var(--bg2);flex-shrink:0;
 }
 .rpicker-info{font-size:11px;color:var(--text3);flex:1}
-.rp-orientation-toggle{display:flex;gap:5px}
 
 /* DROP ZONE */
 .dz{border:2px dashed var(--border);border-radius:var(--r);padding:22px 12px;text-align:center;cursor:pointer;transition:all .2s;background:rgba(255,255,255,.01)}
@@ -2085,6 +2103,8 @@ function renderRpGrid(){
   tbl+='</tbody></table>';
 
   document.getElementById('rpTblWrap').innerHTML=tbl;
+  // Il body (.rpicker-body) è il container che scrolla — non serve altro
+  document.getElementById('rpTblWrap').style.cssText='display:block;';
 
   // Attach events
   const tblEl=document.getElementById('rpTbl');
