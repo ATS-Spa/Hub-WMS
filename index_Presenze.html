@@ -3039,7 +3039,7 @@ function renderSection(sec, emps, data, opts){
   var dates=data?data.dates:getDates(y,m);
   var _td=new Date(),_todayDay=(_td.getFullYear()===y&&_td.getMonth()+1===m)?_td.getDate():-1;
 
-  var T={P:0,X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,ord:0,str:0,fest:0,week:0};
+  var T={X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,ord:0,str:0,fest:0,week:0,P:0};
   emps.forEach(function(e){
     var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
     Object.keys(T).forEach(function(k){T[k]+=(t[k]||0);});
@@ -3070,7 +3070,7 @@ function renderSection(sec, emps, data, opts){
   ];
   var SIGLA_TO_TOT={X:'X',F:'F','1/2F':'F',M:'M',HP:'HP',H104:'H104','104':'104',CP:'CP',HPE:'HPE',PE:'PE',SW:'SW',Lutto:'Lutto',TFS:'TFS'};
   var activeSiglaCodes=isAts?SIGLE.filter(function(s){return ATS_EXCL_CODES.indexOf(s.code)===-1;}).map(function(s){return s.code;}):COOP_SIGLE_CODES;
-  var activeTotKeys=['ord','str','week','fest'];
+  var activeTotKeys=['ord','str','week','fest','P'];
   activeSiglaCodes.forEach(function(code){var k=SIGLA_TO_TOT[code];if(k&&activeTotKeys.indexOf(k)===-1)activeTotKeys.push(k);});
   var totHdrs=ALL_TOT_HDRS.filter(function(th){return activeTotKeys.indexOf(th.k)!==-1;});
   var NCOLS_TOT=totHdrs.length;
@@ -3507,7 +3507,7 @@ function coopExport(){
   XLSX.utils.book_append_sheet(wb,coopSheet,mName+'_Coop');
   // Report con sole sigle attive in Coop
   var COOP_REP=[
-    {l:'P',k:'X'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},{l:'PLT',k:'PLT'},{l:'PLT.ORE',k:'PLT_ore'},{l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'WEEK',k:'week'},{l:'H.FEST',k:'fest'}
+    {l:'P',k:'P'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},{l:'PLT',k:'PLT'},{l:'PLT.ORE',k:'PLT_ore'},{l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'WEEK',k:'week'},{l:'H.FEST',k:'fest'}
   ];
   var repHdr=['Ext SAP','Nominativo','Resp.','Plant'].concat(COOP_REP.map(function(c){return c.l;}));
   var repRows=[repHdr];
@@ -3767,7 +3767,7 @@ function atsExport(){
   XLSX.utils.book_append_sheet(wb,atsSheet,mName+'_Dipendenti');
   // Report con tutte le sigle Dipendenti
   var ATS_REP=[
-    {l:'P',k:'X'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},
+    {l:'P',k:'P'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},
     {l:'H104',k:'H104'},{l:'104',k:'104'},{l:'CP',k:'CP'},{l:'HPE',k:'HPE'},{l:'PE',k:'PE'},
     {l:'SW',k:'SW'},{l:'Lutto',k:'Lutto'},{l:'TFS',k:'TFS'},{l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'WEEK',k:'week'},{l:'H.FEST',k:'fest'}
   ];
@@ -4613,18 +4613,16 @@ function parsePausaVal(v){
 }
 function fmtOre(h){if(!h)return '';var i=Math.floor(h),f=h-i;return i+(f===0.5?'.5':f>0?'.'+Math.round(f*10):'');}
 
+// Sigle che indicano presenza giornaliera (anche parziale)
+var PRESENCE_CODES=['X','HP','H104','104','HPE','PE','CP','SW','TFS','Lutto','PLT'];
 function calcTots(sig,ingresso,uscita,pause,dates,month,year){
-  // Sigle che contano come "presenza" ai fini del totale P
-  var PRESENCE_CODES=['X','HP','HPE','SW','TFS','H104'];
-  var r={P:0,X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,PLT:0,PLT_ore:0,ord:0,str:0,fest:0,week:0};
+  var r={X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,PLT:0,PLT_ore:0,ord:0,str:0,fest:0,week:0,P:0};
   (sig||[]).forEach(function(v,di){
     if(!v)return;
     var sg=xSig(v);
     // Sigle numeriche pure (104) hanno qty=1, non il numero stesso
     var qty=/^\d+$/.test(String(v)) ? 1 : parseFloat((String(v).match(/^[\d.]+/)||['1'])[0])||1;
     if(r.hasOwnProperty(sg)) r[sg]+=qty;
-    // Conta come presenza se la sigla è nella lista PRESENCE_CODES
-    if(PRESENCE_CODES.indexOf(sg)!==-1) r.P+=1;
     var d=dates&&dates[di];
     var isWe=d&&(d.weekday===0||d.weekday===6);
     if(sg==='PLT'){
@@ -4655,6 +4653,9 @@ function calcTots(sig,ingresso,uscita,pause,dates,month,year){
         else{r.ord+=oreResidueOrd;if(o2.str>0)r.str+=o2.str;}
       }
     }
+    // Conta come presenza giornaliera (P) se la sigla indica presenza
+    if(PRESENCE_CODES.indexOf(sg)!==-1){r.P+=1;}
+    else if(sg==='1/2F'){r.P+=0.5;}
   });
   return r;
 }
