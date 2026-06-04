@@ -34,28 +34,32 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .btn.danger{border-color:rgba(239,68,68,.4);color:var(--err)}.btn.danger:hover{background:rgba(239,68,68,.1)}
 .btn.icon-btn{padding:6px 8px;font-size:14px}
 
-/* TAB freccia laterale — absolute rispetto al sidebar-wrap */
-.sb-tab{
-  position:absolute;
-  right:-20px; top:50%;
-  transform:translateY(-50%);
-  width:20px; height:50px;
+/* TOGGLE STRIP — striscia verticale cliccabile tra sidebar e main */
+.sb-toggle-strip{
+  width:14px;
+  flex-shrink:0;
   background:var(--bg2);
-  border:1px solid var(--border);
-  border-left:none;
-  border-radius:0 var(--rs) var(--rs) 0;
-  display:flex; align-items:center; justify-content:center;
+  border-right:1px solid var(--border);
+  display:flex;
+  align-items:center;
+  justify-content:center;
   cursor:pointer;
-  z-index:50;
-  transition:background .15s, color .15s;
+  transition:background .15s, border-color .15s;
+  position:relative;
+  z-index:10;
+}
+.sb-toggle-strip:hover{background:var(--bg4);border-color:var(--accent)}
+.sb-toggle-strip .st-arr{
+  font-size:10px;
   color:var(--text3);
-  font-size:11px;
+  transition:transform .3s, color .15s;
+  writing-mode:vertical-rl;
+  line-height:1;
   user-select:none;
 }
-.sb-tab:hover{background:var(--bg4);color:var(--accent2);border-color:var(--accent)}
-.sb-tab .arr{transition:transform .3s;display:inline-block;line-height:1}
-.sidebar.collapsed .sb-tab{border-left:1px solid var(--border);border-radius:var(--rs);right:-20px}
-.sidebar.collapsed .sb-tab .arr{transform:rotate(180deg)}
+.sb-toggle-strip:hover .st-arr{color:var(--accent2)}
+.sidebar.collapsed+.sb-toggle-strip{border-right:none;border-left:1px solid var(--border)}
+.sidebar.collapsed+.sb-toggle-strip .st-arr{transform:rotate(180deg)}
 
 /* LAYOUT — occupa tutto lo spazio rimasto sotto la topbar */
 .app{display:flex;flex:1;overflow:hidden;min-height:0}
@@ -63,13 +67,12 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 /* SIDEBAR */
 .sidebar{
   width:var(--sb-w);min-width:var(--sb-w);
-  background:var(--bg2);border-right:1px solid var(--border);
-  overflow-y:auto;overflow-x:visible;
+  background:var(--bg2);
+  overflow-y:auto;overflow-x:hidden;
   flex-shrink:0;display:flex;flex-direction:column;
   transition:width .3s cubic-bezier(.4,0,.2,1), min-width .3s cubic-bezier(.4,0,.2,1);
-  position:relative; /* il tab si posiziona rispetto a questa */
 }
-.sidebar.collapsed{width:0;min-width:0;border-right:none;overflow-y:hidden}
+.sidebar.collapsed{width:0;min-width:0;overflow-y:hidden}
 
 /* MAIN — scroll verticale solo qui */
 .main{flex:1;overflow-y:auto;overflow-x:hidden;padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0;min-height:0}
@@ -336,12 +339,14 @@ table.prev tr:hover td{background:var(--bg3)}
     <div class="s-body vis" id="chartList"><span class="htxt">Nessun grafico</span></div>
   </div>
 
-  <!-- TAB freccia — position:absolute rispetto alla sidebar (overflow-x:visible) -->
-  <div class="sb-tab" id="sbTab" onclick="toggleSidebar()" title="Mostra/Nascondi pannello">
-    <span class="arr">◀</span>
-  </div>
+  <!-- (nessun tab assoluto qui) -->
 
 </div><!-- /sidebar -->
+
+<!-- STRISCIA TOGGLE — nel flusso normale, tra sidebar e main, mai sovrapposta -->
+<div class="sb-toggle-strip" id="sbToggleStrip" onclick="toggleSidebar()" title="Mostra/Nascondi pannello">
+  <span class="st-arr" id="stArr">◀</span>
+</div>
 
 <!-- MAIN -->
 <div class="main" id="mainArea">
@@ -426,7 +431,9 @@ window.addEventListener('load',()=>{
 // ================================================================
 function toggleSidebar(){
   sidebarOpen=!sidebarOpen;
-  document.getElementById('sidebar').classList.toggle('collapsed',!sidebarOpen);
+  const sb=document.getElementById('sidebar');
+  sb.classList.toggle('collapsed',!sidebarOpen);
+  // La freccia si inverte via CSS (.sidebar.collapsed + .sb-toggle-strip .st-arr)
 }
 
 // ================================================================
