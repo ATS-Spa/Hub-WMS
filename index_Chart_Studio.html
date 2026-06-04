@@ -77,6 +77,89 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 /* MAIN — scroll verticale solo qui */
 .main{flex:1;overflow-y:auto;overflow-x:hidden;padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0;min-height:0}
 
+
+/* ================================================================
+   TEMI
+   ================================================================ */
+
+/* Dark (default — già in :root) */
+
+/* Dark Blue */
+body.theme-dark-blue{
+  --bg:#070d1a;--bg2:#0d1829;--bg3:#132035;--bg4:#1a2a45;
+  --border:#1e3354;--text:#dde8ff;--text2:#7aa0d4;--text3:#4a6a9a;
+  --accent:#4f9cf9;--accent2:#7bb8ff;--asoft:rgba(79,156,249,.13);
+}
+
+/* Slate */
+body.theme-slate{
+  --bg:#0f1117;--bg2:#181c26;--bg3:#21263a;--bg4:#2c3349;
+  --border:#353d55;--text:#e4e9f4;--text2:#8b96b8;--text3:#5a6380;
+  --accent:#818cf8;--accent2:#a5b4fc;--asoft:rgba(129,140,248,.13);
+}
+
+/* Emerald Dark */
+body.theme-emerald{
+  --bg:#071210;--bg2:#0e1e1a;--bg3:#152820;--bg4:#1c342a;
+  --border:#1f3d2e;--text:#d4f0e8;--text2:#6ab89a;--text3:#3d7a60;
+  --accent:#10b981;--accent2:#34d399;--asoft:rgba(16,185,129,.13);
+}
+
+/* Amber Dark */
+body.theme-amber{
+  --bg:#130e03;--bg2:#1e1608;--bg3:#2a1f0d;--bg4:#352812;
+  --border:#433214;--text:#fdf4dc;--text2:#c8a84a;--text3:#8a6e28;
+  --accent:#f59e0b;--accent2:#fbbf24;--asoft:rgba(245,158,11,.13);
+}
+
+/* Rose Dark */
+body.theme-rose{
+  --bg:#130810;--bg2:#1e0e1a;--bg3:#2a1424;--bg4:#361a2f;
+  --border:#451f3a;--text:#fde4f4;--text2:#c46ea0;--text3:#8a3d6a;
+  --accent:#f43f5e;--accent2:#fb7185;--asoft:rgba(244,63,94,.13);
+}
+
+/* Light Clean */
+body.theme-light{
+  --bg:#f0f4f8;--bg2:#ffffff;--bg3:#e8edf4;--bg4:#dce3ed;
+  --border:#c8d3e0;--text:#1a2336;--text2:#4a5670;--text3:#7a88a0;
+  --accent:#3b82f6;--accent2:#2563eb;--asoft:rgba(59,130,246,.1);
+  --ok:#059669;--warn:#d97706;--err:#dc2626;
+  --sh:0 2px 12px rgba(0,0,0,.12);
+}
+
+/* Light Warm */
+body.theme-light-warm{
+  --bg:#faf7f2;--bg2:#ffffff;--bg3:#f2ede4;--bg4:#e8e0d0;
+  --border:#d4c8b4;--text:#2a1f0a;--text2:#6b5a3a;--text3:#9a8760;
+  --accent:#d97706;--accent2:#b45309;--asoft:rgba(217,119,6,.1);
+  --ok:#059669;--warn:#dc2626;--err:#dc2626;
+  --sh:0 2px 12px rgba(0,0,0,.1);
+}
+
+/* ── Tema picker popup ── */
+.theme-popup{
+  display:none;position:fixed;top:50px;right:16px;z-index:500;
+  background:var(--bg2);border:1px solid var(--border);
+  border-radius:var(--r);padding:12px;
+  box-shadow:var(--sh);width:220px;
+  flex-direction:column;gap:6px;
+}
+.theme-popup.open{display:flex}
+.theme-popup-title{font-size:10px;font-weight:700;text-transform:uppercase;
+  letter-spacing:.08em;color:var(--text3);padding:2px 0 6px;
+  border-bottom:1px solid var(--border);margin-bottom:2px}
+.theme-btn{
+  display:flex;align-items:center;gap:10px;
+  padding:7px 10px;border-radius:var(--rs);
+  cursor:pointer;border:1px solid transparent;
+  transition:all .15s;font-size:12px;font-weight:500;
+  color:var(--text2);background:var(--bg3);
+}
+.theme-btn:hover{border-color:var(--accent);color:var(--text)}
+.theme-btn.active{border-color:var(--accent);background:var(--asoft);color:var(--accent2)}
+.theme-swatch{width:28px;height:18px;border-radius:4px;flex-shrink:0;border:1px solid rgba(255,255,255,.1)}
+
 /* SIDEBAR SECTIONS */
 .s-section{border-bottom:1px solid var(--border)}
 .s-header{display:flex;align-items:center;justify-content:space-between;padding:9px 13px;cursor:pointer;user-select:none;font-size:10px;font-weight:700;text-transform:uppercase;letter-spacing:.09em;color:var(--text3)}
@@ -251,6 +334,7 @@ table.prev tr:hover td{background:var(--bg3)}
     <button class="btn primary" onclick="addChart()">＋ Grafico</button>
     <button class="btn" onclick="addKpiBlock()">📊 KPI</button>
     <button class="btn" id="gridBtn" onclick="cycleGrid()">▦ Layout</button>
+    <button class="btn" onclick="toggleThemePicker()" id="themeBtn" title="Cambia tema">🎨</button>
     <button class="btn" onclick="exportAll()">🖼 Export</button>
   </div>
 </div>
@@ -371,6 +455,44 @@ table.prev tr:hover td{background:var(--bg3)}
   <span style="margin-left:auto" id="st-time"></span>
 </div>
 
+
+<!-- TEMA PICKER -->
+<div class="theme-popup" id="themePicker">
+  <div class="theme-popup-title">🎨 Tema</div>
+  <div class="theme-btn active" id="tbtn-dark" onclick="setTheme('dark')">
+    <div class="theme-swatch" style="background:linear-gradient(135deg,#0d1117,#3b82f6)"></div>
+    Dark (default)
+  </div>
+  <div class="theme-btn" id="tbtn-dark-blue" onclick="setTheme('dark-blue')">
+    <div class="theme-swatch" style="background:linear-gradient(135deg,#070d1a,#4f9cf9)"></div>
+    Dark Blue
+  </div>
+  <div class="theme-btn" id="tbtn-slate" onclick="setTheme('slate')">
+    <div class="theme-swatch" style="background:linear-gradient(135deg,#0f1117,#818cf8)"></div>
+    Slate Indigo
+  </div>
+  <div class="theme-btn" id="tbtn-emerald" onclick="setTheme('emerald')">
+    <div class="theme-swatch" style="background:linear-gradient(135deg,#071210,#10b981)"></div>
+    Emerald Dark
+  </div>
+  <div class="theme-btn" id="tbtn-amber" onclick="setTheme('amber')">
+    <div class="theme-swatch" style="background:linear-gradient(135deg,#130e03,#f59e0b)"></div>
+    Amber Dark
+  </div>
+  <div class="theme-btn" id="tbtn-rose" onclick="setTheme('rose')">
+    <div class="theme-swatch" style="background:linear-gradient(135deg,#130810,#f43f5e)"></div>
+    Rose Dark
+  </div>
+  <div class="theme-btn" id="tbtn-light" onclick="setTheme('light')">
+    <div class="theme-swatch" style="background:linear-gradient(135deg,#f0f4f8,#3b82f6)"></div>
+    Light Clean
+  </div>
+  <div class="theme-btn" id="tbtn-light-warm" onclick="setTheme('light-warm')">
+    <div class="theme-swatch" style="background:linear-gradient(135deg,#faf7f2,#d97706)"></div>
+    Light Warm
+  </div>
+</div>
+
 <div class="tcon" id="tcon"></div>
 
 <!-- MODAL -->
@@ -452,6 +574,7 @@ function getToken(){
 
 function localInit(){
   updateLocalList();
+  loadSavedTheme();
   const tok=getToken();
   setBadge(!!tok);
   document.getElementById('st-drive').textContent=tok?'Drive: ✓':'Drive: offline';
@@ -681,7 +804,7 @@ function importJSON(e){
 // ================================================================
 function buildPayload(){
   return{v:5,savedAt:new Date().toISOString(),
-    gPal,sidebarOpen,gridMode,chartCtr,kpiCtr,
+    gPal,sidebarOpen,gridMode,chartCtr,kpiCtr,theme:currentTheme,
     globalStyle:{axCol:document.getElementById('axCol').value,
       gridLn:document.getElementById('gridLn').value,
       animMs:document.getElementById('animMs').value},
@@ -701,6 +824,7 @@ function buildPayload(){
 
 function applyPayload(p){
   if(!p||p.v<3){toast('Config non compatibile (versione < 3)','err');return;}
+  if(p.theme) setTheme(p.theme);
   gPal=p.gPal||gPal; renderGP();
   if(p.globalStyle){
     document.getElementById('axCol').value=p.globalStyle.axCol||'#94a3b8';
@@ -1693,6 +1817,49 @@ function updateChartList(){
 }
 
 // ================================================================
+
+// ================================================================
+// TEMA
+// ================================================================
+const THEMES=['dark','dark-blue','slate','emerald','amber','rose','light','light-warm'];
+let currentTheme='dark';
+
+function toggleThemePicker(){
+  document.getElementById('themePicker').classList.toggle('open');
+}
+// Chiudi cliccando fuori
+document.addEventListener('click',e=>{
+  const picker=document.getElementById('themePicker');
+  const btn=document.getElementById('themeBtn');
+  if(picker&&!picker.contains(e.target)&&e.target!==btn)
+    picker.classList.remove('open');
+});
+
+function setTheme(name){
+  // Rimuovi tutti i temi dal body
+  THEMES.forEach(t=>document.body.classList.remove('theme-'+t));
+  if(name!=='dark') document.body.classList.add('theme-'+name);
+  currentTheme=name;
+  // Aggiorna bottoni active
+  THEMES.forEach(t=>{
+    const b=document.getElementById('tbtn-'+t);
+    if(b) b.classList.toggle('active',t===name);
+  });
+  // Salva in localStorage
+  try{localStorage.setItem('ats_chart_theme',name);}catch(e){}
+  // Ricarica tutti i grafici (assi/colori devono aggiornarsi)
+  refreshAll();
+  document.getElementById('themePicker').classList.remove('open');
+  toast('Tema: '+name,'ok');
+}
+
+function loadSavedTheme(){
+  try{
+    const saved=localStorage.getItem('ats_chart_theme');
+    if(saved&&THEMES.includes(saved)) setTheme(saved);
+  }catch(e){}
+}
+
 // STATUS & UTILS
 // ================================================================
 function updateStatus(){
