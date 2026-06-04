@@ -16,10 +16,11 @@
   --sb-w:280px;
 }
 *{box-sizing:border-box;margin:0;padding:0}
-body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);min-height:100vh;overflow-x:hidden}
+html,body{height:100%;overflow:hidden}
+body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(--text);display:flex;flex-direction:column}
 
-/* TOPBAR */
-.topbar{display:flex;align-items:center;gap:10px;padding:9px 16px;background:var(--bg2);border-bottom:1px solid var(--border);position:sticky;top:0;z-index:200;flex-wrap:wrap}
+/* TOPBAR — non sticky, fa parte del flex column */
+.topbar{flex-shrink:0;display:flex;align-items:center;gap:10px;padding:9px 16px;background:var(--bg2);border-bottom:1px solid var(--border);z-index:200;flex-wrap:wrap}
 .tb-left{display:flex;align-items:center;gap:10px}
 .logo{font-size:16px;font-weight:700;color:var(--accent2);letter-spacing:-.5px;white-space:nowrap}
 .logo span{color:var(--text3);font-weight:400;font-size:11px;margin-left:5px}
@@ -33,10 +34,10 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 .btn.danger{border-color:rgba(239,68,68,.4);color:var(--err)}.btn.danger:hover{background:rgba(239,68,68,.1)}
 .btn.icon-btn{padding:6px 8px;font-size:14px}
 
-/* TAB freccia laterale — fuori dalla sidebar, posizione fissa */
+/* TAB freccia laterale — absolute rispetto al sidebar-wrap */
 .sb-tab{
-  position:fixed;
-  top:50vh;
+  position:absolute;
+  right:-20px; top:50%;
   transform:translateY(-50%);
   width:20px; height:50px;
   background:var(--bg2);
@@ -45,34 +46,33 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
   border-radius:0 var(--rs) var(--rs) 0;
   display:flex; align-items:center; justify-content:center;
   cursor:pointer;
-  z-index:300;
-  transition:background .15s, color .15s, left .3s cubic-bezier(.4,0,.2,1);
+  z-index:50;
+  transition:background .15s, color .15s;
   color:var(--text3);
   font-size:11px;
   user-select:none;
-  left:var(--sb-w);
 }
 .sb-tab:hover{background:var(--bg4);color:var(--accent2);border-color:var(--accent)}
 .sb-tab .arr{transition:transform .3s;display:inline-block;line-height:1}
-.sb-tab.collapsed{left:0;border-left:1px solid var(--border);border-radius:var(--rs);}
-.sb-tab.collapsed .arr{transform:rotate(180deg)}
+.sidebar.collapsed .sb-tab{border-left:1px solid var(--border);border-radius:var(--rs);right:-20px}
+.sidebar.collapsed .sb-tab .arr{transform:rotate(180deg)}
 
-/* LAYOUT */
-.app{display:flex;height:calc(100vh - 50px);transition:none}
+/* LAYOUT — occupa tutto lo spazio rimasto sotto la topbar */
+.app{display:flex;flex:1;overflow:hidden;min-height:0}
 
 /* SIDEBAR */
 .sidebar{
   width:var(--sb-w);min-width:var(--sb-w);
   background:var(--bg2);border-right:1px solid var(--border);
-  overflow-y:auto;
+  overflow-y:auto;overflow-x:visible;
   flex-shrink:0;display:flex;flex-direction:column;
   transition:width .3s cubic-bezier(.4,0,.2,1), min-width .3s cubic-bezier(.4,0,.2,1);
-  position:relative;
+  position:relative; /* il tab si posiziona rispetto a questa */
 }
 .sidebar.collapsed{width:0;min-width:0;border-right:none;overflow-y:hidden}
 
-/* MAIN */
-.main{flex:1;overflow-y:auto;padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0}
+/* MAIN — scroll verticale solo qui */
+.main{flex:1;overflow-y:auto;overflow-x:hidden;padding:16px;display:flex;flex-direction:column;gap:14px;min-width:0;min-height:0}
 
 /* SIDEBAR SECTIONS */
 .s-section{border-bottom:1px solid var(--border)}
@@ -215,7 +215,7 @@ table.prev tr:hover td{background:var(--bg3)}
 .treemap-wrap{width:100%;height:100%}
 
 /* BULLET */
-.bullet-wrap{display:flex;flex-direction:column;gap:12px;padding:8px 2px;height:100%;justify-content:center}
+.bullet-wrap{display:flex;flex-direction:column;gap:12px;padding:8px 4px;min-height:100%;justify-content:flex-start;box-sizing:border-box}
 .bullet-row{display:flex;flex-direction:column;gap:4px}
 .bullet-lbl{font-size:11px;color:var(--text2);font-weight:500}
 .bullet-track{position:relative;height:22px;background:var(--bg4);border-radius:4px;overflow:hidden}
@@ -302,22 +302,24 @@ table.prev tr:hover td{background:var(--bg3)}
   </div>
 
   <div class="s-section">
-    <div class="s-header" onclick="tgl(this)"><span>💾 Salva / Carica Config</span><span class="s-arr">▶</span></div>
-    <div class="s-body">
-      <div class="htxt">La config viene salvata in locale (localStorage) e scaricata come JSON. Per caricarla su Drive trascina il file .json qui sotto o nella chat con Claude.</div>
-      <div class="fld"><div class="fl">Nome configurazione</div><input type="text" id="cfgName" value="dashboard_config"></div>
-      <button class="btn ok" onclick="driveSave()" style="width:100%">💾 Salva + Scarica JSON</button>
-      <div style="display:flex;gap:6px">
-        <button class="btn" onclick="driveLoad()" style="flex:1">📋 Config locali</button>
-        <button class="btn" onclick="document.getElementById('jimp').click()" style="flex:1">📂 Importa JSON</button>
+    <div class="s-header open" onclick="tgl(this)"><span>☁️ Google Drive</span><span class="s-arr">▶</span></div>
+    <div class="s-body vis">
+      <div class="htxt">☁ Cartella Drive: ATS Chart Studio</div>
+      <div class="fld">
+        <div class="fl">Nome configurazione</div>
+        <input type="text" id="cfgName" placeholder="auto dal nome file Excel" value="">
+        <div class="htxt" style="font-size:9px;margin-top:2px">Vuoto = usa nome file Excel</div>
       </div>
-      <input type="file" id="jimp" accept=".json" style="display:none" onchange="importJSON(event)">
+      <div id="dFileInfo" class="htxt" style="color:var(--text3);font-style:italic">Nessun file caricato</div>
+      <div class="htxt" style="color:var(--text3);font-size:9px">💡 Salva config JSON + file Excel su Drive</div>
+      <button class="btn ok" onclick="driveSave()" style="width:100%">💾 Salva su Drive</button>
+      <button class="btn" onclick="driveLoad()" style="width:100%">📋 Elenca config su Drive</button>
       <div id="cfgList" style="display:none" class="fld">
-        <div class="fl">Config salvate</div>
-        <select id="cfgSel"></select>
-        <div style="display:flex;gap:5px">
-          <button class="btn sm" onclick="driveLoadSel()" style="flex:1">Carica</button>
-          <button class="btn sm danger" onclick="deleteLocal()" style="flex:1">Elimina</button>
+        <div class="fl">Configurazioni su Drive</div>
+        <select id="cfgSel" style="font-size:11px"></select>
+        <div style="display:flex;gap:5px;margin-top:4px">
+          <button class="btn sm primary" onclick="driveLoadSel()" style="flex:1">📂 Carica</button>
+          <button class="btn sm danger" onclick="deleteLocal()" style="flex:1">🗑 Elimina</button>
         </div>
       </div>
       <div id="driveLog" class="htxt"></div>
@@ -334,12 +336,12 @@ table.prev tr:hover td{background:var(--bg3)}
     <div class="s-body vis" id="chartList"><span class="htxt">Nessun grafico</span></div>
   </div>
 
-</div><!-- /sidebar -->
+  <!-- TAB freccia — position:absolute rispetto alla sidebar (overflow-x:visible) -->
+  <div class="sb-tab" id="sbTab" onclick="toggleSidebar()" title="Mostra/Nascondi pannello">
+    <span class="arr">◀</span>
+  </div>
 
-<!-- TAB freccia laterale (fuori dalla sidebar per evitare clipping) -->
-<div class="sb-tab" id="sbTab" onclick="toggleSidebar()" title="Mostra/Nascondi pannello">
-  <span class="arr">◀</span>
-</div>
+</div><!-- /sidebar -->
 
 <!-- MAIN -->
 <div class="main" id="mainArea">
@@ -424,10 +426,7 @@ window.addEventListener('load',()=>{
 // ================================================================
 function toggleSidebar(){
   sidebarOpen=!sidebarOpen;
-  const sb=document.getElementById('sidebar');
-  const tab=document.getElementById('sbTab');
-  sb.classList.toggle('collapsed',!sidebarOpen);
-  if(tab) tab.classList.toggle('collapsed',!sidebarOpen);
+  document.getElementById('sidebar').classList.toggle('collapsed',!sidebarOpen);
 }
 
 // ================================================================
@@ -470,7 +469,13 @@ async function driveReq(method,url,body=null,extraHeaders={}){
 }
 
 async function driveSave(){
-  const cfgBaseName=(document.getElementById('cfgName').value||'dashboard_config').replace(/\.json$/,'');
+  // Nome config = nome file dati (senza estensione) oppure quello inserito
+  let cfgBaseName=document.getElementById('cfgName').value||'';
+  if(!cfgBaseName && currentFileName){
+    cfgBaseName=currentFileName.replace(/\.[^.]+$/,''); // rimuove estensione
+    document.getElementById('cfgName').value=cfgBaseName;
+  }
+  cfgBaseName=(cfgBaseName||'dashboard_config').replace(/\.json$/,'');
   const name=cfgBaseName+'.json';
   const payload=buildPayload();
   const json=JSON.stringify(payload,null,2);
@@ -574,76 +579,77 @@ async function driveSaveDataFile(cfgBaseName){
 
 async function driveLoad(){
   const tok=getToken();
-  if(!tok){
-    // Solo lista locale
-    document.getElementById('cfgList').style.display='';
-    updateLocalList();
-    toast('Drive non disponibile — mostro config locali','warn');
-    return;
-  }
-  toast('Ricerca config su Drive…','warn');
+  if(!tok){toast('Accedi all\' HUB WMS per usare Drive','err');return;}
+  toast('Ricerca configurazioni su Drive…','warn');
   try{
+    // Cerca solo i JSON di config (non i file _data)
     const q=`'${FOLDER_ID}' in parents and mimeType='application/json' and trashed=false`;
     const res=await driveReq('GET',`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name,modifiedTime)&orderBy=modifiedTime+desc`);
-    const files=res.files||[];
+    const files=(res.files||[]).filter(f=>!f.name.includes('_data.'));
+    if(!files.length){toast('Nessuna configurazione trovata su Drive','warn');return;}
     const sel=document.getElementById('cfgSel');
-    // Mescola Drive + locale
-    const lsKeys=[];
-    for(let i=0;i<localStorage.length;i++){const k=localStorage.key(i);if(k&&k.startsWith(LS_PREFIX)&&!k.endsWith('__last'))lsKeys.push({id:'ls:'+k,name:k.replace(LS_PREFIX,'')+'  [locale]'});}
-    const allOpts=[...files.map(f=>({id:'dr:'+f.id,name:f.name+' ('+new Date(f.modifiedTime).toLocaleDateString('it-IT')+')'})),...lsKeys];
-    if(!allOpts.length){toast('Nessuna config trovata','warn');return;}
     document.getElementById('cfgList').style.display='';
-    sel.innerHTML=allOpts.map(o=>`<option value="${o.id}">${o.name}</option>`).join('');
-    toast(`Config: ${files.length} su Drive, ${lsKeys.length} locali`,'ok');
+    sel.innerHTML=files.map(f=>`<option value="dr:${f.id}:${encodeURIComponent(f.name)}">${f.name.replace('.json','')} · ${new Date(f.modifiedTime).toLocaleDateString('it-IT')}</option>`).join('');
     setBadge(true);
+    toast(`Trovate ${files.length} configurazioni su Drive`,'ok');
   }catch(e){toast('Errore Drive: '+e.message,'err');}
 }
 
 async function driveLoadSel(){
   const val=document.getElementById('cfgSel').value; if(!val)return;
+  const tok=getToken();
+  if(!tok){toast('Token non disponibile','err');return;}
   try{
-    if(val.startsWith('ls:')){
-      // Locale
-      const raw=localStorage.getItem(val.replace('ls:',''));
-      if(!raw){toast('Config non trovata','err');return;}
-      applyPayload(JSON.parse(raw));
-      toast('Config locale caricata ✓','ok');
-    } else {
-      // Drive
-      const fid=val.replace('dr:','');
-      const tok=getToken();
-      const r=await fetch(`https://www.googleapis.com/drive/v3/files/${fid}?alt=media`,{headers:{Authorization:'Bearer '+tok}});
-      if(!r.ok) throw new Error(r.status);
-      const obj=await r.json();
-      applyPayload(obj);
-      // Salva copia locale
-      const nm=LS_PREFIX+(document.getElementById('cfgName').value||'dashboard_config');
-      try{localStorage.setItem(nm,JSON.stringify(obj));}catch(e){}
-      updateLocalList();
-      toast('Config Drive caricata ✓','ok');
-    }
+    // formato val: dr:{fileId}:{encodedName}
+    const parts=val.split(':');
+    const fid=parts[1];
+    const fname=decodeURIComponent(parts.slice(2).join(':'));
+    const r=await fetch(`https://www.googleapis.com/drive/v3/files/${fid}?alt=media`,
+      {headers:{Authorization:'Bearer '+tok}});
+    if(!r.ok) throw new Error(r.status);
+    const obj=await r.json();
+    // Nome config = nome file (senza .json)
+    const cfgBaseName=fname.replace('.json','');
+    document.getElementById('cfgName').value=cfgBaseName;
+    applyPayload(obj); // applyPayload chiama driveLoadDataFile se c'è dataFile.driveId
+    toast('Config caricata: '+cfgBaseName+' ✓','ok');
   }catch(e){toast('Errore caricamento: '+e.message,'err');}
 }
 
-function updateLocalList(){
-  const sel=document.getElementById('cfgSel');
-  const keys=[];
-  for(let i=0;i<localStorage.length;i++){
-    const k=localStorage.key(i);
-    if(k&&k.startsWith(LS_PREFIX)&&!k.endsWith('__last')) keys.push(k.replace(LS_PREFIX,''));
-  }
-  if(keys.length&&document.getElementById('cfgList').style.display!==''){
-    sel.innerHTML=keys.map(k=>`<option value="ls:${LS_PREFIX+k}">${k} [locale]</option>`).join('');
-  }
-}
+function updateLocalList(){ /* lista ora gestita solo da driveLoad() */ }
 
-function deleteLocal(){
+async function deleteLocal(){
   const val=document.getElementById('cfgSel').value; if(!val)return;
-  if(val.startsWith('ls:')){
-    if(!confirm('Eliminare questa config locale?'))return;
-    localStorage.removeItem(val.replace('ls:',''));
-    updateLocalList(); toast('Config eliminata','ok');
-  }
+  const parts=val.split(':');
+  const fid=parts[1];
+  const fname=decodeURIComponent(parts.slice(2).join(':'));
+  const cfgName=fname.replace('.json','');
+  if(!confirm(`Eliminare la configurazione "${cfgName}" e il file dati collegato da Drive?\n\nQuesta operazione non è reversibile.`))return;
+  const tok=getToken();
+  if(!tok){toast('Token non disponibile','err');return;}
+  toast('Eliminazione in corso…','warn');
+  let deleted=0;
+  // Elimina config JSON
+  try{
+    const r=await fetch(`https://www.googleapis.com/drive/v3/files/${fid}`,
+      {method:'DELETE',headers:{Authorization:'Bearer '+tok}});
+    if(r.ok||r.status===204) deleted++;
+  }catch(e){}
+  // Cerca e elimina anche il file dati collegato (_data.*)
+  try{
+    const dataQ=`name contains '${cfgName}_data' and '${FOLDER_ID}' in parents and trashed=false`;
+    const search=await driveReq('GET',`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(dataQ)}&fields=files(id,name)`);
+    for(const f of (search.files||[])){
+      await fetch(`https://www.googleapis.com/drive/v3/files/${f.id}`,
+        {method:'DELETE',headers:{Authorization:'Bearer '+tok}});
+      deleted++;
+    }
+  }catch(e){}
+  toast(`Eliminat${deleted===1?'a':'i'} ${deleted} file da Drive ✓`,'ok');
+  // Aggiorna lista
+  await driveLoad();
+  // Reset UI se era il file caricato
+  if(currentFileDriveId){currentFileDriveId=null;updateDriveFileInfo();}
 }
 
 // Import JSON da file
@@ -1198,20 +1204,34 @@ function renderChartJS(id,wrap,cfg,p,ax,sg,dur){
   };
 
   if(!isPie&&!isRadar){
-    const xAxis={ticks:{color:ax,maxRotation:45,autoSkip:true,maxTicksLimit:16},
-      grid:{display:sg,color:'rgba(255,255,255,0.04)'},
-      title:{display:!!cfg.xLabel,text:cfg.xLabel,color:ax,font:{size:11}}};
-    if(isHBar) xAxis.indexAxis='y';
-    const yAxis={ticks:{color:ax,callback:(v)=>Number.isInteger(v)?v.toLocaleString('it-IT'):v},
-      grid:{display:sg,color:'rgba(255,255,255,0.04)'},
-      title:{display:!!cfg.yLabel,text:cfg.yLabel,color:ax,font:{size:11}},
-      stacked:isStacked};
-    opts.scales={x:{...xAxis,stacked:isStacked},y:yAxis};
-    if(isMixed) opts.scales.y2={position:'right',ticks:{color:ax},grid:{display:false}};
-    if(isScatter||isBubble){
-      opts.scales.x={ticks:{color:ax},grid:{display:sg,color:'rgba(255,255,255,0.04)'}};
-      opts.scales.y={ticks:{color:ax},grid:{display:sg,color:'rgba(255,255,255,0.04)'}};
+    // indexAxis ROOT-LEVEL per Chart.js 4 (non sullo scale)
+    if(isHBar) opts.indexAxis='y';
+    const catTicks={color:ax,maxRotation:isHBar?0:45,autoSkip:true,maxTicksLimit:16};
+    const valTicks={color:ax,callback:(v)=>typeof v==='number'?v.toLocaleString('it-IT'):v};
+    const catGrid={display:sg,color:'rgba(255,255,255,0.04)'};
+    const valGrid={display:sg,color:'rgba(255,255,255,0.04)'};
+    // Su bar-h: x=valori, y=categorie
+    if(isHBar){
+      opts.scales={
+        x:{ticks:{...valTicks},grid:valGrid,stacked:isStacked,
+           title:{display:!!cfg.yLabel,text:cfg.yLabel,color:ax,font:{size:11}}},
+        y:{ticks:{...catTicks},grid:catGrid,stacked:isStacked,
+           title:{display:!!cfg.xLabel,text:cfg.xLabel,color:ax,font:{size:11}}},
+      };
+    } else if(isScatter||isBubble){
+      opts.scales={
+        x:{ticks:{color:ax},grid:valGrid},
+        y:{ticks:{color:ax},grid:valGrid},
+      };
+    } else {
+      opts.scales={
+        x:{ticks:{...catTicks},grid:catGrid,stacked:isStacked,
+           title:{display:!!cfg.xLabel,text:cfg.xLabel,color:ax,font:{size:11}}},
+        y:{ticks:{...valTicks},grid:valGrid,stacked:isStacked,
+           title:{display:!!cfg.yLabel,text:cfg.yLabel,color:ax,font:{size:11}}},
+      };
     }
+    if(isMixed) opts.scales.y2={position:'right',ticks:{color:ax},grid:{display:false}};
   } else if(isRadar){
     opts.scales={r:{ticks:{color:ax,backdropColor:'transparent'},grid:{color:'rgba(255,255,255,0.08)'},pointLabels:{color:ax,font:{size:10}}}};
   }
