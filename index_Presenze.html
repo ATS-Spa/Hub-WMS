@@ -2989,7 +2989,8 @@ function renderSection(sec, emps, data, opts){
     {l:'Dip.',v:emps.length,c:'var(--subtle)'},
     {l:'Presenze',v:T.X,c:'var(--c-X)'},{l:'Ferie',v:T.F+(T['1/2F']*.5),c:'var(--c-F)'},
     {l:'Malattia',v:T.M,c:'var(--c-M)'},{l:'HP',v:T.HP,c:'var(--c-HP)'},
-    {l:'H104',v:T.H104,c:'var(--c-H104)'},{l:'SW',v:T.SW,c:'var(--c-SW)'},
+    {l:'H104',v:T.H104,c:'var(--c-H104)'},{l:'104',v:T['104'],c:'var(--c-104)'},
+    {l:'SW',v:T.SW,c:'var(--c-SW)'},
     {l:'TFS',v:T.TFS,c:'var(--c-TFS)'},
     {l:'H.Ord.',v:fmtOre(T.ord),c:'var(--green)'},{l:'H.Str.',v:fmtOre(T.str),c:'var(--amber)'},
     {l:'H.Week',v:fmtOre(T.week),c:'var(--purple)'},{l:'H.Fest.',v:fmtOre(T.fest),c:'var(--red)'}
@@ -4501,7 +4502,8 @@ function downloadTemplate(){
 function calcOreGiorno(ing,usc,pausaOre){
   if(!ing||!usc)return{tot:0,eff:0,ord:0,str:0};
   var im=timeToMin(ing),um=timeToMin(usc);
-  if(um<=im)return{tot:0,eff:0,ord:0,str:0};
+  // Turno notturno: se uscita <= entrata, aggiunge 24h all'uscita
+  if(um<=im) um+=24*60;
   var tot=(um-im)/60;
   var pausa=pausaOre!==undefined&&pausaOre!==null?pausaOre:wmsConfig.pausa||1;
   var eff=Math.max(0,tot-pausa);
