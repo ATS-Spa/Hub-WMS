@@ -4558,7 +4558,8 @@ function calcTots(sig,ingresso,uscita,pause,dates,month,year){
   (sig||[]).forEach(function(v,di){
     if(!v)return;
     var sg=xSig(v);
-    var qty=parseFloat((String(v).match(/^[\d.]+/)||['1'])[0])||1;
+    // Sigle numeriche pure (104) hanno qty=1, non il numero stesso
+    var qty=/^\d+$/.test(String(v)) ? 1 : parseFloat((String(v).match(/^[\d.]+/)||['1'])[0])||1;
     if(r.hasOwnProperty(sg)) r[sg]+=qty;
     var d=dates&&dates[di];
     var isWe=d&&(d.weekday===0||d.weekday===6);
