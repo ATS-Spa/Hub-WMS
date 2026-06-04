@@ -3039,7 +3039,7 @@ function renderSection(sec, emps, data, opts){
   var dates=data?data.dates:getDates(y,m);
   var _td=new Date(),_todayDay=(_td.getFullYear()===y&&_td.getMonth()+1===m)?_td.getDate():-1;
 
-  var T={X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,ord:0,str:0,fest:0,week:0};
+  var T={P:0,X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,ord:0,str:0,fest:0,week:0};
   emps.forEach(function(e){
     var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
     Object.keys(T).forEach(function(k){T[k]+=(t[k]||0);});
@@ -3047,7 +3047,7 @@ function renderSection(sec, emps, data, opts){
   var sb=document.getElementById(opts.statsId);sb.style.display='flex';
   var statDefs=[
     {l:'Dip.',v:emps.length,c:'var(--subtle)'},
-    {l:'Presenze',v:T.X,c:'var(--c-X)'},{l:'Ferie',v:T.F+(T['1/2F']*.5),c:'var(--c-F)'},
+    {l:'Presenze',v:T.P,c:'var(--c-X)'},{l:'Ferie',v:T.F+(T['1/2F']*.5),c:'var(--c-F)'},
     {l:'Malattia',v:T.M,c:'var(--c-M)'},{l:'HP',v:T.HP,c:'var(--c-HP)'},
     {l:'H104',v:T.H104,c:'var(--c-H104)'},{l:'104',v:T['104'],c:'var(--c-104)'},
     {l:'SW',v:T.SW,c:'var(--c-SW)'},
@@ -3061,7 +3061,7 @@ function renderSection(sec, emps, data, opts){
   if(!emps.length){setEl(opts.contentId,'<div class="state"><div class="state-ico">'+(isAts?'🏥':'📋')+'</div><div class="state-title">Nessun risultato</div></div>');return;}
 
   var ALL_TOT_HDRS=[
-    {l:'P',c:'var(--c-X)',k:'X'},{l:'F',c:'var(--c-F)',k:'F'},{l:'M',c:'var(--c-M)',k:'M'},
+    {l:'P',c:'var(--c-X)',k:'P'},{l:'F',c:'var(--c-F)',k:'F'},{l:'M',c:'var(--c-M)',k:'M'},
     {l:'HP',c:'var(--c-HP)',k:'HP'},{l:'H104',c:'var(--c-H104)',k:'H104'},{l:'104',c:'var(--c-104)',k:'104'},
     {l:'CP',c:'var(--c-CP)',k:'CP'},{l:'HPE',c:'var(--c-HPE)',k:'HPE'},{l:'PE',c:'var(--c-PE)',k:'PE'},
     {l:'SW',c:'var(--c-SW)',k:'SW'},{l:'Lut',c:'var(--c-Lutto)',k:'Lutto'},{l:'TFS',c:'var(--c-TFS)',k:'TFS'},
@@ -4614,13 +4614,17 @@ function parsePausaVal(v){
 function fmtOre(h){if(!h)return '';var i=Math.floor(h),f=h-i;return i+(f===0.5?'.5':f>0?'.'+Math.round(f*10):'');}
 
 function calcTots(sig,ingresso,uscita,pause,dates,month,year){
-  var r={X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,PLT:0,PLT_ore:0,ord:0,str:0,fest:0,week:0};
+  // Sigle che contano come "presenza" ai fini del totale P
+  var PRESENCE_CODES=['X','HP','HPE','SW','TFS','H104'];
+  var r={P:0,X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,PLT:0,PLT_ore:0,ord:0,str:0,fest:0,week:0};
   (sig||[]).forEach(function(v,di){
     if(!v)return;
     var sg=xSig(v);
     // Sigle numeriche pure (104) hanno qty=1, non il numero stesso
     var qty=/^\d+$/.test(String(v)) ? 1 : parseFloat((String(v).match(/^[\d.]+/)||['1'])[0])||1;
     if(r.hasOwnProperty(sg)) r[sg]+=qty;
+    // Conta come presenza se la sigla è nella lista PRESENCE_CODES
+    if(PRESENCE_CODES.indexOf(sg)!==-1) r.P+=1;
     var d=dates&&dates[di];
     var isWe=d&&(d.weekday===0||d.weekday===6);
     if(sg==='PLT'){
