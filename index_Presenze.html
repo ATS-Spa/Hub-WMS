@@ -4594,7 +4594,15 @@ function calcTots(sig,ingresso,uscita,pause,dates,month,year){
   return r;
 }
 function getPausaDefaultGlobal(){return wmsConfig.pausa!==undefined?wmsConfig.pausa:1;}
-function xSig(v){if(!v)return '';var m=String(v).match(/^[\d.]*(.+)$/);return m?m[1]:v;}
+function xSig(v){
+  if(!v) return '';
+  var s=String(v);
+  // Sigle puramente numeriche come '104' vanno restituite intatte
+  if(/^\d+$/.test(s)) return s;
+  // Altrimenti rimuovi il prefisso numerico (es. '1.5HP' → 'HP')
+  var m=s.match(/^[\d.]*(.+)$/);
+  return m?m[1]:s;
+}
 
 // ═══════════════════════════════════════════════════════════
 //  PERMISSION PANEL
