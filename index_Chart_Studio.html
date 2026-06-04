@@ -3,7 +3,7 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>ATS Chart Studio</title>
+<title>Chart Studio · WMS Hub</title>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/Chart.js/4.4.1/chart.umd.js"></script>
 <style>
@@ -240,7 +240,7 @@ table.prev tr:hover td{background:var(--bg3)}
 
 <!-- TOPBAR -->
 <div class="topbar">
-  <div class="logo">ATS Chart Studio <span>v3.1 Pro</span></div>
+  <div class="logo">Chart Studio <span>v4.0 · WMS Hub</span></div>
   <div class="tb-right">
     <div id="dbadge" class="dbadge"><span class="ddot"></span>💾 —</div>
     <button class="btn ok" onclick="driveSave()">💾 Salva Config</button>
@@ -347,7 +347,7 @@ table.prev tr:hover td{background:var(--bg3)}
     <div style="font-size:48px;margin-bottom:12px">📊</div>
     <div style="font-size:18px;font-weight:700;margin-bottom:6px;color:var(--text)">ATS Chart Studio Pro</div>
     <div style="margin-bottom:4px">Carica un file Excel o CSV dalla sidebar per iniziare</div>
-    <div style="font-size:11px;color:var(--text3);margin-top:14px">20 tipi di grafico · KPI Cards · Tabella dati · Filtri · Export · Google Drive</div>
+    <div style="font-size:11px;color:var(--text3);margin-top:14px">20 tipi di grafico · KPI Cards · Tabella · Filtri · Export · Salvataggio Drive (config + dati)</div>
   </div>
   <div id="kpiArea"></div>
   <div class="cgrid" id="cgrid"></div>
@@ -386,6 +386,7 @@ table.prev tr:hover td{background:var(--bg3)}
 // STATO GLOBALE
 // ================================================================
 let rawData=[], filteredData=[], columns=[], workbook=null;
+let currentFileName=null, currentFileBuffer=null, currentFileExt='xlsx', currentFileDriveId=null;
 let charts=[], kpiBlocks=[];
 let editId=null, gridMode=1, chartCtr=0, kpiCtr=0;
 let filterActive={};
@@ -469,7 +470,8 @@ async function driveReq(method,url,body=null,extraHeaders={}){
 }
 
 async function driveSave(){
-  const name=(document.getElementById('cfgName').value||'dashboard_config').replace(/\.json$/,'')+'.json';
+  const cfgBaseName=(document.getElementById('cfgName').value||'dashboard_config').replace(/\.json$/,'');
+  const name=cfgBaseName+'.json';
   const payload=buildPayload();
   const json=JSON.stringify(payload,null,2);
   const tok=getToken();
@@ -512,14 +514,61 @@ async function driveSave(){
     }
     setBadge(true);
     document.getElementById('driveLog').textContent='Salvato: '+name+' ('+new Date().toLocaleTimeString('it-IT')+')';
-    toast('✓ Salvato su Drive: '+name,'ok');
+    toast('✓ Config salvata su Drive: '+name,'ok');
+    // Salva anche il file dati se presente
+    if(currentFileBuffer && currentFileName){
+      await driveSaveDataFile(cfgBaseName);
+    }
   }catch(e){
     toast('Errore Drive: '+e.message+' — config scaricata localmente','err');
     document.getElementById('driveLog').textContent='Errore: '+e.message;
-    // Fallback download
     const a=document.createElement('a');
     a.href=URL.createObjectURL(new Blob([json],{type:'application/json'}));
     a.download=name; a.click();
+  }
+}
+
+// Upload del file dati (Excel/CSV) su Drive, linkato alla config
+async function driveSaveDataFile(cfgBaseName){
+  const tok=getToken();
+  if(!tok||!currentFileBuffer||!currentFileName) return;
+  const dataName=cfgBaseName+'_data.'+currentFileExt;
+  toast('⏳ Upload file dati: '+dataName+'…','warn');
+  try{
+    // Cerca se esiste già
+    const q=`name='${dataName}' and '${FOLDER_ID}' in parents and trashed=false`;
+    const search=await driveReq('GET','https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name)');
+    const existing=(search.files||[])[0];
+    const mime=currentFileExt==='csv'?'text/csv':'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet';
+    let fid;
+    if(existing){
+      const r2=await fetch('https://www.googleapis.com/upload/drive/v3/files/'+existing.id+'?uploadType=media',
+        {method:'PATCH',headers:{Authorization:'Bearer '+tok,'Content-Type':mime},body:currentFileBuffer});
+      if(!r2.ok) throw new Error(r2.status);
+      fid=existing.id;
+    } else {
+      const meta={name:dataName,mimeType:mime,parents:[FOLDER_ID]};
+      const bnd='ATS_D_'+Date.now();
+      // Per file binari usiamo multipart con ArrayBuffer
+      const metaStr=JSON.stringify(meta);
+      const enc=new TextEncoder();
+      const metaBytes=enc.encode('--'+bnd+'\r\nContent-Type: application/json\r\n\r\n'+metaStr+'\r\n--'+bnd+'\r\nContent-Type: '+mime+'\r\n\r\n');
+      const endBytes=enc.encode('\r\n--'+bnd+'--');
+      const combined=new Uint8Array(metaBytes.length+currentFileBuffer.byteLength+endBytes.length);
+      combined.set(metaBytes,0);
+      combined.set(new Uint8Array(currentFileBuffer),metaBytes.length);
+      combined.set(endBytes,metaBytes.length+currentFileBuffer.byteLength);
+      const cr=await fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',
+        {method:'POST',headers:{Authorization:'Bearer '+tok,'Content-Type':'multipart/related; boundary='+bnd},body:combined});
+      if(!cr.ok) throw new Error(cr.status);
+      const cd=await cr.json(); fid=cd.id;
+    }
+    currentFileDriveId=fid;
+    updateDriveFileInfo();
+    document.getElementById('driveLog').textContent+=' · dati: '+dataName;
+    toast('✓ File dati salvato: '+dataName,'ok');
+  }catch(e){
+    toast('Errore upload file dati: '+e.message,'err');
   }
 }
 
@@ -618,11 +667,18 @@ function importJSON(e){
 // PAYLOAD
 // ================================================================
 function buildPayload(){
-  return{v:4,savedAt:new Date().toISOString(),
+  return{v:5,savedAt:new Date().toISOString(),
     gPal,sidebarOpen,gridMode,chartCtr,kpiCtr,
     globalStyle:{axCol:document.getElementById('axCol').value,
       gridLn:document.getElementById('gridLn').value,
       animMs:document.getElementById('animMs').value},
+    // Metadati file dati collegato
+    dataFile:{
+      name:currentFileName,
+      ext:currentFileExt,
+      driveId:currentFileDriveId,
+      sheet:document.getElementById('shSelect')?.value||null,
+    },
     charts:charts.map(c=>({id:c.id,config:c.config,h:c.h,showTable:c.showTable,tableRows:c.tableRows,tableH:c.tableH||220})),
     kpiBlocks:kpiBlocks.map(k=>({id:k.id,config:k.config})),
   };
@@ -643,10 +699,48 @@ function applyPayload(p){
   document.getElementById('kpiArea').innerHTML='';
   if(p.kpiBlocks) p.kpiBlocks.forEach(k=>{kpiBlocks.push({id:k.id,config:k.config});renderKpiCard(k.id);});
   if(p.charts) p.charts.forEach(c=>{charts.push({id:c.id,config:c.config,h:c.h||340,inst:null,showTable:c.showTable||false,tableRows:c.tableRows||10,tableH:c.tableH||220});renderCard(c.id);});
-  applyGrid();
-  if(rawData.length){charts.forEach(c=>refreshChart(c.id));kpiBlocks.forEach(k=>refreshKpi(k.id));}
-  else toast('Carica il file Excel per visualizzare i dati','warn');
-  updateStatus(); updateChartList();
+  applyGrid(); updateStatus(); updateChartList();
+  // Carica automaticamente il file dati collegato
+  if(p.dataFile&&p.dataFile.name){
+    if(p.dataFile.driveId){
+      toast('⏳ Caricamento file dati da Drive…','warn');
+      driveLoadDataFile(p.dataFile.driveId, p.dataFile.name, p.dataFile.sheet);
+    } else {
+      toast('⚠ File dati "'+p.dataFile.name+'" non su Drive — caricalo manualmente','warn');
+      document.getElementById('dInfo').style.display='';
+      document.getElementById('dInfo').textContent='Ricarica: '+p.dataFile.name;
+    }
+  }
+}
+
+// Scarica il file dati da Drive e lo carica nel workbook
+async function driveLoadDataFile(fileId, fileName, sheetName){
+  const tok=getToken();
+  if(!tok){toast('Token non disponibile per caricare il file','err');return;}
+  try{
+    const r=await fetch('https://www.googleapis.com/drive/v3/files/'+fileId+'?alt=media',
+      {headers:{Authorization:'Bearer '+tok}});
+    if(!r.ok) throw new Error(r.status);
+    const buf=await r.arrayBuffer();
+    currentFileBuffer=buf;
+    currentFileName=fileName;
+    currentFileExt=fileName.split('.').pop().toLowerCase();
+    currentFileDriveId=fileId;
+    workbook=XLSX.read(new Uint8Array(buf),{type:'array',cellDates:true});
+    const sheets=workbook.SheetNames;
+    document.getElementById('shSelect').innerHTML=sheets.map(s=>`<option value="${s}">${s}</option>`).join('');
+    document.getElementById('shSel').style.display='';
+    // Seleziona il foglio usato in precedenza se disponibile
+    if(sheetName&&sheets.includes(sheetName)){
+      document.getElementById('shSelect').value=sheetName;
+    }
+    document.getElementById('st-file').textContent='📂 '+fileName;
+    updateDriveFileInfo();
+    loadSheet();
+    toast('✓ File dati caricato da Drive: '+fileName,'ok');
+  }catch(e){
+    toast('Errore caricamento file dati: '+e.message,'err');
+  }
 }
 
 // ================================================================
@@ -664,14 +758,26 @@ function processFile(file){
   const r=new FileReader();
   r.onload=evt=>{
     try{
+      currentFileBuffer=evt.target.result; // salva buffer per Drive upload
+      currentFileName=file.name;
+      currentFileExt=file.name.split('.').pop().toLowerCase();
       workbook=XLSX.read(new Uint8Array(evt.target.result),{type:'array',cellDates:true});
       document.getElementById('shSelect').innerHTML=workbook.SheetNames.map(s=>`<option value="${s}">${s}</option>`).join('');
       document.getElementById('shSel').style.display='';
-      document.getElementById('st-file').textContent='File: '+file.name;
+      document.getElementById('st-file').textContent='📂 '+file.name;
+      updateDriveFileInfo();
       loadSheet(); toast('📂 Caricato: '+file.name,'ok');
     }catch(e){toast('Errore lettura file: '+e.message,'err');}
   };
   r.readAsArrayBuffer(file);
+}
+
+function updateDriveFileInfo(){
+  const el=document.getElementById('dFileInfo');
+  if(!el)return;
+  el.textContent=currentFileName
+    ? (currentFileDriveId?'☁ su Drive: ':'💾 locale: ')+currentFileName
+    : 'Nessun file caricato';
 }
 function loadSheet(){
   const ws=workbook.Sheets[document.getElementById('shSelect').value];
