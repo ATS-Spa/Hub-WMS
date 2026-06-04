@@ -84,57 +84,31 @@ body{font-family:'Segoe UI',system-ui,sans-serif;background:var(--bg);color:var(
 
 /* Dark (default — già in :root) */
 
-/* Dark Blue */
-body.theme-dark-blue{
-  --bg:#070d1a;--bg2:#0d1829;--bg3:#132035;--bg4:#1a2a45;
-  --border:#1e3354;--text:#dde8ff;--text2:#7aa0d4;--text3:#4a6a9a;
-  --accent:#4f9cf9;--accent2:#7bb8ff;--asoft:rgba(79,156,249,.13);
-}
-
-/* Slate */
-body.theme-slate{
-  --bg:#0f1117;--bg2:#181c26;--bg3:#21263a;--bg4:#2c3349;
-  --border:#353d55;--text:#e4e9f4;--text2:#8b96b8;--text3:#5a6380;
-  --accent:#818cf8;--accent2:#a5b4fc;--asoft:rgba(129,140,248,.13);
-}
-
-/* Emerald Dark */
-body.theme-emerald{
-  --bg:#071210;--bg2:#0e1e1a;--bg3:#152820;--bg4:#1c342a;
-  --border:#1f3d2e;--text:#d4f0e8;--text2:#6ab89a;--text3:#3d7a60;
-  --accent:#10b981;--accent2:#34d399;--asoft:rgba(16,185,129,.13);
-}
-
-/* Amber Dark */
-body.theme-amber{
-  --bg:#130e03;--bg2:#1e1608;--bg3:#2a1f0d;--bg4:#352812;
-  --border:#433214;--text:#fdf4dc;--text2:#c8a84a;--text3:#8a6e28;
-  --accent:#f59e0b;--accent2:#fbbf24;--asoft:rgba(245,158,11,.13);
-}
-
-/* Rose Dark */
-body.theme-rose{
-  --bg:#130810;--bg2:#1e0e1a;--bg3:#2a1424;--bg4:#361a2f;
-  --border:#451f3a;--text:#fde4f4;--text2:#c46ea0;--text3:#8a3d6a;
-  --accent:#f43f5e;--accent2:#fb7185;--asoft:rgba(244,63,94,.13);
-}
-
-/* Light Clean */
-body.theme-light{
-  --bg:#f0f4f8;--bg2:#ffffff;--bg3:#e8edf4;--bg4:#dce3ed;
-  --border:#c8d3e0;--text:#1a2336;--text2:#4a5670;--text3:#7a88a0;
-  --accent:#3b82f6;--accent2:#2563eb;--asoft:rgba(59,130,246,.1);
-  --ok:#059669;--warn:#d97706;--err:#dc2626;
-  --sh:0 2px 12px rgba(0,0,0,.12);
-}
-
 /* Light Warm */
 body.theme-light-warm{
   --bg:#faf7f2;--bg2:#ffffff;--bg3:#f2ede4;--bg4:#e8e0d0;
   --border:#d4c8b4;--text:#2a1f0a;--text2:#6b5a3a;--text3:#9a8760;
   --accent:#d97706;--accent2:#b45309;--asoft:rgba(217,119,6,.1);
-  --ok:#059669;--warn:#dc2626;--err:#dc2626;
+  --ok:#059669;--warn:#d97706;--err:#dc2626;
   --sh:0 2px 12px rgba(0,0,0,.1);
+}
+
+/* Rovere — legno caldo, toni ocra/tabacco */
+body.theme-rovere{
+  --bg:#f5f0e8;--bg2:#fdfaf4;--bg3:#ede5d6;--bg4:#e0d4c0;
+  --border:#c8b898;--text:#2c1f0e;--text2:#6b5030;--text3:#9a7a50;
+  --accent:#8b5e2a;--accent2:#6b4418;--asoft:rgba(139,94,42,.1);
+  --ok:#4a7c3f;--warn:#c4820a;--err:#c0392b;
+  --sh:0 2px 14px rgba(80,40,0,.12);
+}
+
+/* Avorio — neutro luminoso, toni panna/platino */
+body.theme-avorio{
+  --bg:#f8f6f0;--bg2:#fffff8;--bg3:#f0ede4;--bg4:#e6e2d8;
+  --border:#ccc8bc;--text:#1e1c18;--text2:#5a5648;--text3:#8a8474;
+  --accent:#5b7fa6;--accent2:#3d6490;--asoft:rgba(91,127,166,.1);
+  --ok:#3d7a50;--warn:#b87a14;--err:#c0392b;
+  --sh:0 2px 14px rgba(0,0,0,.08);
 }
 
 /* ── Tema picker popup ── */
@@ -460,36 +434,20 @@ table.prev tr:hover td{background:var(--bg3)}
 <div class="theme-popup" id="themePicker">
   <div class="theme-popup-title">🎨 Tema</div>
   <div class="theme-btn active" id="tbtn-dark" onclick="setTheme('dark')">
-    <div class="theme-swatch" style="background:linear-gradient(135deg,#0d1117,#3b82f6)"></div>
-    Dark (default)
-  </div>
-  <div class="theme-btn" id="tbtn-dark-blue" onclick="setTheme('dark-blue')">
-    <div class="theme-swatch" style="background:linear-gradient(135deg,#070d1a,#4f9cf9)"></div>
-    Dark Blue
-  </div>
-  <div class="theme-btn" id="tbtn-slate" onclick="setTheme('slate')">
-    <div class="theme-swatch" style="background:linear-gradient(135deg,#0f1117,#818cf8)"></div>
-    Slate Indigo
-  </div>
-  <div class="theme-btn" id="tbtn-emerald" onclick="setTheme('emerald')">
-    <div class="theme-swatch" style="background:linear-gradient(135deg,#071210,#10b981)"></div>
-    Emerald Dark
-  </div>
-  <div class="theme-btn" id="tbtn-amber" onclick="setTheme('amber')">
-    <div class="theme-swatch" style="background:linear-gradient(135deg,#130e03,#f59e0b)"></div>
-    Amber Dark
-  </div>
-  <div class="theme-btn" id="tbtn-rose" onclick="setTheme('rose')">
-    <div class="theme-swatch" style="background:linear-gradient(135deg,#130810,#f43f5e)"></div>
-    Rose Dark
-  </div>
-  <div class="theme-btn" id="tbtn-light" onclick="setTheme('light')">
-    <div class="theme-swatch" style="background:linear-gradient(135deg,#f0f4f8,#3b82f6)"></div>
-    Light Clean
+    <div class="theme-swatch" style="background:linear-gradient(135deg,#0d1117 50%,#3b82f6)"></div>
+    Dark
   </div>
   <div class="theme-btn" id="tbtn-light-warm" onclick="setTheme('light-warm')">
-    <div class="theme-swatch" style="background:linear-gradient(135deg,#faf7f2,#d97706)"></div>
+    <div class="theme-swatch" style="background:linear-gradient(135deg,#faf7f2 50%,#d97706)"></div>
     Light Warm
+  </div>
+  <div class="theme-btn" id="tbtn-rovere" onclick="setTheme('rovere')">
+    <div class="theme-swatch" style="background:linear-gradient(135deg,#f5f0e8 50%,#8b5e2a)"></div>
+    Rovere
+  </div>
+  <div class="theme-btn" id="tbtn-avorio" onclick="setTheme('avorio')">
+    <div class="theme-swatch" style="background:linear-gradient(135deg,#f8f6f0 50%,#5b7fa6)"></div>
+    Avorio
   </div>
 </div>
 
@@ -1821,7 +1779,7 @@ function updateChartList(){
 // ================================================================
 // TEMA
 // ================================================================
-const THEMES=['dark','dark-blue','slate','emerald','amber','rose','light','light-warm'];
+const THEMES=['dark','light-warm','rovere','avorio'];
 let currentTheme='dark';
 
 function toggleThemePicker(){
