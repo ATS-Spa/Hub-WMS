@@ -455,6 +455,14 @@ table.prev tr:hover td{background:var(--bg3)}
         <div class="fl">Foglio</div>
         <select id="shSelect" onchange="loadSheet()"></select>
       </div>
+      <div id="shSel2" style="display:none" class="fld">
+        <div class="fl">Riga intestazioni (header)</div>
+        <div class="frow">
+          <input type="number" id="headerRow" value="1" min="1" max="50" style="width:60px" title="Quale riga contiene i nomi delle colonne?">
+          <button class="btn sm" onclick="loadSheet()">↺ Ricarica</button>
+        </div>
+        <div class="htxt">Es: per il tuo Excel usa riga 4</div>
+      </div>
       <div id="dInfo" class="htxt" style="display:none"></div>
     </div>
   </div>
@@ -1053,6 +1061,7 @@ function processFile(file){
       workbook=XLSX.read(new Uint8Array(evt.target.result),{type:'array',cellDates:true});
       document.getElementById('shSelect').innerHTML=workbook.SheetNames.map(s=>`<option value="${s}">${s}</option>`).join('');
       document.getElementById('shSel').style.display='';
+      document.getElementById('shSel2').style.display='';
       document.getElementById('st-file').textContent='📂 '+file.name;
       updateDriveFileInfo();
       loadSheet(); toast('📂 Caricato: '+file.name,'ok');
@@ -1070,11 +1079,31 @@ function updateDriveFileInfo(){
 }
 function loadSheet(){
   const ws=workbook.Sheets[document.getElementById('shSelect').value];
-  const json=XLSX.utils.sheet_to_json(ws,{defval:'',header:0});
-  if(!json.length){toast('Foglio vuoto','err');return;}
-  rawData=json; columns=cleanCols(Object.keys(rawData[0])); filteredData=[...rawData];
+  const hRow=parseInt(document.getElementById('headerRow')?.value||1);
+  // Leggi prima le righe raw per capire dove inizia il foglio
+  const allRows=XLSX.utils.sheet_to_json(ws,{defval:'',header:1}); // header:1 = array di array
+  if(!allRows.length){toast('Foglio vuoto','err');return;}
+  // Riga header = hRow-1 (0-based)
+  const headerIdx=Math.max(0,hRow-1);
+  const headerArr=allRows[headerIdx]||[];
+  // Costruisci nomi colonne dalla riga header, sostituendo vuoti con lettera colonna
+  const colNames=headerArr.map((v,i)=>{
+    const s=String(v??'').trim();
+    return s!==''?s:idxToColLetter(i); // usa lettera colonna se cella vuota
+  });
+  // Righe dati = tutto dopo la riga header
+  const dataRows=allRows.slice(headerIdx+1).map(arr=>{
+    const row={};
+    colNames.forEach((name,i)=>{row[name]=arr[i]??'';});
+    return row;
+  }).filter(row=>Object.values(row).some(v=>v!==''&&v!=null));
+  if(!dataRows.length){toast('Nessun dato dopo la riga header '+hRow,'err');return;}
+  rawData=dataRows;
+  columns=cleanCols(colNames);
+  filteredData=[...rawData];
+  document.getElementById('shSel2').style.display='';
   document.getElementById('dInfo').style.display='';
-  document.getElementById('dInfo').textContent=`${rawData.length.toLocaleString('it-IT')} righe · ${columns.length} colonne`;
+  document.getElementById('dInfo').textContent=`${rawData.length.toLocaleString('it-IT')} righe · ${columns.length} colonne · header riga ${hRow}`;
   document.getElementById('noData').style.display='none';
   populateFSel(); updatePreview(); updateStatus();
   charts.forEach(c=>refreshChart(c.id));
@@ -1132,8 +1161,10 @@ function isNum(col){
   return s.length>0&&s.every(v=>!isNaN(parseFloat(v)));
 }
 // Filtra colonne senza nome reale (__EMPTY = SheetJS per celle senza header)
+// Se dopo il filtro non rimane nulla, mantieni tutte le colonne originali
 function cleanCols(cols){
-  return (cols||[]).filter(c=>c&&!String(c).startsWith('__EMPTY')&&String(c).trim()!=='');
+  const filtered=(cols||[]).filter(c=>c&&!String(c).startsWith('__EMPTY')&&String(c).trim()!=='');
+  return filtered.length>0?filtered:(cols||[]);
 }
 function getNum(col,row){return parseFloat(row[col])||0;}
 // Converte lettera colonna Excel → indice 0-based (A=0, B=1, AA=26 ...)
