@@ -680,10 +680,12 @@ function buildPayload(){
       animMs:document.getElementById('animMs').value},
     // Metadati file dati collegato
     dataFile:{
-      name:currentFileName,
-      ext:currentFileExt,
-      driveId:currentFileDriveId,
+      name:currentFileName,           // nome originale (es. AnagraficaSAP.xlsx)
+      ext:currentFileExt,             // estensione (xlsx, csv)
+      driveId:currentFileDriveId,     // ID Drive del _data file (null se non ancora salvato)
       sheet:document.getElementById('shSelect')?.value||null,
+      cfgBase:document.getElementById('cfgName').value||
+              (currentFileName?currentFileName.replace(/\.[^.]+$/,''):''),
     },
     charts:charts.map(c=>({id:c.id,config:c.config,h:c.h,showTable:c.showTable,tableRows:c.tableRows,tableH:c.tableH||220})),
     kpiBlocks:kpiBlocks.map(k=>({id:k.id,config:k.config})),
@@ -709,13 +711,46 @@ function applyPayload(p){
   // Carica automaticamente il file dati collegato
   if(p.dataFile&&p.dataFile.name){
     if(p.dataFile.driveId){
+      // Abbiamo l'ID diretto → scarica subito
       toast('⏳ Caricamento file dati da Drive…','warn');
       driveLoadDataFile(p.dataFile.driveId, p.dataFile.name, p.dataFile.sheet);
     } else {
-      toast('⚠ File dati "'+p.dataFile.name+'" non su Drive — caricalo manualmente','warn');
-      document.getElementById('dInfo').style.display='';
-      document.getElementById('dInfo').textContent='Ricarica: '+p.dataFile.name;
+      // Nessun ID salvato → cerca per nome su Drive (es. AnagraficaSAP_data.xlsx)
+      toast('⏳ Ricerca file dati su Drive…','warn');
+      driveSearchAndLoadDataFile(p.dataFile.name, p.dataFile.ext||'xlsx', p.dataFile.sheet, p.dataFile.cfgBase);
     }
+  }
+}
+
+// Cerca il file _data su Drive per nome e lo carica
+async function driveSearchAndLoadDataFile(origName, ext, sheetName, cfgBase){
+  const tok=getToken();
+  if(!tok){toast('Token non disponibile','err');return;}
+  // Costruiamo tutte le varianti possibili del nome file su Drive
+  const base=cfgBase||document.getElementById('cfgName').value||origName.replace(/\.[^.]+$/,'');
+  const candidates=[
+    base+'_data.'+ext,
+    base+'_data.xlsx',
+    base+'_data.xls',
+    base+'_data.csv',
+    origName,
+  ].filter((v,i,a)=>v&&a.indexOf(v)===i); // dedup
+  try{
+    const nameFilter=candidates.map(n=>`name='${n}'`).join(' or ');
+    const q=`'${FOLDER_ID}' in parents and trashed=false and (${nameFilter})`;
+    const res=await driveReq('GET',`https://www.googleapis.com/drive/v3/files?q=${encodeURIComponent(q)}&fields=files(id,name)&pageSize=5`);
+    const files=res.files||[];
+    if(!files.length){
+      toast('⚠ File dati non trovato su Drive — caricalo manualmente','warn');
+      document.getElementById('dInfo').style.display='';
+      document.getElementById('dInfo').textContent='Ricarica manualmente: '+origName;
+      return;
+    }
+    const f=files[0];
+    toast('⏳ File trovato: '+f.name+' — caricamento…','warn');
+    driveLoadDataFile(f.id, f.name, sheetName);
+  }catch(e){
+    toast('Errore ricerca file dati: '+e.message,'err');
   }
 }
 
