@@ -2,7 +2,7 @@
 <html lang="it">
 <head>
 <meta charset="UTF-8">
-<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, viewport-fit=cover">
 <title>WMS · Presenze</title>
 <meta name="wms-version" content="v2.7 · 2026-05-28 · Richieste Ferie + Auto-registrazione + Gestione Anagrafica">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📋</text></svg>">
@@ -1635,10 +1635,70 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
 
 /* Responsive richieste */
 @media (max-width: 768px) {
-  .rich-layout { flex-direction: column; }
-  .rich-sidebar { width: 100%; border-right: none; border-bottom: 1px solid var(--border); }
-  .rich-form { max-height: 400px; }
-  .rich-type-grid { grid-template-columns: repeat(4, 1fr); }
+  /* Layout: colonna verticale su mobile */
+  .rich-layout { flex-direction: column; overflow: visible; height: auto; }
+  
+  /* Sidebar form: larghezza piena, no border destra */
+  .rich-sidebar {
+    width: 100%;
+    border-right: none;
+    border-bottom: 1px solid var(--border);
+    max-height: none;
+  }
+
+  /* Form richiesta: no scroll interno su mobile */
+  .rich-form {
+    max-height: none;
+    overflow: visible;
+    padding: 12px 16px;
+    padding-bottom: max(16px, env(safe-area-inset-bottom, 16px));
+    gap: 10px;
+  }
+
+  /* Griglia tipi: 4 colonne su mobile */
+  .rich-type-grid { grid-template-columns: repeat(4, 1fr); gap: 4px; }
+  .rich-type-btn { padding: 8px 2px; }
+  .rich-type-btn .rtb-code { font-size: 12px; }
+  .rich-type-btn .rtb-label { font-size: 8px; }
+
+  /* Date picker: affiancate */
+  .rich-date-row { display: flex; gap: 8px; }
+  .rich-date-row > * { flex: 1; }
+
+  /* Pulsante invia: piena larghezza */
+  .rich-send-btn { width: 100%; padding: 14px; font-size: 15px; border-radius: 10px; }
+
+  /* Lista richieste: padding ridotto */
+  .rich-list { padding: 12px; padding-bottom: max(12px, env(safe-area-inset-bottom, 12px)); gap: 10px; }
+
+  /* Card richiesta: layout mobile compatto */
+  .rich-card { padding: 12px; }
+  .rich-card-hdr { flex-wrap: wrap; gap: 6px; }
+  .rich-card-dates { font-size: 13px; }
+  .rich-card-gg { font-size: 11px; }
+
+  /* Filtri: scroll orizzontale */
+  .rich-filters { overflow-x: auto; padding-bottom: 4px; }
+
+  /* Bottoni approva/rifiuta: più grandi su mobile */
+  .rich-btn-approva, .rich-btn-rifiuta, .rich-btn-annulla {
+    padding: 10px 16px;
+    font-size: 13px;
+    border-radius: 8px;
+  }
+
+  /* Sidebar header compatto */
+  .rich-sidebar-hdr { padding: 12px 16px 10px; }
+  .rich-profile { margin-bottom: 8px; }
+
+  /* Stats ferie: scrollabile orizzontalmente */
+  .rich-stats { overflow-x: auto; padding-bottom: 4px; }
+}
+
+@media (max-width: 480px) {
+  /* Telefoni piccoli: tipo grid a 3 col */
+  .rich-type-grid { grid-template-columns: repeat(3, 1fr); }
+  .rich-form { padding: 10px 12px; }
 }</style>
 </head>
 <body>
