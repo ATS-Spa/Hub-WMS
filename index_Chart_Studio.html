@@ -2110,17 +2110,6 @@ function openKpiM(id){
     <div id="krows" style="display:flex;flex-direction:column;gap:6px">${k.config.cols.map((cc,i)=>mkRow(cc,i)).join('')}</div>
     <button class="btn sm" onclick="addKRow()">＋ Metrica</button>`;
   document.getElementById('moverlay').classList.add('vis');
-  // Toggle colori-per-valore
-  const cbvCk=document.getElementById('mc-cbv');
-  if(cbvCk) cbvCk.addEventListener('change',()=>{
-    const el=document.getElementById('mc-cbv-colors');
-    if(el) el.style.display=cbvCk.checked?'':'none';
-  });
-  // Preview range se già impostato
-  requestAnimationFrame(()=>{
-    previewRange(cfg.dataRange||'');
-    updateRowSelUI(cfg);
-  });
 }
 
 function addKRow(){
@@ -2155,24 +2144,51 @@ function openM(id){
       </div>
     </div>
 
-        <div class="m-section-title">🔲 Range dati (opzionale — come in Excel)</div>
+        <div class="m-section-title">🔲 Range dati</div>
     <div class="range-input-row">
       <div class="fld" style="flex:1">
-        <div class="fl">Range celle (es. A3:P12, lascia vuoto = tutto il foglio)</div>
-        <input type="text" id="mc-range" placeholder="es. A3:P12 oppure B4:B20"
+        <div class="fl">Range celle (es. B4:O13 · multi-range: B4:O13,AI4:AK13)</div>
+        <input type="text" id="mc-range" placeholder="es. B4:O13"
           value="${cfg.dataRange||''}"
           oninput="previewRange(this.value)"
           style="font-family:monospace;font-size:13px;letter-spacing:.05em">
       </div>
-      <button class="btn sm primary" onclick="openRpicker(editId)" style="flex-shrink:0;margin-top:16px">🔲 Griglia</button>
-      <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;margin-top:16px;white-space:nowrap">
-        <input type="checkbox" id="mc-sumrows" ${cfg.sumRows?'checked':''}>
-        Somma righe (totale)
-      </label>
-      <button class="btn sm" onclick="clearRange()" style="flex-shrink:0;margin-top:16px">✕ Rimuovi</button>
+      <button class="btn sm primary" onclick="openRpicker(editId)" style="flex-shrink:0;margin-top:16px">🔲 Seleziona</button>
+      <button class="btn sm" onclick="clearRange()" style="flex-shrink:0;margin-top:16px">✕</button>
     </div>
     <div id="mc-range-info" class="htxt" style="color:var(--accent2)"></div>
     <div id="mc-range-grid" class="range-grid-wrap" style="display:none"></div>
+
+    <div class="m-section-title">↔ Orientamento dati</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px">
+      <div id="orient-cols" onclick="setOrient('cols')"
+        style="padding:12px;border-radius:var(--rs);cursor:pointer;border:2px solid ${(!cfg.rpOrient||cfg.rpOrient==='cols')?'var(--accent)':'var(--border)'};background:${(!cfg.rpOrient||cfg.rpOrient==='cols')?'var(--asoft)':'var(--bg3)'};transition:all .15s">
+        <div style="font-weight:700;font-size:12px;margin-bottom:6px;color:${(!cfg.rpOrient||cfg.rpOrient==='cols')?'var(--accent2)':'var(--text2)'}">📊 Colonne = Serie (default)</div>
+        <div style="font-size:10px;color:var(--text3);line-height:1.5">
+          Prima colonna = etichette X<br>
+          Ogni colonna successiva = 1 serie<br>
+          <b>Es: col A = mesi, col B = Warehouse, col C = Handling</b>
+        </div>
+      </div>
+      <div id="orient-rows" onclick="setOrient('rows')"
+        style="padding:12px;border-radius:var(--rs);cursor:pointer;border:2px solid ${cfg.rpOrient==='rows'?'var(--accent)':'var(--border)'};background:${cfg.rpOrient==='rows'?'var(--asoft)':'var(--bg3)'};transition:all .15s">
+        <div style="font-weight:700;font-size:12px;margin-bottom:6px;color:${cfg.rpOrient==='rows'?'var(--accent2)':'var(--text2)'}">📋 Righe = Serie (per il tuo Excel)</div>
+        <div style="font-size:10px;color:var(--text3);line-height:1.5">
+          Prima riga = etichette X (Gen25, Feb25…)<br>
+          Ogni riga successiva = 1 serie<br>
+          <b>Es: riga 4 = header mesi, righe 5-13 = Service Lines</b>
+        </div>
+      </div>
+    </div>
+    <div id="mc-orient-val" style="display:none">${cfg.rpOrient||'cols'}</div>
+    <div style="display:flex;gap:10px;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer">
+        <input type="checkbox" id="mc-hasrowhdr" ${cfg.rpHasRowHdr!==false?'checked':''}> Prima col = etichette riga
+      </label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer">
+        <input type="checkbox" id="mc-hascolhdr" ${cfg.rpHasColHdr!==false?'checked':''}> Prima riga = header colonne
+      </label>
+    </div>
 
     <div class="m-section-title" id="mc-rowsel-title" style="display:none">📋 Righe da includere (orientamento Righe=Serie)</div>
     <div id="mc-rowsel-wrap" style="display:none;flex-direction:column;gap:6px">
@@ -2326,6 +2342,18 @@ function openM(id){
       </div>
     </div>`;
   document.getElementById('moverlay').classList.add('vis');
+  requestAnimationFrame(()=>{
+    // Toggle colori per valore
+    const cbvCk=document.getElementById('mc-cbv');
+    if(cbvCk) cbvCk.addEventListener('change',()=>{
+      const el=document.getElementById('mc-cbv-colors');
+      if(el) el.style.display=cbvCk.checked?'':'none';
+    });
+    // Aggiorna visualizzazione orient buttons
+    setOrient(cfg.rpOrient||'cols');
+    // Preview range
+    previewRange(cfg.dataRange||'');
+  });
 }
 
 
@@ -2607,6 +2635,28 @@ function applyRpRange(){
 // ================================================================
 // MODALITÀ TRASPOSTA — righe come serie (per struttura pivot del tuo Excel)
 // ================================================================
+
+// Trasponi dati già caricati (da multi-range o range singolo)
+function transposeData(data, headers, cfg){
+  if(!data||!data.length) return null;
+  const hasRH=cfg.rpHasRowHdr!==false;
+  const hasCH=cfg.rpHasColHdr!==false;
+  // Primo header = etichetta riga (skip se hasRH), resto = valori X
+  const labelCol=hasRH?headers[0]:null;
+  const xHeaders=hasCH?headers.slice(hasRH?1:0):headers.slice(hasRH?1:0);
+  const labels=xHeaders; // etichette X = nomi colonne
+  // Ogni riga dati = una serie
+  const series=data.map(row=>{
+    const seriesLabel=hasRH&&labelCol?String(row[labelCol]||''):('Serie');
+    const values=xHeaders.map(h=>{
+      const v=row[h];
+      return(v!==''&&v!=null&&!isNaN(parseFloat(v)))?parseFloat(v):0;
+    });
+    return{label:seriesLabel,values};
+  });
+  return{labels,series};
+}
+
 function getDataTransposed(cfg){
   if(!cfg.dataRange||!workbook) return null;
   const sn=document.getElementById('shSelect')?.value||workbook.SheetNames[0];
@@ -2876,8 +2926,11 @@ function addYCol(colName=''){
   div.className='yc-row'; div.id='ycr-'+i;
   div.style.cssText='display:flex;gap:6px;align-items:center;background:var(--bg3);padding:6px;border-radius:var(--rs);flex-wrap:wrap';
   const palColor=gPal[i%gPal.length];
+  // Usa le colonne del range corrente se disponibile
+  const rngInp=document.getElementById('mc-range');
+  const curCols=(rngInp&&rngInp.value)?getColsForRangeAny(rngInp.value):columns;
   div.innerHTML=`<div style="width:14px;height:14px;border-radius:3px;background:${palColor};flex-shrink:0"></div>
-    <select id="ycc-${i}" style="flex:1;min-width:120px">${columns.map(c=>`<option value="${c}" ${c===colName?'selected':''}>${c}</option>`).join('')}</select>
+    <select id="ycc-${i}" style="flex:1;min-width:120px">${curCols.map(c=>`<option value="${c}" ${c===colName?'selected':''}>${c}</option>`).join('')}</select>
     <select id="yca-${i}" style="width:75px"><option>auto</option><option>sum</option><option>count</option><option>avg</option><option>min</option><option>max</option></select>
     <input type="text" id="ycl-${i}" placeholder="Label serie" style="width:110px">
     <button class="btn sm danger" onclick="removeYCol(${i})" style="padding:3px 7px">✕</button>`;
@@ -2906,6 +2959,23 @@ function readYCols(){
 }
 
 let _mcc=50;
+
+function setOrient(val){
+  document.getElementById('mc-orient-val').textContent=val;
+  const colBox=document.getElementById('orient-cols');
+  const rowBox=document.getElementById('orient-rows');
+  if(!colBox||!rowBox) return;
+  const isCols=val==='cols';
+  colBox.style.borderColor=isCols?'var(--accent)':'var(--border)';
+  colBox.style.background=isCols?'var(--asoft)':'var(--bg3)';
+  colBox.firstElementChild.style.color=isCols?'var(--accent2)':'var(--text2)';
+  rowBox.style.borderColor=!isCols?'var(--accent)':'var(--border)';
+  rowBox.style.background=!isCols?'var(--asoft)':'var(--bg3)';
+  rowBox.firstElementChild.style.color=!isCols?'var(--accent2)':'var(--text2)';
+  // Aggiorna anche rpState per il picker
+  rpState.orient=val;
+}
+
 function addRefLine(){
   const cont=document.getElementById('mc-reflines');
   const idx=cont.children.length;
@@ -2934,6 +3004,9 @@ function applyM(){
     type:document.getElementById('mc-type').value,
     xCol:document.getElementById('mc-xcol').value,
     dataRange:document.getElementById('mc-range')?.value?.trim()||null,
+    rpOrient:document.getElementById('mc-orient-val')?.textContent||'cols',
+    rpHasRowHdr:document.getElementById('mc-hasrowhdr')?.checked!==false,
+    rpHasColHdr:document.getElementById('mc-hascolhdr')?.checked!==false,
     sumRows:document.getElementById('mc-sumrows')?.checked||false,
     excludeRows:c.config.excludeRows||[],
     yCol:firstY.col,       // retrocompat
