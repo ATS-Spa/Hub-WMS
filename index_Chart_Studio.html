@@ -1451,13 +1451,15 @@ function renderTable(id){
   const el=document.getElementById('tbl-'+id); if(!el)return;
   if(!c.showTable||!columns.length){el.innerHTML='';return;}
   const cfg=c.config;
-  const isMultiT=cfg.yCols&&cfg.yCols.length>1;
+  const isTransposedT=cfg.rpOrient==='rows'&&cfg.dataRange;
+  const isMultiT=(cfg.yCols&&cfg.yCols.length>1)||isTransposedT;
   const tblH=c.tableH||220;
   const fmt=v=>typeof v==='number'?v.toLocaleString('it-IT',{maximumFractionDigits:2}):v;
 
   let tableHTML;
   if(isMultiT){
-    const md=aggMulti(cfg);
+    const md=isTransposedT?getDataTransposed(cfg):aggMulti(cfg);
+    if(!md){el.innerHTML='<div class="htxt" style="padding:6px">Nessun dato</div>';return;}
     const {labels,series}=md;
     const hdr=series.map(s=>`<th style="text-align:right">${s.label||s.col}</th>`).join('');
     const rows=labels.map((l,i)=>{
@@ -1612,30 +1614,31 @@ function renderChartJS(id,wrap,cfg,p,ax,sg,dur){
 
   // ORIENTAMENTO TRASPOSTO (righe=serie, colonne=X) — per strutture pivot Excel
   // ORIENTAMENTO TRASPOSTO
+  // ============================================================
+  // ORIENTAMENTO: RIGHE = SERIE (pivot Excel — B4:P13)
+  // Prima riga del range = etichette X (Gen25, Feb25...)
+  // Ogni riga dati = una serie (Warehouse, Handling...)
+  // ============================================================
   const isTransposed=cfg.rpOrient==='rows'&&cfg.dataRange;
-  // Modalità SUM — somma tutte le serie in una sola linea (come il grafico Excel)
-  const isSumMode=isTransposed&&cfg.sumRows===true;
-  let transData=isTransposed?getDataTransposed(cfg):null;
+  const isMulti=(cfg.yCols&&cfg.yCols.length>1||isTransposed)&&!isWF&&!isScatter&&!isBubble&&!isPie&&!isRadar;
 
-  // MULTI-SERIE: usa aggMulti se ci sono più yCols e non è un tipo speciale
-  const isMulti=(cfg.yCols&&cfg.yCols.length>1||(isTransposed&&!isSumMode))&&!isWF&&!isScatter&&!isBubble&&!isPie&&!isRadar;
+  let labels=[], values=[], multiData=null;
 
-  let labels, values, multiData;
-  if(isTransposed&&transData&&isSumMode){
-    // Modalità somma: una sola serie = somma di tutte le righe incluse
-    labels=transData.labels;
-    values=transData.labels.map((_,i)=>
-      Math.round(transData.series.reduce((sum,s)=>sum+(s.values[i]||0),0)*100)/100
-    );
-    multiData=null; // non multi
-  } else if(isTransposed&&transData){
-    labels=transData.labels;
-    values=transData.series[0]?.values||[];
-    multiData=transData;
+  if(isTransposed){
+    // Leggi pivot direttamente dal workbook
+    const td=getDataTransposed(cfg);
+    if(td&&td.labels&&td.series&&td.series.length){
+      labels=td.labels;
+      values=td.series[0]?.values||[];
+      multiData=td;
+    } else {
+      // Fallback a lista vuota con messaggio
+      labels=[]; values=[]; multiData=null;
+    }
   } else if(isMulti){
     multiData=aggMulti(cfg);
     labels=multiData.labels;
-    values=multiData.series[0].values;
+    values=multiData.series[0]?.values||[];
   } else {
     const entries=aggData(cfg);
     labels=entries.map(e=>e[0]);
@@ -1736,8 +1739,8 @@ function renderChartJS(id,wrap,cfg,p,ax,sg,dur){
   // Formattatore Y
   const yFmt=cfg.yFormat||'';
   const fmtVal=(v)=>{
-    if(v===null||v===undefined) return '';
-    const n=Number(v);
+    if(v===null||v===undefined||v==='') return '';
+    const n=typeof v==='string'?parseFloat(v.replace(/[.,]/g,m=>m===','&&v.indexOf('.')>=0?'':m==='.'&&v.indexOf(',')>=0?'':'.'))||0:Number(v);
     if(yFmt==='%') return (n*100).toFixed(1)+'%';
     if(yFmt==='M') return (n/1000000).toFixed(2)+'M';
     if(yFmt==='k') return (n/1000).toFixed(1)+'k';
@@ -2165,18 +2168,18 @@ function openM(id){
         style="padding:12px;border-radius:var(--rs);cursor:pointer;border:2px solid ${(!cfg.rpOrient||cfg.rpOrient==='cols')?'var(--accent)':'var(--border)'};background:${(!cfg.rpOrient||cfg.rpOrient==='cols')?'var(--asoft)':'var(--bg3)'};transition:all .15s">
         <div style="font-weight:700;font-size:12px;margin-bottom:6px;color:${(!cfg.rpOrient||cfg.rpOrient==='cols')?'var(--accent2)':'var(--text2)'}">📊 Colonne = Serie (default)</div>
         <div style="font-size:10px;color:var(--text3);line-height:1.5">
-          Prima colonna = etichette X<br>
-          Ogni colonna successiva = 1 serie<br>
-          <b>Es: col A = mesi, col B = Warehouse, col C = Handling</b>
+          Prima colonna = etichette X (categorie)<br>
+          Ogni colonna successiva = 1 serie di dati<br>
+          <b>Tipico: tabella con ID/nome + valori numerici per colonna</b>
         </div>
       </div>
       <div id="orient-rows" onclick="setOrient('rows')"
         style="padding:12px;border-radius:var(--rs);cursor:pointer;border:2px solid ${cfg.rpOrient==='rows'?'var(--accent)':'var(--border)'};background:${cfg.rpOrient==='rows'?'var(--asoft)':'var(--bg3)'};transition:all .15s">
         <div style="font-weight:700;font-size:12px;margin-bottom:6px;color:${cfg.rpOrient==='rows'?'var(--accent2)':'var(--text2)'}">📋 Righe = Serie (per il tuo Excel)</div>
         <div style="font-size:10px;color:var(--text3);line-height:1.5">
-          Prima riga = etichette X (Gen25, Feb25…)<br>
-          Ogni riga successiva = 1 serie<br>
-          <b>Es: riga 4 = header mesi, righe 5-13 = Service Lines</b>
+          Prima riga del range = etichette asse X<br>
+          Ogni riga dati successiva = 1 serie<br>
+          <b>Tipico: tabella pivot Excel già aggregata</b>
         </div>
       </div>
     </div>
@@ -2201,6 +2204,9 @@ function openM(id){
     </div>
 
     <div class="m-section-title">📊 Dati — Colonne</div>
+    <div id="mc-pivot-note" style="${cfg.rpOrient==='rows'?'':'display:none'};background:rgba(59,130,246,.1);border:1px solid var(--accent);border-radius:var(--rs);padding:8px 12px;font-size:11px;color:var(--accent2);margin-bottom:4px">
+      ℹ️ <b>Modalità Righe = Serie:</b> l'asse X e le serie vengono letti direttamente dal range — non serve configurare colonne X/Y qui sotto.
+    </div>
     <div class="g2">
       <div class="fld"><div class="fl">Colonna X (categorie / etichette)</div><select id="mc-xcol">${columns.map(c=>`<option value="${c}" ${cfg.xCol===c?'selected':''}>${c}</option>`).join('')}</select></div>
       <div class="fld"><div class="fl">Aggregazione (globale)</div>
@@ -2421,9 +2427,11 @@ function renderRpGrid(){
       const cell=ws[addr];
       let v='';
       if(cell){
-        if(cell.t==='n') v=Number(cell.v).toLocaleString('it-IT',{maximumFractionDigits:1});
-        else if(cell.t==='d') v=new Date(cell.v).toLocaleDateString('it-IT',{month:'short',year:'2-digit'});
-        else v=String(cell.w||cell.v||'').slice(0,18);
+        if(cell.t==='n'){
+          const n=Number(cell.v);
+          v=n>9999?n.toLocaleString('it-IT',{maximumFractionDigits:0}):n.toLocaleString('it-IT',{maximumFractionDigits:2});
+        } else if(cell.t==='d') v=new Date(cell.v).toLocaleDateString('it-IT',{month:'short',year:'2-digit'});
+        else v=String(cell.v||cell.w||'').slice(0,20);
       }
       // Controlla selezione corrente
       const isSel=rpState.r1>=0&&r>=Math.min(rpState.r1,rpState.r2)&&r<=Math.max(rpState.r1,rpState.r2)&&c>=Math.min(rpState.c1,rpState.c2)&&c<=Math.max(rpState.c1,rpState.c2);
@@ -2602,32 +2610,35 @@ function applyRpRange(){
     chart.config.rpOrient=rpState.orient;
     chart.config.rpHasRowHdr=hasRH;
     chart.config.rpHasColHdr=hasCH;
-    // Aggiorna colonne da range e ricostruisci yCols automaticamente
-    const res=getDataForRange(rangeStr);
-    if(res){
-      const cols=res.headers;
-      // Se orient=cols: prima col = X, resto = serie Y
-      // Se orient=rows: prima riga = header serie, prima col = X
-      if(rpState.orient==='cols'){
+    chart.config.showLegend=true;
+
+    if(rpState.orient==='rows'){
+      // Modalità pivot: leggi direttamente dal workbook
+      // Non serve configurare xCol/yCols — getDataTransposed fa tutto
+      chart.config.rpOrient='rows';
+    } else {
+      // Modalità colonne: aggiorna xCol e yCols
+      const res=getDataForRangeAny(rangeStr);
+      if(res){
+        const cols=res.headers;
         chart.config.xCol=cols[0]||chart.config.xCol;
-        // Auto-costruisci yCols da tutte le colonne rimanenti
-        const numericCols=cols.slice(hasRH?1:0).filter(c=>res.data.some(row=>{const v=row[c];return v!==''&&v!=null&&!isNaN(parseFloat(v));}));
+        const numericCols=cols.slice(hasRH?1:0).filter(c=>
+          res.data.some(row=>{const v=row[c];return v!==''&&v!=null&&!isNaN(parseFloat(v));})
+        );
         if(numericCols.length){
           chart.config.yCols=numericCols.map(c=>({col:c,agg:'auto',label:c}));
           chart.config.yCol=numericCols[0];
         }
-      } else {
-        // orient=rows: trasponi i dati
-        chart.config.rpTranspose=true;
-        chart.config.xCol=cols[0]||chart.config.xCol;
       }
-      chart.config.showLegend=true;
-      refreshChart(cid);
     }
-    // Aggiorna input range nel modal se aperto
+
+    refreshChart(cid);
+    // Aggiorna modal se aperto
     const inp=document.getElementById('mc-range');
     if(inp){inp.value=rangeStr;previewRange(rangeStr);}
-    toast('Range applicato: '+rangeStr,'ok');
+    // Aggiorna orient buttons
+    setOrient(rpState.orient);
+    toast('Range applicato: '+rangeStr+' ('+rpState.orient+')','ok');
   }
   closeRpicker();
 }
@@ -2657,39 +2668,83 @@ function transposeData(data, headers, cfg){
   return{labels,series};
 }
 
+// ============================================================
+// getDataTransposed — lettura pivot diretta dal workbook
+// Range es. B4:P13:
+//   hasRowHdr=true  → col B = nome serie (Service Line)
+//   hasColHdr=true  → riga 4 = etichette X (Gen 25, Feb 25...)
+//   righe 5-13      → una serie ciascuna
+// ============================================================
 function getDataTransposed(cfg){
   if(!cfg.dataRange||!workbook) return null;
   const sn=document.getElementById('shSelect')?.value||workbook.SheetNames[0];
   const ws=workbook.Sheets[sn];
-  const rng=parseRange(cfg.dataRange);
-  if(!rng) return null;
 
-  const hasRH=cfg.rpHasRowHdr!==false; // prima col = etichette righe
-  const hasCH=cfg.rpHasColHdr!==false; // prima riga = header colonne
+  // Supporta multi-range: prende il primo blocco come riferimento
+  // per l'asse X e unisce i valori degli altri blocchi
+  const rngs=parseMultiRange(cfg.dataRange);
+  if(!rngs.length) return null;
 
-  // Prima riga = header colonne (mesi, trimestri, ecc.)
-  const colHeaders=[];
-  for(let c=rng.c1+(hasRH?1:0);c<=rng.c2;c++){
-    const addr=idxToColLetter(c)+(rng.r1+1);
+  const hasRH=cfg.rpHasRowHdr!==false; // prima colonna = nome serie
+  const hasCH=cfg.rpHasColHdr!==false; // prima riga = header X
+
+  // Helper: legge il valore grezzo di una cella (mai .w formattato)
+  function cellVal(addr){
     const cell=ws[addr];
-    colHeaders.push(cell?String(cell.w||cell.v||idxToColLetter(c)):idxToColLetter(c));
+    if(!cell) return null;
+    if(cell.t==='s') return String(cell.v||'');
+    if(cell.t==='n') return Number(cell.v);
+    if(cell.t==='b') return cell.v;
+    return String(cell.v||'');
   }
 
-  // Ogni riga successiva = una serie
-  const series=[];
-  const excluded=new Set(cfg.excludeRows||[]);
-  for(let r=rng.r1+(hasCH?1:0);r<=rng.r2;r++){
-    const labelCell=hasRH?ws[idxToColLetter(rng.c1)+(r+1)]:null;
-    const label=labelCell?String(labelCell.w||labelCell.v||'Riga '+(r+1)):('Riga '+(r+1));
-    if(excluded.has(label)) continue; // salta righe escluse
-    const values=[];
-    for(let c=rng.c1+(hasRH?1:0);c<=rng.c2;c++){
-      const cell=ws[idxToColLetter(c)+(r+1)];
-      values.push(cell&&cell.t==='n'?cell.v:parseFloat(cell?.w||'0')||0);
+  // ── Costruisci etichette asse X da TUTTI i range ──────────
+  const labels=[];
+  rngs.forEach(rng=>{
+    const startCol=rng.c1+(hasRH?1:0);
+    const headerRow=rng.r1+1; // 1-based Excel
+    for(let c=startCol;c<=rng.c2;c++){
+      const v=cellVal(idxToColLetter(c)+headerRow);
+      labels.push(v!==null?String(v):idxToColLetter(c));
     }
-    series.push({label,values});
+  });
+
+  // ── Costruisci serie da TUTTI i range ─────────────────────
+  // Le righe dati devono essere le stesse in tutti i range (stesso numero)
+  const refRng=rngs[0];
+  const dataRowStart=refRng.r1+(hasCH?1:0); // prima riga dati (0-based)
+  const dataRowEnd=refRng.r2;
+  const excluded=new Set(cfg.excludeRows||[]);
+  const series=[];
+
+  for(let r=dataRowStart;r<=dataRowEnd;r++){
+    const excelRow=r+1; // 1-based
+    if(excluded.has(excelRow)) continue;
+
+    // Nome serie = prima colonna del primo range (se hasRH)
+    let seriesLabel='Serie '+(r-dataRowStart+1);
+    if(hasRH){
+      const lv=cellVal(idxToColLetter(refRng.c1)+excelRow);
+      if(lv!==null&&lv!=='') seriesLabel=String(lv);
+    }
+
+    // Valori = tutte le colonne dati di tutti i range
+    const vals=[];
+    rngs.forEach(rng=>{
+      const startCol=rng.c1+(hasRH&&rng===rngs[0]?1:0);
+      for(let c=startCol;c<=rng.c2;c++){
+        const v=cellVal(idxToColLetter(c)+excelRow);
+        vals.push(typeof v==='number'?v:(parseFloat(String(v).replace(',','.'))||0));
+      }
+    });
+
+    // Salta righe completamente vuote
+    if(vals.every(v=>v===0||v===null)) continue;
+    series.push({label:seriesLabel, values:vals});
   }
-  return{labels:colHeaders,series};
+
+  if(!series.length||!labels.length) return null;
+  return{labels, series};
 }
 
 // ================================================================
@@ -2961,18 +3016,23 @@ function readYCols(){
 let _mcc=50;
 
 function setOrient(val){
-  document.getElementById('mc-orient-val').textContent=val;
+  const el=document.getElementById('mc-orient-val');
+  if(el) el.textContent=val;
   const colBox=document.getElementById('orient-cols');
   const rowBox=document.getElementById('orient-rows');
-  if(!colBox||!rowBox) return;
-  const isCols=val==='cols';
-  colBox.style.borderColor=isCols?'var(--accent)':'var(--border)';
-  colBox.style.background=isCols?'var(--asoft)':'var(--bg3)';
-  colBox.firstElementChild.style.color=isCols?'var(--accent2)':'var(--text2)';
-  rowBox.style.borderColor=!isCols?'var(--accent)':'var(--border)';
-  rowBox.style.background=!isCols?'var(--asoft)':'var(--bg3)';
-  rowBox.firstElementChild.style.color=!isCols?'var(--accent2)':'var(--text2)';
-  // Aggiorna anche rpState per il picker
+  if(colBox&&rowBox){
+    const isCols=val==='cols';
+    colBox.style.borderColor=isCols?'var(--accent)':'var(--border)';
+    colBox.style.background=isCols?'var(--asoft)':'var(--bg3)';
+    colBox.firstElementChild.style.color=isCols?'var(--accent2)':'var(--text2)';
+    rowBox.style.borderColor=!isCols?'var(--accent)':'var(--border)';
+    rowBox.style.background=!isCols?'var(--asoft)':'var(--bg3)';
+    rowBox.firstElementChild.style.color=!isCols?'var(--accent2)':'var(--text2)';
+  }
+  // Mostra/nascondi nota pivot
+  const note=document.getElementById('mc-pivot-note');
+  if(note) note.style.display=val==='rows'?'':'none';
+  // Aggiorna rpState
   rpState.orient=val;
 }
 
