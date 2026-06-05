@@ -1615,24 +1615,50 @@ function renderChartJS(id,wrap,cfg,p,ax,sg,dur){
   // ORIENTAMENTO TRASPOSTO (righe=serie, colonne=X) — per strutture pivot Excel
   // ORIENTAMENTO TRASPOSTO
   // ============================================================
-  // ORIENTAMENTO: RIGHE = SERIE (pivot Excel — B4:P13)
-  // Prima riga del range = etichette X (Gen25, Feb25...)
-  // Ogni riga dati = una serie (Warehouse, Handling...)
   // ============================================================
-  const isTransposed=cfg.rpOrient==='rows'&&cfg.dataRange;
-  const isMulti=(cfg.yCols&&cfg.yCols.length>1||isTransposed)&&!isWF&&!isScatter&&!isBubble&&!isPie&&!isRadar;
+  // MODALITÀ A: RANGE DIRETTO X+Y (replica esatta grafici Excel)
+  // Attivata quando xRange è impostato O almeno una yCol ha yRange
+  // Es: xRange=C4:O4, serie1.yRange=C5:O5, serie2.yRange=C6:O6
+  // ============================================================
+  const hasDirectRanges=!isWF&&!isScatter&&!isBubble&&!isPie&&!isRadar&&
+    (cfg.xRange||(cfg.yCols&&cfg.yCols.some(y=>y&&y.yRange)));
+
+  // MODALITÀ B: RIGHE = SERIE (pivot B4:O13 — una riga = una serie)
+  const isTransposed=!hasDirectRanges&&cfg.rpOrient==='rows'&&cfg.dataRange;
+
+  const isMulti=(hasDirectRanges||(cfg.yCols&&cfg.yCols.length>1)||isTransposed)&&
+    !isWF&&!isScatter&&!isBubble&&!isPie&&!isRadar;
 
   let labels=[], values=[], multiData=null;
 
-  if(isTransposed){
-    // Leggi pivot direttamente dal workbook
+  if(hasDirectRanges){
+    // Leggi etichette X dal range diretto
+    const xR=cfg.xRange||'';
+    const xLabels=xR?readRangeValues(xR,true).filter(v=>v!==''&&v!=null):[];
+    // Ogni yCol: se ha yRange leggi da lì, altrimenti usa i dati aggregati
+    const yCols=cfg.yCols&&cfg.yCols.length?cfg.yCols:[{col:cfg.yCol,label:'',yRange:''}];
+    const series=yCols.map((yc,i)=>{
+      let vals=[];
+      if(yc&&yc.yRange){
+        vals=readRangeValues(yc.yRange,false);
+      } else {
+        vals=xLabels.map(()=>0);
+      }
+      while(vals.length<xLabels.length) vals.push(0);
+      return{label:yc.label||yc.col||('Serie '+(i+1)), values:vals.slice(0,xLabels.length)};
+    });
+    labels=xLabels;
+    values=series[0]?.values||[];
+    multiData={labels,series};
+
+  } else if(isTransposed){
+    // Leggi pivot direttamente dal workbook (Righe=Serie)
     const td=getDataTransposed(cfg);
     if(td&&td.labels&&td.series&&td.series.length){
       labels=td.labels;
       values=td.series[0]?.values||[];
       multiData=td;
     } else {
-      // Fallback a lista vuota con messaggio
       labels=[]; values=[]; multiData=null;
     }
   } else if(isMulti){
@@ -2209,7 +2235,12 @@ function openM(id){
     </div>
     <div class="g2">
       <div class="fld"><div class="fl">Colonna X (categorie / etichette)</div><select id="mc-xcol">${columns.map(c=>`<option value="${c}" ${cfg.xCol===c?'selected':''}>${c}</option>`).join('')}</select></div>
-      <div class="fld"><div class="fl">Aggregazione (globale)</div>
+      <div class="fld"><div class="fl">Range X diretto (es. C4:O4, opzionale)</div>
+        <input type="text" id="mc-xrange" value="${cfg.xRange||''}" placeholder="es. C4:O4 o (N4,S4:W4)" style="font-family:monospace;font-size:11px" title="Se impostato, sovrascrive la Colonna X con un range diretto di celle">
+      </div>
+    </div>
+    <div class="g2">
+      <div class="fld" style="opacity:.5"><div class="fl">Aggregazione (non usata in modalità range)</div>
         <select id="mc-yagg">
           <option value="auto" ${cfg.yAgg==='auto'?'selected':''}>AUTO</option>
           ${['sum','count','avg','min','max'].map(a=>`<option value="${a}" ${cfg.yAgg===a?'selected':''}>${a.toUpperCase()}</option>`).join('')}
@@ -2219,12 +2250,13 @@ function openM(id){
 
     <div class="m-section-title">📈 Serie Y — aggiungi quante ne vuoi (cluster)</div>
     <div id="mc-ycols" style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;padding:2px">
-      ${(cfg.yCols&&cfg.yCols.length?cfg.yCols:[{col:cfg.yCol,agg:cfg.yAgg||'auto',label:''}]).map((yc,i)=>`
+      ${(cfg.yCols&&cfg.yCols.length?cfg.yCols:[{col:cfg.yCol,agg:cfg.yAgg||'auto',label:'',yRange:''}]).map((yc,i)=>`
         <div class="yc-row" id="ycr-${i}" style="display:flex;gap:6px;align-items:center;background:var(--bg3);padding:6px;border-radius:var(--rs);flex-wrap:wrap">
           <div style="width:14px;height:14px;border-radius:3px;background:${gPal[i%gPal.length]};flex-shrink:0"></div>
-          <select id="ycc-${i}" style="flex:1;min-width:120px">${columns.map(c=>`<option value="${c}" ${c===yc.col?'selected':''}>${c}</option>`).join('')}</select>
-          <select id="yca-${i}" style="width:75px">${['auto','sum','count','avg','min','max'].map(a=>`<option value="${a}" ${a===(yc.agg||'auto')?'selected':''}>${a}</option>`).join('')}</select>
-          <input type="text" id="ycl-${i}" value="${yc.label||''}" placeholder="Label serie" style="width:110px">
+          <select id="ycc-${i}" style="flex:1;min-width:100px">${columns.map(c=>`<option value="${c}" ${c===yc.col?'selected':''}>${c}</option>`).join('')}</select>
+          <select id="yca-${i}" style="width:65px">${['auto','sum','count','avg','min','max'].map(a=>`<option value="${a}" ${a===(yc.agg||'auto')?'selected':''}>${a}</option>`).join('')}</select>
+          <input type="text" id="ycl-${i}" value="${yc.label||''}" placeholder="Label" style="width:90px">
+          <input type="text" id="ycr-rng-${i}" value="${yc.yRange||''}" placeholder="Range Y (es. C5:O5)" style="width:120px;font-family:monospace;font-size:11px" title="Range Y diretto dal foglio. Se impostato, bypassa la colonna.">
           <button class="btn sm danger" onclick="removeYCol(${i})" style="padding:3px 7px">✕</button>
         </div>`).join('')}
     </div>
@@ -2668,6 +2700,88 @@ function transposeData(data, headers, cfg){
   return{labels,series};
 }
 
+
+// ================================================================
+// LETTURA RANGE Y DIRETTO DAL WORKBOOK
+// Per grafici con asse X fisso e ogni serie = riga/range specifici
+// Es: X=C4:O4, Serie1=C5:O5, Serie2=C6:O6, Serie3=C7:O7
+// ================================================================
+
+// Legge valori numerici da un range/multi-range di celle
+// Restituisce array di numeri, converte datetime in stringa
+function readRangeValues(rangeStr, asLabels){
+  if(!rangeStr||!workbook) return [];
+  const sn=document.getElementById('shSelect')?.value||workbook.SheetNames[0];
+  const ws=workbook.Sheets[sn];
+  const rngs=parseMultiRange(rangeStr.trim());
+  if(!rngs.length) return [];
+  const result=[];
+  rngs.forEach(rng=>{
+    for(let r=rng.r1;r<=rng.r2;r++){
+      for(let c=rng.c1;c<=rng.c2;c++){
+        const addr=idxToColLetter(c)+(r+1);
+        const cell=ws[addr];
+        if(!cell){result.push(asLabels?'':0);continue;}
+        if(asLabels){
+          // Per etichette X: stringa o data→mese
+          if(cell.t==='s') result.push(String(cell.v||''));
+          else if(cell.t==='d'||cell.t==='n'&&cell.w&&cell.w.match(/\d+[\/\-]\d+[\/\-]\d+/)){
+            try{
+              const d=cell.t==='d'?new Date(cell.v):new Date(Math.round((cell.v-25569)*86400000));
+              const mm=['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+              result.push(mm[d.getMonth()]+' '+(d.getFullYear()%100).toString().padStart(2,'0'));
+            }catch(e){result.push(String(cell.v||''));}
+          } else result.push(String(cell.v||cell.w||''));
+        } else {
+          // Per valori Y: numero grezzo
+          if(cell.t==='n') result.push(Number(cell.v)||0);
+          else result.push(parseFloat(String(cell.v||'0').replace(',','.'))||0);
+        }
+      }
+    }
+  });
+  return result;
+}
+
+// Costruisce un dataset Chart.js leggendo direttamente dal workbook
+// xRange: es "C4:O4" o "(N4,S4:W4)" — range etichette X
+// yRanges: array di {range:"C5:O5", label:"Warehouse", color:"#..."} 
+function buildDatasetsFromRanges(xRange, yRanges, chartCfg, palette){
+  const labels=readRangeValues(xRange.trim(), true).filter(v=>v!==''&&v!==null);
+  const datasets=[];
+  yRanges.forEach((yr,i)=>{
+    const col=palette[i%palette.length];
+    const values=readRangeValues(yr.range.trim(), false);
+    // Padding se lunghezze diverse
+    while(values.length<labels.length) values.push(0);
+    const isLine=(yr.type||chartCfg.type)==='line';
+    datasets.push({
+      label:yr.label||('Serie '+(i+1)),
+      data:values.slice(0,labels.length),
+      backgroundColor:isLine?(chartCfg.fill?col+'44':col+'22'):col+'cc',
+      borderColor:col,
+      borderWidth:isLine?2:1.5,
+      borderRadius:isLine?0:(chartCfg.borderR||4),
+      fill:!!chartCfg.fill,
+      tension:chartCfg.smooth?0.4:0,
+      pointRadius:isLine?(chartCfg.pointSize||4):0,
+      pointHoverRadius:6,
+      type:isLine?'line':'bar',
+    });
+    // Trendline
+    if(chartCfg.trendGlobal&&chartCfg.trendGlobal!=='none'){
+      const td=chartCfg.trendGlobal==='ma'?calcMovingAvg(values,chartCfg.maPeriod||3):calcTrendline(values);
+      datasets.push({
+        label:yr.label+' (trend)',data:td,type:'line',
+        borderColor:col,borderDash:[5,4],borderWidth:1.5,
+        pointRadius:0,fill:false,tension:0.3,
+      });
+    }
+  });
+  return{labels, datasets};
+}
+
+
 // ============================================================
 // getDataTransposed — lettura pivot diretta dal workbook
 // Range es. B4:P13:
@@ -2693,8 +2807,15 @@ function getDataTransposed(cfg){
     const cell=ws[addr];
     if(!cell) return null;
     if(cell.t==='s') return String(cell.v||'');
+    if(cell.t==='d'||cell.t==='n'&&cell.v&&String(cell.w||'').match(/^\d{1,2}\/\d{1,2}\/\d{2,4}$|^\d{4}-\d{2}/)){
+      // Cella data — converti in etichetta mese
+      try{
+        const d=cell.t==='d'?new Date(cell.v):new Date(Math.round((cell.v-25569)*86400000));
+        const mesi=['Gen','Feb','Mar','Apr','Mag','Giu','Lug','Ago','Set','Ott','Nov','Dic'];
+        return mesi[d.getMonth()]+' '+(d.getFullYear()%100).toString().padStart(2,'0');
+      }catch(e){ return String(cell.v); }
+    }
     if(cell.t==='n') return Number(cell.v);
-    if(cell.t==='b') return cell.v;
     return String(cell.v||'');
   }
 
@@ -2985,9 +3106,10 @@ function addYCol(colName=''){
   const rngInp=document.getElementById('mc-range');
   const curCols=(rngInp&&rngInp.value)?getColsForRangeAny(rngInp.value):columns;
   div.innerHTML=`<div style="width:14px;height:14px;border-radius:3px;background:${palColor};flex-shrink:0"></div>
-    <select id="ycc-${i}" style="flex:1;min-width:120px">${curCols.map(c=>`<option value="${c}" ${c===colName?'selected':''}>${c}</option>`).join('')}</select>
-    <select id="yca-${i}" style="width:75px"><option>auto</option><option>sum</option><option>count</option><option>avg</option><option>min</option><option>max</option></select>
-    <input type="text" id="ycl-${i}" placeholder="Label serie" style="width:110px">
+    <select id="ycc-${i}" style="flex:1;min-width:100px">${curCols.map(c=>`<option value="${c}" ${c===colName?'selected':''}>${c}</option>`).join('')}</select>
+    <select id="yca-${i}" style="width:65px"><option>auto</option><option>sum</option><option>count</option><option>avg</option><option>min</option><option>max</option></select>
+    <input type="text" id="ycl-${i}" placeholder="Label" style="width:90px">
+    <input type="text" id="ycr-rng-${i}" placeholder="Range Y (es. C5:O5)" style="width:120px;font-family:monospace;font-size:11px" title="Range diretto celle Y">
     <button class="btn sm danger" onclick="removeYCol(${i})" style="padding:3px 7px">✕</button>`;
   document.getElementById('mc-ycols').appendChild(div);
 }
@@ -3009,7 +3131,8 @@ function readYCols(){
     const col=document.getElementById('ycc-'+ri)?.value||'';
     const agg=document.getElementById('yca-'+ri)?.value||'auto';
     const label=document.getElementById('ycl-'+ri)?.value||'';
-    return col?{col,agg,label}:null;
+    const yRange=document.getElementById('ycr-rng-'+ri)?.value?.trim()||'';
+    return(col||yRange)?{col,agg,label,yRange}:null;
   }).filter(Boolean);
 }
 
@@ -3064,6 +3187,7 @@ function applyM(){
     type:document.getElementById('mc-type').value,
     xCol:document.getElementById('mc-xcol').value,
     dataRange:document.getElementById('mc-range')?.value?.trim()||null,
+    xRange:document.getElementById('mc-xrange')?.value?.trim()||null,
     rpOrient:document.getElementById('mc-orient-val')?.textContent||'cols',
     rpHasRowHdr:document.getElementById('mc-hasrowhdr')?.checked!==false,
     rpHasColHdr:document.getElementById('mc-hascolhdr')?.checked!==false,
