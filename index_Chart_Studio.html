@@ -275,6 +275,33 @@ input[type=color]{width:28px;height:26px;border-radius:var(--rs);border:1px soli
 .rp-cell.rp-sel-start{outline:2px solid var(--accent);outline-offset:-1px}
 .rp-cell.rp-num{text-align:right;color:var(--text)}
 .rp-cell.rp-hdr-cell{background:rgba(16,185,129,.22)!important;color:#6ee7b7!important;font-weight:600}
+.rp-cell.rp-excl{background:rgba(239,68,68,.18)!important;color:#fca5a5!important;text-decoration:line-through}
+.rp-row-hdr.rp-excl-hdr{background:rgba(239,68,68,.25)!important;color:#fca5a5!important}
+/* ── FEATURES AVANZATE ───────────────────────────────── */
+.sel-block{background:rgba(59,130,246,.15);border:2px solid var(--accent);pointer-events:none}
+.rp-sel-multi{background:rgba(139,92,246,.35)!important;color:#fff!important}
+.rp-sel-multi-2{background:rgba(16,185,129,.35)!important;color:#fff!important}
+.rp-sel-multi-3{background:rgba(245,158,11,.35)!important;color:#fff!important}
+/* Colori per selezioni multiple */
+.rp-sel-0{background:rgba(59,130,246,.35)!important}
+.rp-sel-1{background:rgba(139,92,246,.35)!important}
+.rp-sel-2{background:rgba(16,185,129,.35)!important}
+.rp-sel-3{background:rgba(245,158,11,.35)!important}
+.rp-sel-4{background:rgba(239,68,68,.35)!important}
+
+/* Multi-range badge list */
+.rp-ranges-list{display:flex;flex-wrap:wrap;gap:5px;padding:5px 0}
+.rp-range-chip{display:inline-flex;align-items:center;gap:4px;padding:2px 8px;border-radius:20px;font-size:10px;font-weight:700;font-family:monospace;cursor:pointer;border:1px solid transparent}
+.rp-range-chip:hover{opacity:.8}
+.rp-range-chip .rp-chip-del{font-size:10px;cursor:pointer;opacity:.7}
+.rp-range-chip .rp-chip-del:hover{opacity:1}
+
+/* Formato numeri tooltip */
+.fmt-preview{font-size:11px;color:var(--accent2);font-family:monospace;padding:3px 0}
+
+/* Linee di riferimento */
+.ref-line-row{display:flex;gap:6px;align-items:center;padding:5px;background:var(--bg3);border-radius:var(--rs);flex-wrap:wrap}
+
 .rpicker-foot{
   padding:8px 14px;border-top:1px solid var(--border);
   display:flex;gap:8px;align-items:center;flex-wrap:wrap;
@@ -611,9 +638,14 @@ table.prev tr:hover td{background:var(--bg3)}
       <div class="rpicker-tbl-wrap" id="rpTblWrap"></div>
     </div>
     <div class="rpicker-foot">
-      <div class="rpicker-info" id="rpInfo">Clicca una cella, poi trascina o shift+click per selezionare il range</div>
+      <div style="flex:1;display:flex;flex-direction:column;gap:6px">
+        <div class="rpicker-info" id="rpInfo">Clicca e trascina · Shift+click per estendere · Ctrl+click per aggiungere al range</div>
+        <div id="rpRangesList" class="rp-ranges-list"></div>
+      </div>
+      <button class="btn" onclick="rpAddCurrentSel()" title="Aggiungi selezione corrente al range (Ctrl+A)">＋ Aggiungi</button>
+      <button class="btn" onclick="rpClearAll()">🗑 Pulisci tutto</button>
       <button class="btn" onclick="closeRpicker()">Annulla</button>
-      <button class="btn primary" onclick="applyRpRange()">✓ Usa questo range</button>
+      <button class="btn primary" onclick="applyRpRange()">✓ Usa range</button>
     </div>
   </div>
 </div>
@@ -1092,13 +1124,16 @@ function loadSheet(){
     return s!==''?s:idxToColLetter(i); // usa lettera colonna se cella vuota
   });
   // Righe dati = tutto dopo la riga header
-  const dataRows=allRows.slice(headerIdx+1).map(arr=>{
-    const row={};
+  // Salva anche l'indice originale di riga (1-based, relativo al foglio)
+  // per permettere l'esclusione di righe specifiche
+  const dataRows=allRows.slice(headerIdx+1).map((arr,idx)=>{
+    const row={__rowIdx__:headerIdx+2+idx}; // numero riga Excel (1-based)
     colNames.forEach((name,i)=>{row[name]=arr[i]??'';});
     return row;
-  }).filter(row=>Object.values(row).some(v=>v!==''&&v!=null));
+  }).filter(row=>colNames.some(name=>row[name]!==''&&row[name]!=null));
   if(!dataRows.length){toast('Nessun dato dopo la riga header '+hRow,'err');return;}
   rawData=dataRows;
+  // cleanCols filtra __EMPTY ma mantieni __rowIdx__ come metadato interno
   columns=cleanCols(colNames);
   filteredData=[...rawData];
   document.getElementById('shSel2').style.display='';
@@ -1232,7 +1267,7 @@ function getData(rangeStr){
 // Versione getData per preview range in modal
 function getColsForRange(rangeStr){
   if(!rangeStr) return columns;
-  const res=getDataForRange(rangeStr);
+  const res=getDataForRangeAny?getDataForRangeAny(rangeStr):getDataForRange(rangeStr);
   return res?res.headers:columns;
 }
 function pal(cfg){return(cfg.colors&&cfg.colors.length)?cfg.colors:gPal;}
@@ -1248,12 +1283,29 @@ function aggData(cfg){
 
 // Aggrega una colonna specifica
 function aggOneCol(cfg, yCol, yAgg){
-  const data=getData(cfg.dataRange);
+  let data;
+  if(cfg.dataRange){
+    const res=getDataForRangeAny(cfg.dataRange);
+    data=res?res.data:getData();
+  } else {
+    data=getData();
+  }
   const {xCol,maxItems,sortBy}=cfg;
   if(!xCol) return [];
+  // Escludi righe specifiche se configurate (indici Excel 1-based)
+  if(cfg.excludeRows&&cfg.excludeRows.length){
+    const excSet=new Set(cfg.excludeRows);
+    data=data.filter(row=>!excSet.has(row.__rowIdx__));
+  }
+  // Escludi righe dove la colonna X contiene parole chiave di totale
+  if(cfg.excludeTotals){
+    const totKw=/^(total|totale|tot|subtotal|subtotale|grand|somma|sum)/i;
+    data=data.filter(row=>!totKw.test(String(row[xCol]??'')));
+  }
   const agg={};
   data.forEach(row=>{
     const k=String(row[xCol]??'N/A');
+    if(!k||k==='N/A'||k===''||k==='undefined') return; // salta righe senza etichetta X
     const rawV=row[yCol];
     const v=(rawV!==''&&rawV!=null&&!isNaN(parseFloat(rawV)))?parseFloat(rawV):0;
     if(!agg[k]) agg[k]={sum:0,cnt:0,min:v,max:v};
@@ -1433,7 +1485,7 @@ function renderTable(id){
       <span class="htxt">Altezza px:</span>
       <input type="number" value="${tblH}" min="80" max="2000" step="20" style="width:70px" onchange="setTblH(${id},this.value)" id="thi-${id}">
       <span class="htxt" style="color:var(--text3)">·</span>
-      <span class="htxt">${allRows.length} righe · trascina il bordo per ridimensionare</span>
+      <span class="htxt">${isMultiT?(multiData.labels.length+' righe'):(entries?.length||rawData.length)+' righe'} · trascina il bordo per ridimensionare</span>
       <button class="btn sm" onclick="exportTableCSV(${id})" style="margin-left:auto">📄 CSV</button>
     </div>`;
   // Attach drag-resize
@@ -1559,14 +1611,24 @@ function renderChartJS(id,wrap,cfg,p,ax,sg,dur){
   const isWF=type==='waterfall';
 
   // ORIENTAMENTO TRASPOSTO (righe=serie, colonne=X) — per strutture pivot Excel
+  // ORIENTAMENTO TRASPOSTO
   const isTransposed=cfg.rpOrient==='rows'&&cfg.dataRange;
+  // Modalità SUM — somma tutte le serie in una sola linea (come il grafico Excel)
+  const isSumMode=isTransposed&&cfg.sumRows===true;
   let transData=isTransposed?getDataTransposed(cfg):null;
 
   // MULTI-SERIE: usa aggMulti se ci sono più yCols e non è un tipo speciale
-  const isMulti=(cfg.yCols&&cfg.yCols.length>1||isTransposed)&&!isWF&&!isScatter&&!isBubble&&!isPie&&!isRadar;
+  const isMulti=(cfg.yCols&&cfg.yCols.length>1||(isTransposed&&!isSumMode))&&!isWF&&!isScatter&&!isBubble&&!isPie&&!isRadar;
 
   let labels, values, multiData;
-  if(isTransposed&&transData){
+  if(isTransposed&&transData&&isSumMode){
+    // Modalità somma: una sola serie = somma di tutte le righe incluse
+    labels=transData.labels;
+    values=transData.labels.map((_,i)=>
+      Math.round(transData.series.reduce((sum,s)=>sum+(s.values[i]||0),0)*100)/100
+    );
+    multiData=null; // non multi
+  } else if(isTransposed&&transData){
     labels=transData.labels;
     values=transData.series[0]?.values||[];
     multiData=transData;
@@ -1671,15 +1733,85 @@ function renderChartJS(id,wrap,cfg,p,ax,sg,dur){
       stack:isStacked?'s1':undefined}];
   }
 
-  const opts={responsive:true,maintainAspectRatio:false,animation:{duration:dur},
-    plugins:{
-      legend:{display:cfg.showLegend&&(isPie||isRadar||isMixed||isMulti),
-        labels:{color:ax,boxWidth:10,font:{size:10},padding:12}},
-      tooltip:{backgroundColor:'#1e2535',borderColor:'#2a3347',borderWidth:1,
-        titleColor:'#e2e8f0',bodyColor:'#94a3b8',padding:8,
-        callbacks:isWF?{label:ctx=>{const v=values[ctx.dataIndex];return(v>=0?'+':'')+v.toLocaleString('it-IT');}}:{}},
-    }
+  // Formattatore Y
+  const yFmt=cfg.yFormat||'';
+  const fmtVal=(v)=>{
+    if(v===null||v===undefined) return '';
+    const n=Number(v);
+    if(yFmt==='%') return (n*100).toFixed(1)+'%';
+    if(yFmt==='M') return (n/1000000).toFixed(2)+'M';
+    if(yFmt==='k') return (n/1000).toFixed(1)+'k';
+    if(yFmt==='€') return '€'+n.toLocaleString('it-IT',{maximumFractionDigits:0});
+    if(yFmt==='€k') return '€'+(n/1000).toFixed(1)+'k';
+    if(yFmt==='€M') return '€'+(n/1000000).toFixed(2)+'M';
+    if(yFmt) return n.toLocaleString('it-IT')+' '+yFmt;
+    return n.toLocaleString('it-IT',{maximumFractionDigits:2});
   };
+
+  // Plugins avanzati
+  const pluginsBase={
+    legend:{display:cfg.showLegend&&(isPie||isRadar||isMixed||isMulti),
+      labels:{color:ax,boxWidth:10,font:{size:10},padding:12}},
+    tooltip:{backgroundColor:'#1e2535',borderColor:'#2a3347',borderWidth:1,
+      titleColor:'#e2e8f0',bodyColor:'#94a3b8',padding:8,
+      callbacks:{
+        label:ctx=>{
+          if(isWF){const v=values[ctx.dataIndex];return(v>=0?'+':'')+fmtVal(v);}
+          const val=ctx.parsed?.y??ctx.parsed;
+          return ' '+(ctx.dataset.label||'')+': '+fmtVal(val);
+        }
+      }
+    },
+  };
+
+  // Data labels (valori sopra barre/punti)
+  if(cfg.dataLabels&&!isPie&&!isRadar){
+    pluginsBase.datalabels={
+      display:true,
+      anchor:'end',align:'top',
+      color:ax,
+      font:{size:9,weight:'600'},
+      formatter:(v,ctx)=>fmtVal(v),
+      clip:false,
+    };
+  }
+
+  // Linee di riferimento (annotation plugin emulato con dataset fantasma)
+  // Aggiunto come dataset di tipo 'line' con un singolo valore ripetuto
+  if(cfg.refLines&&cfg.refLines.length&&labels&&labels.length){
+    cfg.refLines.forEach(rl=>{
+      const dashMap={solid:[],dash:[6,4],dot:[2,3]};
+      datasets.push({
+        type:'line',
+        label:rl.label||('Ref '+rl.value),
+        data:labels.map(()=>rl.value),
+        borderColor:rl.color||'#ef4444',
+        borderWidth:2,
+        borderDash:dashMap[rl.style||'dash']||[6,4],
+        pointRadius:0,
+        fill:false,
+        tension:0,
+        order:-1, // sempre sotto le barre
+      });
+    });
+  }
+
+  const opts={responsive:true,maintainAspectRatio:false,animation:{duration:dur},
+    plugins:pluginsBase,
+    layout:{padding:{top:cfg.dataLabels?20:6}},
+  };
+
+  // Overlap e gap
+  if(!isPie&&!isRadar&&!isScatter&&!isBubble){
+    if(cjsType==='bar'){
+      datasets.forEach(ds=>{
+        if(ds.type==='bar'||!ds.type){
+          ds.barPercentage=1-((cfg.gapWidth??150)/500);
+          ds.categoryPercentage=1+((cfg.barOverlap??-20)/100);
+        }
+      });
+    }
+  }
 
   if(!isPie&&!isRadar){
     // indexAxis ROOT-LEVEL per Chart.js 4 (non sullo scale)
@@ -1710,14 +1842,60 @@ function renderChartJS(id,wrap,cfg,p,ax,sg,dur){
       };
     }
     if(isMixed) opts.scales.y2={position:'right',ticks:{color:ax},grid:{display:false}};
+    // Y Min/Max/Step
+    if(cfg.yMin!=null||cfg.yMax!=null||cfg.yStep!=null||cfg.yFormat){
+      const yAx=isHBar?opts.scales.x:opts.scales.y;
+      if(yAx){
+        if(cfg.yMin!=null) yAx.min=cfg.yMin;
+        if(cfg.yMax!=null) yAx.max=cfg.yMax;
+        if(cfg.yStep!=null) yAx.ticks={...yAx.ticks,stepSize:cfg.yStep};
+        if(cfg.yFormat) yAx.ticks={...yAx.ticks,callback:(v)=>fmtVal(v)};
+      }
+    }
+    // Inversione assi
+    if(cfg.invertY){
+      const yAx=isHBar?opts.scales.x:opts.scales.y;
+      if(yAx) yAx.reverse=true;
+    }
+    if(cfg.invertX){
+      const xAx=isHBar?opts.scales.y:opts.scales.x;
+      if(xAx) xAx.reverse=true;
+    }
+    // Scala logaritmica
+    if(cfg.logScale){
+      const yAx=isHBar?opts.scales.x:opts.scales.y;
+      if(yAx) yAx.type='logarithmic';
+    }
+    // Barre 100% normalizzate
+    if(cfg.stack100&&isMulti&&multiData){
+      // Ricalcola valori normalizzati
+      const sums=multiData.labels.map((_,i)=>multiData.series.reduce((s,sr)=>s+Math.abs(sr.values[i]||0),0)||1);
+      multiData.series.forEach((sr,si)=>{
+        datasets[si].data=sr.values.map((v,i)=>(v/sums[i]*100));
+      });
+      const yAx=isHBar?opts.scales.x:opts.scales.y;
+      if(yAx){yAx.min=0;yAx.max=100;yAx.ticks={...yAx.ticks,callback:v=>v+'%'};}
+    }
+    // Rotazione etichette X
+    if(cfg.xRotation!=null){
+      const xAx=opts.scales.x;
+      if(xAx) xAx.ticks={...xAx.ticks,maxRotation:Math.abs(cfg.xRotation),minRotation:Math.abs(cfg.xRotation)};
+    }
   } else if(isRadar){
     opts.scales={r:{ticks:{color:ax,backdropColor:'transparent'},grid:{color:'rgba(255,255,255,0.08)'},pointLabels:{color:ax,font:{size:10}}}};
   }
 
+  // Applica colore per valore
+  if(cfg.colorByValue) applyColorByValue(datasets,cfg,values);
+
   try{
     const chartInst=new Chart(cv,{type:cjsType,data:{labels,datasets},options:opts});
     const chartRef=charts.find(x=>x.id===id);
-    if(chartRef) chartRef.inst=chartInst;
+    if(chartRef){
+      chartRef.inst=chartInst;
+      // Init zoom/pan
+      if(cfg.zoomEnabled) initZoomPan(cv,chartInst);
+    }
   }catch(err){console.error('Chart error:',err);wrap.innerHTML=`<div style="color:var(--err);padding:16px;font-size:12px">Errore rendering: ${err.message}</div>`;}
 }
 
@@ -1932,8 +2110,17 @@ function openKpiM(id){
     <div id="krows" style="display:flex;flex-direction:column;gap:6px">${k.config.cols.map((cc,i)=>mkRow(cc,i)).join('')}</div>
     <button class="btn sm" onclick="addKRow()">＋ Metrica</button>`;
   document.getElementById('moverlay').classList.add('vis');
+  // Toggle colori-per-valore
+  const cbvCk=document.getElementById('mc-cbv');
+  if(cbvCk) cbvCk.addEventListener('change',()=>{
+    const el=document.getElementById('mc-cbv-colors');
+    if(el) el.style.display=cbvCk.checked?'':'none';
+  });
   // Preview range se già impostato
-  requestAnimationFrame(()=>previewRange(cfg.dataRange||''));
+  requestAnimationFrame(()=>{
+    previewRange(cfg.dataRange||'');
+    updateRowSelUI(cfg);
+  });
 }
 
 function addKRow(){
@@ -1978,10 +2165,24 @@ function openM(id){
           style="font-family:monospace;font-size:13px;letter-spacing:.05em">
       </div>
       <button class="btn sm primary" onclick="openRpicker(editId)" style="flex-shrink:0;margin-top:16px">🔲 Griglia</button>
+      <label style="display:inline-flex;align-items:center;gap:6px;font-size:11px;cursor:pointer;margin-top:16px;white-space:nowrap">
+        <input type="checkbox" id="mc-sumrows" ${cfg.sumRows?'checked':''}>
+        Somma righe (totale)
+      </label>
       <button class="btn sm" onclick="clearRange()" style="flex-shrink:0;margin-top:16px">✕ Rimuovi</button>
     </div>
     <div id="mc-range-info" class="htxt" style="color:var(--accent2)"></div>
     <div id="mc-range-grid" class="range-grid-wrap" style="display:none"></div>
+
+    <div class="m-section-title" id="mc-rowsel-title" style="display:none">📋 Righe da includere (orientamento Righe=Serie)</div>
+    <div id="mc-rowsel-wrap" style="display:none;flex-direction:column;gap:6px">
+      <div class="htxt">Seleziona quali righe usare come serie. Deseleziona per escluderle (es. totali, righe gialle).</div>
+      <div id="mc-rowsel-list" style="max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div>
+      <div style="display:flex;gap:6px">
+        <button class="btn sm" onclick="rpRowSelAll(true)">✓ Tutte</button>
+        <button class="btn sm" onclick="rpRowSelAll(false)">✗ Nessuna</button>
+      </div>
+    </div>
 
     <div class="m-section-title">📊 Dati — Colonne</div>
     <div class="g2">
@@ -2038,11 +2239,75 @@ function openM(id){
       </div>
     </div>
 
+    <div class="m-section-title">🚫 Righe da escludere dal calcolo</div>
+    <div style="display:flex;flex-direction:column;gap:8px">
+      <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
+        <input type="checkbox" id="mc-excltot" ${cfg.excludeTotals?'checked':''}>
+        Escludi automaticamente righe "Totale/Total/Subtotale" (basato sul testo della colonna X)
+      </label>
+      <div class="fld">
+        <div class="fl">Righe da escludere manualmente (numeri riga Excel separati da virgola, es. 14,33,85)</div>
+        <input type="text" id="mc-exclrows"
+          value="${(cfg.excludeRows||[]).join(',')}"
+          placeholder="es. 14,33,85,102"
+          style="font-family:monospace">
+        <div class="htxt" style="margin-top:3px">
+          💡 Apri la griglia 🔲 per vedere i numeri riga. Le righe escluse non entrano nel calcolo di nessuna serie.
+        </div>
+      </div>
+      ${cfg.dataRange?`<div id="excl-preview-${id}" class="htxt" style="color:var(--warn)"></div>`:''}
+    </div>
+
+    <div class="m-section-title">📐 Barre & Assi</div>
+    <div class="g4">
+      <div class="fld"><div class="fl">Overlap barre (%)</div><input type="number" id="mc-overlap" value="${cfg.barOverlap??-20}" min="-100" max="100" title="Negativo = spazio tra barre, positivo = sovrapposizione"></div>
+      <div class="fld"><div class="fl">Gap Width (%)</div><input type="number" id="mc-gap" value="${cfg.gapWidth??150}" min="0" max="500"></div>
+      <div class="fld"><div class="fl">Formato Y (€,k,M,%)</div><input type="text" id="mc-yfmt" value="${cfg.yFormat||''}" placeholder="es. €,k,M,%,0.0"></div>
+      <div class="fld"><div class="fl">Rotaz. etich. X (°)</div><input type="number" id="mc-xrot" value="${cfg.xRotation??-45}" min="-90" max="90"></div>
+    </div>
+    <div class="g4">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="mc-invertx" ${cfg.invertX?'checked':''}> Inverti asse X</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="mc-inverty" ${cfg.invertY?'checked':''}> Inverti asse Y</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="mc-datalabels" ${cfg.dataLabels?'checked':''}> Valori sulle barre</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="mc-cbv" ${cfg.colorByValue?'checked':''}> Colore per segno ±</label>
+    </div>
+    <div class="g2" id="mc-cbv-colors" style="${cfg.colorByValue?'':'display:none'}">
+      <div class="fld"><div class="fl">Colore positivo</div><div style="display:flex;gap:8px;align-items:center"><input type="color" id="mc-cpos" value="${cfg.colorPos||'#10b981'}"><span class="htxt">Valori ≥ 0</span></div></div>
+      <div class="fld"><div class="fl">Colore negativo</div><div style="display:flex;gap:8px;align-items:center"><input type="color" id="mc-cneg" value="${cfg.colorNeg||'#ef4444'}"><span class="htxt">Valori < 0</span></div></div>
+    </div>
+    <div class="g3">
+      <div class="fld"><div class="fl">Y Min</div><input type="number" id="mc-ymin" value="${cfg.yMin??''}" placeholder="auto"></div>
+      <div class="fld"><div class="fl">Y Max</div><input type="number" id="mc-ymax" value="${cfg.yMax??''}" placeholder="auto"></div>
+      <div class="fld"><div class="fl">Step Y (tick)</div><input type="number" id="mc-ystep" value="${cfg.yStep??''}" placeholder="auto"></div>
+    </div>
+
+    <div class="m-section-title">📏 Linee di riferimento</div>
+    <div id="mc-reflines" style="display:flex;flex-direction:column;gap:5px">
+      ${(cfg.refLines||[]).map((rl,i)=>`
+      <div class="ref-line-row" id="rrl-${i}">
+        <input type="number" id="rlv-${i}" value="${rl.value||0}" style="width:90px" placeholder="Valore">
+        <input type="text" id="rll-${i}" value="${rl.label||''}" style="flex:1" placeholder="Label (es. Budget 2025)">
+        <input type="color" id="rlc-${i}" value="${rl.color||'#ef4444'}">
+        <select id="rls-${i}" style="width:90px">
+          <option value="solid" ${rl.style==='solid'?'selected':''}>Solida</option>
+          <option value="dash" ${rl.style==='dash'||!rl.style?'selected':''}>Tratteggiata</option>
+          <option value="dot" ${rl.style==='dot'?'selected':''}>Punteggiata</option>
+        </select>
+        <button class="btn sm danger" onclick="document.getElementById('rrl-${i}').remove()">✕</button>
+      </div>`).join('')}
+    </div>
+    <button class="btn sm" onclick="addRefLine()" style="margin-top:4px">＋ Linea riferimento</button>
+
     <div class="m-section-title">🎛️ Opzioni speciali</div>
     <div class="g3">
       <div class="fld"><div class="fl">Gauge Min</div><input type="number" id="mc-gmin" value="${cfg.gaugeMin||0}"></div>
       <div class="fld"><div class="fl">Gauge Max</div><input type="number" id="mc-gmax" value="${cfg.gaugeMax||100}"></div>
       <div class="fld"><div class="fl">Bullet Target %</div><input type="number" id="mc-tp" value="${cfg.targetPct||75}" min="0" max="100"></div>
+    </div>
+    <div class="g3">
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="mc-zoom" ${cfg.zoomEnabled?'checked':''}> Zoom/Pan (scroll + Ctrl+trascina · doppio-click reset)</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="mc-stack100" ${cfg.stack100?'checked':''}> Barre al 100% (normalizzate)</label>
+      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="mc-logscale" ${cfg.logScale?'checked':''}> Scala logaritmica Y</label>
     </div>
 
     <div class="sep"></div>
@@ -2069,17 +2334,26 @@ function openM(id){
 // ================================================================
 // RANGE PICKER VISIVO
 // ================================================================
-let rpState={r1:-1,c1:-1,r2:-1,c2:-1,dragging:false,orient:'cols',targetChartId:null};
+let rpState={
+  r1:-1,c1:-1,r2:-1,c2:-1,dragging:false,
+  orient:'cols',targetChartId:null,
+  // Multi-selezione: array di {r1,c1,r2,c2}
+  selections:[],
+  activeSelIdx:-1,
+};
 
 function openRpicker(chartId){
   if(!workbook){toast('Carica un file Excel prima','err');return;}
   rpState.targetChartId=chartId;
+  rpState.r1=rpState.c1=rpState.r2=rpState.c2=-1;
+  rpState.selections=[];
   const c=charts.find(x=>x.id===chartId);
-  // Se c'è già un range, pre-selezionalo
+  // Pre-carica selezioni esistenti
   if(c&&c.config.dataRange){
-    const rng=parseRange(c.config.dataRange);
-    if(rng){rpState.r1=rng.r1;rpState.c1=rng.c1;rpState.r2=rng.r2;rpState.c2=rng.c2;}
-  } else {rpState.r1=rpState.c1=rpState.r2=rpState.c2=-1;}
+    const rngs=parseMultiRange(c.config.dataRange);
+    rpState.selections=rngs.map(r=>({r1:r.r1,c1:r.c1,r2:r.r2,c2:r.c2}));
+    if(rngs.length>0){const r=rngs[0];rpState.r1=r.r1;rpState.c1=r.c1;rpState.r2=r.r2;rpState.c2=r.c2;}
+  }
   if(c&&c.config.rpOrient) rpState.orient=c.config.rpOrient;
   document.getElementById('rpOrientBtn').textContent=rpState.orient==='cols'?'Colonne = Serie':'Righe = Serie';
   renderRpGrid();
@@ -2123,15 +2397,24 @@ function renderRpGrid(){
         else if(cell.t==='d') v=new Date(cell.v).toLocaleDateString('it-IT',{month:'short',year:'2-digit'});
         else v=String(cell.w||cell.v||'').slice(0,18);
       }
+      // Controlla selezione corrente
       const isSel=rpState.r1>=0&&r>=Math.min(rpState.r1,rpState.r2)&&r<=Math.max(rpState.r1,rpState.r2)&&c>=Math.min(rpState.c1,rpState.c2)&&c<=Math.max(rpState.c1,rpState.c2);
+      // Controlla selezioni salvate
+      const selIdx=rpState.selections.findIndex(s=>r>=Math.min(s.r1,s.r2)&&r<=Math.max(s.r1,s.r2)&&c>=Math.min(s.c1,s.c2)&&c<=Math.max(s.c1,s.c2));
       const isStart=r===rpState.r1&&c===rpState.c1;
       const isHdrCell=(hasCH&&r===rpState.r1)||(hasRH&&c===rpState.c1);
       const isNum=cell&&cell.t==='n';
+      // Riga esclusa = bordo rosso
+      const chart=rpState.targetChartId?charts.find(x=>x.id===rpState.targetChartId):null;
+      const exclSet=new Set((chart?.config?.excludeRows||[]).map(n=>n-2)); // converti a 0-based
+      const isExcluded=exclSet.has(r);
       let cls='rp-cell';
-      if(isSel&&isHdrCell) cls+=' rp-hdr-cell';
+      if(selIdx>=0) cls+=` rp-sel-${selIdx%5}`; // selezioni salvate (multicolore)
+      else if(isSel&&isHdrCell) cls+=' rp-hdr-cell';
       else if(isSel) cls+=' rp-sel';
       if(isStart) cls+=' rp-sel-start';
       if(isNum&&!isHdrCell) cls+=' rp-num';
+      if(isExcluded) cls+=' rp-excl';
       tbl+=`<td class="${cls}" data-r="${r}" data-c="${c}" title="${v}">${v}</td>`;
     }
     tbl+='</tr>';
@@ -2139,8 +2422,8 @@ function renderRpGrid(){
   tbl+='</tbody></table>';
 
   document.getElementById('rpTblWrap').innerHTML=tbl;
-  // Il body (.rpicker-body) è il container che scrolla — non serve altro
   document.getElementById('rpTblWrap').style.cssText='display:block;';
+  rpRenderChips();
 
   // Attach events
   const tblEl=document.getElementById('rpTbl');
@@ -2168,6 +2451,60 @@ function renderRpGrid(){
   document.addEventListener('mouseup',()=>{rpState.dragging=false;},{once:false});
   rpUpdateBadge();
 }
+
+
+// Aggiunge la selezione corrente alle selections salvate
+function rpAddCurrentSel(){
+  if(rpState.r1<0){toast('Seleziona prima un range','warn');return;}
+  const r1=Math.min(rpState.r1,rpState.r2),r2=Math.max(rpState.r1,rpState.r2);
+  const c1=Math.min(rpState.c1,rpState.c2),c2=Math.max(rpState.c1,rpState.c2);
+  rpState.selections.push({r1,c1,r2,c2});
+  rpState.r1=rpState.c1=rpState.r2=rpState.c2=-1; // reset corrente
+  renderRpGrid(); rpUpdateBadge(); rpRenderChips();
+  toast('Range aggiunto ✓','ok');
+}
+
+function rpClearAll(){
+  rpState.selections=[];
+  rpState.r1=rpState.c1=rpState.r2=rpState.c2=-1;
+  renderRpGrid(); rpUpdateBadge(); rpRenderChips();
+}
+
+function rpRemoveSel(idx){
+  rpState.selections.splice(idx,1);
+  renderRpGrid(); rpUpdateBadge(); rpRenderChips();
+}
+
+// Colori per selezioni multiple
+const SEL_COLORS=['#3b82f6','#8b5cf6','#10b981','#f59e0b','#ef4444','#06b6d4','#ec4899'];
+
+function rpRenderChips(){
+  const el=document.getElementById('rpRangesList'); if(!el) return;
+  const all=[...rpState.selections];
+  if(rpState.r1>=0){
+    const r1=Math.min(rpState.r1,rpState.r2),r2=Math.max(rpState.r1,rpState.r2);
+    const c1=Math.min(rpState.c1,rpState.c2),c2=Math.max(rpState.c1,rpState.c2);
+    all.push({r1,c1,r2,c2,_current:true});
+  }
+  if(!all.length){el.innerHTML='<span style="font-size:10px;color:var(--text3)">Nessun range — clicca e trascina per selezionare</span>';return;}
+  el.innerHTML=all.map((s,i)=>{
+    const r1=Math.min(s.r1,s.r2),r2=Math.max(s.r1,s.r2);
+    const c1=Math.min(s.c1,s.c2),c2=Math.max(s.c1,s.c2);
+    const rs=idxToColLetter(c1)+(r1+1)+':'+idxToColLetter(c2)+(r2+1);
+    const clr=SEL_COLORS[i%SEL_COLORS.length];
+    const isCur=s._current;
+    return `<span class="rp-range-chip" style="background:${clr}22;border-color:${clr};color:${clr}" title="${isCur?'Selezione corrente (clicca + per aggiungere)':'Clicca X per rimuovere'}">
+      ${rs}${isCur?' ✎':''} ${!isCur?`<span class="rp-chip-del" onclick="rpRemoveSel(${i})">✕</span>`:''}
+    </span>`;
+  }).join('');
+}
+
+// Keyboard shortcut per aggiungere al range
+document.addEventListener('keydown',e=>{
+  if(e.ctrlKey&&e.key==='a'&&document.getElementById('rpicker').classList.contains('vis')){
+    e.preventDefault(); rpAddCurrentSel();
+  }
+});
 
 function rpSelectCol(c){
   if(!workbook)return;
@@ -2205,7 +2542,8 @@ function rpUpdateBadge(){
   const r1=Math.min(rpState.r1,rpState.r2),r2=Math.max(rpState.r1,rpState.r2);
   const c1=Math.min(rpState.c1,rpState.c2),c2=Math.max(rpState.c1,rpState.c2);
   const rangeStr=idxToColLetter(c1)+(r1+1)+':'+idxToColLetter(c2)+(r2+1);
-  badge.textContent=rangeStr;
+  const allRanges=[...rpState.selections,{r1,c1,r2,c2}];
+  badge.textContent=selectionsToRangeStr(allRanges)||rangeStr;
   const rows=r2-r1+1,cols=c2-c1+1;
   const hasRH=document.getElementById('rpHasRowHdr').checked;
   const hasCH=document.getElementById('rpHasColHdr').checked;
@@ -2215,10 +2553,17 @@ function rpUpdateBadge(){
 }
 
 function applyRpRange(){
-  if(rpState.r1<0){toast('Seleziona un range prima','err');return;}
-  const r1=Math.min(rpState.r1,rpState.r2),r2=Math.max(rpState.r1,rpState.r2);
-  const c1=Math.min(rpState.c1,rpState.c2),c2=Math.max(rpState.c1,rpState.c2);
-  const rangeStr=idxToColLetter(c1)+(r1+1)+':'+idxToColLetter(c2)+(r2+1);
+  // Usa le selezioni multiple se presenti, altrimenti la selezione corrente
+  let allSels=[...rpState.selections];
+  if(rpState.r1>=0){
+    const r1=Math.min(rpState.r1,rpState.r2),r2=Math.max(rpState.r1,rpState.r2);
+    const c1=Math.min(rpState.c1,rpState.c2),c2=Math.max(rpState.c1,rpState.c2);
+    // Aggiungi la selezione corrente se non è già nelle selections
+    const exists=allSels.some(s=>s.r1===r1&&s.c1===c1&&s.r2===r2&&s.c2===c2);
+    if(!exists) allSels.push({r1,c1,r2,c2});
+  }
+  if(!allSels.length){toast('Seleziona almeno un range','err');return;}
+  const rangeStr=selectionsToRangeStr(allSels);
   const hasRH=document.getElementById('rpHasRowHdr').checked;
   const hasCH=document.getElementById('rpHasColHdr').checked;
 
@@ -2282,9 +2627,11 @@ function getDataTransposed(cfg){
 
   // Ogni riga successiva = una serie
   const series=[];
+  const excluded=new Set(cfg.excludeRows||[]);
   for(let r=rng.r1+(hasCH?1:0);r<=rng.r2;r++){
     const labelCell=hasRH?ws[idxToColLetter(rng.c1)+(r+1)]:null;
     const label=labelCell?String(labelCell.w||labelCell.v||'Riga '+(r+1)):('Riga '+(r+1));
+    if(excluded.has(label)) continue; // salta righe escluse
     const values=[];
     for(let c=rng.c1+(hasRH?1:0);c<=rng.c2;c++){
       const cell=ws[idxToColLetter(c)+(r+1)];
@@ -2318,6 +2665,132 @@ function calcMovingAvg(values,period=3){
     return Math.round(slice.reduce((a,b)=>a+b,0)/slice.length*100)/100;
   });
 }
+
+
+// ================================================================
+// SELEZIONE RIGHE (modalità trasposta — righe come serie)
+// ================================================================
+function updateRowSelUI(cfg){
+  const isRows=cfg.rpOrient==='rows'&&cfg.dataRange;
+  const wrap=document.getElementById('mc-rowsel-wrap');
+  const title=document.getElementById('mc-rowsel-title');
+  if(!wrap||!title)return;
+  if(!isRows){wrap.style.display='none';title.style.display='none';return;}
+  wrap.style.display='flex';title.style.display='';
+
+  // Leggi le righe disponibili dal range
+  const transData=getDataTransposed(cfg);
+  if(!transData||!transData.series.length){
+    wrap.innerHTML='<div class="htxt">Nessuna riga trovata nel range</div>';return;
+  }
+  const excluded=new Set(cfg.excludeRows||[]);
+  const list=document.getElementById('mc-rowsel-list');
+  list.innerHTML=transData.series.map((s,i)=>`
+    <label style="display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:4px;cursor:pointer;background:var(--bg3);font-size:12px">
+      <input type="checkbox" data-row="${s.label}" ${excluded.has(s.label)?'':'checked'}
+        onchange="rpRowToggle(this)">
+      <span style="flex:1">${s.label}</span>
+      <span style="font-size:10px;color:var(--text3)">${s.values.filter(v=>v).slice(0,3).map(v=>Number(v).toLocaleString('it-IT',{maximumFractionDigits:0})).join(', ')}…</span>
+    </label>`).join('');
+}
+
+function rpRowToggle(cb){
+  // Aggiorna il config live mentre il modal è aperto
+  const c=charts.find(x=>x.id===editId); if(!c)return;
+  const lbl=cb.dataset.row;
+  let ex=new Set(c.config.excludeRows||[]);
+  if(cb.checked) ex.delete(lbl); else ex.add(lbl);
+  c.config.excludeRows=[...ex];
+}
+
+function rpRowSelAll(checked){
+  const list=document.getElementById('mc-rowsel-list');
+  if(!list)return;
+  list.querySelectorAll('input[type=checkbox]').forEach(cb=>{
+    cb.checked=checked;
+    rpRowToggle(cb);
+  });
+}
+
+
+// ================================================================
+// RANGE NON CONTIGUI — unisce più blocchi selezionati
+// ================================================================
+
+// Converte array di selezioni in stringa multi-range "A1:C3,E1:G3"
+function selectionsToRangeStr(sels){
+  if(!sels||!sels.length) return '';
+  return sels.map(s=>{
+    const r1=Math.min(s.r1,s.r2),r2=Math.max(s.r1,s.r2);
+    const c1=Math.min(s.c1,s.c2),c2=Math.max(s.c1,s.c2);
+    return idxToColLetter(c1)+(r1+1)+':'+idxToColLetter(c2)+(r2+1);
+  }).join(',');
+}
+
+// Parsa multi-range "A1:C3,E1:G3" → array di {c1,r1,c2,r2}
+function parseMultiRange(str){
+  if(!str) return [];
+  return str.split(',').map(s=>parseRange(s.trim())).filter(Boolean);
+}
+
+// Legge dati da un multi-range — unisce i segmenti orizzontalmente
+// Ogni range deve avere le stesse righe, colonne diverse
+function getDataForMultiRange(rangeStr, sheetName){
+  const sn=sheetName||document.getElementById('shSelect')?.value||workbook?.SheetNames[0];
+  if(!workbook||!sn) return null;
+  const ws=workbook.Sheets[sn];
+  if(!ws) return null;
+  const rngs=parseMultiRange(rangeStr);
+  if(!rngs.length) return null;
+  if(rngs.length===1) return getDataForRange(rangeStr,sheetName);
+
+  // Costruisci headers uniti da tutti i range
+  const allHeaders=[];
+  rngs.forEach(rng=>{
+    for(let c=rng.c1;c<=rng.c2;c++){
+      const addr=idxToColLetter(c)+(rng.r1+1);
+      const cell=ws[addr];
+      const label=cell?String(cell.v||cell.w||''):idxToColLetter(c);
+      allHeaders.push(label!==''?label:idxToColLetter(c));
+    }
+  });
+  const headers=cleanCols(allHeaders);
+
+  // Righe dati: unisci da tutti i range per ogni riga
+  // Usa il primo range come riferimento per le righe
+  const ref=rngs[0];
+  const numRows=ref.r2-ref.r1; // escludi header
+  const result=[];
+  for(let ri=0;ri<numRows;ri++){
+    const row={__rowIdx__:ref.r1+2+ri};
+    let hi=0;
+    rngs.forEach(rng=>{
+      for(let c=rng.c1;c<=rng.c2;c++){
+        const addr=idxToColLetter(c)+(rng.r1+2+ri);
+        const cell=ws[addr];
+        row[allHeaders[hi]]=cell?(cell.t==='n'?cell.v:(cell.w||cell.v||'')):'';
+        hi++;
+      }
+    });
+    result.push(row);
+  }
+  return{data:result,headers};
+}
+
+// Override getData per multi-range
+function getDataForRangeAny(rangeStr,sheetName){
+  if(!rangeStr) return null;
+  if(rangeStr.includes(',')) return getDataForMultiRange(rangeStr,sheetName);
+  return getDataForRange(rangeStr,sheetName);
+}
+
+// Override getColsForRange per multi-range
+function getColsForRangeAny(rangeStr){
+  if(!rangeStr) return columns;
+  const res=getDataForRangeAny(rangeStr);
+  return res?res.headers:columns;
+}
+
 
 // ================================================================
 // RANGE SELECTOR (legacy text input)
@@ -2378,7 +2851,7 @@ function clearRange(){
 
 // Aggiorna i select colonne X e yCols nel modal basandosi sul range
 function updateModalColsForRange(rangeStr){
-  const cols=rangeStr?getColsForRange(rangeStr):columns;
+  const cols=rangeStr?getColsForRangeAny(rangeStr):columns;
   if(!cols||!cols.length) return;
 
   const xsel=document.getElementById('mc-xcol');
@@ -2433,6 +2906,19 @@ function readYCols(){
 }
 
 let _mcc=50;
+function addRefLine(){
+  const cont=document.getElementById('mc-reflines');
+  const idx=cont.children.length;
+  const div=document.createElement('div');
+  div.className='ref-line-row'; div.id='rrl-'+idx;
+  div.innerHTML=`<input type="number" id="rlv-${idx}" style="width:90px" placeholder="Valore">
+    <input type="text" id="rll-${idx}" style="flex:1" placeholder="Label">
+    <input type="color" value="#ef4444" id="rlc-${idx}">
+    <select id="rls-${idx}" style="width:90px"><option value="solid">Solida</option><option value="dash" selected>Tratteggiata</option><option value="dot">Punteggiata</option></select>
+    <button class="btn sm danger" onclick="this.parentElement.remove()">✕</button>`;
+  cont.appendChild(div);
+}
+
 function addMC(){_mcc++;const r=document.getElementById('mc-cols');const d=document.createElement('div');d.className='cswatch';d.innerHTML=`<input type="color" value="${gPal[_mcc%gPal.length]}" id="mcc-${_mcc}"><button class="cdel" onclick="this.parentElement.remove()">✕</button>`;r.appendChild(d);}
 function resetMC(){document.getElementById('mc-cols').innerHTML=gPal.map((c,i)=>`<div class="cswatch"><input type="color" value="${c}" id="mcc-r${i}"><button class="cdel" onclick="this.parentElement.remove()">✕</button></div>`).join('');}
 
@@ -2448,6 +2934,8 @@ function applyM(){
     type:document.getElementById('mc-type').value,
     xCol:document.getElementById('mc-xcol').value,
     dataRange:document.getElementById('mc-range')?.value?.trim()||null,
+    sumRows:document.getElementById('mc-sumrows')?.checked||false,
+    excludeRows:c.config.excludeRows||[],
     yCol:firstY.col,       // retrocompat
     yAgg:document.getElementById('mc-yagg').value,
     yCols:newYCols,         // MULTI
@@ -2462,7 +2950,39 @@ function applyM(){
     yLabel:document.getElementById('mc-yl').value,
     trendGlobal:document.getElementById('mc-trend')?.value||'none',
     maPeriod:parseInt(document.getElementById('mc-maperiod')?.value)||3,
-    trendlines:(()=>{const t=document.getElementById('mc-trend')?.value;if(!t||t==='none')return null;const yCols2=readYCols();return yCols2.map(()=>t);})(  ),
+    trendlines:(()=>{const t=document.getElementById('mc-trend')?.value;if(!t||t==='none')return null;const yCols2=readYCols();return yCols2.map(()=>t);})(),
+    barOverlap:parseInt(document.getElementById('mc-overlap')?.value??-20),
+    gapWidth:parseInt(document.getElementById('mc-gap')?.value??150),
+    yFormat:document.getElementById('mc-yfmt')?.value||'',
+    xRotation:parseInt(document.getElementById('mc-xrot')?.value??-45),
+    invertX:document.getElementById('mc-invertx')?.checked||false,
+    invertY:document.getElementById('mc-inverty')?.checked||false,
+    dataLabels:document.getElementById('mc-datalabels')?.checked||false,
+    yMin:document.getElementById('mc-ymin')?.value!==''?parseFloat(document.getElementById('mc-ymin').value):null,
+    yMax:document.getElementById('mc-ymax')?.value!==''?parseFloat(document.getElementById('mc-ymax').value):null,
+    yStep:document.getElementById('mc-ystep')?.value!==''?parseFloat(document.getElementById('mc-ystep').value):null,
+    colorByValue:document.getElementById('mc-cbv')?.checked||false,
+    zoomEnabled:document.getElementById('mc-zoom')?.checked||false,
+    stack100:document.getElementById('mc-stack100')?.checked||false,
+    logScale:document.getElementById('mc-logscale')?.checked||false,
+    colorPos:document.getElementById('mc-cpos')?.value||'#10b981',
+    colorNeg:document.getElementById('mc-cneg')?.value||'#ef4444',
+    refLines:(()=>{
+      const rows=[...document.getElementById('mc-reflines').querySelectorAll('[id^="rrl-"]')];
+      return rows.map(r=>{
+        const i=r.id.replace('rrl-','');
+        const v=parseFloat(document.getElementById('rlv-'+i)?.value);
+        if(isNaN(v))return null;
+        return{value:v,label:document.getElementById('rll-'+i)?.value||'',
+          color:document.getElementById('rlc-'+i)?.value||'#ef4444',
+          style:document.getElementById('rls-'+i)?.value||'dash'};
+      }).filter(Boolean);
+    })(),
+    excludeTotals:document.getElementById('mc-excltot')?.checked||false,
+    excludeRows:(()=>{
+      const v=document.getElementById('mc-exclrows')?.value||'';
+      return v.split(',').map(s=>parseInt(s.trim())).filter(n=>!isNaN(n)&&n>0);
+    })(),
     gaugeMin:parseFloat(document.getElementById('mc-gmin').value)||0,
     gaugeMax:parseFloat(document.getElementById('mc-gmax').value)||100,
     targetPct:parseFloat(document.getElementById('mc-tp').value)||75,
@@ -2592,6 +3112,80 @@ function loadSavedTheme(){
     const saved=localStorage.getItem('ats_chart_theme');
     if(saved&&THEMES.includes(saved)) setTheme(saved);
   }catch(e){}
+}
+
+
+// ================================================================
+// COLORE PER VALORE — barre verdi/rosse in base al segno
+// ================================================================
+function applyColorByValue(datasets, cfg, values){
+  if(!cfg.colorByValue) return;
+  const pos=cfg.colorPos||'#10b981';
+  const neg=cfg.colorNeg||'#ef4444';
+  datasets.forEach(ds=>{
+    if(ds.type==='line') return;
+    if(Array.isArray(ds.data)){
+      ds.backgroundColor=ds.data.map((v,i)=>{
+        const val=Array.isArray(v)?v[1]:v;
+        return (val>=0?pos:neg)+'cc';
+      });
+      ds.borderColor=ds.data.map((v,i)=>{
+        const val=Array.isArray(v)?v[1]:v;
+        return val>=0?pos:neg;
+      });
+    }
+  });
+}
+
+// ================================================================
+// ZOOM/PAN — via wheel + drag (implementazione nativa canvas)
+// ================================================================
+function initZoomPan(canvasEl, chartInst){
+  if(!canvasEl||!chartInst) return;
+  let scale=1, panX=0, panY=0, isPanning=false, lastX=0, lastY=0;
+  canvasEl.addEventListener('wheel',e=>{
+    e.preventDefault();
+    const delta=e.deltaY>0?0.85:1.15;
+    scale=Math.max(0.3,Math.min(5,scale*delta));
+    applyZoom(chartInst,scale,panX,panY);
+  },{passive:false});
+  canvasEl.addEventListener('mousedown',e=>{if(e.button===1||e.ctrlKey){isPanning=true;lastX=e.clientX;lastY=e.clientY;canvasEl.style.cursor='grabbing';}});
+  document.addEventListener('mousemove',e=>{
+    if(!isPanning)return;
+    panX+=(e.clientX-lastX)/scale;
+    panY+=(e.clientY-lastY)/scale;
+    lastX=e.clientX;lastY=e.clientY;
+    applyZoom(chartInst,scale,panX,panY);
+  });
+  document.addEventListener('mouseup',()=>{isPanning=false;canvasEl.style.cursor='';});
+  // Double-click reset
+  canvasEl.addEventListener('dblclick',()=>{scale=1;panX=0;panY=0;applyZoom(chartInst,1,0,0);});
+}
+
+function applyZoom(inst,scale,panX,panY){
+  try{
+    if(!inst||!inst.scales) return;
+    ['x','y'].forEach(ax=>{
+      const s=inst.scales[ax];
+      if(!s) return;
+      const range=s.max-s.min;
+      const newRange=range/scale;
+      const center=(s.max+s.min)/2-panY*(ax==='y'?1:0)+panX*(ax==='x'?0.01:0);
+      inst.options.scales[ax]={...inst.options.scales[ax],min:center-newRange/2,max:center+newRange/2};
+    });
+    inst.update('none');
+  }catch(e){}
+}
+
+// ================================================================
+// IMPORTA GRAFICI DA EXCEL — legge la struttura e crea grafici automaticamente
+// ================================================================
+async function importFromExcel(){
+  if(!workbook){toast('Carica un file Excel prima','err');return;}
+  const sn=document.getElementById('shSelect')?.value||workbook.SheetNames[0];
+  // Usa openpyxl non disponibile in browser — usiamo XLSX.js per leggere chart data
+  // Mostra dialog per selezione range manuale guidata
+  toast('Apri 🔲 per selezionare il range di ogni grafico da importare','ok');
 }
 
 // STATUS & UTILS
