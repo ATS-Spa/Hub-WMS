@@ -2166,231 +2166,267 @@ function openM(id){
   const numC=columns.filter(isNum);
   document.getElementById('mtitle').textContent='⚙ Config: '+cfg.title;
   document.getElementById('mbody').innerHTML=`
-    <div class="g2">
-      <div class="fld"><div class="fl">Titolo</div><input type="text" id="mc-title" value="${cfg.title}"></div>
+    <!-- STEP 1: Titolo + Tipo -->
+    <div class="g2" style="margin-bottom:4px">
+      <div class="fld"><div class="fl">Titolo grafico</div>
+        <input type="text" id="mc-title" value="${cfg.title}">
+      </div>
       <div class="fld"><div class="fl">Tipo grafico</div>
         <select id="mc-type">${CHART_TYPES.map(t=>`<option value="${t.id}" ${cfg.type===t.id?'selected':''}>${t.l}</option>`).join('')}</select>
       </div>
     </div>
 
-        <div class="m-section-title">🔲 Range dati</div>
-    <div class="range-input-row">
-      <div class="fld" style="flex:1">
-        <div class="fl">Range celle (es. B4:O13 · multi-range: B4:O13,AI4:AK13)</div>
-        <input type="text" id="mc-range" placeholder="es. B4:O13"
+    <!-- STEP 2: Range dati -->
+    <div class="m-section-title">1️⃣ &nbsp;Seleziona range dati</div>
+    <div style="display:flex;gap:6px;align-items:flex-end;flex-wrap:wrap">
+      <div class="fld" style="flex:1;min-width:180px">
+        <div class="fl">Range celle del foglio (es. C2:O3 oppure B4:O13)</div>
+        <input type="text" id="mc-range"
           value="${cfg.dataRange||''}"
-          oninput="previewRange(this.value)"
-          style="font-family:monospace;font-size:13px;letter-spacing:.05em">
+          placeholder="es. C2:O3"
+          style="font-family:monospace;font-size:14px;font-weight:600;letter-spacing:.05em"
+          oninput="previewRange(this.value)">
       </div>
-      <button class="btn sm primary" onclick="openRpicker(editId)" style="flex-shrink:0;margin-top:16px">🔲 Seleziona</button>
-      <button class="btn sm" onclick="clearRange()" style="flex-shrink:0;margin-top:16px">✕</button>
+      <button class="btn primary" onclick="openRpicker(editId)" style="flex-shrink:0;height:34px">
+        🔲 Apri griglia foglio
+      </button>
+      <button class="btn sm" onclick="document.getElementById('mc-range').value='';previewRange('')" style="flex-shrink:0;height:34px">✕</button>
     </div>
-    <div id="mc-range-info" class="htxt" style="color:var(--accent2)"></div>
+    <div id="mc-range-info" class="htxt" style="color:var(--accent2);margin-top:3px"></div>
     <div id="mc-range-grid" class="range-grid-wrap" style="display:none"></div>
 
-    <div class="m-section-title">↔ Orientamento dati</div>
-    <div style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin-bottom:6px">
+    <!-- STEP 3: Come leggere i dati -->
+    <div class="m-section-title">2️⃣ &nbsp;Come sono organizzati i dati nel range?</div>
+    <div style="display:grid;grid-template-columns:1fr 1fr;gap:8px">
+
+      <!-- OPZIONE A: Colonne verticali (standard) -->
       <div id="orient-cols" onclick="setOrient('cols')"
-        style="padding:12px;border-radius:var(--rs);cursor:pointer;border:2px solid ${(!cfg.rpOrient||cfg.rpOrient==='cols')?'var(--accent)':'var(--border)'};background:${(!cfg.rpOrient||cfg.rpOrient==='cols')?'var(--asoft)':'var(--bg3)'};transition:all .15s">
-        <div style="font-weight:700;font-size:12px;margin-bottom:6px;color:${(!cfg.rpOrient||cfg.rpOrient==='cols')?'var(--accent2)':'var(--text2)'}">📊 Colonne = Serie (default)</div>
-        <div style="font-size:10px;color:var(--text3);line-height:1.5">
-          Prima colonna = etichette X (categorie)<br>
-          Ogni colonna successiva = 1 serie di dati<br>
-          <b>Tipico: tabella con ID/nome + valori numerici per colonna</b>
+        style="padding:10px;border-radius:var(--rs);cursor:pointer;transition:all .15s;
+               border:2px solid ${(!cfg.rpOrient||cfg.rpOrient==='cols')?'var(--accent)':'var(--border)'};
+               background:${(!cfg.rpOrient||cfg.rpOrient==='cols')?'var(--asoft)':'var(--bg3)'}">
+        <div style="font-weight:700;font-size:12px;color:${(!cfg.rpOrient||cfg.rpOrient==='cols')?'var(--accent2)':'var(--text2)'}">
+          📊 Verticale — colonne = valori
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:5px;line-height:1.6">
+          <b>La prima colonna = etichette X</b><br>
+          Le altre colonne = una serie ciascuna<br>
+          <span style="font-family:monospace;font-size:9px">Prodotto | Gen | Feb | Mar</span><br>
+          <span style="font-family:monospace;font-size:9px">Sedia    | 100 | 120 | 115</span>
         </div>
       </div>
+
+      <!-- OPZIONE B: Righe orizzontali (pivot Excel) -->
       <div id="orient-rows" onclick="setOrient('rows')"
-        style="padding:12px;border-radius:var(--rs);cursor:pointer;border:2px solid ${cfg.rpOrient==='rows'?'var(--accent)':'var(--border)'};background:${cfg.rpOrient==='rows'?'var(--asoft)':'var(--bg3)'};transition:all .15s">
-        <div style="font-weight:700;font-size:12px;margin-bottom:6px;color:${cfg.rpOrient==='rows'?'var(--accent2)':'var(--text2)'}">📋 Righe = Serie (per il tuo Excel)</div>
-        <div style="font-size:10px;color:var(--text3);line-height:1.5">
-          Prima riga del range = etichette asse X<br>
-          Ogni riga dati successiva = 1 serie<br>
-          <b>Tipico: tabella pivot Excel già aggregata</b>
+        style="padding:10px;border-radius:var(--rs);cursor:pointer;transition:all .15s;
+               border:2px solid ${cfg.rpOrient==='rows'?'var(--accent)':'var(--border)'};
+               background:${cfg.rpOrient==='rows'?'var(--asoft)':'var(--bg3)'}">
+        <div style="font-weight:700;font-size:12px;color:${cfg.rpOrient==='rows'?'var(--accent2)':'var(--text2)'}">
+          📋 Orizzontale — righe = serie
+        </div>
+        <div style="font-size:10px;color:var(--text3);margin-top:5px;line-height:1.6">
+          <b>La prima riga = etichette X (mesi, ecc.)</b><br>
+          Ogni riga dati = una serie del grafico<br>
+          <span style="font-family:monospace;font-size:9px">         | Gen | Feb | Mar</span><br>
+          <span style="font-family:monospace;font-size:9px">Sedia    | 100 | 120 | 115</span>
         </div>
       </div>
     </div>
     <div id="mc-orient-val" style="display:none">${cfg.rpOrient||'cols'}</div>
-    <div style="display:flex;gap:10px;flex-wrap:wrap">
-      <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer">
-        <input type="checkbox" id="mc-hasrowhdr" ${cfg.rpHasRowHdr!==false?'checked':''}> Prima col = etichette riga
+
+    <!-- Opzioni header (appaiono sempre, piccole) -->
+    <div style="display:flex;gap:16px;margin-top:6px;flex-wrap:wrap">
+      <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer">
+        <input type="checkbox" id="mc-hasrowhdr" ${cfg.rpHasRowHdr!==false?'checked':''}> Prima colonna = nomi serie
       </label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:11px;cursor:pointer">
-        <input type="checkbox" id="mc-hascolhdr" ${cfg.rpHasColHdr!==false?'checked':''}> Prima riga = header colonne
+      <label style="display:flex;align-items:center;gap:5px;font-size:11px;cursor:pointer">
+        <input type="checkbox" id="mc-hascolhdr" ${cfg.rpHasColHdr!==false?'checked':''}> Prima riga = etichette X
       </label>
     </div>
 
-    <div class="m-section-title" id="mc-rowsel-title" style="display:none">📋 Righe da includere (orientamento Righe=Serie)</div>
-    <div id="mc-rowsel-wrap" style="display:none;flex-direction:column;gap:6px">
-      <div class="htxt">Seleziona quali righe usare come serie. Deseleziona per escluderle (es. totali, righe gialle).</div>
-      <div id="mc-rowsel-list" style="max-height:180px;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div>
-      <div style="display:flex;gap:6px">
+    <!-- STEP 3B: Solo per modalità Verticale — selettore colonne -->
+    <div id="mc-cols-section" style="${cfg.rpOrient==='rows'?'display:none':''}">
+      <div class="m-section-title" style="margin-top:8px">3️⃣ &nbsp;Scegli colonne (modalità Verticale)</div>
+      <div class="g2">
+        <div class="fld">
+          <div class="fl">Colonna X — etichette asse orizzontale</div>
+          <select id="mc-xcol">${columns.map(c=>`<option value="${c}" ${cfg.xCol===c?'selected':''}>${c}</option>`).join('')}</select>
+        </div>
+        <div class="fld">
+          <div class="fl">Aggregazione Y</div>
+          <select id="mc-yagg">
+            <option value="auto" ${cfg.yAgg==='auto'?'selected':''}>AUTO (SUM se numeri, COUNT altrimenti)</option>
+            ${['sum','count','avg','min','max'].map(a=>`<option value="${a}" ${cfg.yAgg===a?'selected':''}>${a.toUpperCase()}</option>`).join('')}
+          </select>
+        </div>
+      </div>
+      <div style="margin-top:6px">
+        <div class="fl" style="margin-bottom:4px">Colonne Y — valori (aggiungi quante serie vuoi)</div>
+        <div id="mc-ycols" style="display:flex;flex-direction:column;gap:5px;max-height:200px;overflow-y:auto">
+          ${(cfg.yCols&&cfg.yCols.length?cfg.yCols:[{col:cfg.yCol||columns[0],agg:'auto',label:'',yRange:''}]).map((yc,i)=>`
+            <div class="yc-row" id="ycr-${i}" style="display:flex;gap:6px;align-items:center;background:var(--bg3);padding:6px;border-radius:var(--rs);flex-wrap:wrap">
+              <div style="width:12px;height:12px;border-radius:3px;background:${gPal[i%gPal.length]};flex-shrink:0"></div>
+              <select id="ycc-${i}" style="flex:2;min-width:100px">
+                ${columns.map(c=>`<option value="${c}" ${c===yc.col?'selected':''}>${c}</option>`).join('')}
+              </select>
+              <input type="text" id="ycl-${i}" value="${yc.label||''}" placeholder="Label (opz.)" style="flex:1;min-width:80px">
+              <select id="yca-${i}" style="width:70px">
+                ${['auto','sum','count','avg','min','max'].map(a=>`<option value="${a}" ${a===(yc.agg||'auto')?'selected':''}>${a}</option>`).join('')}
+              </select>
+              <button class="btn sm danger" onclick="removeYCol(${i})" style="padding:2px 6px">✕</button>
+            </div>`).join('')}
+        </div>
+        <div style="display:flex;gap:6px;margin-top:5px">
+          <button class="btn sm primary" onclick="addYCol()">＋ Aggiungi colonna Y</button>
+          <button class="btn sm" onclick="addAllNumCols()">＋ Tutte le numeriche</button>
+        </div>
+      </div>
+    </div>
+
+    <!-- STEP 3C: Solo per modalità Orizzontale — selezione righe -->
+    <div id="mc-rows-section" style="${cfg.rpOrient==='rows'?'':'display:none'}">
+      <div class="m-section-title" style="margin-top:8px">3️⃣ &nbsp;Seleziona righe da includere come serie</div>
+      <div class="htxt" style="margin-bottom:6px">
+        Dopo aver impostato il range, le righe appaiono qui. Deseleziona le righe totale/subtotale da escludere.
+      </div>
+      <div id="mc-rowsel-list" style="max-height:200px;overflow-y:auto;display:flex;flex-direction:column;gap:3px"></div>
+      <div style="display:flex;gap:6px;margin-top:5px">
         <button class="btn sm" onclick="rpRowSelAll(true)">✓ Tutte</button>
         <button class="btn sm" onclick="rpRowSelAll(false)">✗ Nessuna</button>
       </div>
     </div>
 
-    <div class="m-section-title">📊 Dati — Colonne</div>
-    <div id="mc-pivot-note" style="${cfg.rpOrient==='rows'?'':'display:none'};background:rgba(59,130,246,.1);border:1px solid var(--accent);border-radius:var(--rs);padding:8px 12px;font-size:11px;color:var(--accent2);margin-bottom:4px">
-      ℹ️ <b>Modalità Righe = Serie:</b> l'asse X e le serie vengono letti direttamente dal range — non serve configurare colonne X/Y qui sotto.
-    </div>
-    <div class="g2">
-      <div class="fld"><div class="fl">Colonna X (categorie / etichette)</div><select id="mc-xcol">${columns.map(c=>`<option value="${c}" ${cfg.xCol===c?'selected':''}>${c}</option>`).join('')}</select></div>
-      <div class="fld"><div class="fl">Range X diretto (es. C4:O4, opzionale)</div>
-        <input type="text" id="mc-xrange" value="${cfg.xRange||''}" placeholder="es. C4:O4 o (N4,S4:W4)" style="font-family:monospace;font-size:11px" title="Se impostato, sovrascrive la Colonna X con un range diretto di celle">
-      </div>
-    </div>
-    <div class="g2">
-      <div class="fld" style="opacity:.5"><div class="fl">Aggregazione (non usata in modalità range)</div>
-        <select id="mc-yagg">
-          <option value="auto" ${cfg.yAgg==='auto'?'selected':''}>AUTO</option>
-          ${['sum','count','avg','min','max'].map(a=>`<option value="${a}" ${cfg.yAgg===a?'selected':''}>${a.toUpperCase()}</option>`).join('')}
-        </select>
-      </div>
-    </div>
+    <!-- SEPARATORE + OPZIONI AVANZATE COLLASSABILI -->
+    <details style="margin-top:12px;border:1px solid var(--border);border-radius:var(--rs);padding:8px">
+      <summary style="font-size:12px;font-weight:600;cursor:pointer;color:var(--text2);user-select:none">
+        ⚙ Opzioni avanzate (aspetto, assi, colori...)
+      </summary>
+      <div style="margin-top:10px;display:flex;flex-direction:column;gap:8px">
 
-    <div class="m-section-title">📈 Serie Y — aggiungi quante ne vuoi (cluster)</div>
-    <div id="mc-ycols" style="display:flex;flex-direction:column;gap:6px;max-height:260px;overflow-y:auto;padding:2px">
-      ${(cfg.yCols&&cfg.yCols.length?cfg.yCols:[{col:cfg.yCol,agg:cfg.yAgg||'auto',label:'',yRange:''}]).map((yc,i)=>`
-        <div class="yc-row" id="ycr-${i}" style="display:flex;gap:6px;align-items:center;background:var(--bg3);padding:6px;border-radius:var(--rs);flex-wrap:wrap">
-          <div style="width:14px;height:14px;border-radius:3px;background:${gPal[i%gPal.length]};flex-shrink:0"></div>
-          <select id="ycc-${i}" style="flex:1;min-width:100px">${columns.map(c=>`<option value="${c}" ${c===yc.col?'selected':''}>${c}</option>`).join('')}</select>
-          <select id="yca-${i}" style="width:65px">${['auto','sum','count','avg','min','max'].map(a=>`<option value="${a}" ${a===(yc.agg||'auto')?'selected':''}>${a}</option>`).join('')}</select>
-          <input type="text" id="ycl-${i}" value="${yc.label||''}" placeholder="Label" style="width:90px">
-          <input type="text" id="ycr-rng-${i}" value="${yc.yRange||''}" placeholder="Range Y (es. C5:O5)" style="width:120px;font-family:monospace;font-size:11px" title="Range Y diretto dal foglio. Se impostato, bypassa la colonna.">
-          <button class="btn sm danger" onclick="removeYCol(${i})" style="padding:3px 7px">✕</button>
-        </div>`).join('')}
-    </div>
-    <div style="display:flex;gap:6px;margin-top:4px;flex-wrap:wrap">
-      <button class="btn sm primary" onclick="addYCol()">＋ Aggiungi serie</button>
-      <button class="btn sm" onclick="addAllNumCols()">＋＋ Tutte le numeriche</button>
-      <div class="fld" style="flex:1"><div class="fl">Size col. (Bubble)</div><select id="mc-scol">${columns.map(c=>`<option value="${c}" ${cfg.sizeCol===c?'selected':''}>${c}</option>`).join('')}</select></div>
-    </div>
-
-<div class="g4">
-      <div class="fld"><div class="fl">Ordina</div><select id="mc-sort"><option value="none" ${cfg.sortBy==='none'?'selected':''}>Nessuno</option><option value="desc" ${cfg.sortBy==='desc'?'selected':''}>↓ Decr.</option><option value="asc" ${cfg.sortBy==='asc'?'selected':''}>↑ Cresc.</option></select></div>
-      <div class="fld"><div class="fl">Max elementi</div><input type="number" id="mc-max" value="${cfg.maxItems||25}" min="1" max="2000"></div>
-      <div class="fld"><div class="fl">Border radius</div><input type="number" id="mc-br" value="${cfg.borderR||4}" min="0" max="40"></div>
-      <div class="fld"><div class="fl">Point size</div><input type="number" id="mc-ps" value="${cfg.pointSize||4}" min="1" max="20"></div>
-    </div>
-    <div class="g2">
-      <div class="fld"><div class="fl">Label asse X</div><input type="text" id="mc-xl" value="${cfg.xLabel||''}"></div>
-      <div class="fld"><div class="fl">Label asse Y</div><input type="text" id="mc-yl" value="${cfg.yLabel||''}"></div>
-    </div>
-
-    <div class="m-section-title">📉 Linee di tendenza</div>
-    <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap">
-      <div class="fld" style="flex:1">
-        <div class="fl">Tipo trendline (per tutte le serie)</div>
-        <select id="mc-trend">
-          <option value="none" ${!cfg.trendGlobal||cfg.trendGlobal==='none'?'selected':''}>Nessuna</option>
-          <option value="linear" ${cfg.trendGlobal==='linear'?'selected':''}>Regressione lineare</option>
-          <option value="ma" ${cfg.trendGlobal==='ma'?'selected':''}>Media mobile</option>
-        </select>
-      </div>
-      <div class="fld" style="width:80px">
-        <div class="fl">Periodo MA</div>
-        <input type="number" id="mc-maperiod" value="${cfg.maPeriod||3}" min="2" max="12">
-      </div>
-    </div>
-
-    <div class="m-section-title">🚫 Righe da escludere dal calcolo</div>
-    <div style="display:flex;flex-direction:column;gap:8px">
-      <label style="display:flex;align-items:center;gap:8px;font-size:12px;cursor:pointer">
-        <input type="checkbox" id="mc-excltot" ${cfg.excludeTotals?'checked':''}>
-        Escludi automaticamente righe "Totale/Total/Subtotale" (basato sul testo della colonna X)
-      </label>
-      <div class="fld">
-        <div class="fl">Righe da escludere manualmente (numeri riga Excel separati da virgola, es. 14,33,85)</div>
-        <input type="text" id="mc-exclrows"
-          value="${(cfg.excludeRows||[]).join(',')}"
-          placeholder="es. 14,33,85,102"
-          style="font-family:monospace">
-        <div class="htxt" style="margin-top:3px">
-          💡 Apri la griglia 🔲 per vedere i numeri riga. Le righe escluse non entrano nel calcolo di nessuna serie.
+        <div class="g4">
+          <div class="fld"><div class="fl">Ordina</div>
+            <select id="mc-sort">
+              <option value="none" ${cfg.sortBy==='none'||!cfg.sortBy?'selected':''}>Nessuno</option>
+              <option value="desc" ${cfg.sortBy==='desc'?'selected':''}>↓ Decrescente</option>
+              <option value="asc" ${cfg.sortBy==='asc'?'selected':''}>↑ Crescente</option>
+            </select>
+          </div>
+          <div class="fld"><div class="fl">Max elementi</div>
+            <input type="number" id="mc-max" value="${cfg.maxItems||500}" min="1" max="5000">
+          </div>
+          <div class="fld"><div class="fl">Formato Y</div>
+            <input type="text" id="mc-yfmt" value="${cfg.yFormat||''}" placeholder="€ k M %">
+          </div>
+          <div class="fld"><div class="fl">Rotaz. X (°)</div>
+            <input type="number" id="mc-xrot" value="${cfg.xRotation??-45}" min="-90" max="90">
+          </div>
         </div>
+
+        <div class="g4">
+          <div class="fld"><div class="fl">Overlap barre</div>
+            <input type="number" id="mc-overlap" value="${cfg.barOverlap??-20}" min="-100" max="100">
+          </div>
+          <div class="fld"><div class="fl">Gap Width</div>
+            <input type="number" id="mc-gap" value="${cfg.gapWidth??150}" min="0" max="500">
+          </div>
+          <div class="fld"><div class="fl">Y Min</div>
+            <input type="number" id="mc-ymin" value="${cfg.yMin??''}" placeholder="auto">
+          </div>
+          <div class="fld"><div class="fl">Y Max</div>
+            <input type="number" id="mc-ymax" value="${cfg.yMax??''}" placeholder="auto">
+          </div>
+        </div>
+
+        <div style="display:flex;flex-wrap:wrap;gap:10px">
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="mc-leg" ${cfg.showLegend?'checked':''}> Legenda
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="mc-datalabels" ${cfg.dataLabels?'checked':''}> Valori sulle barre
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="mc-cbv" ${cfg.colorByValue?'checked':''} onchange="document.getElementById('mc-cbv-colors').style.display=this.checked?'':'none'"> Colore ± (verde/rosso)
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="mc-sm" ${cfg.smooth?'checked':''}> Linea morbida
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="mc-fi" ${cfg.fill?'checked':''}> Fill area
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="mc-invertx" ${cfg.invertX?'checked':''}> Inverti X
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="mc-inverty" ${cfg.invertY?'checked':''}> Inverti Y
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="mc-logscale" ${cfg.logScale?'checked':''}> Scala log
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="mc-stack100" ${cfg.stack100?'checked':''}> 100% impilato
+          </label>
+          <label style="display:flex;align-items:center;gap:5px;font-size:12px;cursor:pointer">
+            <input type="checkbox" id="mc-zoom" ${cfg.zoomEnabled?'checked':''}> Zoom/Pan
+          </label>
+        </div>
+
+        <div id="mc-cbv-colors" style="${cfg.colorByValue?'':'display:none'};display:flex;gap:10px;flex-wrap:wrap">
+          <div class="fld"><div class="fl">Colore positivo</div><input type="color" id="mc-cpos" value="${cfg.colorPos||'#10b981'}"></div>
+          <div class="fld"><div class="fl">Colore negativo</div><input type="color" id="mc-cneg" value="${cfg.colorNeg||'#ef4444'}"></div>
+        </div>
+
+        <!-- Trendline -->
+        <div class="g2">
+          <div class="fld"><div class="fl">Trendline</div>
+            <select id="mc-trend">
+              <option value="none" ${!cfg.trendGlobal||cfg.trendGlobal==='none'?'selected':''}>Nessuna</option>
+              <option value="linear" ${cfg.trendGlobal==='linear'?'selected':''}>Regressione lineare</option>
+              <option value="ma" ${cfg.trendGlobal==='ma'?'selected':''}>Media mobile</option>
+            </select>
+          </div>
+          <div class="fld"><div class="fl">Periodo MA</div>
+            <input type="number" id="mc-maperiod" value="${cfg.maPeriod||3}" min="2" max="12">
+          </div>
+        </div>
+
+        <!-- Linee di riferimento -->
+        <div>
+          <div class="fl" style="margin-bottom:5px">Linee di riferimento (budget, target...)</div>
+          <div id="mc-reflines" style="display:flex;flex-direction:column;gap:5px">
+            ${(cfg.refLines||[]).map((rl,i)=>`
+            <div class="ref-line-row" id="rrl-${i}">
+              <input type="number" id="rlv-${i}" value="${rl.value||0}" style="width:90px" placeholder="Valore">
+              <input type="text" id="rll-${i}" value="${rl.label||''}" style="flex:1" placeholder="Label">
+              <input type="color" id="rlc-${i}" value="${rl.color||'#ef4444'}">
+              <select id="rls-${i}" style="width:90px">
+                <option value="solid" ${rl.style==='solid'?'selected':''}>Solida</option>
+                <option value="dash" ${!rl.style||rl.style==='dash'?'selected':''}>Tratteggiata</option>
+                <option value="dot" ${rl.style==='dot'?'selected':''}>Punteggiata</option>
+              </select>
+              <button class="btn sm danger" onclick="document.getElementById('rrl-${i}').remove()">✕</button>
+            </div>`).join('')}
+          </div>
+          <button class="btn sm" onclick="addRefLine()" style="margin-top:4px">＋ Linea riferimento</button>
+        </div>
+
+        <!-- Colori palette -->
+        <div>
+          <div class="fl" style="margin-bottom:4px">Colori serie</div>
+          <div id="mc-cols" class="crow">${cfg.colors.map((c,i)=>`<div class="cswatch"><input type="color" value="${c}" id="mcc-${i}"><button class="cdel" onclick="this.parentElement.remove()">✕</button></div>`).join('')}</div>
+          <div style="display:flex;gap:6px;margin-top:4px">
+            <button class="btn sm" onclick="addMC()">＋ Colore</button>
+            <button class="btn sm" onclick="resetMC()">↺ Palette default</button>
+          </div>
+        </div>
+
       </div>
-      ${cfg.dataRange?`<div id="excl-preview-${id}" class="htxt" style="color:var(--warn)"></div>`:''}
-    </div>
-
-    <div class="m-section-title">📐 Barre & Assi</div>
-    <div class="g4">
-      <div class="fld"><div class="fl">Overlap barre (%)</div><input type="number" id="mc-overlap" value="${cfg.barOverlap??-20}" min="-100" max="100" title="Negativo = spazio tra barre, positivo = sovrapposizione"></div>
-      <div class="fld"><div class="fl">Gap Width (%)</div><input type="number" id="mc-gap" value="${cfg.gapWidth??150}" min="0" max="500"></div>
-      <div class="fld"><div class="fl">Formato Y (€,k,M,%)</div><input type="text" id="mc-yfmt" value="${cfg.yFormat||''}" placeholder="es. €,k,M,%,0.0"></div>
-      <div class="fld"><div class="fl">Rotaz. etich. X (°)</div><input type="number" id="mc-xrot" value="${cfg.xRotation??-45}" min="-90" max="90"></div>
-    </div>
-    <div class="g4">
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="mc-invertx" ${cfg.invertX?'checked':''}> Inverti asse X</label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="mc-inverty" ${cfg.invertY?'checked':''}> Inverti asse Y</label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="mc-datalabels" ${cfg.dataLabels?'checked':''}> Valori sulle barre</label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="mc-cbv" ${cfg.colorByValue?'checked':''}> Colore per segno ±</label>
-    </div>
-    <div class="g2" id="mc-cbv-colors" style="${cfg.colorByValue?'':'display:none'}">
-      <div class="fld"><div class="fl">Colore positivo</div><div style="display:flex;gap:8px;align-items:center"><input type="color" id="mc-cpos" value="${cfg.colorPos||'#10b981'}"><span class="htxt">Valori ≥ 0</span></div></div>
-      <div class="fld"><div class="fl">Colore negativo</div><div style="display:flex;gap:8px;align-items:center"><input type="color" id="mc-cneg" value="${cfg.colorNeg||'#ef4444'}"><span class="htxt">Valori < 0</span></div></div>
-    </div>
-    <div class="g3">
-      <div class="fld"><div class="fl">Y Min</div><input type="number" id="mc-ymin" value="${cfg.yMin??''}" placeholder="auto"></div>
-      <div class="fld"><div class="fl">Y Max</div><input type="number" id="mc-ymax" value="${cfg.yMax??''}" placeholder="auto"></div>
-      <div class="fld"><div class="fl">Step Y (tick)</div><input type="number" id="mc-ystep" value="${cfg.yStep??''}" placeholder="auto"></div>
-    </div>
-
-    <div class="m-section-title">📏 Linee di riferimento</div>
-    <div id="mc-reflines" style="display:flex;flex-direction:column;gap:5px">
-      ${(cfg.refLines||[]).map((rl,i)=>`
-      <div class="ref-line-row" id="rrl-${i}">
-        <input type="number" id="rlv-${i}" value="${rl.value||0}" style="width:90px" placeholder="Valore">
-        <input type="text" id="rll-${i}" value="${rl.label||''}" style="flex:1" placeholder="Label (es. Budget 2025)">
-        <input type="color" id="rlc-${i}" value="${rl.color||'#ef4444'}">
-        <select id="rls-${i}" style="width:90px">
-          <option value="solid" ${rl.style==='solid'?'selected':''}>Solida</option>
-          <option value="dash" ${rl.style==='dash'||!rl.style?'selected':''}>Tratteggiata</option>
-          <option value="dot" ${rl.style==='dot'?'selected':''}>Punteggiata</option>
-        </select>
-        <button class="btn sm danger" onclick="document.getElementById('rrl-${i}').remove()">✕</button>
-      </div>`).join('')}
-    </div>
-    <button class="btn sm" onclick="addRefLine()" style="margin-top:4px">＋ Linea riferimento</button>
-
-    <div class="m-section-title">🎛️ Opzioni speciali</div>
-    <div class="g3">
-      <div class="fld"><div class="fl">Gauge Min</div><input type="number" id="mc-gmin" value="${cfg.gaugeMin||0}"></div>
-      <div class="fld"><div class="fl">Gauge Max</div><input type="number" id="mc-gmax" value="${cfg.gaugeMax||100}"></div>
-      <div class="fld"><div class="fl">Bullet Target %</div><input type="number" id="mc-tp" value="${cfg.targetPct||75}" min="0" max="100"></div>
-    </div>
-    <div class="g3">
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="mc-zoom" ${cfg.zoomEnabled?'checked':''}> Zoom/Pan (scroll + Ctrl+trascina · doppio-click reset)</label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="mc-stack100" ${cfg.stack100?'checked':''}> Barre al 100% (normalizzate)</label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="mc-logscale" ${cfg.logScale?'checked':''}> Scala logaritmica Y</label>
-    </div>
-
-    <div class="sep"></div>
-    <div class="g3">
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="mc-leg" ${cfg.showLegend?'checked':''}> Mostra legenda</label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="mc-sm" ${cfg.smooth?'checked':''}> Linea morbida</label>
-      <label style="display:flex;align-items:center;gap:6px;font-size:12px;cursor:pointer"><input type="checkbox" id="mc-fi" ${cfg.fill?'checked':''}> Fill area</label>
-    </div>
-
-    <div class="m-section-title">🎨 Colori</div>
-    <div class="fld">
-      <div id="mc-cols" class="crow">${cfg.colors.map((c,i)=>`<div class="cswatch"><input type="color" value="${c}" id="mcc-${i}"><button class="cdel" onclick="this.parentElement.remove()">✕</button></div>`).join('')}</div>
-      <div style="display:flex;gap:6px;margin-top:5px">
-        <button class="btn sm" onclick="addMC()">＋ Colore</button>
-        <button class="btn sm" onclick="resetMC()">↺ Palette globale</button>
-      </div>
-    </div>`;
+    </details>
+`;
   document.getElementById('moverlay').classList.add('vis');
+  _tmpExcludeRows=[...(cfg.excludeRows||[])];
   requestAnimationFrame(()=>{
-    // Toggle colori per valore
-    const cbvCk=document.getElementById('mc-cbv');
-    if(cbvCk) cbvCk.addEventListener('change',()=>{
-      const el=document.getElementById('mc-cbv-colors');
-      if(el) el.style.display=cbvCk.checked?'':'none';
-    });
-    // Aggiorna visualizzazione orient buttons
     setOrient(cfg.rpOrient||'cols');
-    // Preview range
     previewRange(cfg.dataRange||'');
+    if(cfg.rpOrient==='rows') updateRowList();
   });
 }
 
@@ -3141,22 +3177,89 @@ let _mcc=50;
 function setOrient(val){
   const el=document.getElementById('mc-orient-val');
   if(el) el.textContent=val;
-  const colBox=document.getElementById('orient-cols');
-  const rowBox=document.getElementById('orient-rows');
-  if(colBox&&rowBox){
-    const isCols=val==='cols';
-    colBox.style.borderColor=isCols?'var(--accent)':'var(--border)';
-    colBox.style.background=isCols?'var(--asoft)':'var(--bg3)';
-    colBox.firstElementChild.style.color=isCols?'var(--accent2)':'var(--text2)';
-    rowBox.style.borderColor=!isCols?'var(--accent)':'var(--border)';
-    rowBox.style.background=!isCols?'var(--asoft)':'var(--bg3)';
-    rowBox.firstElementChild.style.color=!isCols?'var(--accent2)':'var(--text2)';
-  }
-  // Mostra/nascondi nota pivot
-  const note=document.getElementById('mc-pivot-note');
-  if(note) note.style.display=val==='rows'?'':'none';
+  const isCols=val==='cols';
+  
+  // Aggiorna box visivi
+  ['orient-cols','orient-rows'].forEach((id,idx)=>{
+    const box=document.getElementById(id);
+    if(!box) return;
+    const active=(idx===0)?isCols:!isCols;
+    box.style.borderColor=active?'var(--accent)':'var(--border)';
+    box.style.background=active?'var(--asoft)':'var(--bg3)';
+    if(box.firstElementChild) box.firstElementChild.style.color=active?'var(--accent2)':'var(--text2)';
+  });
+  
+  // Mostra/nascondi sezioni colonne vs righe
+  const colsSec=document.getElementById('mc-cols-section');
+  const rowsSec=document.getElementById('mc-rows-section');
+  if(colsSec) colsSec.style.display=isCols?'':'none';
+  if(rowsSec) rowsSec.style.display=isCols?'none':'';
+  
   // Aggiorna rpState
   rpState.orient=val;
+  
+  // Se Righe=Serie e c'è già un range, popola la lista righe
+  if(!isCols) updateRowList();
+}
+
+// Popola la lista righe selezionabili (per Righe=Serie)
+function updateRowList(){
+  const rangeStr=document.getElementById('mc-range')?.value?.trim();
+  const list=document.getElementById('mc-rowsel-list');
+  if(!list) return;
+  if(!rangeStr||!workbook){
+    list.innerHTML='<span class="htxt">Imposta prima il range e riapri</span>';
+    return;
+  }
+  const sn=document.getElementById('shSelect')?.value||workbook.SheetNames[0];
+  const ws=workbook.Sheets[sn];
+  const rngs=parseMultiRange(rangeStr);
+  if(!rngs.length) return;
+  const rng=rngs[0];
+  const hasCH=document.getElementById('mc-hascolhdr')?.checked!==false;
+  const hasRH=document.getElementById('mc-hasrowhdr')?.checked!==false;
+  const dataStart=rng.r1+(hasCH?1:0);
+  const excludeSet=new Set((editId&&charts.find(x=>x.id===editId)?.config?.excludeRows)||[]);
+  
+  let html='';
+  for(let r=dataStart;r<=rng.r2;r++){
+    const excelRow=r+1;
+    const labelCell=hasRH?ws[idxToColLetter(rng.c1)+excelRow]:null;
+    const label=labelCell?String(labelCell.v||('Riga '+excelRow)):('Riga '+excelRow);
+    const checked=!excludeSet.has(excelRow);
+    // Mostra anche i primi valori numerici come anteprima
+    const previewVals=[];
+    for(let c=rng.c1+(hasRH?1:0);c<=Math.min(rng.c2,rng.c1+(hasRH?4:3));c++){
+      const cell=ws[idxToColLetter(c)+excelRow];
+      if(cell&&cell.t==='n') previewVals.push(Number(cell.v).toLocaleString('it-IT',{maximumFractionDigits:0}));
+    }
+    html+=`<label style="display:flex;align-items:center;gap:8px;padding:4px 6px;border-radius:4px;cursor:pointer;background:${checked?'var(--asoft)':'transparent'};border:1px solid ${checked?'var(--accent)':'transparent'}">
+      <input type="checkbox" data-row="${excelRow}" ${checked?'checked':''} onchange="toggleRowSel(${excelRow},this.checked)">
+      <span style="font-size:12px;font-weight:600;flex:1">${label}</span>
+      <span style="font-size:10px;color:var(--text3);font-family:monospace">${previewVals.join(' · ')}</span>
+    </label>`;
+  }
+  list.innerHTML=html||'<span class="htxt">Nessuna riga trovata nel range</span>';
+}
+
+let _tmpExcludeRows=[];
+function toggleRowSel(excelRow, checked){
+  if(!checked){
+    if(!_tmpExcludeRows.includes(excelRow)) _tmpExcludeRows.push(excelRow);
+  } else {
+    _tmpExcludeRows=_tmpExcludeRows.filter(r=>r!==excelRow);
+  }
+}
+function rpRowSelAll(checked){
+  _tmpExcludeRows=[];
+  if(!checked){
+    document.querySelectorAll('#mc-rowsel-list input[type=checkbox]').forEach(cb=>{
+      _tmpExcludeRows.push(parseInt(cb.dataset.row));
+      cb.checked=false;
+    });
+  } else {
+    document.querySelectorAll('#mc-rowsel-list input[type=checkbox]').forEach(cb=>{cb.checked=true;});
+  }
 }
 
 function addRefLine(){
@@ -3187,7 +3290,7 @@ function applyM(){
     type:document.getElementById('mc-type').value,
     xCol:document.getElementById('mc-xcol').value,
     dataRange:document.getElementById('mc-range')?.value?.trim()||null,
-    xRange:document.getElementById('mc-xrange')?.value?.trim()||null,
+    xRange:null,
     rpOrient:document.getElementById('mc-orient-val')?.textContent||'cols',
     rpHasRowHdr:document.getElementById('mc-hasrowhdr')?.checked!==false,
     rpHasColHdr:document.getElementById('mc-hascolhdr')?.checked!==false,
@@ -3235,11 +3338,8 @@ function applyM(){
           style:document.getElementById('rls-'+i)?.value||'dash'};
       }).filter(Boolean);
     })(),
-    excludeTotals:document.getElementById('mc-excltot')?.checked||false,
-    excludeRows:(()=>{
-      const v=document.getElementById('mc-exclrows')?.value||'';
-      return v.split(',').map(s=>parseInt(s.trim())).filter(n=>!isNaN(n)&&n>0);
-    })(),
+    excludeTotals:false,
+    excludeRows:[..._tmpExcludeRows],
     gaugeMin:parseFloat(document.getElementById('mc-gmin').value)||0,
     gaugeMax:parseFloat(document.getElementById('mc-gmax').value)||100,
     targetPct:parseFloat(document.getElementById('mc-tp').value)||75,
