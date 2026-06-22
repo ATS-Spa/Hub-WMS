@@ -3053,7 +3053,7 @@ function renderSection(sec, emps, data, opts){
     {l:'SW',v:T.SW,c:'var(--c-SW)'},
     {l:'TFS',v:T.TFS,c:'var(--c-TFS)'},
     {l:'H.Ord.',v:fmtOre(T.ord),c:'var(--green)'},{l:'H.Str.',v:fmtOre(T.str),c:'var(--amber)'},
-    {l:'H.Week',v:fmtOre(T.week),c:'var(--purple)'},{l:'H.Fest.',v:fmtOre(T.fest),c:'var(--red)'}
+    {l:'H.Dom',v:fmtOre(T.week),c:'var(--purple)'},{l:'H.Fest.',v:fmtOre(T.fest),c:'var(--red)'}
   ];
   sb.innerHTML=statDefs.filter(function(d){return d.v!==0&&d.v!=='0'&&d.v!=='';})
     .map(function(d){return '<div class="stat" style="border-top:2px solid '+d.c+'"><div class="sl">'+d.l+'</div><div class="sv" style="color:'+d.c+'">'+d.v+'</div></div>';}).join('');
@@ -3066,7 +3066,7 @@ function renderSection(sec, emps, data, opts){
     {l:'CP',c:'var(--c-CP)',k:'CP'},{l:'HPE',c:'var(--c-HPE)',k:'HPE'},{l:'PE',c:'var(--c-PE)',k:'PE'},
     {l:'SW',c:'var(--c-SW)',k:'SW'},{l:'Lut',c:'var(--c-Lutto)',k:'Lutto'},{l:'TFS',c:'var(--c-TFS)',k:'TFS'},
     {l:'ORD',c:'var(--green)',k:'ord'},{l:'STR',c:'var(--amber)',k:'str'},
-    {l:'WEEK',c:'var(--purple)',k:'week'},{l:'FEST',c:'var(--red)',k:'fest'}
+    {l:'DOM',c:'var(--purple)',k:'week'},{l:'FEST',c:'var(--red)',k:'fest'}
   ];
   var SIGLA_TO_TOT={X:'X',F:'F','1/2F':'F',M:'M',HP:'HP',H104:'H104','104':'104',CP:'CP',HPE:'HPE',PE:'PE',SW:'SW',Lutto:'Lutto',TFS:'TFS'};
   var activeSiglaCodes=isAts?SIGLE.filter(function(s){return ATS_EXCL_CODES.indexOf(s.code)===-1;}).map(function(s){return s.code;}):COOP_SIGLE_CODES;
@@ -3509,7 +3509,7 @@ function coopExport(){
   XLSX.utils.book_append_sheet(wb,coopSheet,mName+'_Coop');
   // Report con sole sigle attive in Coop
   var COOP_REP=[
-    {l:'P',k:'P'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},{l:'PLT',k:'PLT'},{l:'PLT.ORE',k:'PLT_ore'},{l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'WEEK',k:'week'},{l:'H.FEST',k:'fest'}
+    {l:'P',k:'P'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},{l:'PLT',k:'PLT'},{l:'PLT.ORE',k:'PLT_ore'},{l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'DOM',k:'week'},{l:'H.FEST',k:'fest'}
   ];
   var repHdr=['Ext SAP','Nominativo','Resp.','Plant'].concat(COOP_REP.map(function(c){return c.l;}));
   var repRows=[repHdr];
@@ -4628,7 +4628,7 @@ function calcTots(sig,ingresso,uscita,pause,dates,month,year){
     var qty=/^\d+$/.test(String(v)) ? 1 : parseFloat((String(v).match(/^[\d.]+/)||['1'])[0])||1;
     if(r.hasOwnProperty(sg)) r[sg]+=qty;
     var d=dates&&dates[di];
-    var isWe=d&&(d.weekday===0||d.weekday===6);
+    var isWe=d&&(d.weekday===0); // Dom only — Sab trattato come giorno ordinario
     if(sg==='PLT'){
       var qta=parseFloat((ingresso||[])[di])||0;
       var oreStr=(uscita||[])[di]||'';
