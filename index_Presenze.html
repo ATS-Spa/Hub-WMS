@@ -5752,10 +5752,20 @@ async function generaAnnoStart(){
       var vals=await sheetsRead(item.templateFileId,sname+'!A1:AQ300');
       var pd=await parseSheetValues(vals,item.anno,item.templateMonth,item.templateFileId,sname,'ats');
       emps=pd.employees.map(function(e){return{sap:e.id||e.sap||'',nome:e.nome,plant:e.plant||item.plant};});
-      genLog('  ✓ Template letto: '+emps.length+' dipendenti','var(--green)');
+      genLog('  ✓ Template ATS letto: '+emps.length+' dipendenti','var(--green)');
     }catch(e){
-      genLog('  ✗ Errore lettura template: '+e.message,'var(--red)');
+      genLog('  ✗ Errore lettura template ATS: '+e.message,'var(--red)');
       done+=item.mesiDaCreare.length;setBar(done,totFile);continue;
+    }
+    var coopEmps=[];
+    try{
+      var snameCoop=MESI[item.templateMonth-1]+'_Coop';
+      var valsCoop=await sheetsRead(item.templateFileId,snameCoop+'!A1:AQ300');
+      var pdCoop=await parseSheetValues(valsCoop,item.anno,item.templateMonth,item.templateFileId,snameCoop,'coop');
+      coopEmps=pdCoop.employees.map(function(e){return{sap:e.id||e.sap||'',nome:e.nome,plant:e.plant||item.plant};});
+      genLog('  ✓ Template Coop letto: '+coopEmps.length+' dipendenti','var(--green)');
+    }catch(e){
+      genLog('  ⚠ Nessun dato Coop nel template ('+e.message+')','var(--amber)');
     }
     for(var mi=0;mi<item.mesiDaCreare.length;mi++){
       if(_genAbort)break;
@@ -5764,7 +5774,7 @@ async function generaAnnoStart(){
       var fname=item.resp+'_'+item.plant+'_'+item.anno+mm;
       genLog('  Crea '+fname+'…');
       try{
-        await generaUnFile(fname,item.resp,item.plant,item.anno,mese,emps);
+        await generaUnFile(fname,item.resp,item.plant,item.anno,mese,emps,coopEmps);
         genLog('  ✓ '+fname+' creato','var(--green)');
       }catch(e){genLog('  ✗ Errore: '+e.message,'var(--red)');}
       done++;setBar(done,totFile);
@@ -5776,7 +5786,7 @@ async function generaAnnoStart(){
   loadAllFiles();buildYears();
 }
 
-async function generaUnFile(fname,resp,plant,anno,mese,emps){
+async function generaUnFile(fname,resp,plant,anno,mese,emps,coopEmps){
   var mName=MESI[mese-1];var dates=getDates(anno,mese);
   var h0=['Resp. '+resp,'Dipendenti','Plant','Data'];
   var h1=['ExtEmpN_SAP','Nominativo','Plant '+plant,mName.substring(0,3).toLowerCase()+'-'+String(anno).slice(2)];
@@ -5787,6 +5797,13 @@ async function generaUnFile(fname,resp,plant,anno,mese,emps){
     var ing=[emp.sap,emp.nome,'Ingresso'];dates.forEach(function(){ing.push('');});atsRows.push(ing);
     var usc=[emp.sap,emp.nome,'Uscita'];dates.forEach(function(){usc.push('');});atsRows.push(usc);
     atsRows.push([]);
+  });
+  var coopRows=[h0,h1];
+  (coopEmps||[]).forEach(function(emp){
+    var sig=[emp.sap,emp.nome,'Sigla'];dates.forEach(function(){sig.push('');});coopRows.push(sig);
+    var ing=[emp.sap,emp.nome,'Ingresso'];dates.forEach(function(){ing.push('');});coopRows.push(ing);
+    var usc=[emp.sap,emp.nome,'Uscita'];dates.forEach(function(){usc.push('');});coopRows.push(usc);
+    coopRows.push([]);
   });
   var legRows=[['SIGLA','DESCRIZIONE','NOTE']];
   SIGLE.forEach(function(s){legRows.push([s.code,s.label,s.hasQty?'Es. 1'+s.code:'']);});
@@ -5799,7 +5816,7 @@ async function generaUnFile(fname,resp,plant,anno,mese,emps){
     method:'PATCH',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},body:JSON.stringify({})
   });
   await sheetsBatchUpdate(ss.spreadsheetId,[
-    {range:mName+'_Coop!A1',values:[h0,h1]},
+    {range:mName+'_Coop!A1',values:coopRows},
     {range:mName+'_ATS!A1',values:atsRows},
     {range:'Leggenda!A1',values:legRows}
   ]);
