@@ -502,6 +502,7 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
 .mt{font-family:var(--ffc);font-size:19px;font-weight:700;letter-spacing:.5px}
 .ms{font-size:12px;color:var(--muted);margin-top:-8px;line-height:1.6}
 .mi{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px 13px;font-family:var(--ffm);font-size:13px;color:var(--text);outline:none;width:100%;transition:border-color .2s}
+.mi.err{border-color:var(--red)}
 .mi:focus{border-color:var(--teal)}
 .merr{font-size:11px;color:var(--red);display:none}
 .merr.show{display:block}
@@ -2147,6 +2148,10 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
 <div id="moConf" class="mo hide"><div class="mc" style="width:360px">
   <div class="mt" id="confTitle">Conferma</div>
   <div class="ms" id="confMsg" style="margin-top:0;color:var(--subtle);font-size:13px"></div>
+  <div id="confNoteWrap" style="display:none;margin-top:10px">
+    <div class="fl" id="confNoteLabel" style="margin-bottom:4px">Nota (opzionale)</div>
+    <textarea class="mi fc" id="confNoteInput" rows="2" style="resize:vertical;width:100%;font-family:var(--ff);font-size:12px" placeholder="Motivazione, dettagli…"></textarea>
+  </div>
   <div class="mbtns" style="margin-top:4px"><button class="mbtn cancel" onclick="mClose('moConf')">Annulla</button><button class="mbtn danger" id="confOk">Conferma</button></div>
 </div></div>
 
@@ -2521,7 +2526,7 @@ var SIGLE_COTTIMO=['PLT']; // sigle a cottimo: IN=quantità, OUT=ore
 //  STATE
 // ═══════════════════════════════════════════════════════════
 var TOKEN=null, uEmail='', uName='', uPic='';
-var adminMode=false, toastT=null, confCb=null;
+var adminMode=false, toastT=null, confCb=null, _confShowNote=false, _confNoteRequired=false;
 var permConfig=null, configFileId=null;
 var userTags=[], userSecs=[], isSuperUser=false, isAdminUser=false, isReadOnly=false;
 var notaMode='coop', notaRi=-1, notaDi=-1;
@@ -6078,8 +6083,30 @@ function loadCommesseForEmps(emps, fileId, mode, y, m){
 }
 
 function mClose(id){document.getElementById(id).classList.add('hide');}
-function showConf(t,m,cb){document.getElementById('confTitle').textContent=t;document.getElementById('confMsg').textContent=m;confCb=cb;mOpen('moConf');}
-document.getElementById('confOk').addEventListener('click',function(){var cb=confCb;mClose('moConf');if(cb)cb();});
+function showConf(t,m,cb,showNote){
+  document.getElementById('confTitle').textContent=t;
+  document.getElementById('confMsg').textContent=m;
+  confCb=cb;
+  _confShowNote=!!showNote;
+  _confNoteRequired=(showNote==='required');
+  var nw=document.getElementById('confNoteWrap'), ni=document.getElementById('confNoteInput'), nl=document.getElementById('confNoteLabel');
+  if(nw)nw.style.display=_confShowNote?'':'none';
+  if(ni){ni.value='';ni.classList.remove('err');}
+  if(nl)nl.textContent=_confNoteRequired?'Nota (obbligatoria)':'Nota (opzionale)';
+  mOpen('moConf');
+}
+document.getElementById('confOk').addEventListener('click',function(){
+  var ni=document.getElementById('confNoteInput');
+  var note=_confShowNote?((ni||{}).value||''):undefined;
+  if(_confShowNote&&_confNoteRequired&&!note.trim()){
+    if(ni)ni.classList.add('err');
+    toast('Inserisci una motivazione per il rifiuto','warn');
+    return;
+  }
+  var cb=confCb;
+  mClose('moConf');
+  if(cb)cb(note);
+});
 function toast(msg,type){var t=document.getElementById('toast');t.textContent=msg;t.className='show '+(type||'');clearTimeout(toastT);toastT=setTimeout(function(){t.className='';},type==='warn'?4000:2600);}
 function disBtn(ids){ids.forEach(function(id){var el=document.getElementById(id);if(el)el.disabled=true;});}
 function lsS(k,v){try{localStorage.setItem('wms_'+k,JSON.stringify(v));}catch(e){}}
@@ -7977,9 +8004,10 @@ function richApprova(id){
   if(!req) return;
   showConf('✅ Approva richiesta',
     'Approvare la richiesta di '+req.dipendente_nome+' ('+fmtDateIT(req.data_dal)+' → '+fmtDateIT(req.data_al)+')?\n\nVerrà scritto automaticamente sul foglio presenze.',
-    function(){
+    function(note){
       req.stato='approvata';
       req.data_risposta=new Date().toLocaleDateString('it-IT');
+      req.nota_resp=(note||'').trim();
       req.mail_esito_inviata=false;
       toast('⏳ Approvazione in corso…','warn');
       richScriviSuDrive(req).then(function(){
@@ -7992,7 +8020,8 @@ function richApprova(id){
         toast('✗ Errore scrittura: '+e.message,'err');
         saveRichieste().then(function(){richUpdateBadge();richRender();});
       });
-    }
+    },
+    true
   );
 }
 
@@ -8002,16 +8031,18 @@ function richRifiuta(id){
   if(!req) return;
   showConf('❌ Rifiuta richiesta',
     'Rifiutare la richiesta di '+req.dipendente_nome+' ('+fmtDateIT(req.data_dal)+' → '+fmtDateIT(req.data_al)+')?',
-    function(){
+    function(note){
       req.stato='rifiutata';
       req.data_risposta=new Date().toLocaleDateString('it-IT');
+      req.nota_resp=(note||'').trim();
       req.mail_esito_inviata=false;
       saveRichieste().then(function(){
         richUpdateBadge();
         richRender();
         toast('❌ Rifiutata — notifica al dipendente in partenza');
       });
-    }
+    },
+    'required'
   );
 }
 
