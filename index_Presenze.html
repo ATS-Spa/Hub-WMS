@@ -2396,12 +2396,18 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
   <div id="spCommesseWrap" style="display:none;margin-top:8px">
     <div style="font-family:var(--ffc);font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--muted);margin-bottom:8px">DISTRIBUZIONE ORE COMMESSE</div>
     <div id="spCommesseGrid" style="display:flex;flex-direction:column;gap:6px"></div>
-    <div style="margin-top:6px;font-family:var(--ffm);font-size:11px;display:flex;gap:8px;align-items:center">
-      <span style="color:var(--muted)">Assegnate:</span>
-      <span id="spCommTot" style="color:var(--teal);font-weight:700">0h</span>
-      <span style="color:var(--muted)">/ Disponibili:</span>
-      <span id="spCommDisp" style="color:var(--green);font-weight:700">0h</span>
-      <span id="spCommWarn" style="color:var(--red);display:none">⚠ Supera le ore disponibili</span>
+    <div style="margin-top:6px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:6px">
+      <div style="font-family:var(--ffm);font-size:11px;display:flex;gap:8px;align-items:center">
+        <span style="color:var(--muted)">Assegnate:</span>
+        <span id="spCommTot" style="color:var(--teal);font-weight:700">0h</span>
+        <span style="color:var(--muted)">/ Disponibili:</span>
+        <span id="spCommDisp" style="color:var(--green);font-weight:700">0h</span>
+        <span id="spCommWarn" style="color:var(--red);display:none">⚠ Supera le ore disponibili</span>
+      </div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);cursor:pointer">
+        <input type="checkbox" id="spCommSave" style="accent-color:var(--teal);width:13px;height:13px">
+        Ricorda come predefinita
+      </label>
     </div>
   </div>
   <div class="mbtns"><button class="mbtn cancel" onclick="mClose('moSigla')">Annulla</button><button class="mbtn" id="spNotaBtn" onclick="spOpenNota()" style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);color:var(--amber);display:none">📝 Nota</button><button class="mbtn ok" id="spConfirmBtn" onclick="spConfirm()">Imposta</button></div>
@@ -2526,7 +2532,7 @@ var SIGLE = [
 var SM={};SIGLE.forEach(function(s){SM[s.code]=s;});
 
 // ── FIX 1: Sigle disponibili in Coop (modifica qui per aggiungere/rimuovere) ──
-var COOP_SIGLE_CODES = ['X','PLT'];
+var COOP_SIGLE_CODES = ['X','F','PLT'];
 var ATS_EXCL_CODES = ['1/2F','PLT']; // PLT solo Coop
 // Le sigle ATS escludono 1/2F (rimossa dall'array SIGLE)
 
@@ -3941,6 +3947,7 @@ function openPickerGeneric(mode,ri,di){
   notaBtn.style.display='';
   notaBtn.textContent=hasNote?'📝 Nota ✓':'📝 Nota';
   notaBtn.style.borderColor=hasNote?'rgba(245,158,11,.6)':'rgba(245,158,11,.35)';
+  var spcs=document.getElementById('spCommSave');if(spcs)spcs.checked=false;
   mOpen('moSigla');
 }
 function spOpenNota(){
@@ -4029,7 +4036,15 @@ function spConfirm(){
     if(fid3&&sname2)deleteCommessaRow(spMode,fid2,spDi,fid3,sname2,y2,m2);
   } else {
     // Salva distribuzione commesse
-    saveCommesse();
+    var spcs=document.getElementById('spCommSave');
+    if(spcs&&spcs.checked){
+      var commValsSnap=saveCommesse(true);
+      if(!permConfig)permConfig={};
+      permConfig.bulkCommesse=commValsSnap||{};
+      savePermConfig();
+    } else {
+      saveCommesse();
+    }
     if(fid3&&sname2)saveCommesseToSheet(spMode,fid2,spDi,fid3,sname2,y2,m2);
   }
   mClose('moSigla');
@@ -4922,6 +4937,9 @@ function renderCommesseGrid(){
   if(!commesse.length){wrap.style.display='none';return;}
   var disp=getCommDisp();
   var existing=(emp.commesse&&emp.commesse[spDi])||{};
+  if(!Object.keys(existing).length&&permConfig&&permConfig.bulkCommesse&&Object.keys(permConfig.bulkCommesse).length){
+    existing=permConfig.bulkCommesse;
+  }
   grid.innerHTML='';
   commesse.forEach(function(c){
     var savedH=existing[c.code]; // undefined=non attiva, 0=resto, >0=ore fisse
@@ -4992,14 +5010,12 @@ function updateCommTot(){
   });
 }
 
-function saveCommesse(){
+function saveCommesse(returnOnly){
   var grid=document.getElementById('spCommesseGrid');
   var rows=grid.querySelectorAll('.comm-row');
-  if(!rows.length)return;
+  if(!rows.length)return returnOnly?{}:undefined;
   var emps=spMode==='ats'?atsEmps:coopEmps;
-  var emp=emps[spIdx]; if(!emp)return;
-  if(!emp.commesse)emp.commesse=[];
-  while(emp.commesse.length<=spDi)emp.commesse.push(null);
+  var emp=emps[spIdx]; if(!emp)return returnOnly?{}:undefined;
   // Calcola ore resto
   var disp=getCommDisp();
   var fisse=0,restoCount=0;
@@ -5020,6 +5036,9 @@ function saveCommesse(){
     var actual=v>0?v:restoH;
     if(actual>0)vals[inp.dataset.code]=actual;
   });
+  if(returnOnly)return vals;
+  if(!emp.commesse)emp.commesse=[];
+  while(emp.commesse.length<=spDi)emp.commesse.push(null);
   emp.commesse[spDi]=Object.keys(vals).length?vals:null;
 }
 
