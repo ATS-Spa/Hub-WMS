@@ -2864,17 +2864,18 @@ function applyPerm(){
   isSuperUser=(permConfig.super_users||[SUPER_USER]).some(function(s){return s.toLowerCase()===em;});
   isAdminUser=isSuperUser||(permConfig.admins||[]).some(function(a){return a.toLowerCase()===em;});
 
-  // Self-view dipendente: email matcha un record in permConfig.dipendenti
+  // Self-view: utente in permConfig.users ma senza is_admin → vede solo la sua riga
   isDipSelf=false; dipSelfRecord=null;
-  if(!isSuperUser&&!isAdminUser){
-    var matchDip=(permConfig.dipendenti||[]).find(function(d){
-      return (d.email_google||'').toLowerCase().trim()===em;
-    });
-    if(matchDip){isDipSelf=true;dipSelfRecord=matchDip;}
-  }
-
   var uc=null;
   Object.keys(permConfig.users||{}).forEach(function(k){if(k.toLowerCase()===em)uc=permConfig.users[k];});
+
+  if(!isSuperUser&&!isAdminUser&&uc&&!uc.is_admin){
+    isDipSelf=true;
+    // Cerca nome/SAP dall'anagrafica dipendenti per filtrare la riga giusta
+    dipSelfRecord=(permConfig.dipendenti||[]).find(function(d){
+      return (d.email_google||'').toLowerCase().trim()===em;
+    })||{nome:'',sap:''};
+  }
 
   if(isSuperUser){
     userTags=['*'];userSecs=['coop','ats','file','ferie'];
@@ -2896,17 +2897,9 @@ function applyPerm(){
     document.getElementById('permBadge').className='pbadge is-admin';
     document.getElementById('snFerie').style.display='';
     autoAdminIfSaved();
-  } else if(isDipSelf){
-    var resp=dipSelfRecord.responsabile_nome||'';
-    userTags=resp?[resp]:[];
-    var sec=(dipSelfRecord.tipo||'ats').toLowerCase()==='coop'?'coop':'ats';
-    userSecs=[sec];
-    isReadOnly=true;
-    document.getElementById('permBadge').textContent='DIP';
-    document.getElementById('permBadge').className='pbadge';
   } else if(uc){
     userTags=uc.tags||[];userSecs=uc.sections||[];isReadOnly=!uc.is_admin;
-    document.getElementById('permBadge').textContent=userTags.length?userTags.join('·'):'DEFAULT';
+    document.getElementById('permBadge').textContent=isDipSelf?'DIP':(userTags.length?userTags.join('·'):'DEFAULT');
     document.getElementById('permBadge').className='pbadge';
   } else {
     var def=permConfig.default||{};
