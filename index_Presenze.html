@@ -2557,7 +2557,7 @@ var oreVisible=false, coopOreVisible=false;
 
 // ── Config orario utente (salvata su Drive per cartella) ──
 var USER_CONFIG_FOLDER = '1LGoR9SKDthz1tUDLxbZhClqA-xhkjoNY';
-var wmsConfig = {ingresso:'08:00', uscita:'18:00', pausa:1, tema:'scuro'};
+var wmsConfig = {ingresso:'08:00', uscita:'18:00', pausa:1, tema:'scuro', bulkCommesse:{}};
 var wmsConfigFileId = null;
 
 function userConfigFname(email){
@@ -2581,6 +2581,7 @@ function loadUserConfig(){
           if(cfg.ganttShowSap!==undefined) wmsConfig.ganttShowSap=cfg.ganttShowSap;
           if(cfg.ganttShowFres!==undefined) wmsConfig.ganttShowFres=cfg.ganttShowFres;
           if(cfg.ganttShowHpres!==undefined) wmsConfig.ganttShowHpres=cfg.ganttShowHpres;
+          if(cfg.bulkCommesse) wmsConfig.bulkCommesse=cfg.bulkCommesse;
           applyTheme(wmsConfig.tema||'scuro');
         });
     }).catch(function(){});
@@ -4039,9 +4040,8 @@ function spConfirm(){
     var spcs=document.getElementById('spCommSave');
     if(spcs&&spcs.checked){
       var commValsSnap=saveCommesse(true);
-      if(!permConfig)permConfig={};
-      permConfig.bulkCommesse=commValsSnap||{};
-      savePermConfig();
+      wmsConfig.bulkCommesse=commValsSnap||{};
+      saveUserConfig();
     } else {
       saveCommesse();
     }
@@ -4937,9 +4937,7 @@ function renderCommesseGrid(){
   if(!commesse.length){wrap.style.display='none';return;}
   var disp=getCommDisp();
   var existing=(emp.commesse&&emp.commesse[spDi])||{};
-  if(!Object.keys(existing).length&&permConfig&&permConfig.bulkCommesse&&Object.keys(permConfig.bulkCommesse).length){
-    existing=permConfig.bulkCommesse;
-  }
+  if(!Object.keys(existing).length){var _def=wmsConfig.bulkCommesse||{};if(Object.keys(_def).length)existing=_def;}
   grid.innerHTML='';
   commesse.forEach(function(c){
     var savedH=existing[c.code]; // undefined=non attiva, 0=resto, >0=ore fisse
@@ -5280,7 +5278,7 @@ function renderBulkCommesse(){
   var commesse=getCommesse(''); // tutte, senza filtro plant
   var sigBase=bulkSigla?xSig(bulkSigla):'';
   if(!commesse.length||SIGLE_COMMESSE.indexOf(sigBase)===-1){wrap.style.display='none';return;}
-  var existing=(permConfig&&permConfig.bulkCommesse)||{};
+  var existing=wmsConfig.bulkCommesse||{};
   grid.innerHTML='';
   commesse.forEach(function(c){
     var savedH=existing[c.code];
@@ -5422,8 +5420,8 @@ function bulkConfirm(){
 
   if(saveComm){
     if(!permConfig)permConfig={};
-    permConfig.bulkCommesse=commVals||{};
-    savePermConfig();
+    wmsConfig.bulkCommesse=commVals||{};
+    saveUserConfig();
   }
 
   mClose('moBulk');
