@@ -2251,6 +2251,17 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
       </div>
     </div>
   </div>
+  <div id="bulkCommesseWrap" style="display:none;margin-top:8px">
+    <div style="font-family:var(--ffc);font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--muted);margin-bottom:6px">DISTRIBUZIONE COMMESSE</div>
+    <div id="bulkCommesseGrid"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;flex-wrap:wrap;gap:6px">
+      <div style="font-size:11px;color:var(--muted)">Totale: <span id="bulkCommTot" style="color:var(--teal);font-weight:700">0h</span> / <span id="bulkCommDisp">0h</span> <span id="bulkCommWarn" style="color:var(--red);display:none">⚠ superi le ore disponibili</span></div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);cursor:pointer">
+        <input type="checkbox" id="bulkCommSave" style="accent-color:var(--teal);width:13px;height:13px">
+        Ricorda come predefinita
+      </label>
+    </div>
+  </div>
   <div id="bulkInfo" style="font-size:11px;color:var(--muted);background:var(--card);border:1px solid var(--border);border-radius:6px;padding:8px 12px;display:none"></div>
   <div class="mbtns"><button class="mbtn cancel" onclick="mClose('moBulk')">Annulla</button><button class="mbtn ok" id="bulkConfirmBtn" onclick="bulkConfirm()">Imposta a Tutti</button></div>
 </div></div>
@@ -5194,6 +5205,8 @@ function openBulkPresenza(mode){
   document.getElementById('bulkOrariWrap').style.display='';
   document.getElementById('bulkCalcBox').style.display='none';
   document.getElementById('bulkInfo').style.display='none';
+  document.getElementById('bulkCommesseWrap').style.display='none';
+  document.getElementById('bulkCommSave').checked=false;
 
   var g=document.getElementById('bulkGrid');g.innerHTML='';
   var siglaList=mode==='coop'
@@ -5210,6 +5223,7 @@ function openBulkPresenza(mode){
       var showOr=SIGLE_NO_ORARIO.indexOf(s.code)===-1;
       document.getElementById('bulkOrariWrap').style.display=showOr?'':'none';
       bulkCalcLive();
+      renderBulkCommesse();
       bulkUpdateInfo();
     });
     g.appendChild(el);
@@ -5218,9 +5232,9 @@ function openBulkPresenza(mode){
 }
 
 function bulkCalcLive(){
-  if(!bulkSigla||SIGLE_NO_ORARIO.indexOf(bulkSigla)!==-1){document.getElementById('bulkCalcBox').style.display='none';return;}
+  if(!bulkSigla||SIGLE_NO_ORARIO.indexOf(bulkSigla)!==-1){document.getElementById('bulkCalcBox').style.display='none';renderBulkCommesse();return;}
   var ing=document.getElementById('bulkIng').value,usc=document.getElementById('bulkUsc').value;
-  if(!ing||!usc){document.getElementById('bulkCalcBox').style.display='none';return;}
+  if(!ing||!usc){document.getElementById('bulkCalcBox').style.display='none';renderBulkCommesse();return;}
   var hasPausa=document.getElementById('bulkPausa').checked;
   var pausaH=hasPausa?parseFloat(document.getElementById('bulkPausaDur').value)||1:0;
   var o=calcOreGiorno(ing,usc,pausaH);
@@ -5230,6 +5244,106 @@ function bulkCalcLive(){
   document.getElementById('bulkCalcEff').textContent=fmtOre(o.eff)+'h';
   document.getElementById('bulkCalcOrd').textContent=fmtOre(o.ord)+'h';
   document.getElementById('bulkCalcStr').textContent=fmtOre(o.str)+'h';
+  renderBulkCommesse();
+}
+
+function getBulkCommDisp(){
+  var sigla=bulkSigla||'';
+  var ing=document.getElementById('bulkIng').value;
+  var usc=document.getElementById('bulkUsc').value;
+  var pausa=document.getElementById('bulkPausa').checked?parseFloat(document.getElementById('bulkPausaDur').value)||1:0;
+  return calcOreDisponibili(sigla,ing,usc,pausa,null);
+}
+
+function renderBulkCommesse(){
+  var wrap=document.getElementById('bulkCommesseWrap');
+  var grid=document.getElementById('bulkCommesseGrid');
+  var commesse=getCommesse(''); // tutte, senza filtro plant
+  var sigBase=bulkSigla?xSig(bulkSigla):'';
+  if(!commesse.length||SIGLE_COMMESSE.indexOf(sigBase)===-1){wrap.style.display='none';return;}
+  var existing=(permConfig&&permConfig.bulkCommesse)||{};
+  grid.innerHTML='';
+  commesse.forEach(function(c){
+    var savedH=existing[c.code];
+    var isOn=savedH!==undefined;
+    var h=savedH&&savedH>0?savedH:'';
+    var row=document.createElement('div');row.className='comm-row';
+    row.innerHTML=
+      '<input type="checkbox" class="conf-cb comm-check" data-code="'+esc(c.code)+'" '+(isOn?'checked':'')+' onchange="updateBulkCommTot()">'
+      +'<span class="comm-label" style="'+(isOn?'color:var(--text)':'color:var(--muted)')+'">'+esc(c.code)+'</span>'
+      +'<input class="comm-inp'+(isOn&&!(savedH>0)?' is-resto':'')+'" type="number" min="0" max="24" step="0.5" placeholder="resto" value="'+h+'" data-code="'+esc(c.code)+'" '
+        +(isOn?'':'disabled')+' style="'+(isOn?'':'opacity:.35')+'" oninput="updateBulkCommTot()">'
+      +'<span style="font-size:11px;color:var(--muted);min-width:20px">'+(isOn&&savedH>0?'h':'')+'</span>'
+      +'<div class="comm-bar"><div class="comm-bar-fill" id="bcbar_'+esc(c.code)+'" style="width:0%"></div></div>';
+    grid.appendChild(row);
+    var cb=row.querySelector('.comm-check');
+    var inp=row.querySelector('.comm-inp');
+    var lbl=row.querySelector('.comm-label');
+    cb.addEventListener('change',function(){
+      inp.disabled=!cb.checked;inp.style.opacity=cb.checked?'1':'0.35';
+      lbl.style.color=cb.checked?'var(--text)':'var(--muted)';
+      if(!cb.checked){inp.value='';inp.classList.remove('is-resto');}
+      else inp.classList.add('is-resto');
+      updateBulkCommTot();
+    });
+  });
+  updateBulkCommTot();
+  wrap.style.display='';
+}
+
+function updateBulkCommTot(){
+  var grid=document.getElementById('bulkCommesseGrid');
+  var rows=grid.querySelectorAll('.comm-row');
+  var disp=getBulkCommDisp();
+  var fisse=0,restoCount=0;
+  rows.forEach(function(row){
+    var cb=row.querySelector('.comm-check');
+    var inp=row.querySelector('.comm-inp');
+    if(!cb||!cb.checked)return;
+    var v=parseFloat(inp.value);
+    if(v>0)fisse+=v; else restoCount++;
+  });
+  var restoH=restoCount>0?Math.max(0,Math.round((disp-fisse)*10/restoCount)/10):0;
+  var tot=fisse+restoH*restoCount;
+  document.getElementById('bulkCommTot').textContent=Math.round(tot*10)/10+'h';
+  document.getElementById('bulkCommDisp').textContent=disp+'h';
+  document.getElementById('bulkCommWarn').style.display=fisse>disp+0.01?'':'none';
+  rows.forEach(function(row){
+    var cb=row.querySelector('.comm-check');
+    var inp=row.querySelector('.comm-inp');
+    var unit=row.querySelectorAll('span')[2];
+    var bar=row.querySelector('.comm-bar-fill');
+    if(!cb||!bar)return;
+    if(!cb.checked){bar.style.width='0%';if(inp)inp.classList.remove('is-resto');return;}
+    var v=parseFloat(inp.value);
+    var actual=v>0?v:restoH;
+    var pct=disp>0?Math.min(100,Math.round(actual/disp*100)):0;
+    bar.style.width=pct+'%';
+    if(inp)inp.classList.toggle('is-resto',!(v>0));
+    if(unit)unit.textContent=v>0?'h':'→'+restoH+'h';
+  });
+}
+
+function getBulkCommVals(){
+  var grid=document.getElementById('bulkCommesseGrid');
+  var rows=grid.querySelectorAll('.comm-row');
+  if(!rows.length)return null;
+  var disp=getBulkCommDisp();
+  var fisse=0,restoCount=0;
+  rows.forEach(function(row){
+    var cb=row.querySelector('.comm-check');var inp=row.querySelector('.comm-inp');
+    if(!cb||!cb.checked)return;
+    var v=parseFloat(inp.value);if(v>0)fisse+=v;else restoCount++;
+  });
+  var restoH=restoCount>0?Math.max(0,Math.round((disp-fisse)*10/restoCount)/10):0;
+  var vals={};
+  rows.forEach(function(row){
+    var cb=row.querySelector('.comm-check');var inp=row.querySelector('.comm-inp');
+    if(!cb||!cb.checked)return;
+    var v=parseFloat(inp.value);var actual=v>0?v:restoH;
+    if(actual>0)vals[inp.dataset.code]=actual;
+  });
+  return Object.keys(vals).length?vals:null;
 }
 
 function bulkUpdateInfo(){
@@ -5269,6 +5383,9 @@ function bulkConfirm(){
   var sigCode=bulkSigla;
   if(SM[sigCode]&&SM[sigCode].hasQty&&qty&&parseFloat(qty)!==1) sigCode=sigCode+'('+qty+')';
 
+  var commVals=SIGLE_COMMESSE.indexOf(xSig(bulkSigla))!==-1?getBulkCommVals():null;
+  var saveComm=document.getElementById('bulkCommSave').checked;
+
   visible.forEach(function(emp){
     if(!emp.sigla)emp.sigla=[];
     if(!emp.ingresso)emp.ingresso=[];
@@ -5277,7 +5394,18 @@ function bulkConfirm(){
     emp.sigla[di]=sigCode;
     if(showOr){emp.ingresso[di]=ing;emp.uscita[di]=usc;emp.pausa[di]=pausaH;}
     else{emp.ingresso[di]='';emp.uscita[di]='';emp.pausa[di]=null;}
+    if(commVals){
+      if(!emp.commesse)emp.commesse=[];
+      while(emp.commesse.length<=di)emp.commesse.push(null);
+      emp.commesse[di]=commVals;
+    }
   });
+
+  if(saveComm){
+    if(!permConfig)permConfig={};
+    permConfig.bulkCommesse=commVals||{};
+    savePermConfig();
+  }
 
   mClose('moBulk');
   if(mode==='ats'){atsRender();aSave();}else{coopRender();cSave();}
