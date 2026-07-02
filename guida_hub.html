@@ -325,7 +325,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
     <a class="sb-link" onclick="goto('p',5)" id="p-nav-5"><span class="icon">⚡</span> Presenza a Tutti <span class="num">6</span></a>
     <a class="sb-link" onclick="goto('p',6)" id="p-nav-6"><span class="icon">📤</span> Export e Stampa <span class="num">7</span></a>
     <div class="sb-sect">Avanzato</div>
-    <a class="sb-link" onclick="goto('p',7)" id="p-nav-7"><span class="icon">🔐</span> Admin e Permessi <span class="num">8</span></a>
+    <a class="sb-link" onclick="goto('p',7)" id="p-nav-7"><span class="icon">🔐</span> Admin, Ferie e Massivi <span class="num">8</span></a>
   </div>
 
   <!-- Sidebar Spedizioni -->
@@ -972,7 +972,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
   <div class="chapter-header">
     <div class="ch-tag">Operatività · Passo 6 di 8</div>
     <h1 class="ch-title">Presenza a Tutti</h1>
-    <p class="ch-desc">La funzione "Presenza a Tutti" permette di impostare la stessa sigla su tutti i dipendenti visibili per un determinato giorno, in un'unica operazione.</p>
+    <p class="ch-desc">La funzione "Presenza a Tutti" permette di impostare la stessa sigla su tutti i dipendenti visibili per un determinato giorno, in un'unica operazione — inclusa la distribuzione ore sulle commesse.</p>
   </div>
 
   <div class="steps">
@@ -995,7 +995,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
         <span class="step-num">2</span>
         <div>
           <div class="step-title">Configura l'operazione di massa</div>
-          <div class="step-body">Si apre un pannello modale. Seleziona la sigla da applicare, il giorno del mese, l'orario (se richiesto) e la pausa.</div>
+          <div class="step-body">Si apre un pannello modale. Seleziona la sigla da applicare, il giorno del mese, l'orario (se richiesto) e la pausa pranzo.</div>
         </div>
       </div>
       <div class="step-detail">
@@ -1039,6 +1039,47 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
     <div class="step">
       <div class="step-header">
         <span class="step-num">3</span>
+        <div>
+          <div class="step-title">Distribuzione ore su commessa (opzionale)</div>
+          <div class="step-body">Se la sigla selezionata prevede la distribuzione ore (es. <strong style="color:var(--green)">X</strong>, <strong style="color:var(--blue)">HP</strong>…), compare automaticamente la sezione <strong>Distribuzione Commesse</strong>. Puoi spuntare una o più commesse e indicare le ore fisse; chi non ha un valore diventa "resto" (ore rimanenti divise equamente). La stessa ripartizione viene applicata a tutti i dipendenti visibili.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="modal-mock" style="max-width:440px">
+          <div class="mm-title" style="font-size:13px;color:var(--muted);margin-bottom:10px">DISTRIBUZIONE COMMESSE</div>
+          <div style="display:flex;flex-direction:column;gap:8px">
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--card);border:1px solid var(--border);border-radius:8px">
+              <input type="checkbox" checked style="accent-color:var(--teal);width:14px;height:14px">
+              <span style="font-size:13px;color:var(--text);min-width:60px">COMM01</span>
+              <input type="number" value="4" style="width:56px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 8px;color:var(--text);font-size:12px">
+              <span style="font-size:11px;color:var(--muted)">h</span>
+              <div style="flex:1;height:4px;background:var(--border);border-radius:2px"><div style="width:50%;height:100%;background:var(--teal);border-radius:2px"></div></div>
+            </div>
+            <div style="display:flex;align-items:center;gap:10px;padding:8px 10px;background:var(--card);border:1px solid var(--border);border-radius:8px">
+              <input type="checkbox" checked style="accent-color:var(--teal);width:14px;height:14px">
+              <span style="font-size:13px;color:var(--text);min-width:60px">COMM02</span>
+              <input type="number" placeholder="resto" style="width:56px;background:var(--bg);border:1px solid var(--border);border-radius:5px;padding:4px 8px;color:var(--muted);font-size:12px">
+              <span style="font-size:11px;color:var(--teal)">→4h</span>
+              <div style="flex:1;height:4px;background:var(--border);border-radius:2px"><div style="width:50%;height:100%;background:var(--blue);border-radius:2px"></div></div>
+            </div>
+          </div>
+          <div style="display:flex;align-items:center;justify-content:space-between;margin-top:10px;flex-wrap:wrap;gap:6px">
+            <div style="font-size:11px;color:var(--muted)">Totale: <span style="color:var(--teal);font-weight:700">8h</span> / 8h</div>
+            <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);cursor:pointer">
+              <input type="checkbox" style="accent-color:var(--teal);width:13px;height:13px"> Ricorda come predefinita
+            </label>
+          </div>
+        </div>
+        <div class="infobox tip">
+          <span class="ib-icon">💡</span>
+          <div class="ib-body">Spunta <strong>Ricorda come predefinita</strong> per salvare la ripartizione in config: la prossima volta che apri il modal le commesse saranno già pre-spuntate con gli stessi valori. La config viene aggiornata automaticamente su Drive.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">4</span>
         <div>
           <div class="step-title">Filtro attivo = operazione parziale</div>
           <div class="step-body">Se hai attivo un filtro per responsabile, plant o una ricerca per nome, la funzione "Presenza a Tutti" agisce solo sui dipendenti filtrati. Puoi usarla per impostare presenze su un gruppo specifico.</div>
@@ -1135,7 +1176,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
   <div class="chapter-header">
     <div class="ch-tag">Avanzato · Passo 8 di 8</div>
     <h1 class="ch-title">Admin e Permessi</h1>
-    <p class="ch-desc">Funzionalità avanzate per la gestione degli accessi e l'importazione di dati. Disponibili solo per utenti con ruolo Admin o Super.</p>
+    <p class="ch-desc">Funzionalità avanzate per la gestione degli accessi, l'importazione di dati e la generazione massiva dei file. Disponibili solo per utenti con ruolo Admin o Super.</p>
   </div>
 
   <div class="steps">
@@ -1189,6 +1230,84 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
       <div class="step-header">
         <span class="step-num">3</span>
         <div>
+          <div class="step-title">🗂️ Genera File Anno Completo</div>
+          <div class="step-body">Disponibile nel tab <span class="tag" style="background:rgba(6,182,212,.12);border:1px solid rgba(6,182,212,.3);color:var(--cyan)">File Import</span>, questa funzione crea in automatico tutti i file mensili di un anno per uno o più responsabili, leggendo la lista dipendenti da un file template di riferimento.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <ul class="checklist">
+          <li>Seleziona il file template di riferimento (il mese da cui leggere i dipendenti) e l'anno da generare</li>
+          <li>I dipendenti <strong>ATS</strong> vengono letti dal foglio <code>Mese_ATS</code> del template e scritti nel foglio <code>_ATS</code> di ogni nuovo file</li>
+          <li>I dipendenti <strong>Cooperativa</strong> vengono letti dal foglio <code>Mese_Coop</code> del template e scritti nel foglio <code>_Coop</code> di ogni nuovo file</li>
+          <li>Ogni file contiene le righe <strong>Sigla / Ingresso / Uscita / Pausa</strong> per ogni dipendente, pronte per la compilazione</li>
+          <li>I file vengono creati direttamente su Google Drive nella cartella configurata</li>
+        </ul>
+        <div class="infobox tip">
+          <span class="ib-icon">💡</span>
+          <div class="ib-body">Se il foglio <code>_Coop</code> del template è vuoto o assente, la generazione continua comunque: il foglio Coop nei nuovi file verrà creato senza dipendenti e potrà essere compilato manualmente.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">4</span>
+        <div>
+          <div class="step-title">📅 Inserimento Massivo per dipendente</div>
+          <div class="step-body">L'inserimento massivo applica una sigla a un singolo dipendente su un <strong>range di date multi-mese</strong>. Disponibile per Admin.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <ul class="checklist">
+          <li>Seleziona il dipendente, la sigla, il range Dal/Al (anche su mesi diversi) e gli orari</li>
+          <li>I giorni festivi e i weekend vengono saltati automaticamente</li>
+          <li>Se la sigla è <strong style="color:var(--blue)">F</strong> (Ferie), il residuo ferie viene aggiornato automaticamente</li>
+          <li>Puoi aggiungere una nota che verrà scritta nelle celle corrispondenti</li>
+          <li>I file Drive interessati vengono aggiornati mese per mese in sequenza</li>
+        </ul>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">5</span>
+        <div>
+          <div class="step-title">🌴 Richieste Ferie — flusso completo</div>
+          <div class="step-body">Il modulo Richieste Ferie gestisce l'intero ciclo: il dipendente invia la richiesta, il responsabile approva o rifiuta, e il sistema notifica via email e aggiorna automaticamente il foglio presenze.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <ul class="checklist">
+          <li><strong>Dipendente:</strong> apre il pannello Richieste, indica il range di date, la tipologia e una nota opzionale, poi invia</li>
+          <li><strong>Responsabile:</strong> riceve una notifica email e vede la richiesta in stato <span class="tag amber">In attesa</span></li>
+          <li>Clicca <strong style="color:var(--green)">✅ Approva</strong> o <strong style="color:var(--red)">❌ Rifiuta</strong>: si apre un popup di conferma</li>
+          <li>In caso di <strong>approvazione</strong>: il campo Nota è opzionale — puoi lasciarlo vuoto o aggiungere un messaggio che arriverà nella mail al dipendente</li>
+          <li>In caso di <strong>rifiuto</strong>: il campo Nota è <strong>obbligatorio</strong> — devi inserire una motivazione prima di poter confermare</li>
+          <li>Il dipendente riceve la mail di esito con stato e motivazione; il foglio presenze viene aggiornato automaticamente per le approvazioni</li>
+        </ul>
+        <div class="modal-mock" style="max-width:380px;margin-top:12px">
+          <div class="mm-title">❌ Rifiuta richiesta</div>
+          <div class="mm-sub">Rifiutare la richiesta di Mario Rossi (01/06 → 05/06)?</div>
+          <div style="margin-top:10px">
+            <div class="fm-label" style="margin-bottom:4px">Nota <span style="color:var(--red)">(obbligatoria)</span></div>
+            <textarea class="fm-input" rows="2" placeholder="Motivazione, dettagli…" style="resize:vertical;width:100%;font-size:12px">Periodo già coperto da altro collega.</textarea>
+          </div>
+          <div class="mm-btns" style="margin-top:12px">
+            <button class="mm-btn cancel">Annulla</button>
+            <button class="mm-btn" style="background:var(--red);color:#fff;border:none;border-radius:8px;padding:8px 18px;font-family:var(--ffc);font-size:13px;font-weight:700;cursor:pointer">❌ Conferma</button>
+          </div>
+        </div>
+        <div class="infobox tip">
+          <span class="ib-icon">💡</span>
+          <div class="ib-body">La nota del responsabile (approvazione o rifiuto) arriva nella mail di esito al dipendente come campo <strong>Motivazione</strong>. Per l'approvazione è facoltativa, per il rifiuto è sempre richiesta.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">6</span>
+        <div>
           <div class="step-title">Gestione Permessi utenti (Super)</div>
           <div class="step-body">Il tab <span class="tag amber">Permessi</span> è visibile solo al Super Utente. Permette di aggiungere, modificare e rimuovere gli accessi al modulo.</div>
         </div>
@@ -1226,7 +1345,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
 
     <div class="step">
       <div class="step-header">
-        <span class="step-num">4</span>
+        <span class="step-num">7</span>
         <div>
           <div class="step-title">Riepilogo scorciatoie</div>
           <div class="step-body">Tutte le scorciatoie da tastiera disponibili nel modulo.</div>
