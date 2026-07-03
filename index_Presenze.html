@@ -4839,16 +4839,19 @@ function renderPermPanel(){
     h += '</div>';
   }
   document.getElementById('permPanel').innerHTML=h;
-  // Forza il valore del select responsabile via DOM (il replace string può fallire)
-  var dipReal=(permConfig.dipendenti||[]).filter(function(d){return !d._esempio;});
-  dipReal.forEach(function(d,i){
-    var row=document.getElementById('anagDip_'+i);
-    if(!row||!d.responsabile_nome) return;
-    var sel=row.querySelector('select.anag-select'); // primo select = responsabile_nome
-    if(!sel) return;
+  // Forza il valore del select responsabile via DOM (match normalizzato: trim + case-insensitive,
+  // così eventuali differenze di spazi/maiuscole tra il nome salvato sul dipendente e l'elenco
+  // responsabili non fanno più "sfalsare" la select)
+  document.querySelectorAll('#anagBody select[data-resp-cur]').forEach(function(sel){
+    var cur = sel.getAttribute('data-resp-cur')||'';
+    if(!cur) return;
+    var curN = normNome(cur), found=-1, foundExact=-1;
     for(var j=0;j<sel.options.length;j++){
-      if(sel.options[j].value===d.responsabile_nome){sel.selectedIndex=j;break;}
+      if(sel.options[j].value===cur){foundExact=j;break;}
+      if(foundExact<0 && found<0 && normNome(sel.options[j].value)===curN){found=j;}
     }
+    var idx = foundExact>=0?foundExact:found;
+    if(idx>=0) sel.selectedIndex=idx;
   });
 }
 function updateDefault(){
@@ -6080,6 +6083,7 @@ function getDates(y,m){var nd=new Date(y,m,0).getDate(),out=[];for(var d=1;d<=nd
 function setEl(id,h){var el=document.getElementById(id);if(el)el.innerHTML=h;}
 function spinH(msg){return '<div class="state"><div class="spinner"></div><div class="state-title">'+esc(msg)+'</div></div>';}
 function esc(s){return String(s||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');}
+function normNome(s){return String(s||'').trim().toLowerCase();}
 function mOpen(id){document.getElementById(id).classList.remove('hide');}
 // NOTE DI CELLA
 function openNota(mode,ri,di){
@@ -8466,7 +8470,7 @@ function richAnagRow(d,i,respOpts){
     +'<td><input class="anag-input" placeholder="email@atsgruppo.eu" value="'+esc(d.email_lavoro||'')+'" onchange="richAnagChange(\'dip\','+i+',\'email_lavoro\',this.value)"></td>'
     +'<td><input class="anag-input" value="'+esc(d.sap||'')+'" style="width:70px" onchange="richAnagChange(\'dip\','+i+',\'sap\',this.value)"></td>'
     +'<td><input class="anag-input" value="'+esc(d.plant||'')+'" style="width:60px" onchange="richAnagChange(\'dip\','+i+',\'plant\',this.value)"></td>'
-    +'<td><select class="anag-select" onchange="richAnagChange(\'dip\','+i+',\'responsabile_nome\',this.value)"><option value="">—</option>'+(function(){var cur=d.responsabile_nome||'';return respOpts.replace('value="'+esc(cur)+'"','value="'+esc(cur)+'" selected');})()+'</select></td>'
+    +'<td><select class="anag-select" data-resp-cur="'+esc(d.responsabile_nome||'')+'" onchange="richAnagChange(\'dip\','+i+',\'responsabile_nome\',this.value)"><option value="">—</option>'+respOpts+'</select></td>'
     +'<td><input class="anag-input" type="number" value="'+(c.ferie_giorni||22)+'" style="width:55px" onchange="richAnagChange(\'dip\','+i+',\'contratto_ferie\',this.value)"></td>'
     +'<td><input class="anag-input" type="number" value="'+(c.permessi_ore||32)+'" style="width:55px" onchange="richAnagChange(\'dip\','+i+',\'contratto_hp\',this.value)"></td>'
     +'<td><select class="anag-select" style="width:70px" onchange="richAnagChange(\'dip\','+i+',\'pausa_default\',parseFloat(this.value))">'+pausaOpts+'</select></td>'
@@ -8496,7 +8500,8 @@ function richAnagChange(tipo,i,field,val){
   else {
     arr[i][field]=val;
     if(tipo==='dip' && field==='responsabile_nome'){
-      var rr=(permConfig.responsabili||[]).find(function(r){return r.nome===val&&!r._esempio;});
+      var valN=normNome(val);
+      var rr=(permConfig.responsabili||[]).find(function(r){return normNome(r.nome)===valN&&!r._esempio;});
       arr[i].responsabile_email=rr?(rr.email_lavoro||rr.email_google||''):'';
     }
   }
@@ -8539,7 +8544,8 @@ function richSaveAnag(){
   // Sincronizza responsabile_email per tutti i dipendenti
   (permConfig.dipendenti||[]).forEach(function(d){
     if(d._esempio) return;
-    var rr=(permConfig.responsabili||[]).find(function(r){return r.nome===d.responsabile_nome&&!r._esempio;});
+    var dN=normNome(d.responsabile_nome);
+    var rr=(permConfig.responsabili||[]).find(function(r){return normNome(r.nome)===dN&&!r._esempio;});
     d.responsabile_email=rr?(rr.email_lavoro||rr.email_google||''):'';
   });
   toast('⏳ Salvo anagrafica…','warn');
