@@ -2797,7 +2797,6 @@ function waitGsi(){
   document.getElementById('loginScreen').style.display='none';
   showShell(uName,uEmail,uPic);
   loadConfig();
-  loadUserConfig();
 }
 
 // Lettura lazy del token: il Hub lo aggiorna in _HUB_TOKEN ad ogni refresh
@@ -2826,24 +2825,27 @@ function mkI(s){var c=(s||'?').replace(/@.*/,'').charAt(0).toUpperCase();return 
 //  CONFIG / PERMISSIONS
 // ═══════════════════════════════════════════════════════════
 function loadConfig(){
-  listFiles('"'+FOLDER_ID_JSON+'" in parents and name="'+CONFIG_FNAME+'" and trashed=false')
+  var p1=listFiles('"'+FOLDER_ID_JSON+'" in parents and name="'+CONFIG_FNAME+'" and trashed=false')
   .then(function(files){
     if(!files.length){
       permConfig={super_users:[SUPER_USER],admins:[],users:{},default:{sections:['coop','ats']}};
-      loadAllFiles();
-      applyPerm();return;
+      return;
     }
     configFileId=files[0].id;
     return fetch('https://www.googleapis.com/drive/v3/files/'+configFileId+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}})
     .then(function(r){return r.text();}).then(function(t){
       try{permConfig=JSON.parse(t);}catch(e){permConfig={super_users:[SUPER_USER],admins:[],users:{},default:{sections:['coop','ats']}};}
-      _pausaCache=null; // invalida cache pausa
-      applyPerm();
-      loadAllFiles();
+      _pausaCache=null;
     });
   }).catch(function(){
     permConfig={super_users:[SUPER_USER],admins:[],users:{},default:{sections:['coop','ats']}};
     _pausaCache=null;
+  });
+  var p2=loadUserConfig();
+  Promise.all([p1,p2]).then(function(){
+    applyPerm();
+    loadAllFiles();
+  }).catch(function(){
     applyPerm();
     loadAllFiles();
   });
@@ -4839,14 +4841,13 @@ function renderPermPanel(){
   document.getElementById('permPanel').innerHTML=h;
   // Forza il valore del select responsabile via DOM (il replace string può fallire)
   var dipReal=(permConfig.dipendenti||[]).filter(function(d){return !d._esempio;});
-  var sels=document.querySelectorAll('#anagBody select.anag-select');
-  sels.forEach(function(sel,idx){
-    var d=dipReal[idx];
-    if(!d||!d.responsabile_nome) return;
-    for(var i=0;i<sel.options.length;i++){
-      if(sel.options[i].value===d.responsabile_nome){
-        sel.selectedIndex=i; break;
-      }
+  dipReal.forEach(function(d,i){
+    var row=document.getElementById('anagDip_'+i);
+    if(!row||!d.responsabile_nome) return;
+    var sel=row.querySelector('select.anag-select'); // primo select = responsabile_nome
+    if(!sel) return;
+    for(var j=0;j<sel.options.length;j++){
+      if(sel.options[j].value===d.responsabile_nome){sel.selectedIndex=j;break;}
     }
   });
 }
