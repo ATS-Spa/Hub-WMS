@@ -4152,7 +4152,23 @@ function startAutoRefresh(){
         return parseSheetValues(vals,y,m,atsFileId,atsData.sheetName,'ats');
       }).then(function(d){
         d.employees.forEach(function(ne){
-          var ex=atsEmps.find(function(e){return !e._manual&&e.nome&&e.nome.toLowerCase()===ne.nome.toLowerCase();});
+          var neSap=String(ne.sap||ne.id||'').trim();
+          var neNome=(ne.nome||'').trim().toLowerCase();
+          var ex=atsEmps.find(function(e){
+            if(e._manual)return false;
+            var eSap=String(e.sap||e.id||'').trim();
+            var eNome=(e.nome||'').trim().toLowerCase();
+            if(neSap&&eSap){
+              if(eSap!==neSap)return false;
+              if(eNome&&neNome&&eNome!==neNome){
+                console.warn('[WMS] Anomalia auto-refresh ATS: SAP '+neSap+' abbinato a nomi diversi ("'+e.nome+'" vs "'+ne.nome+'") - update saltato, verificare anagrafica');
+                return false;
+              }
+              return true;
+            }
+            if(neSap||eSap)return false; // uno dei due ha sap e l'altro no: non è un match sicuro
+            return eNome&&neNome&&eNome===neNome;
+          });
           if(!ex)return;
           ex.sigla=ne.sigla;ex.ingresso=ne.ingresso;ex.uscita=ne.uscita;
         });
@@ -4165,7 +4181,23 @@ function startAutoRefresh(){
         return parseSheetValues(vals,y,m,coopFileId,coopData.sheetName,'coop');
       }).then(function(d){
         d.employees.forEach(function(ne){
-          var ex=coopEmps.find(function(e){return !e._manual&&(e.nom2||e.nome||'').toLowerCase()===(ne.nom2||ne.nome||'').toLowerCase();});
+          var neSap=String(ne.sap||ne.id||'').trim();
+          var neNome=(ne.nom2||ne.nome||'').trim().toLowerCase();
+          var ex=coopEmps.find(function(e){
+            if(e._manual)return false;
+            var eSap=String(e.sap||e.id||'').trim();
+            var eNome=(e.nom2||e.nome||'').trim().toLowerCase();
+            if(neSap&&eSap){
+              if(eSap!==neSap)return false;
+              if(eNome&&neNome&&eNome!==neNome){
+                console.warn('[WMS] Anomalia auto-refresh Coop: SAP '+neSap+' abbinato a nomi diversi ("'+(e.nom2||e.nome)+'" vs "'+(ne.nom2||ne.nome)+'") - update saltato, verificare anagrafica');
+                return false;
+              }
+              return true;
+            }
+            if(neSap||eSap)return false;
+            return eNome&&neNome&&eNome===neNome;
+          });
           if(!ex)return;
           ex.sigla=ne.sigla;ex.ingresso=ne.ingresso;ex.uscita=ne.uscita;
         });
@@ -6926,8 +6958,7 @@ function ganttCellClick(sap,mese,giorno){
   var doOpen=function(empData){
     var emps=empData||atsEmps;
     var ei=emps.findIndex(function(e){return String(e.id||e.sap||'').trim()===String(sap).trim();});
-    if(ei<0) ei=emps.findIndex(function(e){return String(e.nome||'').trim()===String(dip.nome||'').trim();});
-    if(ei<0){toast('Dipendente non trovato nel file','warn');return;}
+    if(ei<0){toast('Dipendente non trovato nel file (SAP '+sap+'). Possibile omonimo: verificare manualmente.','warn');return;}
     atsEmps=emps;
     openPickerGeneric('ats',ei,di);
   };
