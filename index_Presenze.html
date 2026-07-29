@@ -3954,8 +3954,8 @@ function openPickerGeneric(mode,ri,di){
     : SIGLE;
 
   siglaList.forEach(function(s){
-    var el=document.createElement('div');el.className='sopt'+(cs===s.code?' sel':'');
-    el.style.cssText='color:'+s.color+(cs===s.code?';border-color:'+s.border:'');
+    var el=document.createElement('div');el.className='sopt'+(xSig(cs)===s.code?' sel':'');
+    el.style.cssText='color:'+s.color+(xSig(cs)===s.code?';border-color:'+s.border:'');
     el.innerHTML='<span class="sc">'+s.code+'</span><span class="sd">'+s.label+'</span>';
     el.addEventListener('click',function(){
       g.querySelectorAll('.sopt').forEach(function(x){x.classList.remove('sel');x.style.borderColor='';});
@@ -4046,7 +4046,7 @@ function spConfirm(){
   });
   if(!emp.pausa||emp.pausa.length<nd)emp.pausa=(emp.pausa||[]).concat(Array(nd).fill(null)).slice(0,nd);
   var fv=spSigla;
-  if(spSigla&&SM[spSigla]&&SM[spSigla].hasQty){var qty=parseFloat(document.getElementById('spQtyV').value)||1;if(qty!==1)fv=qty+spSigla;}
+  if(spSigla&&SM[spSigla]&&SM[spSigla].hasQty){var qty=parseFloat(document.getElementById('spQtyV').value)||1;fv=qty+spSigla;}
   var vecchiaSigla=(emp.sigla||[])[spDi]||'';
   emp.sigla[spDi]=fv;
   // Aggiorna ganttSigleMap per aggiornamento immediato del Gantt
