@@ -2326,6 +2326,18 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
       </select>
     </div>
   </div>
+  <div id="massCommesseWrap" style="display:none;margin-top:8px">
+    <div style="font-family:var(--ffc);font-size:10px;font-weight:700;letter-spacing:1.5px;color:var(--muted);margin-bottom:6px">DISTRIBUZIONE COMMESSE</div>
+    <div id="massCommesseGrid"></div>
+    <div style="display:flex;align-items:center;justify-content:space-between;margin-top:6px;flex-wrap:wrap;gap:6px">
+      <div style="font-size:11px;color:var(--muted)">Totale: <span id="massCommTot" style="color:var(--teal);font-weight:700">0h</span> / <span id="massCommDisp">0h</span> <span id="massCommWarn" style="color:var(--red);display:none">⚠ superi le ore disponibili</span></div>
+      <label style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--muted);cursor:pointer">
+        <input type="checkbox" id="massCommSave" style="accent-color:var(--teal);width:13px;height:13px">
+        Ricorda come predefinita
+      </label>
+    </div>
+    <div style="font-size:10px;color:var(--muted);margin-top:4px">Applicata a ogni giorno feriale impostato nel range.</div>
+  </div>
   <div id="massInfo" style="font-size:12px;color:var(--subtle);background:var(--card);border:1px solid var(--border);border-radius:6px;padding:10px 14px;margin-top:6px;display:none;line-height:1.7"></div>
   <div id="massWarn" style="font-size:11px;color:var(--amber);background:rgba(245,158,11,.08);border:1px solid rgba(245,158,11,.25);border-radius:6px;padding:8px 12px;margin-top:4px;display:none"></div>
   <div style="margin-top:6px">
@@ -4508,7 +4520,7 @@ function buildAndCreateSpreadsheet(fname,resp,plant,y,m,mName,dates,extraEmps){
     headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
     body:JSON.stringify({
       properties:{title:fname},
-      sheets:[{properties:{title:mName+'_Coop'}},{properties:{title:mName+'_Dipendenti'}},{properties:{title:'Leggenda'}}]
+      sheets:[{properties:{title:mName+'_Coop'}},{properties:{title:mName+'_ATS'}},{properties:{title:'Leggenda'}}]
     })
   }).then(function(r){return r.json();}).then(function(ss){
     var ssId=ss.spreadsheetId;if(!ssId)throw new Error('Errore creazione');
@@ -4616,7 +4628,7 @@ function impDipConfirm(){
   }
   var sheetsToWrite=[];
   if(sheetsCoop)sheetsToWrite.push(mName+'_Coop');
-  if(sheetsAts)sheetsToWrite.push(mName+'_Dipendenti');
+  if(sheetsAts)sheetsToWrite.push(mName+'_ATS');
   var readOps=sheetsToWrite.map(function(sn){return sheetsRead(existing.id,sn+'!A1:A500').then(function(vals){return{sn:sn,nextRow:vals.length+1};}).catch(function(){return{sn:sn,nextRow:3};});});
   Promise.all(readOps).then(function(infos){
     var data=[];
@@ -4665,7 +4677,7 @@ function downloadTemplate(){
   var sampleEmps=[{sap:'001',nome:'Dipendente 1'},{sap:'002',nome:'Dipendente 2'}];
   var wb=XLSX.utils.book_new();
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(buildSheet(sampleEmps)),mName+'_Coop');
-  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(buildSheet(sampleEmps)),mName+'_Dipendenti');
+  XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(buildSheet(sampleEmps)),mName+'_ATS');
   var legRows=[['SIGLA','DESCRIZIONE']];SIGLE.forEach(function(s){legRows.push([s.code,s.label]);});
   XLSX.utils.book_append_sheet(wb,XLSX.utils.aoa_to_sheet(legRows),'Leggenda');
   XLSX.writeFile(wb,fname+'_template.xlsx');
@@ -5569,6 +5581,8 @@ function openMassivo(mode){
   document.getElementById('massInfo').style.display='none';
   document.getElementById('massWarn').style.display='none';
   document.getElementById('massNota').value='';
+  document.getElementById('massCommesseWrap').style.display='none';
+  document.getElementById('massCommSave').checked=false;
 
   // Griglia sigle
   var g=document.getElementById('massGrid');g.innerHTML='';
@@ -5585,7 +5599,7 @@ function openMassivo(mode){
       document.getElementById('massQty').style.display=s.hasQty?'flex':'none';
       var showOr=SIGLE_NO_ORARIO.indexOf(s.code)===-1&&SIGLE_COTTIMO.indexOf(s.code)===-1;
       document.getElementById('massOrariWrap').style.display=showOr?'':'none';
-      massCalcLive();massUpdateInfo();
+      massCalcLive();massUpdateInfo();renderMassCommesse();
     });
     g.appendChild(el);
   });
@@ -5597,7 +5611,7 @@ function openMassivo(mode){
     clr.classList.add('sel');massSigla='';
     document.getElementById('massQty').style.display='none';
     document.getElementById('massOrariWrap').style.display='none';
-    massUpdateInfo();
+    massUpdateInfo();renderMassCommesse();
   });
   g.appendChild(clr);
 
@@ -5605,8 +5619,9 @@ function openMassivo(mode){
 }
 
 function massCalcLive(){
-  if(!massSigla||SIGLE_NO_ORARIO.indexOf(massSigla)!==-1){return;}
+  if(!massSigla||SIGLE_NO_ORARIO.indexOf(massSigla)!==-1){renderMassCommesse();return;}
   massUpdateInfo();
+  renderMassCommesse();
 }
 
 function massUpdateInfo(){
@@ -5649,6 +5664,105 @@ function massUpdateInfo(){
   }
 }
 
+function getMassCommDisp(){
+  var sigla=massSigla||'';
+  var ing=document.getElementById('massIng').value;
+  var usc=document.getElementById('massUsc').value;
+  var pausa=document.getElementById('massPausa').checked?parseFloat(document.getElementById('massPausaDur').value)||1:0;
+  return calcOreDisponibili(sigla,ing,usc,pausa,null);
+}
+
+function renderMassCommesse(){
+  var wrap=document.getElementById('massCommesseWrap');
+  var grid=document.getElementById('massCommesseGrid');
+  var commesse=getCommesse(''); // tutte, senza filtro plant
+  var sigBase=massSigla?xSig(massSigla):'';
+  if(!commesse.length||SIGLE_COMMESSE.indexOf(sigBase)===-1){wrap.style.display='none';return;}
+  var existing=wmsConfig.bulkCommesse||{};
+  grid.innerHTML='';
+  commesse.forEach(function(c){
+    var savedH=existing[c.code];
+    var isOn=savedH!==undefined;
+    var h=savedH&&savedH>0?savedH:'';
+    var row=document.createElement('div');row.className='comm-row';
+    row.innerHTML=
+      '<input type="checkbox" class="conf-cb comm-check" data-code="'+esc(c.code)+'" '+(isOn?'checked':'')+' onchange="updateMassCommTot()">'
+      +'<span class="comm-label" style="'+(isOn?'color:var(--text)':'color:var(--muted)')+'">'+esc(c.code)+'</span>'
+      +'<input class="comm-inp'+(isOn&&!(savedH>0)?' is-resto':'')+'" type="number" min="0" max="24" step="0.5" placeholder="resto" value="'+h+'" data-code="'+esc(c.code)+'" '
+        +(isOn?'':'disabled')+' style="'+(isOn?'':'opacity:.35')+'" oninput="updateMassCommTot()">'
+      +'<span style="font-size:11px;color:var(--muted);min-width:20px">'+(isOn&&savedH>0?'h':'')+'</span>'
+      +'<div class="comm-bar"><div class="comm-bar-fill" id="mcbar_'+esc(c.code)+'" style="width:0%"></div></div>';
+    grid.appendChild(row);
+    var cb=row.querySelector('.comm-check');
+    var inp=row.querySelector('.comm-inp');
+    var lbl=row.querySelector('.comm-label');
+    cb.addEventListener('change',function(){
+      inp.disabled=!cb.checked;inp.style.opacity=cb.checked?'1':'0.35';
+      lbl.style.color=cb.checked?'var(--text)':'var(--muted)';
+      if(!cb.checked){inp.value='';inp.classList.remove('is-resto');}
+      else inp.classList.add('is-resto');
+      updateMassCommTot();
+    });
+  });
+  updateMassCommTot();
+  wrap.style.display='';
+}
+
+function updateMassCommTot(){
+  var grid=document.getElementById('massCommesseGrid');
+  var rows=grid.querySelectorAll('.comm-row');
+  var disp=getMassCommDisp();
+  var fisse=0,restoCount=0;
+  rows.forEach(function(row){
+    var cb=row.querySelector('.comm-check');
+    var inp=row.querySelector('.comm-inp');
+    if(!cb||!cb.checked)return;
+    var v=parseFloat(inp.value);
+    if(v>0)fisse+=v; else restoCount++;
+  });
+  var restoH=restoCount>0?Math.max(0,Math.round((disp-fisse)*10/restoCount)/10):0;
+  var tot=fisse+restoH*restoCount;
+  document.getElementById('massCommTot').textContent=Math.round(tot*10)/10+'h';
+  document.getElementById('massCommDisp').textContent=disp+'h';
+  document.getElementById('massCommWarn').style.display=fisse>disp+0.01?'':'none';
+  rows.forEach(function(row){
+    var cb=row.querySelector('.comm-check');
+    var inp=row.querySelector('.comm-inp');
+    var unit=row.querySelectorAll('span')[2];
+    var bar=row.querySelector('.comm-bar-fill');
+    if(!cb||!bar)return;
+    if(!cb.checked){bar.style.width='0%';if(inp)inp.classList.remove('is-resto');return;}
+    var v=parseFloat(inp.value);
+    var actual=v>0?v:restoH;
+    var pct=disp>0?Math.min(100,Math.round(actual/disp*100)):0;
+    bar.style.width=pct+'%';
+    if(inp)inp.classList.toggle('is-resto',!(v>0));
+    if(unit)unit.textContent=v>0?'h':'→'+restoH+'h';
+  });
+}
+
+function getMassCommVals(){
+  var grid=document.getElementById('massCommesseGrid');
+  var rows=grid.querySelectorAll('.comm-row');
+  if(!rows.length)return null;
+  var disp=getMassCommDisp();
+  var fisse=0,restoCount=0;
+  rows.forEach(function(row){
+    var cb=row.querySelector('.comm-check');var inp=row.querySelector('.comm-inp');
+    if(!cb||!cb.checked)return;
+    var v=parseFloat(inp.value);if(v>0)fisse+=v;else restoCount++;
+  });
+  var restoH=restoCount>0?Math.max(0,Math.round((disp-fisse)*10/restoCount)/10):0;
+  var vals={};
+  rows.forEach(function(row){
+    var cb=row.querySelector('.comm-check');var inp=row.querySelector('.comm-inp');
+    if(!cb||!cb.checked)return;
+    var v=parseFloat(inp.value);var actual=v>0?v:restoH;
+    if(actual>0)vals[inp.dataset.code]=actual;
+  });
+  return Object.keys(vals).length?vals:null;
+}
+
 function massConfirm(){
   if(!massSigla&&massSigla!==''){toast('Seleziona una sigla','warn');return;}
   var dipSel=document.getElementById('massDip').value;
@@ -5667,6 +5781,8 @@ function massConfirm(){
   var fv=massSigla;
   if(massSigla&&SM[massSigla]&&SM[massSigla].hasQty&&qty!==1)fv=qty+massSigla;
   var massNota=(document.getElementById('massNota').value||''  ).trim();
+  var commVals=SIGLE_COMMESSE.indexOf(xSig(massSigla))!==-1?getMassCommVals():null;
+  var saveCommDefault=document.getElementById('massCommSave').checked;
 
   var _d1=dal.split('-'),_d2=al.split('-');
   var d1=new Date(+_d1[0],+_d1[1]-1,+_d1[2]);
@@ -5696,6 +5812,7 @@ function massConfirm(){
   var y=parseInt(document.getElementById(massMode==='ats'?'aYear':'cYear').value);
   var m=parseInt(document.getElementById(massMode==='ats'?'aMonth':'cMonth').value);
 
+  var commesseDays=[]; // {di,action:'save'|'delete'}
   var doMassLoop=function(){
     dates.forEach(function(dt,di){
       var dateObj=new Date(y,m-1,dt.day);
@@ -5708,6 +5825,14 @@ function massConfirm(){
       else{emp.ingresso[di]='';emp.uscita[di]='';emp.pausa[di]=null;}
       updateFerieResiduo(emp,di,fv,oldSig,y,m,'ats');
       if(massNota)emp.notes[di]=massNota;
+      if(massSigla===''){
+        if(emp.commesse&&emp.commesse[di]){emp.commesse[di]=null;commesseDays.push({di:di,action:'delete'});}
+      } else if(commVals){
+        if(!emp.commesse)emp.commesse=[];
+        while(emp.commesse.length<=di)emp.commesse.push(null);
+        emp.commesse[di]=commVals;
+        commesseDays.push({di:di,action:'save'});
+      }
       totSet++;
     });
     if(massMode==='ats') saveFerieResiduo().catch(function(e){console.warn('[WMS]',e.message);});
@@ -5715,6 +5840,23 @@ function massConfirm(){
     if(massMode==='ats'){atsRender();aSave();}else{coopRender();cSave();}
     if(curSec==='ferie')setTimeout(ferieRenderOnly,300);
     toast('✓ Inserite '+totSet+' giornate per '+esc(emp.nome));
+    if(commesseDays.length){
+      if(saveCommDefault&&commVals){wmsConfig.bulkCommesse=commVals;saveUserConfig();}
+      var fid3=(emp.sheetRows&&emp.sheetRows.fileId)||(massMode==='ats'?atsFileId:coopFileId);
+      var sname2=(emp.sheetRows&&emp.sheetRows.sheetName)||(data&&data.sheetName);
+      if(fid3&&sname2){
+        toast('⏳ Salvo distribuzione commesse su '+commesseDays.length+' giorni…','warn');
+        commesseDays.reduce(function(p,cd){
+          return p.then(function(){
+            return cd.action==='delete'
+              ?deleteCommessaRow(massMode,emp,cd.di,fid3,sname2,y,m)
+              :saveCommesseToSheet(massMode,emp,cd.di,fid3,sname2,y,m);
+          });
+        },Promise.resolve()).then(function(){
+          toast('✓ Distribuzione commesse salvata');
+        }).catch(function(e){toast('✗ Errore commesse: '+e.message,'err');});
+      }
+    }
   };
   if(massMode==='ats'&&(!ferieData||ferieYear!==y)){
     ferieYear=y;
