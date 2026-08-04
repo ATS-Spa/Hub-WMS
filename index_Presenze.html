@@ -2115,22 +2115,39 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
   </div>
 </div></div>
 
-<div id="moNewFileDips" class="mo hide"><div class="mc" style="width:520px;max-height:85vh;display:flex;flex-direction:column">
+<div id="moNewFileDips" class="mo hide"><div class="mc" style="width:560px;max-height:90vh;display:flex;flex-direction:column">
   <div class="mt">👥 Aggiungi Dipendenti</div>
   <div class="ms" id="nfdSub" style="color:var(--subtle);font-size:12px"></div>
-  <div style="display:flex;gap:8px;align-items:flex-end;margin-top:4px;flex-wrap:wrap">
-    <div class="fg" style="flex:2"><div class="fl">Nominativo *</div><input class="mi" id="nfdNome" type="text" placeholder="Cognome Nome" autocomplete="off" onkeydown="if(event.key==='Enter')nfdAdd()"></div>
-    <div class="fg" style="flex:1"><div class="fl">ExtEmpN_SAP</div><input class="mi" id="nfdSap" type="text" placeholder="001" autocomplete="off" onkeydown="if(event.key==='Enter')nfdAdd()"></div>
-    <div class="fg" style="flex:1"><div class="fl">Plant</div><input class="mi" id="nfdPlant" type="text" placeholder="Es. P52" autocomplete="off" onkeydown="if(event.key==='Enter')nfdAdd()"></div>
-    <button class="ba bteal" onclick="nfdAdd()" style="flex-shrink:0;margin-bottom:0">＋</button>
-  </div>
-  <div class="merr" id="nfdErr">Inserisci il nominativo.</div>
-  <div style="margin-top:10px;flex:1;overflow-y:auto;min-height:60px;max-height:260px;border:1px solid var(--border);border-radius:8px;background:var(--card)">
-    <div id="nfdList" style="padding:6px 0">
-      <div id="nfdEmpty" style="text-align:center;color:var(--muted);font-size:12px;padding:20px">Nessun dipendente aggiunto ancora</div>
+  <div style="overflow-y:auto;flex:1;min-height:0;padding-right:2px">
+    <div style="margin-top:6px;font-family:var(--ffc);font-size:10px;font-weight:700;letter-spacing:1px;color:var(--blue)">🔵 DIPENDENTI ATS</div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-top:4px;flex-wrap:wrap">
+      <div class="fg" style="flex:2"><div class="fl">Nominativo *</div><input class="mi" id="nfdNomeAts" type="text" placeholder="Cognome Nome" autocomplete="off" onkeydown="if(event.key==='Enter')nfdAdd('ats')"></div>
+      <div class="fg" style="flex:1"><div class="fl">ExtEmpN_SAP</div><input class="mi" id="nfdSapAts" type="text" placeholder="001" autocomplete="off" onkeydown="if(event.key==='Enter')nfdAdd('ats')"></div>
+      <div class="fg" style="flex:1"><div class="fl">Plant</div><input class="mi" id="nfdPlantAts" type="text" placeholder="Es. P52" autocomplete="off" onkeydown="if(event.key==='Enter')nfdAdd('ats')"></div>
+      <button class="ba bteal" onclick="nfdAdd('ats')" style="flex-shrink:0;margin-bottom:0">＋</button>
+    </div>
+    <div class="merr" id="nfdErrAts">Inserisci il nominativo.</div>
+    <div style="margin-top:6px;max-height:160px;overflow-y:auto;min-height:44px;border:1px solid var(--border);border-radius:8px;background:var(--card)">
+      <div id="nfdListAts" style="padding:6px 0">
+        <div style="text-align:center;color:var(--muted);font-size:12px;padding:14px">Nessun dipendente ATS aggiunto</div>
+      </div>
+    </div>
+
+    <div style="margin-top:16px;font-family:var(--ffc);font-size:10px;font-weight:700;letter-spacing:1px;color:var(--green)">🟢 COOPERATIVA</div>
+    <div style="display:flex;gap:8px;align-items:flex-end;margin-top:4px;flex-wrap:wrap">
+      <div class="fg" style="flex:2"><div class="fl">Nominativo *</div><input class="mi" id="nfdNomeCoop" type="text" placeholder="Cognome Nome" autocomplete="off" onkeydown="if(event.key==='Enter')nfdAdd('coop')"></div>
+      <div class="fg" style="flex:1"><div class="fl">ExtEmpN_SAP</div><input class="mi" id="nfdSapCoop" type="text" placeholder="001" autocomplete="off" onkeydown="if(event.key==='Enter')nfdAdd('coop')"></div>
+      <div class="fg" style="flex:1"><div class="fl">Plant</div><input class="mi" id="nfdPlantCoop" type="text" placeholder="Es. P52" autocomplete="off" onkeydown="if(event.key==='Enter')nfdAdd('coop')"></div>
+      <button class="ba bteal" onclick="nfdAdd('coop')" style="flex-shrink:0;margin-bottom:0">＋</button>
+    </div>
+    <div class="merr" id="nfdErrCoop">Inserisci il nominativo.</div>
+    <div style="margin-top:6px;max-height:160px;overflow-y:auto;min-height:44px;border:1px solid var(--border);border-radius:8px;background:var(--card)">
+      <div id="nfdListCoop" style="padding:6px 0">
+        <div style="text-align:center;color:var(--muted);font-size:12px;padding:14px">Nessun dipendente Coop aggiunto</div>
+      </div>
     </div>
   </div>
-  <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">Premi Invio o ＋ per aggiungere. Puoi aggiungerne altri in seguito con ＋ Dipendente.</div>
+  <div style="font-size:11px;color:var(--muted);margin-top:8px;line-height:1.6">Premi Invio o ＋ per aggiungere nella sezione corrispondente. Un file può avere dipendenti solo ATS, solo Coop, o entrambi.</div>
   <div class="mbtns" style="margin-top:10px">
     <button class="mbtn cancel" onclick="nfdSkip()">Salta (file vuoto)</button>
     <button class="mbtn ok" id="nfdSaveBtn" onclick="nfdSave()" disabled>💾 Salva su Drive</button>
@@ -4397,61 +4414,66 @@ function fileOpenExisting(){
 // ═══════════════════════════════════════════════════════════
 //  MODAL DIPENDENTI NUOVO FILE
 // ═══════════════════════════════════════════════════════════
-var _nfdCtx={ssId:null,fname:null,resp:null,plant:null,y:null,m:null,mName:null,dates:null,emps:[]};
+var _nfdCtx={ssId:null,fname:null,resp:null,plant:null,y:null,m:null,mName:null,dates:null,empsAts:[],empsCoop:[]};
 
 function nfdOpen(ssId,fname,resp,plant,y,m,mName,dates){
-  _nfdCtx={ssId:ssId,fname:fname,resp:resp,plant:plant,y:y,m:m,mName:mName,dates:dates,emps:[]};
-  document.getElementById('nfdSub').textContent='File: '+fname+' · Aggiungi i dipendenti da inserire nel foglio';
-  document.getElementById('nfdNome').value='';
-  document.getElementById('nfdSap').value='';
-  document.getElementById('nfdPlant').value=plant||'';
-  document.getElementById('nfdErr').classList.remove('show');
+  _nfdCtx={ssId:ssId,fname:fname,resp:resp,plant:plant,y:y,m:m,mName:mName,dates:dates,empsAts:[],empsCoop:[]};
+  document.getElementById('nfdSub').textContent='File: '+fname+' · Aggiungi i dipendenti da inserire in ciascun foglio';
+  ['Ats','Coop'].forEach(function(suf){
+    document.getElementById('nfdNome'+suf).value='';
+    document.getElementById('nfdSap'+suf).value='';
+    document.getElementById('nfdPlant'+suf).value=plant||'';
+    document.getElementById('nfdErr'+suf).classList.remove('show');
+  });
   document.getElementById('nfdSaveBtn').disabled=true;
-  nfdRenderList();
+  nfdRenderList('ats');
+  nfdRenderList('coop');
   mOpen('moNewFileDips');
-  setTimeout(function(){document.getElementById('nfdNome').focus();},120);
+  setTimeout(function(){document.getElementById('nfdNomeAts').focus();},120);
 }
 
-function nfdRenderList(){
-  var list=document.getElementById('nfdList');
-  var emps=_nfdCtx.emps;
+function nfdRenderList(sec){
+  var suf=sec==='ats'?'Ats':'Coop';
+  var list=document.getElementById('nfdList'+suf);
+  var emps=sec==='ats'?_nfdCtx.empsAts:_nfdCtx.empsCoop;
   if(!emps.length){
-    list.innerHTML='<div style="text-align:center;color:var(--muted);font-size:12px;padding:20px">Nessun dipendente aggiunto ancora</div>';
-    document.getElementById('nfdSaveBtn').disabled=true;
-    return;
+    list.innerHTML='<div style="text-align:center;color:var(--muted);font-size:12px;padding:14px">Nessun dipendente '+(sec==='ats'?'ATS':'Coop')+' aggiunto</div>';
+  } else {
+    var h='';
+    emps.forEach(function(e,i){
+      h+='<div style="display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid rgba(36,48,72,.4)">'
+        +'<span style="font-size:10px;color:var(--muted);min-width:18px;font-family:var(--ffm)">'+(i+1)+'</span>'
+        +'<span style="font-weight:700;font-size:13px;flex:1">'+esc(e.nome)+'</span>'
+        +(e.sap?'<span style="font-family:var(--ffm);font-size:11px;color:var(--muted)">#'+esc(e.sap)+'</span>':'')
+        +(e.plant?'<span style="font-size:11px;color:var(--blue);font-family:var(--ffc);font-weight:700;margin-left:4px">'+esc(e.plant)+'</span>':'')
+        +'<button onclick="nfdRemove(\''+sec+'\','+i+')" style="background:none;border:none;color:var(--border);cursor:pointer;font-size:13px;padding:2px 5px;border-radius:3px" onmouseover="this.style.color=\'var(--red)\'" onmouseout="this.style.color=\'var(--border)\'">✕</button>'
+        +'</div>';
+    });
+    list.innerHTML=h;
   }
-  var h='';
-  emps.forEach(function(e,i){
-    h+='<div style="display:flex;align-items:center;gap:8px;padding:7px 12px;border-bottom:1px solid rgba(36,48,72,.4)">'
-      +'<span style="font-size:10px;color:var(--muted);min-width:18px;font-family:var(--ffm)">'+(i+1)+'</span>'
-      +'<span style="font-weight:700;font-size:13px;flex:1">'+esc(e.nome)+'</span>'
-      +(e.sap?'<span style="font-family:var(--ffm);font-size:11px;color:var(--muted)">#'+esc(e.sap)+'</span>':'')
-      +(e.plant?'<span style="font-size:11px;color:var(--blue);font-family:var(--ffc);font-weight:700;margin-left:4px">'+esc(e.plant)+'</span>':'')
-      +'<button onclick="nfdRemove('+i+')" style="background:none;border:none;color:var(--border);cursor:pointer;font-size:13px;padding:2px 5px;border-radius:3px" onmouseover="this.style.color=\'var(--red)\'" onmouseout="this.style.color=\'var(--border)\'">✕</button>'
-      +'</div>';
-  });
-  list.innerHTML=h;
-  document.getElementById('nfdSaveBtn').disabled=false;
+  document.getElementById('nfdSaveBtn').disabled=!(_nfdCtx.empsAts.length||_nfdCtx.empsCoop.length);
 }
 
-function nfdAdd(){
-  var n=document.getElementById('nfdNome').value.trim();
-  if(!n){document.getElementById('nfdErr').classList.add('show');return;}
-  document.getElementById('nfdErr').classList.remove('show');
-  _nfdCtx.emps.push({
+function nfdAdd(sec){
+  var suf=sec==='ats'?'Ats':'Coop';
+  var n=document.getElementById('nfdNome'+suf).value.trim();
+  if(!n){document.getElementById('nfdErr'+suf).classList.add('show');return;}
+  document.getElementById('nfdErr'+suf).classList.remove('show');
+  var emp={
     nome:n,
-    sap:document.getElementById('nfdSap').value.trim(),
-    plant:document.getElementById('nfdPlant').value.trim()||_nfdCtx.plant||''
-  });
-  document.getElementById('nfdNome').value='';
-  document.getElementById('nfdSap').value='';
-  nfdRenderList();
-  setTimeout(function(){document.getElementById('nfdNome').focus();},50);
+    sap:document.getElementById('nfdSap'+suf).value.trim(),
+    plant:document.getElementById('nfdPlant'+suf).value.trim()||_nfdCtx.plant||''
+  };
+  if(sec==='ats')_nfdCtx.empsAts.push(emp); else _nfdCtx.empsCoop.push(emp);
+  document.getElementById('nfdNome'+suf).value='';
+  document.getElementById('nfdSap'+suf).value='';
+  nfdRenderList(sec);
+  setTimeout(function(){document.getElementById('nfdNome'+suf).focus();},50);
 }
 
-function nfdRemove(i){
-  _nfdCtx.emps.splice(i,1);
-  nfdRenderList();
+function nfdRemove(sec,i){
+  if(sec==='ats')_nfdCtx.empsAts.splice(i,1); else _nfdCtx.empsCoop.splice(i,1);
+  nfdRenderList(sec);
 }
 
 function nfdSkip(){
@@ -4461,31 +4483,31 @@ function nfdSkip(){
 }
 
 function nfdSave(){
-  var emps=_nfdCtx.emps;
-  if(!emps.length)return;
   var ctx=_nfdCtx;
+  var totEmps=ctx.empsAts.length+ctx.empsCoop.length;
+  if(!totEmps)return;
   var allRows=[];
-  emps.forEach(function(emp,i){
-    var baseRow=2+i*4;
-    var sig=[emp.sap||'',emp.nome||'','Sigla'];ctx.dates.forEach(function(){sig.push('');});
-    var ing=[emp.sap||'',emp.nome||'','Ingresso'];ctx.dates.forEach(function(){ing.push('');});
-    var usc=[emp.sap||'',emp.nome||'','Uscita'];ctx.dates.forEach(function(){usc.push('');});
-    allRows.push({range:ctx.mName+'_Coop!A'+(baseRow+1),values:[sig]});
-    allRows.push({range:ctx.mName+'_Coop!A'+(baseRow+2),values:[ing]});
-    allRows.push({range:ctx.mName+'_Coop!A'+(baseRow+3),values:[usc]});
-    allRows.push({range:ctx.mName+'_Coop!A'+(baseRow+4),values:[['']]});
-    allRows.push({range:ctx.mName+'_ATS!A'+(baseRow+1),values:[sig]});
-    allRows.push({range:ctx.mName+'_ATS!A'+(baseRow+2),values:[ing]});
-    allRows.push({range:ctx.mName+'_ATS!A'+(baseRow+3),values:[usc]});
-    allRows.push({range:ctx.mName+'_ATS!A'+(baseRow+4),values:[['']]});
-  });
+  function buildRows(emps,tab){
+    emps.forEach(function(emp,i){
+      var baseRow=2+i*4;
+      var sig=[emp.sap||'',emp.nome||'','Sigla'];ctx.dates.forEach(function(){sig.push('');});
+      var ing=[emp.sap||'',emp.nome||'','Ingresso'];ctx.dates.forEach(function(){ing.push('');});
+      var usc=[emp.sap||'',emp.nome||'','Uscita'];ctx.dates.forEach(function(){usc.push('');});
+      allRows.push({range:ctx.mName+'_'+tab+'!A'+(baseRow+1),values:[sig]});
+      allRows.push({range:ctx.mName+'_'+tab+'!A'+(baseRow+2),values:[ing]});
+      allRows.push({range:ctx.mName+'_'+tab+'!A'+(baseRow+3),values:[usc]});
+      allRows.push({range:ctx.mName+'_'+tab+'!A'+(baseRow+4),values:[['']]});
+    });
+  }
+  buildRows(ctx.empsAts,'ATS');
+  buildRows(ctx.empsCoop,'Coop');
   mClose('moNewFileDips');
-  toast('⏳ Salvo '+emps.length+' dipendenti su Drive…','warn');
+  toast('⏳ Salvo '+totEmps+' dipendenti su Drive…','warn');
   sheetsBatchUpdate(ctx.ssId,allRows)
     .then(function(){
-      toast('✅ '+emps.length+' dipendenti salvati!');
+      toast('✅ '+totEmps+' dipendenti salvati!');
       loadAllFiles();
-      if(confirm('"'+ctx.fname+'" creato con '+emps.length+' dipendenti.\nAprirlo in Google Sheets?'))
+      if(confirm('"'+ctx.fname+'" creato con '+totEmps+' dipendenti.\nAprirlo in Google Sheets?'))
         window.open('https://docs.google.com/spreadsheets/d/'+ctx.ssId+'/edit','_blank');
     })
     .catch(function(e){toast('✗ Errore salvataggio: '+e.message,'err');});
