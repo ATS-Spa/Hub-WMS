@@ -3407,9 +3407,10 @@ function coopLoad(){
     coopFileId=files.length===1?files[0].id:null;
     coopData=merged;coopEmps=merged.employees;
     var _coopFileForComm=coopFileId||merged.fileId;
-    // Carica note dalle celle
-    loadNotesForEmps(coopEmps,_coopFileForComm,merged.sheetName,merged.dayStart||3,merged.nd||merged.dates.length)
-    .then(function(){return loadCommesseForEmps(coopEmps,_coopFileForComm,'coop',y,m);})
+    // Carica note e commesse: per ogni dipendente dal proprio file Drive di origine
+    // (con più responsabili i dipendenti provengono da spreadsheet diversi)
+    loadNotesForEmpsMulti(coopEmps,merged.sheetName,merged.dayStart||3,merged.nd||merged.dates.length,_coopFileForComm)
+    .then(function(){return loadCommesseForEmpsMulti(coopEmps,'coop',y,m,_coopFileForComm);})
     .then(function(){coopRender();});
     ['cRef','cExp','cPrt','cBulkBtn','cMassBtn'].forEach(function(id){document.getElementById(id).disabled=false;});
     document.getElementById('cInfo').textContent=MESI[m-1]+' '+y+' · '+merged.employees.length+' dip.'+(files.length>1?' ('+files.length+' file)':'');
@@ -3722,8 +3723,10 @@ function atsLoad(){
     atsFileId=files.length===1?files[0].id:null;
     atsData=merged;atsEmps=merged.employees;
     var _atsFileForComm=atsFileId||merged.fileId;
-    loadNotesForEmps(atsEmps,_atsFileForComm,merged.sheetName,merged.dayStart||3,merged.nd||merged.dates.length)
-    .then(function(){return loadCommesseForEmps(atsEmps,_atsFileForComm,'ats',y,m);})
+    // Carica note e commesse: per ogni dipendente dal proprio file Drive di origine
+    // (con più responsabili i dipendenti provengono da spreadsheet diversi)
+    loadNotesForEmpsMulti(atsEmps,merged.sheetName,merged.dayStart||3,merged.nd||merged.dates.length,_atsFileForComm)
+    .then(function(){return loadCommesseForEmpsMulti(atsEmps,'ats',y,m,_atsFileForComm);})
     .then(function(){atsRender();});
     ['aRef','aExp','aPrt','aBulkBtn','aMassBtn'].forEach(function(id){document.getElementById(id).disabled=false;});
     document.getElementById('aInfo').textContent=MESI[m-1]+' '+y+' · '+merged.employees.length+' dip.'+(files.length>1?' ('+files.length+' file)':'');
@@ -6391,6 +6394,31 @@ function saveConfermaToSheets(ri){
   .catch(function(e){toast('✗ '+e.message,'err');});
 }
 // CARICA NOTE DAL FOGLIO
+// Raggruppa i dipendenti per il file Drive da cui provengono realmente (emp.sheetRows.fileId).
+// Necessario perché con più responsabili i dipendenti derivano da spreadsheet diversi:
+// note e commesse vanno lette dal file giusto per ciascun dipendente, non da un unico file "a caso".
+function groupEmpsByFileId(emps, fallbackFileId){
+  var groups={}, order=[];
+  emps.forEach(function(e){
+    var fid=(e.sheetRows&&e.sheetRows.fileId)||fallbackFileId;
+    if(!fid)return;
+    if(!groups[fid]){groups[fid]=[];order.push(fid);}
+    groups[fid].push(e);
+  });
+  return order.map(function(fid){return {fileId:fid,emps:groups[fid]};});
+}
+function loadNotesForEmpsMulti(emps, sheetName, dayStart, nd, fallbackFileId){
+  var groups=groupEmpsByFileId(emps,fallbackFileId);
+  return Promise.all(groups.map(function(g){
+    return loadNotesForEmps(g.emps,g.fileId,sheetName,dayStart,nd);
+  }));
+}
+function loadCommesseForEmpsMulti(emps, mode, y, m, fallbackFileId){
+  var groups=groupEmpsByFileId(emps,fallbackFileId);
+  return Promise.all(groups.map(function(g){
+    return loadCommesseForEmps(g.emps,g.fileId,mode,y,m);
+  }));
+}
 function loadNotesForEmps(emps, fileId, sheetName, dayStart, nd){
   if(!fileId||!emps.length)return Promise.resolve();
   return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties')
@@ -6448,31 +6476,36 @@ function loadCommesseForEmps(emps, fileId, mode, y, m){
       var k=c.code+'_h';
       if(colIdx[k]!==undefined)commCols[c.code]=colIdx[k];
     });
-    // Mappa nome -> emp
+    // Mappa nome -> lista emp (può esserci più di un dipendente con lo stesso nominativo
+    // nello stesso file; in tal caso il valore va applicato a tutti, non solo all'ultimo)
     var empByName={};
     emps.forEach(function(e){
       var k=(e.nom2||e.nome||'').trim().toLowerCase();
-      empByName[k]=e;
+      if(!empByName[k])empByName[k]=[];
+      empByName[k].push(e);
     });
     for(var ri=1;ri<rows.length;ri++){
       var row=rows[ri]||[];
       var nome=String(row[nomeIdx]||'').trim();
       var giorno=parseInt(row[giornIdx]||'0');
       if(!nome||!giorno)continue;
-      var emp=empByName[nome.toLowerCase()];
-      if(!emp)continue;
+      var empList=empByName[nome.toLowerCase()];
+      if(!empList||!empList.length)continue;
       // nd = numero giorni del mese
       var nd=new Date(y,m,0).getDate();
       var di=giorno-1; // 0-based
       if(di<0||di>=nd)continue;
-      if(!emp.commesse)emp.commesse=[];
-      while(emp.commesse.length<=di)emp.commesse.push(null);
       var vals={};
       Object.keys(commCols).forEach(function(code){
         var v=parseFloat(row[commCols[code]]);
         if(v>0)vals[code]=v;
       });
-      if(Object.keys(vals).length)emp.commesse[di]=vals;
+      if(!Object.keys(vals).length)continue;
+      empList.forEach(function(emp){
+        if(!emp.commesse)emp.commesse=[];
+        while(emp.commesse.length<=di)emp.commesse.push(null);
+        emp.commesse[di]=vals;
+      });
     }
   }).catch(function(e){console.warn('[WMS] loadCommesse error:',e.message);});
 }
