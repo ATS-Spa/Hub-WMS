@@ -7873,14 +7873,39 @@ function richIdentifyUser(){
   currentRespProfile = resps.find(function(r){return (r.email_google||'').toLowerCase()===em;}) || null;
 }
 
+// ── Tutte le email con cui l'utente loggato può essere identificato ────────
+// Necessario perché una richiesta ferie salva la responsabile_email sincronizzata
+// dall'anagrafica (preferendo email_lavoro se presente), mentre l'utente accede
+// con la sua email Google (uEmail): senza questo confronto "allargato" un
+// responsabile con email_lavoro diversa da email_google non vedrebbe mai
+// le richieste indirizzate a lui.
+function richMyEmails(){
+  var set={};
+  var em=(uEmail||'').toLowerCase().trim();
+  if(em)set[em]=true;
+  if(currentRespProfile){
+    if(currentRespProfile.email_google)set[currentRespProfile.email_google.toLowerCase().trim()]=true;
+    if(currentRespProfile.email_lavoro)set[currentRespProfile.email_lavoro.toLowerCase().trim()]=true;
+  }
+  if(currentDipendente){
+    if(currentDipendente.email_google)set[currentDipendente.email_google.toLowerCase().trim()]=true;
+    if(currentDipendente.email_lavoro)set[currentDipendente.email_lavoro.toLowerCase().trim()]=true;
+  }
+  return Object.keys(set);
+}
+function richIsMe(email){
+  var e=(email||'').toLowerCase().trim();
+  if(!e)return false;
+  return richMyEmails().indexOf(e)!==-1;
+}
+
 // ── Conta richieste pending per l'utente loggato ────────────────────────────
 function richCountPending(){
   if(!richData) return 0;
-  var em = uEmail.toLowerCase().trim();
   // Se responsabile: conta richieste in_attesa indirizzate a lui
   if(currentRespProfile){
     return richData.richieste.filter(function(r){
-      return r.stato==='in_attesa' && (r.responsabile_email||'').toLowerCase()===em;
+      return r.stato==='in_attesa' && richIsMe(r.responsabile_email);
     }).length;
   }
   return 0;
@@ -8091,13 +8116,13 @@ function richRender(){
     if(richFilterTab!=='tutte' && r.stato!==richFilterTab) return false;
     if(isSup||isAdm) return true;
     if(isResp && !isDip){
-      return (r.responsabile_email||'').toLowerCase()===em;
+      return richIsMe(r.responsabile_email);
     }
     if(isDip && !isResp){
       return (r.dipendente_email||'').toLowerCase()===em;
     }
     // Sia dipendente che responsabile: vede sue e quelle del suo team
-    return (r.dipendente_email||'').toLowerCase()===em || (r.responsabile_email||'').toLowerCase()===em;
+    return (r.dipendente_email||'').toLowerCase()===em || richIsMe(r.responsabile_email);
   }).slice().reverse(); // più recenti prima
 
   if(!lista.length){
@@ -8169,7 +8194,7 @@ function fmtDateIT(s){
 
 function richBuildCard(r, em, isResp, isSup, isAdm){
   var isMyRequest = (r.dipendente_email||'').toLowerCase()===em;
-  var isForMe     = (r.responsabile_email||'').toLowerCase()===em;
+  var isForMe     = richIsMe(r.responsabile_email);
   var statoLabel  = {in_attesa:'⏳ In attesa',approvata:'✅ Approvata',rifiutata:'❌ Rifiutata'};
   var dataStr = r.data_dal===r.data_al
     ? fmtDateIT(r.data_dal)
