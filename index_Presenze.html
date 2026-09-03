@@ -6268,17 +6268,41 @@ async function generaUnFile(fname,resp,plant,anno,mese,emps,coopEmps){
 }
 
 function listFiles(q){return gFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name,mimeType)&pageSize=200').then(function(r){return r.files||[];});}
-function downloadFile(id){return fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){if(!r.ok)throw new Error('Download fallito: '+r.status);return r.blob();});}
+function downloadFile(id){
+  if(DOWNLOAD_CACHE[id])return DOWNLOAD_CACHE[id];
+  var p=fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){if(!r.ok)throw new Error('Download fallito: '+r.status);return r.blob();});
+  DOWNLOAD_CACHE[id]=p;
+  p.catch(function(){delete DOWNLOAD_CACHE[id];});
+  return p;
+}
+// ── Cache di sessione per le letture Sheets/Drive. Il vero motivo per cui
+// il caricamento è lento non è (solo) la rete: "Ricalcola" rilegge TUTTI i
+// file, poi richiama ferieLoad() che li rilegge una seconda volta identica;
+// e ogni click su "Carica" (anche solo cambiando filtro Resp/Stabilimento)
+// riscaricava da zero file già letti pochi secondi prima. Questa cache
+// tiene in memoria (per la durata della sessione) il risultato di ogni
+// lettura, tenuta aggiornata: viene invalidata automaticamente per un
+// fileId non appena quel file viene modificato tramite sheetsBatchUpdate.
+var SHEETS_READ_CACHE={};
+var DOWNLOAD_CACHE={};
+function sheetsReadCacheInvalidate(spreadsheetId){
+  Object.keys(SHEETS_READ_CACHE).forEach(function(k){
+    if(k.indexOf(spreadsheetId+'|')===0)delete SHEETS_READ_CACHE[k];
+  });
+}
 function gFetch(url,_retryCount){
   var tok=getToken();
   if(!tok)return Promise.reject(new Error('No token'));
   _retryCount=_retryCount||0;
   return fetch(url,{headers:{Authorization:'Bearer '+tok}}).then(function(r){
-    if(r.status===429&&_retryCount<4){
-      // Rate limit: riprova con backoff esponenziale invece di far fallire la lettura in silenzio
+    if(r.status===429||r.status===503){
+      // Rate limit / servizio momentaneamente non disponibile: si ritenta
+      // SEMPRE (nessun tetto ai tentativi, solo un cap al tempo d'attesa)
+      // così nessun file viene perso per un errore transitorio.
       var retryAfter=parseFloat(r.headers.get('Retry-After'));
-      var waitMs=!isNaN(retryAfter)?retryAfter*1000:(800*Math.pow(2,_retryCount)+Math.random()*300);
-      console.warn('[WMS] gFetch 429, retry '+(_retryCount+1)+'/4 tra '+Math.round(waitMs)+'ms: '+url.substring(0,80));
+      var waitMs=!isNaN(retryAfter)?retryAfter*1000:(800*Math.pow(2,Math.min(_retryCount,8))+Math.random()*300);
+      waitMs=Math.min(waitMs,30000);
+      console.warn('[WMS] gFetch '+r.status+', retry '+(_retryCount+1)+' tra '+Math.round(waitMs)+'ms: '+url.substring(0,80));
       return new Promise(function(res){setTimeout(res,waitMs);}).then(function(){return gFetch(url,_retryCount+1);});
     }
     if(!r.ok){
@@ -6297,16 +6321,22 @@ function sheetsRead(spreadsheetId,range){
     if(sn.charAt(0)!=="'") return "'"+sn+"'!";
     return m;
   });
-  return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+spreadsheetId+'/values/'+encodeURIComponent(safeRange)+'?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING').then(function(r){
+  var key=spreadsheetId+'|'+safeRange;
+  if(SHEETS_READ_CACHE[key])return SHEETS_READ_CACHE[key];
+  var p=gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+spreadsheetId+'/values/'+encodeURIComponent(safeRange)+'?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING').then(function(r){
     if(r.error)throw new Error('Sheets API: '+r.error.message+'\nRange: '+safeRange);
     return r.values||[];
   });
+  SHEETS_READ_CACHE[key]=p;
+  p.catch(function(){delete SHEETS_READ_CACHE[key];});
+  return p;
 }
 function sheetsBatchUpdate(spreadsheetId,data){
   return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+spreadsheetId+'/values:batchUpdate',{
     method:'POST',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
     body:JSON.stringify({valueInputOption:'USER_ENTERED',data:data})
-  }).then(function(r){if(!r.ok)return r.json().then(function(e){throw new Error((e.error&&e.error.message)||r.statusText);});return r.json();});
+  }).then(function(r){if(!r.ok)return r.json().then(function(e){throw new Error((e.error&&e.error.message)||r.statusText);});return r.json();})
+    .then(function(r){sheetsReadCacheInvalidate(spreadsheetId);return r;});
 }
 
 function sheetsDeleteEmpRows(fileId,sheetName,sheetRows,nd){
@@ -6759,29 +6789,47 @@ function ferieRenderOnly(){
 // caricare in un colpo solo decine di file provoca una raffica di errori
 // 429 "Quota exceeded", che poi vengono scambiati per "dato non trovato"
 // da chi chiama (es. ricerca dipendente in Piano Ferie).
-function runThrottled(items, worker, batchSize, delayMs){
-  // Quota Sheets API = 300 letture/min/utente: è un tetto sul NUMERO di
-  // richieste in un minuto, non sulla concorrenza. Con i volumi tipici di
-  // un "Carica" (decine di file) possiamo quindi leggerli quasi tutti
-  // insieme come faceva il codice originale — il totale resta ben sotto
-  // 300 anche se finiscono in 1-2 secondi. Il batch a lotti (invece di
-  // Promise.all su tutto) resta solo per non aprire centinaia di
-  // connessioni in un colpo solo nei casi con moltissimi file.
+function runThrottled(items, worker, batchSize, delayMs, opts){
+  // Un item può fallire per motivi transitori anche dopo tutti i retry
+  // interni di gFetch (errore di rete, ecc.): prima veniva scartato per
+  // sempre al primo fallimento (results[i]=null) senza che il chiamante se
+  // ne accorgesse. Ora ogni item viene ritentato più volte con backoff, e
+  // solo se fallisce anche dopo tutti i tentativi finisce in
+  // results.failed, restituito al chiamante invece di sparire in silenzio.
+  opts = opts || {};
+  var itemLabel = opts.itemLabel;
+  var onProgress = opts.onProgress; // opzionale: onProgress(done,total)
   batchSize = batchSize || 12;
   delayMs = delayMs===undefined ? 150 : delayMs;
+  var ITEM_MAX_RETRY = 6;
   var results = new Array(items.length);
+  var failed = [];
+  var done = 0;
   var i = 0;
+  function runItem(it, attempt){
+    return worker(it).catch(function(e){
+      if(attempt<ITEM_MAX_RETRY){
+        var waitMs=1000*Math.pow(1.7,attempt)+Math.random()*300;
+        console.warn('[WMS] runThrottled retry item '+(itemLabel?itemLabel(it):'')+' tentativo '+(attempt+1)+'/'+ITEM_MAX_RETRY+' tra '+Math.round(waitMs)+'ms:',e&&e.message);
+        return new Promise(function(res){setTimeout(res,waitMs);}).then(function(){return runItem(it,attempt+1);});
+      }
+      console.error('[WMS] runThrottled item definitivamente fallito dopo '+ITEM_MAX_RETRY+' tentativi: '+(itemLabel?itemLabel(it):''),e&&e.message);
+      failed.push({item:it,error:e&&e.message});
+      return null;
+    });
+  }
   function nextBatch(){
-    if(i>=items.length) return Promise.resolve(results);
+    if(i>=items.length){results.failed=failed;return Promise.resolve(results);}
     var batch = items.slice(i, i+batchSize);
     var startIdx = i;
     i += batchSize;
     return Promise.all(batch.map(function(it,bi){
-      return worker(it).then(function(r){results[startIdx+bi]=r;}).catch(function(e){results[startIdx+bi]=null;console.warn('[WMS] runThrottled item error:',e&&e.message);});
+      return runItem(it,0).then(function(r){results[startIdx+bi]=r;done++;if(onProgress)onProgress(done,items.length);});
     })).then(function(){
       if(i<items.length){
         return new Promise(function(res){setTimeout(res,delayMs);}).then(nextBatch);
       }
+      results.failed=failed;
       return results;
     });
   }
@@ -6831,7 +6879,10 @@ function ferieLoad(){
           }
         });
       });
-    }).then(function(){
+    }, 20, 60, {
+      itemLabel:function(f){return f.name;},
+      onProgress:function(done,total){document.getElementById('ferieContent').innerHTML='<div class="gantt-spinner"><div class="spinner"></div>Caricamento\u2026 '+done+'/'+total+' file</div>';}
+    }).then(function(results){
       ferieDipList.sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'');});
       var sel=document.getElementById('fDip');
       sel.innerHTML='<option value="">\u2014 Tutti \u2014</option>';
@@ -6843,6 +6894,10 @@ function ferieLoad(){
       document.getElementById('fRicalcBtn').disabled=false;
       document.getElementById('fExpBtn').disabled=false;
       document.getElementById('fMassBtn').disabled=false;
+      if(results.failed&&results.failed.length){
+        var names=results.failed.map(function(x){return x.item&&x.item.name;}).filter(Boolean).join(', ');
+        toast('\u26a0\ufe0f '+results.failed.length+' file non letti: '+names,'warn');
+      }
     });
   }).catch(function(e){
     // Gestore d'errore reale della catena (prima era codice orfano: mancava
@@ -6878,7 +6933,21 @@ function ferieRicalcola(){
         });
       });
     });
-  }).then(function(){return saveFerieResiduo();}).then(function(){toast('\u2705 Ricalcolo completato');ferieLoad();}).catch(function(e){toast('\u2717 Errore: '+e.message,'err');document.getElementById('fRicalcBtn').disabled=false;});
+  }, 20, 60, {
+    itemLabel:function(f){return f.name;},
+    onProgress:function(done,total){document.getElementById('ferieContent').innerHTML='<div class="gantt-spinner"><div class="spinner"></div>Ricalcolo\u2026 '+done+'/'+total+' file</div>';}
+  }).then(function(results){return saveFerieResiduo().then(function(){return results;});}).then(function(results){
+    toast('\u2705 Ricalcolo completato');
+    if(results.failed&&results.failed.length){
+      var names=results.failed.map(function(x){return x.item&&x.item.name;}).filter(Boolean).join(', ');
+      toast('\u26a0\ufe0f '+results.failed.length+' file non letti (dati non ricalcolati): '+names,'warn');
+    }
+    // ferieLoad() rilegge lo stesso set di file, ma grazie alla cache di
+    // sessione su sheetsRead/downloadFile questi sono già in memoria (il
+    // ricalcolo non scrive sui fogli ATS, solo sul file JSON dei residui),
+    // quindi qui non riparte una seconda tornata di richieste di rete.
+    ferieLoad();
+  }).catch(function(e){toast('\u2717 Errore: '+e.message,'err');document.getElementById('fRicalcBtn').disabled=false;});
 }
 
 function renderGantt(dipList,year,mDa,mA){
