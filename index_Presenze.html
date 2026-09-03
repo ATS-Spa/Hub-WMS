@@ -4105,18 +4105,21 @@ function spConfirm(){
     emp.pausa[spDi]=hasPausa?parseFloat(document.getElementById('spPausaDur').value)||1:0;
   }else if(spSigla===''){
     emp.ingresso[spDi]='';emp.uscita[spDi]='';emp.pausa[spDi]=null;
-    // Cancella anche le commesse del giorno
-    if(emp.commesse&&emp.commesse[spDi])emp.commesse[spDi]=null;
+  }
+  // Se la sigla finale non è tra quelle che ammettono commesse (es. F, M, vuota, ecc.)
+  // le eventuali commesse residue del giorno vanno cancellate — non solo quando
+  // si svuota del tutto la giornata, ma ogni volta che si passa a una sigla
+  // "non commessa" pur mantenendo la presenza (es. da X con split a F/Ferie).
+  var siglaAmmetteComm = !!spSigla && SIGLE_COMMESSE.indexOf(xSig(spSigla))!==-1;
+  if(!siglaAmmetteComm && emp.commesse && emp.commesse[spDi]!=null){
+    emp.commesse[spDi]=null;
   }
   var y2=parseInt(document.getElementById(spMode==='ats'?'aYear':'cYear').value);
   var m2=parseInt(document.getElementById(spMode==='ats'?'aMonth':'cMonth').value);
   var fid2=(spMode==='ats'?atsEmps:coopEmps)[spIdx];
   var fid3=fid2&&fid2.sheetRows&&fid2.sheetRows.fileId||(spMode==='ats'?atsFileId:coopFileId);
   var sname2=fid2&&fid2.sheetRows&&fid2.sheetRows.sheetName||((spMode==='ats'?atsData:coopData)&&(spMode==='ats'?atsData:coopData).sheetName);
-  if(spSigla===''){
-    // Elimina riga dal foglio _Commesse
-    if(fid3&&sname2)deleteCommessaRow(spMode,fid2,spDi,fid3,sname2,y2,m2);
-  } else {
+  if(siglaAmmetteComm){
     // Salva distribuzione commesse
     var spcs=document.getElementById('spCommSave');
     if(spcs&&spcs.checked){
@@ -4137,6 +4140,10 @@ function spConfirm(){
         deleteCommessaRow(spMode,fid2,spDi,fid3,sname2,y2,m2);
       }
     }
+  } else {
+    // Sigla non compatibile con le commesse (F, M, vuota, ecc.): elimina sempre
+    // l'eventuale riga residua sul foglio _Commesse per questo giorno.
+    if(fid3&&sname2)deleteCommessaRow(spMode,fid2,spDi,fid3,sname2,y2,m2);
   }
   mClose('moSigla');
   if(spMode==='ats'){
@@ -5867,6 +5874,10 @@ function massConfirm(){
         while(emp.commesse.length<=di)emp.commesse.push(null);
         emp.commesse[di]=commVals;
         commesseDays.push({di:di,action:'save'});
+      } else if(emp.commesse&&emp.commesse[di]!=null){
+        // Sigla non compatibile con le commesse (es. F, M): elimina eventuali
+        // commesse residue del giorno, come già fatto per massSigla===''.
+        emp.commesse[di]=null;commesseDays.push({di:di,action:'delete'});
       }
       totSet++;
     });
