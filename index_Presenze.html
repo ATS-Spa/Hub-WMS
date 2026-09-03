@@ -6698,6 +6698,12 @@ var ferieFileId=null;
 var ferieYear=null;
 var ferieDipList=[];
 var ganttSigleMap={}; // {sap: {dateStr: sigla}} - dati reali dai fogli ATS
+// Traccia, PER ANNO, se in questa sessione è già stato premuto Ricalcola:
+// importare/modificare il residuo "ad oggi" prima di aver ricalcolato le
+// ferie/permessi già presi produce una correzione basata su un conteggio
+// incompleto, che resta sbagliata per sempre (Ricalcola non tocca più il
+// saldo di partenza una volta impostato). Vedi impResiduoConfirm/saldoManualeSalva.
+var ferieRicalcolatoAnni={};
 var feriePrevData=null; // residuo dell'anno precedente, usato per il riporto (carry-over) del saldo
 
 function ferieResiduoFname(year){ return 'residuo_ats_'+year+'.json'; }
@@ -7027,7 +7033,7 @@ function ferieRicalcola(){
         });
       });
     });
-  }).then(function(){return saveFerieResiduo();}).then(function(){toast('\u2705 Ricalcolo completato');ferieLoad();}).catch(function(e){toast('\u2717 Errore: '+e.message,'err');document.getElementById('fRicalcBtn').disabled=false;});
+  }).then(function(){return saveFerieResiduo();}).then(function(){ferieRicalcolatoAnni[year]=true;toast('\u2705 Ricalcolo completato');ferieLoad();}).catch(function(e){toast('\u2717 Errore: '+e.message,'err');document.getElementById('fRicalcBtn').disabled=false;});
 }
 
 function renderGantt(dipList,year,mDa,mA){
@@ -7300,6 +7306,7 @@ function saldoManualeSalva(sap,nome,resp,plant){
   if(!fEl||!pEl)return;
   var fVal=fEl.value.trim(),pVal=pEl.value.trim();
   if(fVal===''&&pVal===''){toast('Inserisci almeno un valore','warn');return;}
+  if(!ferieRicalcolatoAnni[ferieYear]&&!confirm('Non hai ancora premuto "Ricalcola" in questa sessione per questo anno.\n\nIl valore che inserisci viene corretto sottraendo le ferie/permessi già registrati: se quel conteggio non è aggiornato, la correzione sarà sbagliata e Ricalcola in seguito NON la sistemerà più.\n\nVuoi procedere comunque? (Consigliato: annulla, premi Ricalcola, poi riprova)'))return;
   var res=calcResiduo(sap);
   var nuovoFerie=fVal!==''?parseFloat(fVal):res.ferie;
   var nuovoPerm=pVal!==''?parseFloat(pVal):res.permessi;
@@ -7387,6 +7394,7 @@ function impResiduoConfirm(){
   if(!isAdminUser){toast('Solo admin/superadmin','warn');return;}
   var toApply=impResiduoRows.filter(function(r){return r.match;});
   if(!toApply.length){toast('Nessuna riga abbinata da importare','warn');return;}
+  if(!ferieRicalcolatoAnni[ferieYear]&&!confirm('Non hai ancora premuto "Ricalcola" in questa sessione per questo anno.\n\nIl valore che importi viene corretto sottraendo le ferie/permessi già registrati: se quel conteggio non è aggiornato, la correzione sarà sbagliata e Ricalcola in seguito NON la sistemerà più.\n\nVuoi procedere comunque? (Consigliato: annulla, premi Ricalcola, poi rifai l\'import)'))return;
   if(!confirm('Importare il saldo AD OGGI per '+toApply.length+' dipendenti? Questa azione sovrascrive il saldo attuale e viene registrata nel log.'))return;
   toApply.forEach(function(r){
     var res=calcResiduo(r.sap);
