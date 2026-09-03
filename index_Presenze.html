@@ -508,7 +508,8 @@ body.readonly-mode #cBulkBtn,body.readonly-mode #aBulkBtn{display:none!important
 .merr.show{display:block}
 .mbtns{display:flex;gap:10px;justify-content:flex-end}
 .mbtn{border:none;border-radius:7px;padding:9px 22px;font-family:var(--ffc);font-size:13px;font-weight:700;cursor:pointer;transition:all .2s}
-.mbtn.ok{background:var(--teal);color:#021a17}.mbtn.ok:hover{background:#0d9488}
+.mbtn:disabled{opacity:.4;cursor:not-allowed;filter:grayscale(.3)}
+.mbtn.ok:hover{background:#0d9488}.mbtn.ok{background:var(--teal);color:#021a17}
 .mbtn.blue{background:var(--blue);color:#fff}.mbtn.blue:hover{background:#2563eb}
 .mbtn.cancel{background:var(--card);color:var(--muted);border:1px solid var(--border)}.mbtn.cancel:hover{color:var(--text)}
 .mbtn.danger{background:var(--red);color:#fff}.mbtn.danger:hover{background:#dc2626}
@@ -5150,6 +5151,7 @@ function updateCommTot(){
   document.getElementById('spCommTot').textContent=Math.round(tot*10)/10+'h';
   document.getElementById('spCommDisp').textContent=disp+'h';
   document.getElementById('spCommWarn').style.display=fisse>disp+0.01?'':'none';
+  document.getElementById('spConfirmBtn').disabled=fisse>disp+0.01;
   // Aggiorna barre e hint resto
   rows.forEach(function(row){
     var cb=row.querySelector('.comm-check');
@@ -5484,6 +5486,7 @@ function updateBulkCommTot(){
   document.getElementById('bulkCommTot').textContent=Math.round(tot*10)/10+'h';
   document.getElementById('bulkCommDisp').textContent=disp+'h';
   document.getElementById('bulkCommWarn').style.display=fisse>disp+0.01?'':'none';
+  document.getElementById('bulkConfirmBtn').disabled=fisse>disp+0.01;
   rows.forEach(function(row){
     var cb=row.querySelector('.comm-check');
     var inp=row.querySelector('.comm-inp');
@@ -5789,6 +5792,7 @@ function updateMassCommTot(){
   document.getElementById('massCommTot').textContent=Math.round(tot*10)/10+'h';
   document.getElementById('massCommDisp').textContent=disp+'h';
   document.getElementById('massCommWarn').style.display=fisse>disp+0.01?'':'none';
+  document.getElementById('massConfirmBtn').disabled=fisse>disp+0.01;
   rows.forEach(function(row){
     var cb=row.querySelector('.comm-check');
     var inp=row.querySelector('.comm-inp');
@@ -6278,7 +6282,7 @@ async function generaUnFile(fname,resp,plant,anno,mese,emps,coopEmps){
 // collidere. Si autoregola: se vede un 429 allarga la distanza e mette in
 // pausa TUTTA la coda per un po', se procede liscio la restringe piano.
 var RL=(function(){
-  var lastStart=0, minGap=1100, cooldownUntil=0, queue=[], pumping=false;
+  var lastStart=0, minGap=300, cooldownUntil=0, queue=[], pumping=false;
   function tick(){
     if(!queue.length){pumping=false;return;}
     var now=Date.now();
@@ -6299,7 +6303,7 @@ var RL=(function(){
   return{
     acquire:function(){return new Promise(function(res){queue.push(res);if(!pumping){pumping=true;tick();}});},
     reportRateLimited:function(waitMs){cooldownUntil=Math.max(cooldownUntil,Date.now()+waitMs);minGap=Math.min(4000,Math.round(minGap*1.4));},
-    reportSuccess:function(){minGap=Math.max(1050,Math.round(minGap*0.98));}
+    reportSuccess:function(){minGap=Math.max(220,Math.round(minGap*0.95));}
   };
 })();
 function listFiles(q){return gFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name,mimeType)&pageSize=200').then(function(r){return r.files||[];});}
