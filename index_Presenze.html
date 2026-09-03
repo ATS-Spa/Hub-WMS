@@ -7272,6 +7272,11 @@ function toggleSaldoResiduoPanel(){
   if(!panel)return;
   var open=panel.style.display==='none';
   panel.style.display=open?'':'none';
+  // Il Gantt sotto (#ferieContent) resta comunque nel DOM e prende lo
+  // spazio residuo del flex: senza nasconderlo, sbuca in fondo sotto il
+  // pannello invece di restare completamente coperto.
+  var gantt=document.getElementById('ferieContent');
+  if(gantt)gantt.style.display=open?'none':'';
   if(btn){btn.style.background=open?'rgba(45,212,191,.12)':'';btn.style.borderColor=open?'rgba(45,212,191,.6)':'rgba(45,212,191,.4)';}
   if(open){
     if(!ferieDipList.length){toast('Carica prima il Piano Ferie (↓ Carica)','warn');}
