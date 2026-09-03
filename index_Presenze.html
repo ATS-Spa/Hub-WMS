@@ -2933,6 +2933,7 @@ function applyPerm(){
     document.getElementById('snPerm').style.display='';
     document.getElementById('snFile').style.display='';
     document.getElementById('snFerie').style.display='';
+    var tsrS=document.getElementById('togSaldoResiduo');if(tsrS)tsrS.style.display='';
     renderPermPanel();
     document.getElementById('appShell').style.display='flex';
     document.getElementById('accessDenied').style.display='none';
@@ -6270,10 +6271,18 @@ async function generaUnFile(fname,resp,plant,anno,mese,emps,coopEmps){
 
 function listFiles(q){return gFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name,mimeType)&pageSize=200').then(function(r){return r.files||[];});}
 function downloadFile(id){return fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){if(!r.ok)throw new Error('Download fallito: '+r.status);return r.blob();});}
-function gFetch(url){
+function gFetch(url,_retryCount){
   var tok=getToken();
   if(!tok)return Promise.reject(new Error('No token'));
+  _retryCount=_retryCount||0;
   return fetch(url,{headers:{Authorization:'Bearer '+tok}}).then(function(r){
+    if(r.status===429&&_retryCount<4){
+      // Rate limit: riprova con backoff esponenziale invece di far fallire la lettura in silenzio
+      var retryAfter=parseFloat(r.headers.get('Retry-After'));
+      var waitMs=!isNaN(retryAfter)?retryAfter*1000:(800*Math.pow(2,_retryCount)+Math.random()*300);
+      console.warn('[WMS] gFetch 429, retry '+(_retryCount+1)+'/4 tra '+Math.round(waitMs)+'ms: '+url.substring(0,80));
+      return new Promise(function(res){setTimeout(res,waitMs);}).then(function(){return gFetch(url,_retryCount+1);});
+    }
     if(!r.ok){
       return r.json().then(function(e){
         var msg=(e.error&&e.error.message)||r.statusText;
@@ -6753,8 +6762,8 @@ function ferieRenderOnly(){
 // 429 "Quota exceeded", che poi vengono scambiati per "dato non trovato"
 // da chi chiama (es. ricerca dipendente in Piano Ferie).
 function runThrottled(items, worker, batchSize, delayMs){
-  batchSize = batchSize || 4;
-  delayMs = delayMs===undefined ? 350 : delayMs;
+  batchSize = batchSize || 3;
+  delayMs = delayMs===undefined ? 500 : delayMs;
   var results = new Array(items.length);
   var i = 0;
   function nextBatch(){
