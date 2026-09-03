@@ -6762,13 +6762,14 @@ function ferieRenderOnly(){
 function runThrottled(items, worker, batchSize, delayMs){
   // Quota Sheets API = 300 letture/min/utente: è un tetto sul NUMERO di
   // richieste in un minuto, non sulla concorrenza. Con i volumi tipici di
-  // un "Carica" (decine di file) possiamo quindi leggerli quasi tutti
-  // insieme come faceva il codice originale — il totale resta ben sotto
-  // 300 anche se finiscono in 1-2 secondi. Il batch a lotti (invece di
-  // Promise.all su tutto) resta solo per non aprire centinaia di
+  // un "Carica" annuale (60-150 file, quasi tutti Google Sheet nativi,
+  // quindi letture leggere) restiamo ben sotto quota anche con lotti più
+  // ampi e pause più brevi: 25 x delay 60ms copre 150 file in ~6 lotti
+  // invece di ~13, senza avvicinarsi al limite. Il batch a lotti (invece
+  // di Promise.all su tutto) resta solo per non aprire centinaia di
   // connessioni in un colpo solo nei casi con moltissimi file.
-  batchSize = batchSize || 12;
-  delayMs = delayMs===undefined ? 150 : delayMs;
+  batchSize = batchSize || 25;
+  delayMs = delayMs===undefined ? 60 : delayMs;
   var results = new Array(items.length);
   var i = 0;
   function nextBatch(){
@@ -6796,22 +6797,29 @@ function ferieLoad(){
   ferieYear=year;
   document.getElementById('ferieContent').innerHTML='<div class="gantt-spinner"><div class="spinner"></div>Caricamento\u2026</div>';
   document.getElementById('fRicalcBtn').disabled=true;
-  loadFerieResiduo(year).then(function(){
-    var files=allFiles.filter(function(f){
-      var p=parseFileName(f.name);
-      return p&&p.year===year&&(!resp||p.resp.toLowerCase()===resp.toLowerCase())&&(!plant||p.plant.toLowerCase()===plant.toLowerCase());
-    });
-    if(!files.length){
-      document.getElementById('ferieContent').innerHTML='<div class="state"><div class="state-ico">\ud83d\udcc2</div><div class="state-title">Nessun file trovato</div></div>';
-      document.getElementById('fRicalcBtn').disabled=false;return;
-    }
-    // Un solo giro di lettura per file: prima si leggevano tutti i file due
-    // volte (una per l'elenco dipendenti, una per le sigle del Gantt) — con
-    // range mesi di default (Gennaio-Dicembre) erano LO STESSO identico set
-    // di file, quindi ogni file veniva scaricato due volte inutilmente.
-    // Ora si estraggono entrambe le informazioni dalla stessa risposta.
-    ferieDipList=[];
-    ganttSigleMap={};
+  // Il filtro sui file non dipende dalla rete: lo calcoliamo subito, così se
+  // non c'è nulla da leggere usciamo senza nemmeno interpellare Drive.
+  var files=allFiles.filter(function(f){
+    var p=parseFileName(f.name);
+    return p&&p.year===year&&(!resp||p.resp.toLowerCase()===resp.toLowerCase())&&(!plant||p.plant.toLowerCase()===plant.toLowerCase());
+  });
+  if(!files.length){
+    document.getElementById('ferieContent').innerHTML='<div class="state"><div class="state-ico">\ud83d\udcc2</div><div class="state-title">Nessun file trovato</div></div>';
+    document.getElementById('fRicalcBtn').disabled=false;return;
+  }
+  // Un solo giro di lettura per file: prima si leggevano tutti i file due
+  // volte (una per l'elenco dipendenti, una per le sigle del Gantt) — con
+  // range mesi di default (Gennaio-Dicembre) erano LO STESSO identico set
+  // di file, quindi ogni file veniva scaricato due volte inutilmente.
+  // Ora si estraggono entrambe le informazioni dalla stessa risposta.
+  ferieDipList=[];
+  ganttSigleMap={};
+  // loadFerieResiduo (residuo ferie/permessi) serve solo al momento del
+  // render (calcResiduo dentro renderGantt), non durante la lettura dei
+  // file mensili: prima veniva atteso PRIMA di iniziare a leggerli,
+  // aggiungendo un giro di rete a vuoto in testa. Ora parte in parallelo.
+  Promise.all([
+    loadFerieResiduo(year),
     runThrottled(files, function(f){
       var p=parseFileName(f.name);var sname=MESI[p.month-1]+'_ATS';var isXlsx=/\.xlsx$/i.test(f.name);
       return (isXlsx?downloadFile(f.id).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');}):sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
@@ -6831,19 +6839,19 @@ function ferieLoad(){
           }
         });
       });
-    }).then(function(){
-      ferieDipList.sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'');});
-      var sel=document.getElementById('fDip');
-      sel.innerHTML='<option value="">\u2014 Tutti \u2014</option>';
-      ferieDipList.forEach(function(d){var o=document.createElement('option');o.value=d.sap;o.textContent=d.nome+(d.sap?' ('+d.sap+')':'');sel.appendChild(o);});
-      var mDa=parseInt(document.getElementById('fMeseDa').value)||1;
-      var mA=parseInt(document.getElementById('fMeseA').value)||12;
+    })
+  ]).then(function(){
+    ferieDipList.sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'');});
+    var sel=document.getElementById('fDip');
+    sel.innerHTML='<option value="">\u2014 Tutti \u2014</option>';
+    ferieDipList.forEach(function(d){var o=document.createElement('option');o.value=d.sap;o.textContent=d.nome+(d.sap?' ('+d.sap+')':'');sel.appendChild(o);});
+    var mDa=parseInt(document.getElementById('fMeseDa').value)||1;
+    var mA=parseInt(document.getElementById('fMeseA').value)||12;
 
-      renderGantt(ferieDipList,year,mDa,mA);
-      document.getElementById('fRicalcBtn').disabled=false;
-      document.getElementById('fExpBtn').disabled=false;
-      document.getElementById('fMassBtn').disabled=false;
-    });
+    renderGantt(ferieDipList,year,mDa,mA);
+    document.getElementById('fRicalcBtn').disabled=false;
+    document.getElementById('fExpBtn').disabled=false;
+    document.getElementById('fMassBtn').disabled=false;
   }).catch(function(e){
     // Gestore d'errore reale della catena (prima era codice orfano: mancava
     // sia il .catch() sia il parametro "e", quindi lanciava sempre un
