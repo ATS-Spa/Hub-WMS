@@ -3409,14 +3409,38 @@ function coopLoad(){
     return;
   }
   var sheetName=MESI[m-1]+'_Coop';
-  setEl('cContent',spinH('Lettura '+files.length+' file…'));
-  runThrottled(files, function(f){
+  setEl('cContent','<div class="state"><div class="spinner"></div><div class="state-title">Lettura '+files.length+' file\u2026</div><div id="cLoadProgress" style="margin-top:6px;font-size:12px;color:var(--muted)"></div></div>');
+  // Niente più .catch interno al worker: prima nascondeva i fallimenti a
+  // runThrottled trasformandoli subito in null, quindi non finivano mai in
+  // fileRes.failed e non c'era modo di accorgersene o ritentarli.
+  function coopFileWorker(f){
     var isXlsx=/\.xlsx$/i.test(f.name);
     return (isXlsx
       ? downloadFile(f.id).then(function(b){return parseSheetBlob(b,y,m,f.id,sheetName,'coop');})
-      : sheetsRead(f.id,sheetName+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,y,m,f.id,sheetName,'coop');}))
-    .catch(function(e){console.warn('[WMS] coopLoad skip '+f.name+': '+e.message);return null;});
-  }).then(function(results){
+      : sheetsRead(f.id,sheetName+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,y,m,f.id,sheetName,'coop');}));
+  }
+  runThrottled(files, coopFileWorker, {onProgress:function(done,total,failedCount){
+    var el=document.getElementById('cLoadProgress');
+    if(!el)return;
+    el.textContent='File letti: '+done+'/'+total+(failedCount?' \u2014 '+failedCount+' in difficolt\u00e0, riprovo automaticamente\u2026':'');
+  }}).then(function(fileRes){
+    if(!fileRes.failed||!fileRes.failed.length)return{all:fileRes,stillFailed:[]};
+    // Anche dopo i 7 retry di gFetch qualche file può restare fuori: invece
+    // di perderlo in silenzio, aspettiamo qualche secondo e ritentiamo solo
+    // quelli rimasti indietro prima di arrenderci.
+    var retryFiles=fileRes.failed.map(function(x){return x.item;}).filter(Boolean);
+    var el=document.getElementById('cLoadProgress');
+    if(el)el.textContent=retryFiles.length+' file in coda per un secondo tentativo\u2026';
+    return new Promise(function(r){setTimeout(r,3000);}).then(function(){
+      return runThrottled(retryFiles, coopFileWorker, {onProgress:function(done,total,failedCount){
+        var el2=document.getElementById('cLoadProgress');
+        if(el2)el2.textContent='Secondo tentativo: '+done+'/'+total+(failedCount?' \u2014 '+failedCount+' ancora in difficolt\u00e0':'');
+      }}).then(function(retryRes){
+        return{all:fileRes.concat(retryRes),stillFailed:retryRes.failed||[]};
+      });
+    });
+  }).then(function(combined){
+    var results=combined.all,stillFailed=combined.stillFailed;
     var merged=null;
     results.forEach(function(d){if(!d)return;if(!merged){merged=d;return;}merged.employees=merged.employees.concat(d.employees);});
     if(!merged){
@@ -3435,6 +3459,11 @@ function coopLoad(){
     ['cRef','cExp','cPrt','cBulkBtn','cMassBtn'].forEach(function(id){document.getElementById(id).disabled=false;});
     document.getElementById('cInfo').textContent=MESI[m-1]+' '+y+' · '+merged.employees.length+' dip.'+(files.length>1?' ('+files.length+' file)':'');
     lastRefreshTimeCoop=new Date();updateRefreshBadges();
+    if(stillFailed.length){
+      var names=stillFailed.map(function(x){return x.item&&x.item.name;}).filter(Boolean);
+      console.warn('[WMS] coopLoad: file NON caricati nemmeno al secondo tentativo:',names);
+      toast('⚠️ '+stillFailed.length+' file non caricati ('+names.join(', ')+'), dati potenzialmente incompleti','err');
+    }
   }).catch(function(e){
     setEl('cContent','<div class="state"><div class="state-ico">⚠️</div><div class="state-title">Errore lettura</div><div style="white-space:pre-line;max-width:420px">'+esc(e.message)+'</div></div>');
   });
@@ -3725,14 +3754,32 @@ function atsLoad(){
     return;
   }
   var sheetName=MESI[m-1]+'_ATS';
-  setEl('aContent',spinH('Lettura '+files.length+' file…'));
-  runThrottled(files, function(f){
+  setEl('aContent','<div class="state"><div class="spinner"></div><div class="state-title">Lettura '+files.length+' file\u2026</div><div id="aLoadProgress" style="margin-top:6px;font-size:12px;color:var(--muted)"></div></div>');
+  function atsFileWorker(f){
     var isXlsx=/\.xlsx$/i.test(f.name);
     return (isXlsx
       ? downloadFile(f.id).then(function(b){return parseSheetBlob(b,y,m,f.id,sheetName,'ats');})
-      : sheetsRead(f.id,sheetName+'!A1:AQ200').then(function(vals){return parseSheetValues(vals,y,m,f.id,sheetName,'ats');}))
-    .catch(function(e){console.warn('[WMS] atsLoad skip '+f.name+': '+e.message);return null;});
-  }).then(function(results){
+      : sheetsRead(f.id,sheetName+'!A1:AQ200').then(function(vals){return parseSheetValues(vals,y,m,f.id,sheetName,'ats');}));
+  }
+  runThrottled(files, atsFileWorker, {onProgress:function(done,total,failedCount){
+    var el=document.getElementById('aLoadProgress');
+    if(!el)return;
+    el.textContent='File letti: '+done+'/'+total+(failedCount?' \u2014 '+failedCount+' in difficolt\u00e0, riprovo automaticamente\u2026':'');
+  }}).then(function(fileRes){
+    if(!fileRes.failed||!fileRes.failed.length)return{all:fileRes,stillFailed:[]};
+    var retryFiles=fileRes.failed.map(function(x){return x.item;}).filter(Boolean);
+    var el=document.getElementById('aLoadProgress');
+    if(el)el.textContent=retryFiles.length+' file in coda per un secondo tentativo\u2026';
+    return new Promise(function(r){setTimeout(r,3000);}).then(function(){
+      return runThrottled(retryFiles, atsFileWorker, {onProgress:function(done,total,failedCount){
+        var el2=document.getElementById('aLoadProgress');
+        if(el2)el2.textContent='Secondo tentativo: '+done+'/'+total+(failedCount?' \u2014 '+failedCount+' ancora in difficolt\u00e0':'');
+      }}).then(function(retryRes){
+        return{all:fileRes.concat(retryRes),stillFailed:retryRes.failed||[]};
+      });
+    });
+  }).then(function(combined){
+    var results=combined.all,stillFailed=combined.stillFailed;
     var merged=null;
     results.forEach(function(d){if(!d)return;if(!merged){merged=d;return;}merged.employees=merged.employees.concat(d.employees);});
     if(!merged){
@@ -3751,6 +3798,11 @@ function atsLoad(){
     document.getElementById('aInfo').textContent=MESI[m-1]+' '+y+' · '+merged.employees.length+' dip.'+(files.length>1?' ('+files.length+' file)':'');
     lastRefreshTimeAts=new Date();updateRefreshBadges();
     startAutoRefresh();
+    if(stillFailed.length){
+      var names=stillFailed.map(function(x){return x.item&&x.item.name;}).filter(Boolean);
+      console.warn('[WMS] atsLoad: file NON caricati nemmeno al secondo tentativo:',names);
+      toast('⚠️ '+stillFailed.length+' file non caricati ('+names.join(', ')+'), dati potenzialmente incompleti','err');
+    }
   }).catch(function(e){
     setEl('aContent','<div class="state"><div class="state-ico">⚠️</div><div class="state-title">Errore lettura Dipendenti</div><div style="white-space:pre-line;max-width:420px">'+esc(e.message)+'</div></div>');
   });
