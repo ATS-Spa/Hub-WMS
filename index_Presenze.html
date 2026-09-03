@@ -8546,6 +8546,12 @@ function richScriviSuDrive(req){
   var sigla = req.tipo||req.tipo_code||'F';
   // Trova il responsabile (nome) dal nome del file
   var respNome = req.responsabile_nome||'';
+  // Traccia i mesi in cui il dipendente non è stato trovato in NESSUN file:
+  // in tal caso il residuo ferie viene comunque aggiornato più sotto, ma la
+  // riga sul foglio presenze NON esiste — bisogna avvisare l'utente invece
+  // di fallire in silenzio (altrimenti Piano Ferie mostra una "F" fantasma
+  // che poi risulta introvabile quando si clicca sulla cella).
+  var richScrittoreFalliti=[];
 
   var d1 = parseLocalDate(req.data_dal);
   var d2 = parseLocalDate(req.data_al);
@@ -8620,28 +8626,38 @@ function richScriviSuDrive(req){
         toast('⚠ File '+fname2+' non trovato','warn');
       });
     }
-    var f=fnames[0];
     var sname=MESI[info.month-1]+'_ATS';
-    return ((/\.xlsx$/i.test(f.name))
-      ? downloadFile(f.id).then(function(b){return parseSheetBlob(b,info.year,info.month,f.id,sname,'ats');})
-      : sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,info.year,info.month,f.id,sname,'ats');}))
-    .then(function(d){
-      var emp = d.employees.find(function(e){
-        return (sap&&String(e.id||e.sap||'').trim()===String(sap).trim()) ||
-               ((e.nome||'').toLowerCase()===(nome||'').toLowerCase());
-      });
-      if(!emp){console.warn('[WMS RICH] Dipendente '+nome+' non trovato in '+f.name);return;}
-      var DST=d.dayStart||3;
-      var updates=[];
-      info.giorni.forEach(function(giorno){
-        var di=d.dates.findIndex(function(dt){return dt.day===giorno;});
-        if(di<0||!emp.sheetRows||emp.sheetRows.n===undefined)return;
-        var col=colToLetter(DST+di);
-        updates.push({range:sname+'!'+col+(emp.sheetRows.n+1),values:[[sigla]]});
-      });
-      if(!updates.length) return;
-      return sheetsBatchUpdate(f.id, updates);
-    });
+    // Prova TUTTI i file candidati per questo mese (non solo il primo): il
+    // dipendente potrebbe non essere nel file "atteso" ma comparire in un
+    // altro file dello stesso mese (es. cambio responsabile/plant nel tempo).
+    var tryFile=function(idx){
+      if(idx>=fnames.length){
+        richScrittoreFalliti.push(nome+' — '+MESI[info.month-1]+' '+info.year);
+        return;
+      }
+      var f=fnames[idx];
+      return ((/\.xlsx$/i.test(f.name))
+        ? downloadFile(f.id).then(function(b){return parseSheetBlob(b,info.year,info.month,f.id,sname,'ats');})
+        : sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,info.year,info.month,f.id,sname,'ats');}))
+      .then(function(d){
+        var emp = d.employees.find(function(e){
+          return (sap&&String(e.id||e.sap||'').trim()===String(sap).trim()) ||
+                 ((e.nome||'').toLowerCase()===(nome||'').toLowerCase());
+        });
+        if(!emp){console.warn('[WMS RICH] Dipendente '+nome+' non trovato in '+f.name);return tryFile(idx+1);}
+        var DST=d.dayStart||3;
+        var updates=[];
+        info.giorni.forEach(function(giorno){
+          var di=d.dates.findIndex(function(dt){return dt.day===giorno;});
+          if(di<0||!emp.sheetRows||emp.sheetRows.n===undefined)return;
+          var col=colToLetter(DST+di);
+          updates.push({range:sname+'!'+col+(emp.sheetRows.n+1),values:[[sigla]]});
+        });
+        if(!updates.length) return;
+        return sheetsBatchUpdate(f.id, updates);
+      }).catch(function(e){console.warn('[WMS RICH] errore lettura '+f.name+':',e.message);return tryFile(idx+1);});
+    };
+    return tryFile(0);
   });
 
   return Promise.all(promises).then(function(){
@@ -8672,6 +8688,13 @@ function richScriviSuDrive(req){
       }
     }
     loadAllFiles();
+    // Avvisa se per uno o più mesi non è stato possibile scrivere sul foglio
+    // presenze (dipendente non trovato in nessun file): il residuo ferie è
+    // comunque stato aggiornato, ma va sistemato manualmente su Piano Ferie
+    // (clic sulla cella del giorno → "Crea nuovo file"/verifica anagrafica).
+    if(richScrittoreFalliti.length){
+      toast('⚠ Ferie registrate nel residuo, ma NON scritte sul foglio per: '+richScrittoreFalliti.join(', ')+'. Verifica da Piano Ferie.','warn');
+    }
   });
 }
 
