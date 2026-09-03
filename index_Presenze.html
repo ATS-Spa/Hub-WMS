@@ -6668,6 +6668,34 @@ function ferieRenderOnly(){
   renderGantt(list,year,mDa,mA);
 }
 
+// ── Esegue le funzioni (ognuna → Promise) a piccoli lotti con pausa tra un
+// lotto e l'altro, invece che tutte insieme in parallelo. Necessario per non
+// superare il limite di Google Sheets API (letture al minuto per utente):
+// caricare in un colpo solo decine di file provoca una raffica di errori
+// 429 "Quota exceeded", che poi vengono scambiati per "dato non trovato"
+// da chi chiama (es. ricerca dipendente in Piano Ferie).
+function runThrottled(items, worker, batchSize, delayMs){
+  batchSize = batchSize || 4;
+  delayMs = delayMs===undefined ? 350 : delayMs;
+  var results = new Array(items.length);
+  var i = 0;
+  function nextBatch(){
+    if(i>=items.length) return Promise.resolve(results);
+    var batch = items.slice(i, i+batchSize);
+    var startIdx = i;
+    i += batchSize;
+    return Promise.all(batch.map(function(it,bi){
+      return worker(it).then(function(r){results[startIdx+bi]=r;}).catch(function(e){results[startIdx+bi]=null;console.warn('[WMS] runThrottled item error:',e&&e.message);});
+    })).then(function(){
+      if(i<items.length){
+        return new Promise(function(res){setTimeout(res,delayMs);}).then(nextBatch);
+      }
+      return results;
+    });
+  }
+  return nextBatch();
+}
+
 function ferieLoad(){
   ferieSyncFilters();
   var resp=document.getElementById('fResp2').value;
@@ -6687,12 +6715,14 @@ function ferieLoad(){
     }
     // Load ALL files to get ALL employees (not just first month)
     ferieDipList=[];
-    var promises=files.map(function(f){
+    // Caricamento a lotti (max 4 in parallelo, pausa 350ms tra i lotti) per
+    // non superare la quota di lettura di Google Sheets quando i file sono
+    // molti (es. tutto l'anno per più responsabili/plant).
+    runThrottled(files, function(f){
       var p=parseFileName(f.name);var sname=MESI[p.month-1]+'_ATS';var isXlsx=/\.xlsx$/i.test(f.name);
       return (isXlsx?downloadFile(f.id).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');}):sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
-      .then(function(d){d.employees.forEach(function(e){var sap=String(e.id||e.sap||'').trim();var nome=String(e.nome||'').trim();if(!nome)return;var key=(sap||nome);if(!ferieDipList.find(function(x){return (x.sap&&x.sap===sap)||(x.nome===nome&&x.plant===(e.plant||p.plant));}))ferieDipList.push({sap:sap,nome:nome,resp:d.globalResp||p.resp,plant:e.plant||p.plant});});}).catch(function(){});
-    });
-    Promise.all(promises).then(function(){
+      .then(function(d){d.employees.forEach(function(e){var sap=String(e.id||e.sap||'').trim();var nome=String(e.nome||'').trim();if(!nome)return;var key=(sap||nome);if(!ferieDipList.find(function(x){return (x.sap&&x.sap===sap)||(x.nome===nome&&x.plant===(e.plant||p.plant));}))ferieDipList.push({sap:sap,nome:nome,resp:d.globalResp||p.resp,plant:e.plant||p.plant});});});
+    }).then(function(){
       ferieDipList.sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'');});
       var sel=document.getElementById('fDip');
       sel.innerHTML='<option value="">\u2014 Tutti \u2014</option>';
@@ -6714,7 +6744,7 @@ function ferieLoad(){
           &&(!resp||p.resp.toLowerCase()===resp.toLowerCase())
           &&(!plant||p.plant.toLowerCase()===plant.toLowerCase());
       });
-      var sigPromises=allPeriodFiles.map(function(f){
+      runThrottled(allPeriodFiles, function(f){
         var p=parseFileName(f.name);var sname=MESI[p.month-1]+'_ATS';
         var isXlsx=/\.xlsx$/i.test(f.name);
         return (isXlsx
@@ -6731,13 +6761,16 @@ function ferieLoad(){
               ganttSigleMap[sap][dateStr]=sig;
             });
           });
-        }).catch(function(){});
-      });
-      Promise.all(sigPromises).then(function(){
+        });
+      }).then(function(){
         renderGantt(ferieDipList,year,mDa,mA);
       });
     });
-    document.getElementById('ferieContent').innerHTML='<div class="state"><div class="state-ico">\u26a0\ufe0f</div><div class="state-title">Errore</div><div style="font-size:12px;color:var(--muted)">'+String(e.message||e)+'</div></div>';
+  }).catch(function(e){
+    // Gestore d'errore reale della catena (prima era codice orfano: mancava
+    // sia il .catch() sia il parametro "e", quindi lanciava sempre un
+    // ReferenceError non gestito subito dopo il caricamento).
+    document.getElementById('ferieContent').innerHTML='<div class="state"><div class="state-ico">\u26a0\ufe0f</div><div class="state-title">Errore</div><div style="font-size:12px;color:var(--muted)">'+String((e&&e.message)||e)+'</div></div>';
     document.getElementById('fRicalcBtn').disabled=false;
   });
 }
@@ -6750,7 +6783,7 @@ function ferieRicalcola(){
   document.getElementById('fRicalcBtn').disabled=true;
   var files=allFiles.filter(function(f){var p=parseFileName(f.name);return p&&p.year===year&&(!resp||p.resp.toLowerCase()===resp.toLowerCase())&&(!plant||p.plant.toLowerCase()===plant.toLowerCase());});
   var resetSaps={};
-  var promises=files.map(function(f){
+  runThrottled(files, function(f){
     var p=parseFileName(f.name);var sname=MESI[p.month-1]+'_ATS';var isXlsx=/\.xlsx$/i.test(f.name);
     return (isXlsx?downloadFile(f.id).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');}):sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
     .then(function(d){
@@ -6766,9 +6799,8 @@ function ferieRicalcola(){
           else if(code==='HP'){if(!dip.permessi_goduti.find(function(g){return g.data===dateStr;})){var qtyH=parseFloat((String(sig).match(/^[\d.]*/)||['1'])[0])||1;dip.permessi_goduti.push({data:dateStr,ore:qtyH});}}
         });
       });
-    }).catch(function(e){console.warn('[WMS] ricalcola skip:',e.message);});
-  });
-  Promise.all(promises).then(function(){return saveFerieResiduo();}).then(function(){toast('\u2705 Ricalcolo completato');ferieLoad();}).catch(function(e){toast('\u2717 Errore: '+e.message,'err');document.getElementById('fRicalcBtn').disabled=false;});
+    });
+  }).then(function(){return saveFerieResiduo();}).then(function(){toast('\u2705 Ricalcolo completato');ferieLoad();}).catch(function(e){toast('\u2717 Errore: '+e.message,'err');document.getElementById('fRicalcBtn').disabled=false;});
 }
 
 function renderGantt(dipList,year,mDa,mA){
