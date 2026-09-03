@@ -1971,9 +1971,9 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
       <div class="fg"><div class="fl">Anno</div>
         <select id="fAnno" class="fc" style="min-width:85px" onchange="ferieOnFilterChange()"></select></div>
       <div class="fg"><div class="fl">Da mese</div>
-        <select id="fMeseDa" class="fc" style="min-width:110px" onchange="ferieRenderOnly()"><option value="1">Gennaio</option><option value="2">Febbraio</option><option value="3">Marzo</option><option value="4">Aprile</option><option value="5">Maggio</option><option value="6">Giugno</option><option value="7">Luglio</option><option value="8">Agosto</option><option value="9">Settembre</option><option value="10">Ottobre</option><option value="11">Novembre</option><option value="12">Dicembre</option></select></div>
+        <select id="fMeseDa" class="fc" style="min-width:110px" onchange="ferieLoad()"><option value="1">Gennaio</option><option value="2">Febbraio</option><option value="3">Marzo</option><option value="4">Aprile</option><option value="5">Maggio</option><option value="6">Giugno</option><option value="7">Luglio</option><option value="8">Agosto</option><option value="9">Settembre</option><option value="10">Ottobre</option><option value="11">Novembre</option><option value="12">Dicembre</option></select></div>
       <div class="fg"><div class="fl">A mese</div>
-        <select id="fMeseA" class="fc" style="min-width:110px" onchange="ferieRenderOnly()"><option value="1">Gennaio</option><option value="2">Febbraio</option><option value="3">Marzo</option><option value="4">Aprile</option><option value="5">Maggio</option><option value="6">Giugno</option><option value="7">Luglio</option><option value="8">Agosto</option><option value="9">Settembre</option><option value="10">Ottobre</option><option value="11">Novembre</option><option value="12">Dicembre</option></select></div>
+        <select id="fMeseA" class="fc" style="min-width:110px" onchange="ferieLoad()"><option value="1">Gennaio</option><option value="2">Febbraio</option><option value="3">Marzo</option><option value="4">Aprile</option><option value="5">Maggio</option><option value="6">Giugno</option><option value="7">Luglio</option><option value="8">Agosto</option><option value="9">Settembre</option><option value="10">Ottobre</option><option value="11">Novembre</option><option value="12">Dicembre</option></select></div>
       <div class="fg"><div class="fl">Dipendente</div>
         <select id="fDip" class="fc" style="min-width:170px" onchange="ferieRenderOnly()"><option value="">— Tutti —</option></select></div>
       <button class="ba bteal" onclick="ferieLoad()">↓ Carica</button>
@@ -6883,9 +6883,17 @@ function ferieLoad(){
   document.getElementById('fRicalcBtn').disabled=true;
   // Il filtro sui file non dipende dalla rete: lo calcoliamo subito, così se
   // non c'è nulla da leggere usciamo senza nemmeno interpellare Drive.
+  // Filtriamo anche sul range di mesi selezionato (fMeseDa/fMeseA): il
+  // residuo ferie/permessi (F res./HP res.) viene da un file separato e
+  // leggero (loadFerieResiduo), non dai file mensili — quindi limitare i
+  // mesi letti qui non tocca in nessun modo quel calcolo, solo cosa viene
+  // mostrato nel Gantt e chi finisce nell'elenco dipendenti.
+  var mDaLoad=parseInt(document.getElementById('fMeseDa').value)||1;
+  var mALoad=parseInt(document.getElementById('fMeseA').value)||12;
+  if(mALoad<mDaLoad){document.getElementById('fMeseA').value=String(mDaLoad);mALoad=mDaLoad;}
   var files=allFiles.filter(function(f){
     var p=parseFileName(f.name);
-    return p&&p.year===year&&(!resp||p.resp.toLowerCase()===resp.toLowerCase())&&(!plant||p.plant.toLowerCase()===plant.toLowerCase());
+    return p&&p.year===year&&p.month>=mDaLoad&&p.month<=mALoad&&(!resp||p.resp.toLowerCase()===resp.toLowerCase())&&(!plant||p.plant.toLowerCase()===plant.toLowerCase());
   });
   if(!files.length){
     document.getElementById('ferieContent').innerHTML='<div class="state"><div class="state-ico">\ud83d\udcc2</div><div class="state-title">Nessun file trovato</div></div>';
