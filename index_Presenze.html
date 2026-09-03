@@ -1977,6 +1977,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
       <div class="fg"><div class="fl">Dipendente</div>
         <select id="fDip" class="fc" style="min-width:170px" onchange="ferieRenderOnly()"><option value="">— Tutti —</option></select></div>
       <button class="ba bteal" onclick="ferieLoad()">↓ Carica</button>
+      <button class="ba bghost" onclick="ferieLoad(true)" title="Ignora la cache e rilegge tutti i file da Drive (usa se qualcun altro ha modificato dati altrove)">⟳ Aggiorna</button>
       <button class="ba bghost" onclick="ferieRicalcola()" id="fRicalcBtn" disabled title="Ricalcola residui leggendo tutti i mesi da Drive">↻ Ricalcola</button>
       <button class="ba bghost am" onclick="ferieExport()" id="fExpBtn" disabled>⬇ Excel</button>
       <button class="ba bghost" onclick="openMassivo('ferie')" id="fMassBtn" disabled style="border-color:rgba(59,130,246,.4);color:var(--blue)">📅 Inserimento Massivo</button>
@@ -6268,10 +6269,11 @@ async function generaUnFile(fname,resp,plant,anno,mese,emps,coopEmps){
 }
 
 function listFiles(q){return gFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name,mimeType)&pageSize=200').then(function(r){return r.files||[];});}
-function downloadFile(id){
-  if(DOWNLOAD_CACHE[id])return DOWNLOAD_CACHE[id];
+function downloadFile(id,force){
+  var c=DOWNLOAD_CACHE[id];
+  if(c&&!force&&(Date.now()-c.ts)<CACHE_TTL_MS)return c.promise;
   var p=fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){if(!r.ok)throw new Error('Download fallito: '+r.status);return r.blob();});
-  DOWNLOAD_CACHE[id]=p;
+  DOWNLOAD_CACHE[id]={promise:p,ts:Date.now()};
   p.catch(function(){delete DOWNLOAD_CACHE[id];});
   return p;
 }
@@ -6285,6 +6287,7 @@ function downloadFile(id){
 // fileId non appena quel file viene modificato tramite sheetsBatchUpdate.
 var SHEETS_READ_CACHE={};
 var DOWNLOAD_CACHE={};
+var CACHE_TTL_MS=5*60*1000; // 5 minuti: dopo, una lettura normale rilegge da Drive anche senza forzare
 function sheetsReadCacheInvalidate(spreadsheetId){
   Object.keys(SHEETS_READ_CACHE).forEach(function(k){
     if(k.indexOf(spreadsheetId+'|')===0)delete SHEETS_READ_CACHE[k];
@@ -6315,19 +6318,20 @@ function gFetch(url,_retryCount){
     return r.json();
   });
 }
-function sheetsRead(spreadsheetId,range){
+function sheetsRead(spreadsheetId,range,force){
   // Wrap sheet name in single quotes to handle underscores and special chars
   var safeRange=range.replace(/^([^!]+)!/,function(m,sn){
     if(sn.charAt(0)!=="'") return "'"+sn+"'!";
     return m;
   });
   var key=spreadsheetId+'|'+safeRange;
-  if(SHEETS_READ_CACHE[key])return SHEETS_READ_CACHE[key];
+  var c=SHEETS_READ_CACHE[key];
+  if(c&&!force&&(Date.now()-c.ts)<CACHE_TTL_MS)return c.promise;
   var p=gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+spreadsheetId+'/values/'+encodeURIComponent(safeRange)+'?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING').then(function(r){
     if(r.error)throw new Error('Sheets API: '+r.error.message+'\nRange: '+safeRange);
     return r.values||[];
   });
-  SHEETS_READ_CACHE[key]=p;
+  SHEETS_READ_CACHE[key]={promise:p,ts:Date.now()};
   p.catch(function(){delete SHEETS_READ_CACHE[key];});
   return p;
 }
@@ -6836,7 +6840,7 @@ function runThrottled(items, worker, batchSize, delayMs, opts){
   return nextBatch();
 }
 
-function ferieLoad(){
+function ferieLoad(force){
   ferieSyncFilters();
   var resp=document.getElementById('fResp2').value;
   var plant=document.getElementById('fPlant2').value;
@@ -6862,7 +6866,7 @@ function ferieLoad(){
     ganttSigleMap={};
     runThrottled(files, function(f){
       var p=parseFileName(f.name);var sname=MESI[p.month-1]+'_ATS';var isXlsx=/\.xlsx$/i.test(f.name);
-      return (isXlsx?downloadFile(f.id).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');}):sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
+      return (isXlsx?downloadFile(f.id,force).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');}):sheetsRead(f.id,sname+'!A1:AQ300',force).then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
       .then(function(d){
         d.employees.forEach(function(e){
           var sap=String(e.id||e.sap||'').trim();var nome=String(e.nome||'').trim();if(!nome)return;
@@ -6879,7 +6883,7 @@ function ferieLoad(){
           }
         });
       });
-    }, 20, 60, {
+    }, 12, 150, {
       itemLabel:function(f){return f.name;},
       onProgress:function(done,total){document.getElementById('ferieContent').innerHTML='<div class="gantt-spinner"><div class="spinner"></div>Caricamento\u2026 '+done+'/'+total+' file</div>';}
     }).then(function(results){
@@ -6918,7 +6922,7 @@ function ferieRicalcola(){
   var resetSaps={};
   runThrottled(files, function(f){
     var p=parseFileName(f.name);var sname=MESI[p.month-1]+'_ATS';var isXlsx=/\.xlsx$/i.test(f.name);
-    return (isXlsx?downloadFile(f.id).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');}):sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
+    return (isXlsx?downloadFile(f.id,true).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');}):sheetsRead(f.id,sname+'!A1:AQ300',true).then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
     .then(function(d){
       d.employees.forEach(function(emp){
         var sap=emp.id||emp.sap||'';
@@ -6933,7 +6937,7 @@ function ferieRicalcola(){
         });
       });
     });
-  }, 20, 60, {
+  }, 12, 150, {
     itemLabel:function(f){return f.name;},
     onProgress:function(done,total){document.getElementById('ferieContent').innerHTML='<div class="gantt-spinner"><div class="spinner"></div>Ricalcolo\u2026 '+done+'/'+total+' file</div>';}
   }).then(function(results){return saveFerieResiduo().then(function(){return results;});}).then(function(results){
