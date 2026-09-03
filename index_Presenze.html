@@ -6767,7 +6767,7 @@ function runThrottled(items, worker, batchSize, delayMs){
   // 300 anche se finiscono in 1-2 secondi. Il batch a lotti (invece di
   // Promise.all su tutto) resta solo per non aprire centinaia di
   // connessioni in un colpo solo nei casi con moltissimi file.
-  batchSize = batchSize || 12;
+  batchSize = batchSize || 6;
   delayMs = delayMs===undefined ? 150 : delayMs;
   var results = new Array(items.length);
   var i = 0;
