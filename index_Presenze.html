@@ -6269,16 +6269,54 @@ async function generaUnFile(fname,resp,plant,anno,mese,emps,coopEmps){
 
 function listFiles(q){return gFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name,mimeType)&pageSize=200').then(function(r){return r.files||[];});}
 function downloadFile(id){return fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){if(!r.ok)throw new Error('Download fallito: '+r.status);return r.blob();});}
+// ── Rate limiter globale per le chiamate Google (Sheets/Drive). Prima ogni
+// gFetch sparava la fetch subito e si limitava a ritentare DOPO il 429; col
+// Piano Ferie (decine di file per tutti i mesi/stabilimenti) questo causava
+// raffiche che sforavano la quota "Read requests per minute per user" quasi
+// subito, e con retry limitato a 4 tentativi alcuni file restavano
+// definitivamente 429/503 → venivano scartati in silenzio da runThrottled.
+// Ora tutte le richieste passano da questa coda, che limita quante ne
+// partono al minuto e quante sono in volo contemporaneamente, così la
+// quota non viene più superata nella maggior parte dei casi.
+var GFETCH_RL={maxPerMinute:50,maxConcurrent:3,times:[],queue:[],active:0};
+function gFetchSchedule(fn){
+  return new Promise(function(resolve,reject){
+    GFETCH_RL.queue.push({fn:fn,resolve:resolve,reject:reject});
+    gFetchPump();
+  });
+}
+function gFetchPump(){
+  var rl=GFETCH_RL;
+  while(rl.queue.length&&rl.active<rl.maxConcurrent){
+    var now=Date.now();
+    rl.times=rl.times.filter(function(t){return now-t<60000;});
+    if(rl.times.length>=rl.maxPerMinute){
+      var waitMs=60000-(now-rl.times[0])+50;
+      setTimeout(gFetchPump,waitMs);
+      return;
+    }
+    var item=rl.queue.shift();
+    rl.times.push(now);
+    rl.active++;
+    (function(item){
+      item.fn().then(function(r){rl.active--;item.resolve(r);gFetchPump();},function(e){rl.active--;item.reject(e);gFetchPump();});
+    })(item);
+  }
+}
 function gFetch(url,_retryCount){
   var tok=getToken();
   if(!tok)return Promise.reject(new Error('No token'));
   _retryCount=_retryCount||0;
-  return fetch(url,{headers:{Authorization:'Bearer '+tok}}).then(function(r){
-    if(r.status===429&&_retryCount<4){
-      // Rate limit: riprova con backoff esponenziale invece di far fallire la lettura in silenzio
+  return gFetchSchedule(function(){return fetch(url,{headers:{Authorization:'Bearer '+tok}});}).then(function(r){
+    if(r.status===429||r.status===503){
+      // Rate limit / servizio momentaneamente non disponibile: si ritenta
+      // SEMPRE (nessun tetto ai tentativi) con backoff esponenziale, così
+      // nessun file viene perso per un errore transitorio — al massimo
+      // rallenta il caricamento, ma alla fine legge tutto.
       var retryAfter=parseFloat(r.headers.get('Retry-After'));
-      var waitMs=!isNaN(retryAfter)?retryAfter*1000:(800*Math.pow(2,_retryCount)+Math.random()*300);
-      console.warn('[WMS] gFetch 429, retry '+(_retryCount+1)+'/4 tra '+Math.round(waitMs)+'ms: '+url.substring(0,80));
+      var waitMs=!isNaN(retryAfter)?retryAfter*1000:(800*Math.pow(2,Math.min(_retryCount,8))+Math.random()*300);
+      waitMs=Math.min(waitMs,30000);
+      console.warn('[WMS] gFetch '+r.status+', retry '+(_retryCount+1)+' tra '+Math.round(waitMs)+'ms: '+url.substring(0,80));
       return new Promise(function(res){setTimeout(res,waitMs);}).then(function(){return gFetch(url,_retryCount+1);});
     }
     if(!r.ok){
@@ -6759,29 +6797,46 @@ function ferieRenderOnly(){
 // caricare in un colpo solo decine di file provoca una raffica di errori
 // 429 "Quota exceeded", che poi vengono scambiati per "dato non trovato"
 // da chi chiama (es. ricerca dipendente in Piano Ferie).
-function runThrottled(items, worker, batchSize, delayMs){
-  // Quota Sheets API = 300 letture/min/utente: è un tetto sul NUMERO di
-  // richieste in un minuto, non sulla concorrenza. Con i volumi tipici di
-  // un "Carica" (decine di file) possiamo quindi leggerli quasi tutti
-  // insieme come faceva il codice originale — il totale resta ben sotto
-  // 300 anche se finiscono in 1-2 secondi. Il batch a lotti (invece di
-  // Promise.all su tutto) resta solo per non aprire centinaia di
-  // connessioni in un colpo solo nei casi con moltissimi file.
+function runThrottled(items, worker, batchSize, delayMs, itemLabel){
+  // gFetch ora ritenta da solo all'infinito sui 429/503 (vedi sopra), ma un
+  // item può comunque fallire per altri motivi transitori (errore di rete,
+  // 5xx diverso da 503, ecc.). Prima, al primo fallimento l'item veniva
+  // scartato per sempre (results[i]=null) e il chiamante non se ne accorgeva
+  // nemmeno: è così che nel Piano Ferie sparivano dipendenti/giorni senza
+  // nessun avviso. Ora ogni item viene ritentato più volte con backoff, e
+  // solo se fallisce anche dopo tutti i tentativi finisce nei "falliti",
+  // che vengono restituiti al chiamante (results.failed) invece di essere
+  // solo loggati in console.
   batchSize = batchSize || 6;
   delayMs = delayMs===undefined ? 500 : delayMs;
+  var ITEM_MAX_RETRY = 6;
   var results = new Array(items.length);
+  var failed = [];
   var i = 0;
+  function runItem(it, attempt){
+    return worker(it).catch(function(e){
+      if(attempt<ITEM_MAX_RETRY){
+        var waitMs=1000*Math.pow(1.7,attempt)+Math.random()*300;
+        console.warn('[WMS] runThrottled retry item '+(itemLabel?itemLabel(it):'')+' tentativo '+(attempt+1)+'/'+ITEM_MAX_RETRY+' tra '+Math.round(waitMs)+'ms:',e&&e.message);
+        return new Promise(function(res){setTimeout(res,waitMs);}).then(function(){return runItem(it,attempt+1);});
+      }
+      console.error('[WMS] runThrottled item definitivamente fallito dopo '+ITEM_MAX_RETRY+' tentativi: '+(itemLabel?itemLabel(it):''),e&&e.message);
+      failed.push({item:it,error:e&&e.message});
+      return null;
+    });
+  }
   function nextBatch(){
-    if(i>=items.length) return Promise.resolve(results);
+    if(i>=items.length){results.failed=failed;return Promise.resolve(results);}
     var batch = items.slice(i, i+batchSize);
     var startIdx = i;
     i += batchSize;
     return Promise.all(batch.map(function(it,bi){
-      return worker(it).then(function(r){results[startIdx+bi]=r;}).catch(function(e){results[startIdx+bi]=null;console.warn('[WMS] runThrottled item error:',e&&e.message);});
+      return runItem(it,0).then(function(r){results[startIdx+bi]=r;});
     })).then(function(){
       if(i<items.length){
         return new Promise(function(res){setTimeout(res,delayMs);}).then(nextBatch);
       }
+      results.failed=failed;
       return results;
     });
   }
@@ -6831,7 +6886,7 @@ function ferieLoad(){
           }
         });
       });
-    }).then(function(){
+    }, 6, 500, function(f){return f.name;}).then(function(results){
       ferieDipList.sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'');});
       var sel=document.getElementById('fDip');
       sel.innerHTML='<option value="">\u2014 Tutti \u2014</option>';
@@ -6843,6 +6898,12 @@ function ferieLoad(){
       document.getElementById('fRicalcBtn').disabled=false;
       document.getElementById('fExpBtn').disabled=false;
       document.getElementById('fMassBtn').disabled=false;
+      // Avvisa se qualche file non è stato letto nemmeno dopo tutti i
+      // retry, invece di lasciare che i dati mancanti passino inosservati.
+      if(results.failed&&results.failed.length){
+        var names=results.failed.map(function(x){return x.item&&x.item.name;}).filter(Boolean).join(', ');
+        toast('\u26a0\ufe0f '+results.failed.length+' file non letti: '+names,'warn');
+      }
     });
   }).catch(function(e){
     // Gestore d'errore reale della catena (prima era codice orfano: mancava
@@ -6878,7 +6939,14 @@ function ferieRicalcola(){
         });
       });
     });
-  }).then(function(){return saveFerieResiduo();}).then(function(){toast('\u2705 Ricalcolo completato');ferieLoad();}).catch(function(e){toast('\u2717 Errore: '+e.message,'err');document.getElementById('fRicalcBtn').disabled=false;});
+  }, 6, 500, function(f){return f.name;}).then(function(results){return saveFerieResiduo().then(function(){return results;});}).then(function(results){
+    toast('\u2705 Ricalcolo completato');
+    if(results.failed&&results.failed.length){
+      var names=results.failed.map(function(x){return x.item&&x.item.name;}).filter(Boolean).join(', ');
+      toast('\u26a0\ufe0f '+results.failed.length+' file non letti (dati non ricalcolati): '+names,'warn');
+    }
+    ferieLoad();
+  }).catch(function(e){toast('\u2717 Errore: '+e.message,'err');document.getElementById('fRicalcBtn').disabled=false;});
 }
 
 function renderGantt(dipList,year,mDa,mA){
