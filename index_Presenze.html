@@ -3409,14 +3409,13 @@ function coopLoad(){
   }
   var sheetName=MESI[m-1]+'_Coop';
   setEl('cContent',spinH('Lettura '+files.length+' file…'));
-  var promises=files.map(function(f){
+  runThrottled(files, function(f){
     var isXlsx=/\.xlsx$/i.test(f.name);
     return (isXlsx
       ? downloadFile(f.id).then(function(b){return parseSheetBlob(b,y,m,f.id,sheetName,'coop');})
       : sheetsRead(f.id,sheetName+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,y,m,f.id,sheetName,'coop');}))
     .catch(function(e){console.warn('[WMS] coopLoad skip '+f.name+': '+e.message);return null;});
-  });
-  Promise.all(promises).then(function(results){
+  }).then(function(results){
     var merged=null;
     results.forEach(function(d){if(!d)return;if(!merged){merged=d;return;}merged.employees=merged.employees.concat(d.employees);});
     if(!merged){
@@ -3726,14 +3725,13 @@ function atsLoad(){
   }
   var sheetName=MESI[m-1]+'_ATS';
   setEl('aContent',spinH('Lettura '+files.length+' file…'));
-  var promises=files.map(function(f){
+  runThrottled(files, function(f){
     var isXlsx=/\.xlsx$/i.test(f.name);
     return (isXlsx
       ? downloadFile(f.id).then(function(b){return parseSheetBlob(b,y,m,f.id,sheetName,'ats');})
       : sheetsRead(f.id,sheetName+'!A1:AQ200').then(function(vals){return parseSheetValues(vals,y,m,f.id,sheetName,'ats');}))
     .catch(function(e){console.warn('[WMS] atsLoad skip '+f.name+': '+e.message);return null;});
-  });
-  Promise.all(promises).then(function(results){
+  }).then(function(results){
     var merged=null;
     results.forEach(function(d){if(!d)return;if(!merged){merged=d;return;}merged.employees=merged.employees.concat(d.employees);});
     if(!merged){
@@ -6762,8 +6760,8 @@ function ferieRenderOnly(){
 // 429 "Quota exceeded", che poi vengono scambiati per "dato non trovato"
 // da chi chiama (es. ricerca dipendente in Piano Ferie).
 function runThrottled(items, worker, batchSize, delayMs){
-  batchSize = batchSize || 3;
-  delayMs = delayMs===undefined ? 500 : delayMs;
+  batchSize = batchSize || 1;
+  delayMs = delayMs===undefined ? 1050 : delayMs;
   var results = new Array(items.length);
   var i = 0;
   function nextBatch(){
@@ -6800,15 +6798,32 @@ function ferieLoad(){
       document.getElementById('ferieContent').innerHTML='<div class="state"><div class="state-ico">\ud83d\udcc2</div><div class="state-title">Nessun file trovato</div></div>';
       document.getElementById('fRicalcBtn').disabled=false;return;
     }
-    // Load ALL files to get ALL employees (not just first month)
+    // Un solo giro di lettura per file: prima si leggevano tutti i file due
+    // volte (una per l'elenco dipendenti, una per le sigle del Gantt) — con
+    // range mesi di default (Gennaio-Dicembre) erano LO STESSO identico set
+    // di file, quindi ogni file veniva scaricato due volte inutilmente.
+    // Ora si estraggono entrambe le informazioni dalla stessa risposta.
     ferieDipList=[];
-    // Caricamento a lotti (max 4 in parallelo, pausa 350ms tra i lotti) per
-    // non superare la quota di lettura di Google Sheets quando i file sono
-    // molti (es. tutto l'anno per più responsabili/plant).
+    ganttSigleMap={};
     runThrottled(files, function(f){
       var p=parseFileName(f.name);var sname=MESI[p.month-1]+'_ATS';var isXlsx=/\.xlsx$/i.test(f.name);
       return (isXlsx?downloadFile(f.id).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');}):sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
-      .then(function(d){d.employees.forEach(function(e){var sap=String(e.id||e.sap||'').trim();var nome=String(e.nome||'').trim();if(!nome)return;var key=(sap||nome);if(!ferieDipList.find(function(x){return (x.sap&&x.sap===sap)||(x.nome===nome&&x.plant===(e.plant||p.plant));}))ferieDipList.push({sap:sap,nome:nome,resp:d.globalResp||p.resp,plant:e.plant||p.plant});});});
+      .then(function(d){
+        d.employees.forEach(function(e){
+          var sap=String(e.id||e.sap||'').trim();var nome=String(e.nome||'').trim();if(!nome)return;
+          if(!ferieDipList.find(function(x){return (x.sap&&x.sap===sap)||(x.nome===nome&&x.plant===(e.plant||p.plant));}))
+            ferieDipList.push({sap:sap,nome:nome,resp:d.globalResp||p.resp,plant:e.plant||p.plant});
+          if(sap){
+            if(!ganttSigleMap[sap])ganttSigleMap[sap]={};
+            (e.sigla||[]).forEach(function(sig,di){
+              if(!sig||!d.dates[di])return;
+              var dt=d.dates[di];
+              var dateStr=p.year+'-'+('0'+p.month).slice(-2)+'-'+('0'+dt.day).slice(-2);
+              ganttSigleMap[sap][dateStr]=sig;
+            });
+          }
+        });
+      });
     }).then(function(){
       ferieDipList.sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'');});
       var sel=document.getElementById('fDip');
@@ -6817,41 +6832,10 @@ function ferieLoad(){
       var mDa=parseInt(document.getElementById('fMeseDa').value)||1;
       var mA=parseInt(document.getElementById('fMeseA').value)||12;
 
-      // Carica sigle reali da tutti i file del range - prima mostra Gantt con ferieData, poi aggiorna
       renderGantt(ferieDipList,year,mDa,mA);
       document.getElementById('fRicalcBtn').disabled=false;
       document.getElementById('fExpBtn').disabled=false;
       document.getElementById('fMassBtn').disabled=false;
-
-      // In background carica sigle reali da tutti i file ATS del periodo
-      ganttSigleMap={};
-      var allPeriodFiles=allFiles.filter(function(f){
-        var p=parseFileName(f.name);
-        return p&&p.year===year&&p.month>=mDa&&p.month<=mA
-          &&(!resp||p.resp.toLowerCase()===resp.toLowerCase())
-          &&(!plant||p.plant.toLowerCase()===plant.toLowerCase());
-      });
-      runThrottled(allPeriodFiles, function(f){
-        var p=parseFileName(f.name);var sname=MESI[p.month-1]+'_ATS';
-        var isXlsx=/\.xlsx$/i.test(f.name);
-        return (isXlsx
-          ?downloadFile(f.id).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');})
-          :sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
-        .then(function(d){
-          d.employees.forEach(function(emp){
-            var sap=String(emp.id||emp.sap||'').trim();if(!sap)return;
-            if(!ganttSigleMap[sap])ganttSigleMap[sap]={};
-            (emp.sigla||[]).forEach(function(sig,di){
-              if(!sig||!d.dates[di])return;
-              var dt=d.dates[di];
-              var dateStr=p.year+'-'+('0'+p.month).slice(-2)+'-'+('0'+dt.day).slice(-2);
-              ganttSigleMap[sap][dateStr]=sig;
-            });
-          });
-        });
-      }).then(function(){
-        renderGantt(ferieDipList,year,mDa,mA);
-      });
     });
   }).catch(function(e){
     // Gestore d'errore reale della catena (prima era codice orfano: mancava
