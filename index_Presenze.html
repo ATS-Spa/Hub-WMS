@@ -4126,7 +4126,17 @@ function spConfirm(){
     } else {
       saveCommesse();
     }
-    if(fid3&&sname2)saveCommesseToSheet(spMode,fid2,spDi,fid3,sname2,y2,m2);
+    // Se lo split è stato rimosso (nessuna commessa selezionata) ma la presenza
+    // resta valida, emp.commesse[spDi] è ora null: bisogna ELIMINARE la riga
+    // residua sul foglio _Commesse, non semplicemente saltare la scrittura
+    // (saveCommesseToSheet non scrive nulla quando il valore è null).
+    if(fid3&&sname2){
+      if(emp.commesse&&emp.commesse[spDi]!=null){
+        saveCommesseToSheet(spMode,fid2,spDi,fid3,sname2,y2,m2);
+      } else {
+        deleteCommessaRow(spMode,fid2,spDi,fid3,sname2,y2,m2);
+      }
+    }
   }
   mClose('moSigla');
   if(spMode==='ats'){
