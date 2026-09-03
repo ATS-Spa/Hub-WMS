@@ -6267,21 +6267,59 @@ async function generaUnFile(fname,resp,plant,anno,mese,emps,coopEmps){
   ]);
 }
 
+// ── Limitatore globale delle richieste verso Google (Drive+Sheets) ──
+// Il problema visto nei log non era "quante richieste in un minuto" ma
+// "quante partono nello STESSO istante": un lotto in parallelo che prende
+// 429 fa ripartire i retry di ogni elemento quasi in sincronia (stesso
+// backoff, stesso momento), quindi si riscontrano ad ogni tentativo e
+// restano bloccati per tutti i 7 round. La soluzione è una coda UNICA che
+// fa partire le richieste reali una alla volta con una distanza minima:
+// così due richieste (originali o retry, di file diversi) non possono mai
+// collidere. Si autoregola: se vede un 429 allarga la distanza e mette in
+// pausa TUTTA la coda per un po', se procede liscio la restringe piano.
+var RL=(function(){
+  var lastStart=0, minGap=1100, cooldownUntil=0, queue=[], pumping=false;
+  function tick(){
+    if(!queue.length){pumping=false;return;}
+    var now=Date.now();
+    var earliest=Math.max(lastStart+minGap,cooldownUntil);
+    if(now>=earliest){
+      lastStart=now;
+      var resolve=queue.shift();
+      resolve();
+      tick();
+    } else {
+      // Ricontrollo a intervalli brevi (mai un unico timer lungo): se nel
+      // frattempo un'altra richiesta segnala un 429 e allunga cooldownUntil,
+      // questa coda in attesa lo vede al giro successivo invece di partire
+      // comunque al vecchio orario già programmato.
+      setTimeout(tick,Math.min(200,earliest-now));
+    }
+  }
+  return{
+    acquire:function(){return new Promise(function(res){queue.push(res);if(!pumping){pumping=true;tick();}});},
+    reportRateLimited:function(waitMs){cooldownUntil=Math.max(cooldownUntil,Date.now()+waitMs);minGap=Math.min(4000,Math.round(minGap*1.4));},
+    reportSuccess:function(){minGap=Math.max(1050,Math.round(minGap*0.98));}
+  };
+})();
 function listFiles(q){return gFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name,mimeType)&pageSize=200').then(function(r){return r.files||[];});}
-function downloadFile(id){return fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){if(!r.ok)throw new Error('Download fallito: '+r.status);return r.blob();});}
+function downloadFile(id){return RL.acquire().then(function(){return fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}});}).then(function(r){if(!r.ok)throw new Error('Download fallito: '+r.status);RL.reportSuccess();return r.blob();});}
 function gFetch(url,_retryCount){
   var tok=getToken();
   if(!tok)return Promise.reject(new Error('No token'));
   _retryCount=_retryCount||0;
-  return fetch(url,{headers:{Authorization:'Bearer '+tok}}).then(function(r){
-    if(r.status===429&&_retryCount<7){
-      // Rate limit: riprova con backoff esponenziale (fino a ~20s, tetto a 7
-      // tentativi) invece di far fallire la lettura in silenzio. La quota
-      // Sheets API si resetta su una finestra scorrevole: bisogna dare al
-      // backoff il tempo di superarla, non solo pochi secondi.
+  return RL.acquire().then(function(){return fetch(url,{headers:{Authorization:'Bearer '+tok}});}).then(function(r){
+    if((r.status===429||r.status===503||r.status===502||r.status===504)&&_retryCount<7){
+      // Rate limit o errore temporaneo del server: oltre al backoff sulla
+      // singola richiesta, mettiamo in pausa TUTTA la coda globale — così
+      // anche i retry di altri file non ripartono nello stesso istante di
+      // questo. Prima i 503 non venivano ritentati per niente: fallivano
+      // al primo colpo anche se erano solo un intoppo momentaneo del
+      // servizio Google, non un vero limite di quota.
       var retryAfter=parseFloat(r.headers.get('Retry-After'));
       var waitMs=!isNaN(retryAfter)?retryAfter*1000:Math.min(20000,900*Math.pow(1.8,_retryCount)+Math.random()*400);
-      console.warn('[WMS] gFetch 429, retry '+(_retryCount+1)+'/7 tra '+Math.round(waitMs)+'ms: '+url.substring(0,80));
+      RL.reportRateLimited(r.status===429?waitMs:Math.min(waitMs,3000));
+      console.warn('[WMS] gFetch '+r.status+', retry '+(_retryCount+1)+'/7 tra '+Math.round(waitMs)+'ms: '+url.substring(0,80));
       return new Promise(function(res){setTimeout(res,waitMs);}).then(function(){return gFetch(url,_retryCount+1);});
     }
     if(!r.ok){
@@ -6291,6 +6329,7 @@ function gFetch(url,_retryCount){
         throw new Error(msg);
       });
     }
+    RL.reportSuccess();
     return r.json();
   });
 }
@@ -6756,62 +6795,82 @@ function ferieRenderOnly(){
   renderGantt(list,year,mDa,mA);
 }
 
-// ── Esegue le funzioni (ognuna → Promise) a piccoli lotti con pausa tra un
-// lotto e l'altro, invece che tutte insieme in parallelo. Necessario per non
-// superare il limite di Google Sheets API (letture al minuto per utente):
-// caricare in un colpo solo decine di file provoca una raffica di errori
-// 429 "Quota exceeded", che poi vengono scambiati per "dato non trovato"
-// da chi chiama (es. ricerca dipendente in Piano Ferie).
-function runThrottled(items, worker, batchSize, delayMs, opts){
-  // Non conosciamo la quota reale del progetto (si è visto che 25 in
-  // parallelo la fa saturare in pochi secondi): partiamo prudenti e ci
-  // adattiamo da soli — lotto più piccolo e pausa più lunga appena un
-  // lotto incontra un 429, lotto più grande se procede liscio. Così non
-  // serve indovinare un numero fisso e non si rischia più la tempesta di
-  // 429 vista nei log.
-  batchSize = batchSize || 6;
-  delayMs = delayMs===undefined ? 350 : delayMs;
+// ── Avvia le funzioni (ognuna → Promise) tutte insieme: il vero
+// scaglionamento delle richieste reali verso Google ora avviene dentro
+// gFetch/downloadFile tramite la coda globale RL (vedi sopra), quindi qui
+// non serve più indovinare un batchSize — si tiene solo traccia di
+// avanzamento ed errori. Firma retrocompatibile con le chiamate esistenti
+// che passano solo (items, worker).
+function runThrottled(items, worker, opts){
   opts = opts || {};
-  var minBatch=1, maxBatch=Math.max(batchSize,20);
   var results = new Array(items.length);
   var failed = []; // {item,error} — file che hanno esaurito anche i 7 retry di gFetch
-  var doneCount=0;
-  var i = 0;
-  function nextBatch(){
-    if(i>=items.length) return Promise.resolve(results);
-    var batch = items.slice(i, i+batchSize);
-    var startIdx = i;
-    i += batchSize;
-    var batchHadRateLimit=false;
-    return Promise.all(batch.map(function(it,bi){
-      return worker(it).then(function(r){results[startIdx+bi]=r;}).catch(function(e){
-        results[startIdx+bi]=null;
-        var msg=(e&&e.message)||String(e);
-        if(/quota|rate limit|429/i.test(msg))batchHadRateLimit=true;
-        failed.push({item:it,error:msg});
-        console.warn('[WMS] runThrottled item error:',msg);
-      }).then(function(){
-        doneCount++;
-        if(opts.onProgress)opts.onProgress(doneCount,items.length,failed.length);
-      });
-    })).then(function(){
-      if(batchHadRateLimit){
-        batchSize=Math.max(minBatch,Math.floor(batchSize/2));
-        delayMs=Math.min(4000,Math.round(delayMs*1.6));
-      } else if(batchSize<maxBatch){
-        batchSize=Math.min(maxBatch,batchSize+1);
-        delayMs=Math.max(200,Math.round(delayMs*0.92));
-      }
-      if(i<items.length){
-        return new Promise(function(res){setTimeout(res,delayMs);}).then(nextBatch);
-      }
-      return results;
+  var done = 0;
+  return Promise.all(items.map(function(it,idx){
+    return worker(it).then(function(r){results[idx]=r;}).catch(function(e){
+      results[idx]=null;
+      var msg=(e&&e.message)||String(e);
+      failed.push({item:it,error:msg});
+      console.warn('[WMS] runThrottled item error:',msg);
+    }).then(function(){
+      done++;
+      if(opts.onProgress)opts.onProgress(done,items.length,failed.length);
     });
-  }
-  return nextBatch().then(function(res){
-    res.failed=failed; // proprietà extra sull'array: non rompe chi fa solo results.forEach(...)
-    return res;
+  })).then(function(){
+    results.failed=failed; // proprietà extra sull'array: non rompe chi fa solo results.forEach(...)
+    return results;
   });
+}
+
+// Legge un file mensile e ne estrae sia l'elenco dipendenti sia le sigle
+// per il Gantt (funzione riusabile: serve sia al giro principale di
+// ferieLoad sia al secondo tentativo automatico sui file falliti).
+function ferieFileWorker(f){
+  var p=parseFileName(f.name);var sname=MESI[p.month-1]+'_ATS';var isXlsx=/\.xlsx$/i.test(f.name);
+  return (isXlsx?downloadFile(f.id).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');}):sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
+  .then(function(d){
+    d.employees.forEach(function(e){
+      var sap=String(e.id||e.sap||'').trim();var nome=String(e.nome||'').trim();if(!nome)return;
+      if(!ferieDipList.find(function(x){return (x.sap&&x.sap===sap)||(x.nome===nome&&x.plant===(e.plant||p.plant));}))
+        ferieDipList.push({sap:sap,nome:nome,resp:d.globalResp||p.resp,plant:e.plant||p.plant});
+      if(sap){
+        if(!ganttSigleMap[sap])ganttSigleMap[sap]={};
+        (e.sigla||[]).forEach(function(sig,di){
+          if(!sig||!d.dates[di])return;
+          var dt=d.dates[di];
+          var dateStr=p.year+'-'+('0'+p.month).slice(-2)+'-'+('0'+dt.day).slice(-2);
+          ganttSigleMap[sap][dateStr]=sig;
+        });
+      }
+    });
+  });
+}
+
+// Chiude il caricamento: ordina, popola il filtro dipendenti, disegna il
+// Gantt e — solo se anche dopo il secondo tentativo restano file non letti
+// — mostra un banner esplicito invece di lasciare i dati incompleti senza
+// nessun avviso.
+function ferieRenderFinal(year,stillFailed){
+  ferieDipList.sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'');});
+  var sel=document.getElementById('fDip');
+  sel.innerHTML='<option value="">\u2014 Tutti \u2014</option>';
+  ferieDipList.forEach(function(d){var o=document.createElement('option');o.value=d.sap;o.textContent=d.nome+(d.sap?' ('+d.sap+')':'');sel.appendChild(o);});
+  var mDa=parseInt(document.getElementById('fMeseDa').value)||1;
+  var mA=parseInt(document.getElementById('fMeseA').value)||12;
+  renderGantt(ferieDipList,year,mDa,mA);
+  document.getElementById('fRicalcBtn').disabled=false;
+  document.getElementById('fExpBtn').disabled=false;
+  document.getElementById('fMassBtn').disabled=false;
+  if(stillFailed&&stillFailed.length){
+    var names=stillFailed.map(function(x){return x.item&&x.item.name;}).filter(Boolean);
+    console.warn('[WMS] Piano Ferie: file NON caricati nemmeno al secondo tentativo:',names);
+    var banner=document.createElement('div');
+    banner.style.cssText='background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);color:var(--text);padding:8px 14px;font-size:12px;border-radius:6px;margin:8px 20px;line-height:1.5';
+    banner.innerHTML='\u26a0\ufe0f <strong>'+stillFailed.length+' file non caricati</strong> (limite di lettura Google raggiunto anche dopo i tentativi automatici e un secondo giro): '+esc(names.join(', '))+'. I dati di questi dipendenti/mesi potrebbero mancare dal Piano Ferie. Aspetta un minuto e premi di nuovo «Carica».';
+    var fc=document.getElementById('ferieContent');
+    fc.insertBefore(banner,fc.firstChild);
+    toast('\u26a0\ufe0f '+stillFailed.length+' file non caricati, controlla l\u2019avviso nel pannello','err');
+  }
 }
 
 function ferieLoad(){
@@ -6845,57 +6904,31 @@ function ferieLoad(){
   // aggiungendo un giro di rete a vuoto in testa. Ora parte in parallelo.
   Promise.all([
     loadFerieResiduo(year),
-    runThrottled(files, function(f){
-      var p=parseFileName(f.name);var sname=MESI[p.month-1]+'_ATS';var isXlsx=/\.xlsx$/i.test(f.name);
-      return (isXlsx?downloadFile(f.id).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');}):sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
-      .then(function(d){
-        d.employees.forEach(function(e){
-          var sap=String(e.id||e.sap||'').trim();var nome=String(e.nome||'').trim();if(!nome)return;
-          if(!ferieDipList.find(function(x){return (x.sap&&x.sap===sap)||(x.nome===nome&&x.plant===(e.plant||p.plant));}))
-            ferieDipList.push({sap:sap,nome:nome,resp:d.globalResp||p.resp,plant:e.plant||p.plant});
-          if(sap){
-            if(!ganttSigleMap[sap])ganttSigleMap[sap]={};
-            (e.sigla||[]).forEach(function(sig,di){
-              if(!sig||!d.dates[di])return;
-              var dt=d.dates[di];
-              var dateStr=p.year+'-'+('0'+p.month).slice(-2)+'-'+('0'+dt.day).slice(-2);
-              ganttSigleMap[sap][dateStr]=sig;
-            });
-          }
-        });
-      });
-    }, undefined, undefined, {onProgress:function(done,total,failedCount){
+    runThrottled(files, ferieFileWorker, {onProgress:function(done,total,failedCount){
       var el=document.getElementById('ferieLoadProgress');
       if(!el)return;
       el.textContent='File letti: '+done+'/'+total+(failedCount?' \u2014 '+failedCount+' in difficolt\u00e0, riprovo automaticamente\u2026':'');
     }})
   ]).then(function(res){
     var fileRes=res[1];
-    ferieDipList.sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'');});
-    var sel=document.getElementById('fDip');
-    sel.innerHTML='<option value="">\u2014 Tutti \u2014</option>';
-    ferieDipList.forEach(function(d){var o=document.createElement('option');o.value=d.sap;o.textContent=d.nome+(d.sap?' ('+d.sap+')':'');sel.appendChild(o);});
-    var mDa=parseInt(document.getElementById('fMeseDa').value)||1;
-    var mA=parseInt(document.getElementById('fMeseA').value)||12;
-
-    renderGantt(ferieDipList,year,mDa,mA);
-    document.getElementById('fRicalcBtn').disabled=false;
-    document.getElementById('fExpBtn').disabled=false;
-    document.getElementById('fMassBtn').disabled=false;
-    // Se anche dopo i retry qualche file non è stato letto, va detto
-    // esplicitamente: prima veniva scartato in silenzio (results[i]=null)
-    // e i dati di quel dipendente/mese sparivano dal Piano Ferie senza
-    // nessun avviso.
     if(fileRes&&fileRes.failed&&fileRes.failed.length){
-      var names=fileRes.failed.map(function(x){return x.item&&x.item.name;}).filter(Boolean);
-      console.warn('[WMS] Piano Ferie: file NON caricati dopo i retry:',names);
-      var banner=document.createElement('div');
-      banner.style.cssText='background:rgba(239,68,68,.12);border:1px solid rgba(239,68,68,.4);color:var(--text);padding:8px 14px;font-size:12px;border-radius:6px;margin:8px 20px;line-height:1.5';
-      banner.innerHTML='\u26a0\ufe0f <strong>'+fileRes.failed.length+' file non caricati</strong> (limite di lettura Google raggiunto anche dopo i tentativi automatici): '+esc(names.join(', '))+'. I dati di questi dipendenti/mesi potrebbero mancare dal Piano Ferie. Premi di nuovo «Carica» per riprovare.';
-      var fc=document.getElementById('ferieContent');
-      fc.insertBefore(banner,fc.firstChild);
-      toast('\u26a0\ufe0f '+fileRes.failed.length+' file non caricati, controlla l\u2019avviso nel pannello','err');
+      // Anche con tutti i retry di gFetch, un lotto molto carico può
+      // lasciare fuori qualche file. Invece di arrenderci subito, aspettiamo
+      // qualche secondo (la coda RL nel frattempo si è già raffreddata da
+      // sola) e ritentiamo automaticamente SOLO i file rimasti indietro.
+      var retryFiles=fileRes.failed.map(function(x){return x.item;}).filter(Boolean);
+      var el=document.getElementById('ferieLoadProgress');
+      if(el)el.textContent=retryFiles.length+' file in coda per un secondo tentativo, attendo qualche secondo\u2026';
+      return new Promise(function(r2){setTimeout(r2,4000);}).then(function(){
+        return runThrottled(retryFiles, ferieFileWorker, {onProgress:function(done,total,failedCount){
+          var el2=document.getElementById('ferieLoadProgress');
+          if(el2)el2.textContent='Secondo tentativo: '+done+'/'+total+(failedCount?' \u2014 '+failedCount+' ancora in difficolt\u00e0':'');
+        }});
+      }).then(function(retryRes){
+        ferieRenderFinal(year,(retryRes&&retryRes.failed)||[]);
+      });
     }
+    ferieRenderFinal(year,[]);
   }).catch(function(e){
     // Gestore d'errore reale della catena (prima era codice orfano: mancava
     // sia il .catch() sia il parametro "e", quindi lanciava sempre un
