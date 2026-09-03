@@ -1987,6 +1987,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
         <button class="ba bghost" id="togHpres" onclick="ganttToggleCol('hpres')" style="padding:4px 10px;font-size:11px;font-family:var(--ffc);font-weight:700;color:var(--purple)">HP.Res</button>
       </div>
       <button class="ba bghost" id="togSigleFerie" onclick="toggleSigleFeriePanel()" style="padding:4px 10px;font-size:11px;font-family:var(--ffc);font-weight:700;color:var(--orange);border-color:rgba(251,146,60,.4)">🏷️ Sigle</button>
+      <button class="ba bghost" id="togSaldoResiduo" onclick="toggleSaldoResiduoPanel()" style="display:none;padding:4px 10px;font-size:11px;font-family:var(--ffc);font-weight:700;color:var(--teal);border-color:rgba(45,212,191,.4)">💾 Saldo Residuo</button>
     </div>
     <!-- Pannello sigle Piano Ferie (collassabile) -->
     <div id="sigleFeriePanel" style="display:none;flex-shrink:0;background:var(--surface);border-bottom:1px solid var(--border);padding:10px 20px 12px">
@@ -1998,6 +1999,23 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
         </div>
       </div>
       <div id="sigleFerieGrid" style="display:flex;flex-wrap:wrap;gap:6px"></div>
+    </div>
+    <!-- Pannello Saldo Residuo (import/export/modifica manuale) - solo admin/superadmin -->
+    <div id="saldoResiduoPanel" style="display:none;flex-shrink:0;background:var(--surface);border-bottom:1px solid var(--border);padding:12px 20px 16px">
+      <div style="background:rgba(251,146,60,.1);border:1px solid rgba(251,146,60,.35);border-radius:8px;padding:8px 12px;margin-bottom:12px;font-size:12px;color:var(--text);font-weight:600">
+        ⚠️ Saldo AD OGGI — i valori importati/inseriti sono comprensivi delle assenze (F/HP) già registrate quest'anno
+      </div>
+      <div style="display:flex;flex-wrap:wrap;gap:8px;align-items:center;margin-bottom:12px">
+        <input type="file" id="impResiduoFile" accept=".xlsx,.xls" style="font-size:11px;max-width:220px" onchange="impResiduoPreview()">
+        <button class="ba bghost" onclick="impResiduoConfirm()" id="impResiduoBtn" disabled>✓ Conferma import</button>
+        <span id="impResiduoCount" style="font-size:11px;color:var(--muted);display:none"></span>
+        <span style="flex:1"></span>
+        <button class="ba bghost" onclick="downloadResiduoTemplate()">📄 Template vuoto</button>
+        <button class="ba bghost am" onclick="exportResiduoXlsx()">⬇ Esporta xlsx</button>
+      </div>
+      <div id="impResiduoTableWrap" style="max-height:220px;overflow:auto;margin-bottom:14px"></div>
+      <div style="font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:.5px;color:var(--muted);text-transform:uppercase;margin-bottom:6px">Modifica manuale singolo dipendente</div>
+      <div id="saldoManualeWrap"></div>
     </div>
     <div class="gantt-wrap" id="ferieContent" style="display:flex;flex-direction:column;overflow:hidden">
       <div class="state"><div class="state-ico">🏖️</div><div class="state-title">Seleziona filtri e premi Carica</div></div>
@@ -2927,6 +2945,7 @@ function applyPerm(){
     document.getElementById('permBadge').textContent='ADMIN';
     document.getElementById('permBadge').className='pbadge is-admin';
     document.getElementById('snFerie').style.display='';
+    var tsr=document.getElementById('togSaldoResiduo');if(tsr)tsr.style.display='';
     autoAdminIfSaved();
   } else if(uc){
     userTags=uc.tags||[];userSecs=uc.sections||[];isReadOnly=!uc.is_admin;
@@ -4979,11 +4998,15 @@ function addContr(){
   renderPermPanel();toast('✓ Override aggiunto — premi Salva Config');
 }
 function getContratto(sap){
+  // Fonte unica: Anagrafica del Modulo Richieste Ferie (permConfig.dipendenti[].contratto).
+  // Il vecchio pannello "Contratti ATS" (permConfig.ats_contratti) non viene più letto qui:
+  // resta in UI ma è deprecato, per evitare due fonti divergenti per lo stesso dipendente.
   var def=(permConfig&&permConfig.ats_contratto_default)||{ferie_giorni:26,permessi_ore:32};
   if(!sap)return def;
-  var list=(permConfig&&permConfig.ats_contratti)||[];
-  var ov=list.find(function(c){return String(c.sap||'').trim()===String(sap).trim();});
-  return ov||def;
+  var list=(permConfig&&permConfig.dipendenti)||[];
+  var dip=list.find(function(d){return String(d.sap||'').trim()===String(sap).trim();});
+  if(dip&&dip.contratto)return{ferie_giorni:(dip.contratto.ferie_giorni!=null?dip.contratto.ferie_giorni:def.ferie_giorni),permessi_ore:(dip.contratto.permessi_ore!=null?dip.contratto.permessi_ore:def.permessi_ore)};
+  return def;
 }
 // ═══════════════════════════════════════════════════════════
 //  COMMESSE CONFIG
@@ -6570,11 +6593,19 @@ var ferieFileId=null;
 var ferieYear=null;
 var ferieDipList=[];
 var ganttSigleMap={}; // {sap: {dateStr: sigla}} - dati reali dai fogli ATS
+var feriePrevData=null; // residuo dell'anno precedente, usato per il riporto (carry-over) del saldo
 
 function ferieResiduoFname(year){ return 'residuo_ats_'+year+'.json'; }
 
 function loadFerieResiduo(year){
   var fname=ferieResiduoFname(year);
+  // Carica in parallelo (best-effort) anche il file dell'anno precedente, serve per il riporto saldo
+  var prevPromise=listFiles('"'+FOLDER_ID_JSON+'" in parents and name="'+ferieResiduoFname(year-1)+'" and trashed=false')
+    .then(function(files){
+      if(!files.length)return null;
+      return fetch('https://www.googleapis.com/drive/v3/files/'+files[0].id+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){return r.json();});
+    }).catch(function(){return null;});
+  prevPromise.then(function(d){feriePrevData=d;}).catch(function(){feriePrevData=null;});
   return listFiles('"'+FOLDER_ID_JSON+'" in parents and name="'+fname+'" and trashed=false')
     .then(function(files){
       if(!files.length){ferieFileId=null;ferieData={anno:year,dipendenti:[]};return ferieData;}
@@ -6582,6 +6613,18 @@ function loadFerieResiduo(year){
       return fetch('https://www.googleapis.com/drive/v3/files/'+ferieFileId+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}})
         .then(function(r){return r.json();}).then(function(d){ferieData=d;return d;});
     });
+}
+
+// Calcola il riporto (saldo non goduto) dall'anno precedente per un dipendente, se disponibile
+function riportoAnnoPrec(sap){
+  if(!feriePrevData||!feriePrevData.dipendenti)return{ferie:0,permessi:0};
+  var p=feriePrevData.dipendenti.find(function(d){return String(d.sap||'').trim()===String(sap||'').trim();});
+  if(!p)return{ferie:0,permessi:0};
+  var pContratto=getContratto(sap);
+  var pBase=p.saldo_iniziale||{ferie:pContratto.ferie_giorni,permessi:pContratto.permessi_ore};
+  var pFerieGodute=(p.ferie_godute||[]).length;
+  var pPermGodute=(p.permessi_goduti||[]).reduce(function(a,x){return a+(x.ore||0);},0);
+  return{ferie:Math.max(0,pBase.ferie-pFerieGodute),permessi:Math.max(0,pBase.permessi-pPermGodute)};
 }
 
 function saveFerieResiduo(){
@@ -6605,17 +6648,52 @@ function saveFerieResiduo(){
 function getFerieDip(sap,nome,resp,plant){
   if(!ferieData)return null;
   var found=ferieData.dipendenti.find(function(d){return String(d.sap||'').trim()===String(sap||'').trim();});
-  if(!found){found={sap:sap,nome:nome,resp:resp,plant:plant,ferie_godute:[],permessi_goduti:[]};ferieData.dipendenti.push(found);}
+  if(!found){
+    var contratto=getContratto(sap);
+    var riporto=riportoAnnoPrec(sap);
+    found={sap:sap,nome:nome,resp:resp,plant:plant,ferie_godute:[],permessi_goduti:[],
+      saldo_iniziale:{ferie:round1(contratto.ferie_giorni+riporto.ferie),permessi:round1(contratto.permessi_ore+riporto.permessi)}};
+    ferieData.dipendenti.push(found);
+  } else if(!found.saldo_iniziale){
+    // Record pre-esistente senza saldo_iniziale (migrazione soft): lo inizializza ora, stessa logica
+    var contratto2=getContratto(sap);
+    var riporto2=riportoAnnoPrec(sap);
+    found.saldo_iniziale={ferie:round1(contratto2.ferie_giorni+riporto2.ferie),permessi:round1(contratto2.permessi_ore+riporto2.permessi)};
+  }
   return found;
 }
+function round1(n){return Math.round((n||0)*10)/10;}
 
 function calcResiduo(sap){
   var contratto=getContratto(sap);
-  if(!ferieData)return{ferie:contratto.ferie_giorni,permessi:contratto.permessi_ore,ferieGodute:0,permGodute:0,ferieTot:contratto.ferie_giorni,permTot:contratto.permessi_ore};
+  var fallback={ferie:contratto.ferie_giorni,permessi:contratto.permessi_ore};
+  if(!ferieData)return{ferie:fallback.ferie,permessi:fallback.permessi,ferieGodute:0,permGodute:0,ferieTot:fallback.ferie,permTot:fallback.permessi};
   var dip=ferieData.dipendenti.find(function(d){return String(d.sap||'').trim()===String(sap||'').trim();});
+  var base=(dip&&dip.saldo_iniziale)?dip.saldo_iniziale:fallback;
   var ferieGodute=dip?(dip.ferie_godute||[]).length:0;
   var permGodute=dip?(dip.permessi_goduti||[]).reduce(function(a,p){return a+(p.ore||0);},0):0;
-  return{ferie:contratto.ferie_giorni-ferieGodute,permessi:Math.round((contratto.permessi_ore-permGodute)*10)/10,ferieGodute:ferieGodute,permGodute:Math.round(permGodute*10)/10,ferieTot:contratto.ferie_giorni,permTot:contratto.permessi_ore};
+  return{ferie:round1(base.ferie-ferieGodute),permessi:round1(base.permessi-permGodute),ferieGodute:ferieGodute,permGodute:round1(permGodute),ferieTot:base.ferie,permTot:base.permessi};
+}
+
+// Scrive/corregge il saldo di partenza di un dipendente per l'anno corrente (import o modifica manuale).
+// Riservato ad admin/superadmin, tiene un log delle modifiche per tracciabilità.
+function setSaldoIniziale(sap,nome,resp,plant,ferie,permessi,note){
+  if(!isAdminUser){toast('Solo admin/superadmin','warn');return false;}
+  if(!ferieData){toast('Carica prima il Piano Ferie','warn');return false;}
+  var dip=getFerieDip(sap,nome,resp,plant);
+  if(!dip)return false;
+  if(!dip.saldo_log)dip.saldo_log=[];
+  dip.saldo_log.push({
+    data:new Date().toISOString(),
+    by:(typeof uEmail!=='undefined'?uEmail:''),
+    ferie_prima:dip.saldo_iniziale?dip.saldo_iniziale.ferie:null,
+    perm_prima:dip.saldo_iniziale?dip.saldo_iniziale.permessi:null,
+    ferie_dopo:ferie,
+    perm_dopo:permessi,
+    note:note||''
+  });
+  dip.saldo_iniziale={ferie:round1(ferie),permessi:round1(permessi)};
+  return true;
 }
 
 function updateFerieResiduo(emp,di,nuovaSigla,vecchiaSigla,anno,mese,forceMode){
@@ -7023,6 +7101,158 @@ function ferieExport(){
 
   XLSX.writeFile(WB,'PianoFerie_'+year+'_'+MESI[mDa-1]+'-'+MESI[mA-1]+'.xlsx');
   toast('\u2713 Excel esportato');
+}
+
+// ═══════════════════════════════════════════════════════════
+//  SALDO RESIDUO — import/export/modifica manuale (admin/superadmin)
+//  Formato colonne fisso: Ext SAP | Nominativo | F.RES | HP RES.
+//  I valori sono sempre "AD OGGI" (comprensivi delle assenze già registrate quest'anno)
+// ═══════════════════════════════════════════════════════════
+var impResiduoRows=[];
+
+function toggleSaldoResiduoPanel(){
+  if(!isAdminUser){toast('Solo admin/superadmin','warn');return;}
+  var panel=document.getElementById('saldoResiduoPanel');
+  var btn=document.getElementById('togSaldoResiduo');
+  if(!panel)return;
+  var open=panel.style.display==='none';
+  panel.style.display=open?'':'none';
+  if(btn){btn.style.background=open?'rgba(45,212,191,.12)':'';btn.style.borderColor=open?'rgba(45,212,191,.6)':'rgba(45,212,191,.4)';}
+  if(open){
+    if(!ferieDipList.length){toast('Carica prima il Piano Ferie (↓ Carica)','warn');}
+    buildSaldoManualeTable();
+  }
+}
+
+function buildSaldoManualeTable(){
+  var wrap=document.getElementById('saldoManualeWrap');
+  if(!wrap)return;
+  if(!ferieDipList.length){wrap.innerHTML='<div class="imp-empty">Carica prima il Piano Ferie</div>';return;}
+  var h='<table class="imp-table"><thead><tr><th>Dipendente</th><th>Ext SAP</th><th>F.RES attuale</th><th>HP RES. attuale</th><th>Nuovo F.RES</th><th>Nuovo HP RES.</th><th></th></tr></thead><tbody>';
+  ferieDipList.forEach(function(d){
+    var res=calcResiduo(d.sap);
+    h+='<tr>'
+      +'<td style="font-weight:600;color:var(--text)">'+esc(d.nome)+'</td>'
+      +'<td>'+esc(d.sap)+'</td>'
+      +'<td style="color:var(--blue)">'+res.ferie+'</td>'
+      +'<td style="color:var(--purple)">'+res.permessi+'</td>'
+      +'<td><input type="number" step="0.5" id="sm_f_'+esc(d.sap)+'" style="width:70px" placeholder="'+res.ferie+'"></td>'
+      +'<td><input type="number" step="0.5" id="sm_p_'+esc(d.sap)+'" style="width:70px" placeholder="'+res.permessi+'"></td>'
+      +'<td><button class="ba bghost te" style="padding:3px 10px;font-size:11px" onclick="saldoManualeSalva(\''+esc(d.sap)+'\',\''+esc(d.nome)+'\',\''+esc(d.resp||'')+'\',\''+esc(d.plant||'')+'\')">✓ Salva</button></td>'
+      +'</tr>';
+  });
+  h+='</tbody></table>';
+  wrap.innerHTML=h;
+}
+
+function saldoManualeSalva(sap,nome,resp,plant){
+  if(!isAdminUser){toast('Solo admin/superadmin','warn');return;}
+  var fEl=document.getElementById('sm_f_'+sap),pEl=document.getElementById('sm_p_'+sap);
+  if(!fEl||!pEl)return;
+  var fVal=fEl.value.trim(),pVal=pEl.value.trim();
+  if(fVal===''&&pVal===''){toast('Inserisci almeno un valore','warn');return;}
+  var res=calcResiduo(sap);
+  var nuovoFerie=fVal!==''?parseFloat(fVal):res.ferie;
+  var nuovoPerm=pVal!==''?parseFloat(pVal):res.permessi;
+  // I valori inseriti sono "ad oggi": il saldo_iniziale deve tenere conto di ciò che è già stato goduto quest'anno
+  var ok=setSaldoIniziale(sap,nome,resp,plant,nuovoFerie+res.ferieGodute,nuovoPerm+res.permGodute,'Modifica manuale');
+  if(!ok)return;
+  saveFerieResiduo().then(function(){
+    toast('\u2713 Saldo aggiornato per '+nome);
+    buildSaldoManualeTable();
+    if(document.getElementById('fAnno').value)ferieRenderOnly();
+  });
+}
+
+function downloadResiduoTemplate(){
+  var WB=XLSX.utils.book_new();
+  var rows=[['Ext SAP','Nominativo','F.RES','HP RES.']];
+  ferieDipList.forEach(function(d){rows.push([d.sap,d.nome,'','']);});
+  if(ferieDipList.length===0)rows.push(['','','','']);
+  var ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:10},{wch:26},{wch:10},{wch:10}];
+  XLSX.utils.book_append_sheet(WB,ws,'Foglio1');
+  XLSX.writeFile(WB,'Template_Residuo_Ferie_Permessi.xlsx');
+}
+
+function exportResiduoXlsx(){
+  if(!ferieDipList.length){toast('Carica prima il Piano Ferie','warn');return;}
+  var rows=[['Ext SAP','Nominativo','F.RES','HP RES.']];
+  ferieDipList.forEach(function(d){
+    var res=calcResiduo(d.sap);
+    rows.push([d.sap,d.nome,res.ferie,res.permessi]);
+  });
+  var WB=XLSX.utils.book_new();
+  var ws=XLSX.utils.aoa_to_sheet(rows);
+  ws['!cols']=[{wch:10},{wch:26},{wch:10},{wch:10}];
+  XLSX.utils.book_append_sheet(WB,ws,'Foglio1');
+  XLSX.writeFile(WB,'Residuo_Ferie_Permessi_'+(ferieYear||new Date().getFullYear())+'.xlsx');
+  toast('\u2713 Esportato');
+}
+
+function impResiduoPreview(){
+  var f=document.getElementById('impResiduoFile').files[0];
+  if(!f){document.getElementById('impResiduoTableWrap').innerHTML='';return;}
+  if(!ferieDipList.length){toast('Carica prima il Piano Ferie (↓ Carica)','warn');document.getElementById('impResiduoFile').value='';return;}
+  var fr=new FileReader();
+  fr.onload=function(e){
+    var wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+    var ws=wb.Sheets[wb.SheetNames[0]];
+    var raw=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+    impResiduoRows=[];
+    raw.forEach(function(r){
+      var sap=String(r[0]||'').trim();
+      var nome=String(r[1]||'').trim();
+      var ferieRaw=r[2],permRaw=r[3];
+      if(!sap&&!nome)return;
+      if(sap.toLowerCase()==='ext sap'||nome.toLowerCase()==='nominativo')return; // riga intestazione
+      var ferie=parseFloat(String(ferieRaw).replace(',','.'));
+      var perm=parseFloat(String(permRaw).replace(',','.'));
+      if(isNaN(ferie)&&isNaN(perm))return;
+      var match=ferieDipList.find(function(d){return String(d.sap||'').trim()===sap;});
+      impResiduoRows.push({sap:sap,nome:nome,ferie:isNaN(ferie)?0:ferie,permessi:isNaN(perm)?0:perm,match:match||null});
+    });
+    var cnt=document.getElementById('impResiduoCount');
+    var matched=impResiduoRows.filter(function(r){return r.match;}).length;
+    if(cnt){cnt.style.display='';cnt.textContent=matched+'/'+impResiduoRows.length+' abbinati per SAP';}
+    var h='<table class="imp-table"><thead><tr><th>#</th><th>Ext SAP</th><th>Nominativo file</th><th>F.RES</th><th>HP RES.</th><th>Match</th></tr></thead><tbody>';
+    if(!impResiduoRows.length)h+='<tr><td colspan="6" class="imp-empty">Nessuna riga valida trovata</td></tr>';
+    impResiduoRows.forEach(function(r,i){
+      h+='<tr'+(r.match?'':' style="opacity:.55"')+'>'
+        +'<td style="color:var(--muted);font-size:11px">'+(i+1)+'</td>'
+        +'<td>'+esc(r.sap)+'</td>'
+        +'<td>'+esc(r.nome)+'</td>'
+        +'<td style="color:var(--blue)">'+r.ferie+'</td>'
+        +'<td style="color:var(--purple)">'+r.permessi+'</td>'
+        +'<td>'+(r.match?'✓ '+esc(r.match.nome):'✗ non trovato in Piano Ferie')+'</td>'
+        +'</tr>';
+    });
+    h+='</tbody></table>';
+    document.getElementById('impResiduoTableWrap').innerHTML=h;
+    document.getElementById('impResiduoBtn').disabled=matched===0;
+  };
+  fr.readAsArrayBuffer(f);
+}
+
+function impResiduoConfirm(){
+  if(!isAdminUser){toast('Solo admin/superadmin','warn');return;}
+  var toApply=impResiduoRows.filter(function(r){return r.match;});
+  if(!toApply.length){toast('Nessuna riga abbinata da importare','warn');return;}
+  if(!confirm('Importare il saldo AD OGGI per '+toApply.length+' dipendenti? Questa azione sovrascrive il saldo attuale e viene registrata nel log.'))return;
+  toApply.forEach(function(r){
+    var res=calcResiduo(r.sap);
+    // valori "ad oggi" -> saldo_iniziale = importato + già goduto quest'anno
+    setSaldoIniziale(r.sap,r.match.nome,r.match.resp,r.match.plant,r.ferie+res.ferieGodute,r.permessi+res.permGodute,'Import file residuo');
+  });
+  saveFerieResiduo().then(function(){
+    toast('\u2713 Import completato: '+toApply.length+' dipendenti aggiornati');
+    document.getElementById('impResiduoFile').value='';
+    document.getElementById('impResiduoTableWrap').innerHTML='';
+    document.getElementById('impResiduoBtn').disabled=true;
+    var cnt=document.getElementById('impResiduoCount');if(cnt)cnt.style.display='none';
+    buildSaldoManualeTable();
+    if(document.getElementById('fAnno').value)ferieRenderOnly();
+  });
 }
 
 // Apre Inserimento Massivo dal Piano Ferie mobile pre-selezionando il dipendente
