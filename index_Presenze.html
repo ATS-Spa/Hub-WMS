@@ -6760,8 +6760,15 @@ function ferieRenderOnly(){
 // 429 "Quota exceeded", che poi vengono scambiati per "dato non trovato"
 // da chi chiama (es. ricerca dipendente in Piano Ferie).
 function runThrottled(items, worker, batchSize, delayMs){
-  batchSize = batchSize || 1;
-  delayMs = delayMs===undefined ? 1050 : delayMs;
+  // Valori di default pensati per una quota Sheets API più alta di quella
+  // predefinita di Google (60 letture/min/utente). Se la quota sul progetto
+  // GCP è stata alzata (consigliato: APIs & Services → Sheets API → Quotas
+  // → "Read requests per minute per user"), questi valori sfruttano il
+  // margine extra; se la quota è rimasta a 60/min, i retry automatici in
+  // gFetch assorbono gli eventuali 429 residui. Per tornare a un ritmo più
+  // prudente basta richiamare runThrottled passando batchSize/delayMs più bassi.
+  batchSize = batchSize || 5;
+  delayMs = delayMs===undefined ? 250 : delayMs;
   var results = new Array(items.length);
   var i = 0;
   function nextBatch(){
