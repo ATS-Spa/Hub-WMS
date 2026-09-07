@@ -2964,18 +2964,19 @@ function applyPerm(){
   document.getElementById('snAts').style.display=userSecs.indexOf('ats')!==-1?'':'none';
   document.getElementById('snFile').style.display=userSecs.indexOf('file')!==-1?'':'none';
   document.getElementById('snFerie').style.display=(userSecs.indexOf('ferie')!==-1)?'':'none';
-  if(!userSecs.length){
-    document.getElementById('appShell').style.display='none';
-    document.getElementById('accessDenied').style.display='flex';
-    document.getElementById('adMsg').textContent='Il tuo account ('+uEmail+') non è autorizzato.';
-    return;
-  }
+  // Niente più "Accesso Negato" solo per mancanza di sezioni coop/ats/file/ferie:
+  // Richieste è un modulo self-service (autoregistrazione tramite wizard, vedi
+  // richInit/showSetupWizard) pensato apposta per chi NON è ancora in nessuna
+  // whitelist. Bloccare qui, prima che richInit() potesse anche solo mostrare
+  // il wizard, impediva a qualunque dipendente non già autorizzato di entrare
+  // — anche solo per inviare una richiesta ferie/permesso.
   document.getElementById('appShell').style.display='flex';
   document.getElementById('accessDenied').style.display='none';
   if(isReadOnly)document.body.classList.add('readonly-mode');
   else document.body.classList.remove('readonly-mode');
   if(userSecs.indexOf('coop')===-1&&userSecs.indexOf('ats')!==-1)switchSec('ats');
   richInit();
+  if(!userSecs.length)switchSec('rich');
 }
 function canSeeFile(fname){
   if(userTags.indexOf('*')!==-1)return true;
@@ -8248,6 +8249,38 @@ var RICH_TIPI = [
   {code:'PE',   label:'P.Esami',   color:'var(--c-PE)'}
 ];
 
+// ── Residuo ferie/permessi per il modulo Richieste ──────────────────────────
+// Caricamento indipendente da quello del Piano Ferie (ferieData/ferieFileId):
+// tenerlo separato evita che aprire "Richieste" sovrascriva lo stato che il
+// Piano Ferie ha eventualmente già in memoria per un anno diverso.
+// Il residuo è tracciato solo per F (ferie) e HP (permesso a ore): gli altri
+// tipi (104, H104, CP, HPE, PE) non hanno un contatore residuo nel tool.
+var richResiduoData=null, richResiduoYear=null, richResiduoPromise=null;
+function richEnsureResiduo(year){
+  if(richResiduoYear===year && richResiduoData) return Promise.resolve(richResiduoData);
+  if(richResiduoPromise && richResiduoYear===year) return richResiduoPromise;
+  richResiduoYear=year;
+  richResiduoData=null;
+  richResiduoPromise=listFiles('"'+FOLDER_ID_JSON+'" in parents and name="'+ferieResiduoFname(year)+'" and trashed=false')
+    .then(function(files){
+      if(!files.length){richResiduoData={anno:year,dipendenti:[]};return richResiduoData;}
+      return fetch('https://www.googleapis.com/drive/v3/files/'+files[0].id+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}})
+        .then(function(r){return r.json();}).then(function(d){richResiduoData=d;return d;});
+    }).catch(function(){richResiduoData={anno:year,dipendenti:[]};return richResiduoData;});
+  return richResiduoPromise;
+}
+// Ritorna null se il residuo non è ancora stato caricato (per distinguerlo da "zero"), o se sap manca.
+function richCalcResiduo(sap){
+  if(!sap||!richResiduoData)return null;
+  var contratto=getContratto(sap);
+  var fallback={ferie:contratto.ferie_giorni,permessi:contratto.permessi_ore};
+  var dip=richResiduoData.dipendenti.find(function(d){return String(d.sap||'').trim()===String(sap||'').trim();});
+  var base=(dip&&dip.saldo_iniziale)?dip.saldo_iniziale:fallback;
+  var ferieGodute=dip?(dip.ferie_godute||[]).length:0;
+  var permGodute=dip?(dip.permessi_goduti||[]).reduce(function(a,p){return a+(p.ore||0);},0):0;
+  return{ferie:round1(base.ferie-ferieGodute),permessi:round1(base.permessi-permGodute)};
+}
+
 // ── Carica file richieste da Drive ──────────────────────────────────────────
 function loadRichieste(){
   return listFiles('"'+FOLDER_ID_JSON+'" in parents and name="'+RICH_FNAME+'" and trashed=false')
@@ -8527,6 +8560,10 @@ function setupSave(){
 // ══════════════════════════════════════════════════════════════════════════════
 function richRender(){
   if(!richData){ loadRichieste().then(function(){richRender();}); return; }
+  var richYearNow = new Date().getFullYear();
+  if(richResiduoYear!==richYearNow || !richResiduoData){
+    richEnsureResiduo(richYearNow).then(function(){richRender();});
+  }
   var em = uEmail.toLowerCase().trim();
   var isSup = (permConfig&&permConfig.super_users||[]).some(function(s){return s.toLowerCase()===em;});
   var isAdm = isSup || ((permConfig&&permConfig.admins)||[]).some(function(a){return a.toLowerCase()===em;});
@@ -8592,6 +8629,7 @@ function richBuildSidebar(profile){
       '<span class="rtb-label">'+esc(t.label)+'</span></button>';
   }).join('');
 
+  var res = profile.sap ? richCalcResiduo(profile.sap) : null;
   return '<div class="rich-sidebar">'+
     '<div class="rich-sidebar-hdr">'+
       '<div class="rich-profile">'+
@@ -8602,6 +8640,8 @@ function richBuildSidebar(profile){
             (profile.plant?'<span class="rich-meta-chip blue">'+esc(profile.plant)+'</span>':'')+
             (profile.responsabile_nome?'<span class="rich-meta-chip teal">→ '+esc(profile.responsabile_nome)+'</span>':'')+
             (profile.sap?'<span class="rich-meta-chip">#'+esc(profile.sap)+'</span>':'')+
+            (profile.sap?'<span class="rich-meta-chip" style="color:var(--blue)">🏖 F.Res '+(res?res.ferie:'…')+'</span>':'')+
+            (profile.sap?'<span class="rich-meta-chip" style="color:var(--purple)">⏱ HP.Res '+(res?res.permessi:'…')+'</span>':'')+
           '</div>'+
         '</div>'+
       '</div>'+
@@ -8613,13 +8653,14 @@ function richBuildSidebar(profile){
       '</div>'+
       '<div id="richQtyWrap" style="display:none">'+
         '<div class="fl">Ore</div>'+
-        '<input class="mi" id="richQty" type="number" min="0.5" max="8" step="0.5" value="1" style="width:90px">'+
+        '<input class="mi" id="richQty" type="number" min="0.5" max="8" step="0.5" value="1" style="width:90px" oninput="richCheckResiduoWarn()">'+
       '</div>'+
       '<div class="rich-date-row">'+
         '<div><div class="fl">Dal</div><input class="mi fc" id="richDal" type="date" oninput="richCalcGiorni()"></div>'+
         '<div><div class="fl">Al</div><input class="mi fc" id="richAl" type="date" oninput="richCalcGiorni()"></div>'+
       '</div>'+
       '<div class="rich-days-badge" id="richGiorniBadge">Seleziona le date</div>'+
+      '<div id="richResiduoWarn" style="font-size:11px;margin-top:2px"></div>'+
       '<div>'+
         '<div class="fl">Note (opzionale)</div>'+
         '<textarea class="mi fc" id="richNote" rows="2" placeholder="Motivazione, dettagli…" style="resize:vertical;font-family:var(--ff);font-size:12px"></textarea>'+
@@ -8658,12 +8699,31 @@ function richBuildCard(r, em, isResp, isSup, isAdm){
   h += '<span style="color:var(--border)">·</span><span style="color:var(--muted)">→ '+esc(r.responsabile_nome)+'</span>';
   h += '</div>';
 
+  // Residuo del dipendente al momento — solo per F/HP, gli unici tipi
+  // tracciati; aiuta chi approva a vedere subito se la richiesta lo supera.
+  if(r.dipendente_sap && (r.tipo_code==='F' || r.tipo_code==='HP')){
+    var resC = richCalcResiduo(r.dipendente_sap);
+    if(resC){
+      if(r.tipo_code==='F'){
+        var overF = r.giorni_lavorativi>resC.ferie;
+        h += '<div style="font-size:11px;margin-top:4px;color:'+(overF?'var(--red)':'var(--muted)')+'">'+(overF?'⚠️ ':'🏖 ')+'Residuo ferie: '+resC.ferie+' gg'+(overF?' — la richiesta lo supera':'')+'</div>';
+      } else {
+        var qtyMatch=/^([\d.]+)/.exec(r.tipo||'');
+        var qty=qtyMatch?parseFloat(qtyMatch[1]):1;
+        var oreTot=round1(qty*(r.giorni_lavorativi||1));
+        var overHP=oreTot>resC.permessi;
+        h += '<div style="font-size:11px;margin-top:4px;color:'+(overHP?'var(--red)':'var(--muted)')+'">'+(overHP?'⚠️ ':'⏱ ')+'Residuo permessi: '+resC.permessi+'h'+(overHP?' — supera il residuo ('+oreTot+'h richieste)':'')+'</div>';
+      }
+    }
+  }
+
   h += '</div>';
   h += '<div style="text-align:right;flex-shrink:0">';
   h += '<span class="rich-stato '+esc(r.stato)+'">'+statoLabel[r.stato]+'</span>';
   h += '<div class="rich-card-dates" style="margin-top:4px">'+esc(dataStr)+'</div>';
   h += '<div class="rich-card-gg">'+esc(r.giorni_lavorativi)+' gg lav.</div>';
   h += '</div>';
+
   h += '</div>';
 
   if(r.note){
@@ -8710,6 +8770,7 @@ function richSelTipo(code){
   var tipoInfo = RICH_TIPI.find(function(t){return t.code===code;});
   var qtyWrap = document.getElementById('richQtyWrap');
   if(qtyWrap) qtyWrap.style.display = (tipoInfo&&tipoInfo.hasQty) ? '' : 'none';
+  richCheckResiduoWarn();
 }
 
 function richCalcGiorni(){
@@ -8718,7 +8779,7 @@ function richCalcGiorni(){
   var badge = document.getElementById('richGiorniBadge');
   if(!dal||!al||!badge) return;
   var d1 = new Date(dal.value), d2 = new Date(al.value);
-  if(!dal.value||!al.value||isNaN(d1)||isNaN(d2)){badge.textContent='Seleziona le date';return;}
+  if(!dal.value||!al.value||isNaN(d1)||isNaN(d2)){badge.textContent='Seleziona le date';richCheckResiduoWarn();return;}
   if(d2<d1){al.value=dal.value;d2=new Date(dal.value);}
   var gg = 0;
   var cur = new Date(d1);
@@ -8730,6 +8791,34 @@ function richCalcGiorni(){
   }
   badge.textContent = gg+' giorn'+(gg===1?'o':'i')+' lavorativ'+(gg===1?'o':'i');
   badge.style.color = gg===0 ? 'var(--red)' : 'var(--teal)';
+  richCheckResiduoWarn();
+}
+
+// Confronta i giorni/ore appena scelti col residuo disponibile: avviso
+// informativo, non blocca l'invio. Attivo solo per F e HP, gli unici due
+// tipi che il Piano Ferie traccia effettivamente come residuo.
+function richCheckResiduoWarn(){
+  var el = document.getElementById('richResiduoWarn');
+  if(!el) return;
+  var profile = currentDipendente || (currentRespProfile ? {sap:''} : null);
+  var sap = profile ? profile.sap : '';
+  if(!sap || (richFormTipo!=='F' && richFormTipo!=='HP')){el.textContent='';return;}
+  var res = richCalcResiduo(sap);
+  if(!res){el.textContent='';return;}
+  var dal=document.getElementById('richDal'), al=document.getElementById('richAl');
+  var d1=dal&&dal.value?new Date(dal.value):null, d2=al&&al.value?new Date(al.value):null;
+  if(!d1||!d2||isNaN(d1)||isNaN(d2)){el.textContent='';return;}
+  var gg=0,cur=new Date(d1);
+  while(cur<=d2){var wd=cur.getDay(),m=cur.getMonth()+1,day=cur.getDate(),y=cur.getFullYear();if(wd!==0&&wd!==6&&!isHoliday(day,m,y))gg++;cur.setDate(cur.getDate()+1);}
+  if(richFormTipo==='F'){
+    if(gg>res.ferie){el.innerHTML='⚠️ Superi il residuo ferie: '+res.ferie+' gg disponibili, '+gg+' richiesti';el.style.color='var(--red)';}
+    else{el.innerHTML='✓ '+(res.ferie-gg)+' gg residui dopo questa richiesta';el.style.color='var(--muted)';}
+  } else if(richFormTipo==='HP'){
+    var qty=parseFloat((document.getElementById('richQty')||{}).value)||1;
+    var oreTot=round1(qty*gg);
+    if(oreTot>res.permessi){el.innerHTML='⚠️ Superi il residuo permessi: '+res.permessi+'h disponibili, '+oreTot+'h richieste';el.style.color='var(--red)';}
+    else{el.innerHTML='✓ '+round1(res.permessi-oreTot)+'h residue dopo questa richiesta';el.style.color='var(--muted)';}
+  }
 }
 
 // ── Modal mail dedicato ───────────────────────────────────────────────────────
