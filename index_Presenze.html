@@ -2533,7 +2533,11 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
       <label class="sc-item" style="width:fit-content"><input type="checkbox" id="puSecFile"> Accesso File Import</label>
       <label class="sc-item" style="width:fit-content"><input type="checkbox" id="puSecFerie"> Piano Ferie</label>
       <label class="sc-item" style="width:fit-content"><input type="checkbox" id="puSecRich"> Richieste</label>
-      <label class="sc-item" style="width:fit-content"><input type="checkbox" id="puIsAdmin"> Admin (può modificare le presenze)</label>
+      <label class="sc-item" style="width:fit-content"><input type="checkbox" id="puIsAdmin" onchange="puToggleEmailNotifiche()"> Admin (può modificare le presenze)</label>
+    </div>
+    <div class="fg" id="puEmailNotificheWrap" style="display:none">
+      <div class="fl">Email aziendale per notifiche (co-approvatore Richieste)</div>
+      <input class="mi" id="puEmailNotifiche" type="email" placeholder="Se vuota, le notifiche arrivano sull'email di login sopra" autocomplete="off">
     </div>
   </div>
   <div class="merr" id="puErr">Inserisci un'email valida.</div>
@@ -5378,9 +5382,14 @@ function openPermUser(email){
   document.getElementById('puTitle').textContent=email?'Modifica Utente':'Nuovo Utente';
   document.getElementById('puEmail').value=email||'';document.getElementById('puEmail').disabled=!!email;
   document.getElementById('puErr').classList.remove('show');
-  if(email&&permConfig.users&&permConfig.users[email]){var u=permConfig.users[email];document.getElementById('puTags').value=(u.tags||[]).join('\n');document.getElementById('puSecCoop').checked=(u.sections||[]).indexOf('coop')!==-1;document.getElementById('puSecAts').checked=(u.sections||[]).indexOf('ats')!==-1;document.getElementById('puSecFile').checked=(u.sections||[]).indexOf('file')!==-1||u.is_admin||false;document.getElementById('puSecFerie').checked=(u.sections||[]).indexOf('ferie')!==-1||u.is_admin||false;document.getElementById('puSecRich').checked=(u.sections||[]).indexOf('rich')!==-1||u.is_admin||false;document.getElementById('puIsAdmin').checked=u.is_admin||false;}
-  else{document.getElementById('puTags').value='';document.getElementById('puSecCoop').checked=true;document.getElementById('puSecAts').checked=true;document.getElementById('puSecFile').checked=false;document.getElementById('puSecFerie').checked=false;document.getElementById('puSecRich').checked=false;document.getElementById('puIsAdmin').checked=false;}
+  if(email&&permConfig.users&&permConfig.users[email]){var u=permConfig.users[email];document.getElementById('puTags').value=(u.tags||[]).join('\n');document.getElementById('puSecCoop').checked=(u.sections||[]).indexOf('coop')!==-1;document.getElementById('puSecAts').checked=(u.sections||[]).indexOf('ats')!==-1;document.getElementById('puSecFile').checked=(u.sections||[]).indexOf('file')!==-1||u.is_admin||false;document.getElementById('puSecFerie').checked=(u.sections||[]).indexOf('ferie')!==-1||u.is_admin||false;document.getElementById('puSecRich').checked=(u.sections||[]).indexOf('rich')!==-1||u.is_admin||false;document.getElementById('puIsAdmin').checked=u.is_admin||false;document.getElementById('puEmailNotifiche').value=u.email_notifiche||'';}
+  else{document.getElementById('puTags').value='';document.getElementById('puSecCoop').checked=true;document.getElementById('puSecAts').checked=true;document.getElementById('puSecFile').checked=false;document.getElementById('puSecFerie').checked=false;document.getElementById('puSecRich').checked=false;document.getElementById('puIsAdmin').checked=false;document.getElementById('puEmailNotifiche').value='';}
+  puToggleEmailNotifiche();
   mOpen('moPermUser');setTimeout(function(){if(!email)document.getElementById('puEmail').focus();},120);
+}
+function puToggleEmailNotifiche(){
+  var wrap=document.getElementById('puEmailNotificheWrap');
+  if(wrap)wrap.style.display=document.getElementById('puIsAdmin').checked?'':'none';
 }
 function permUserConfirm(){
   var email=(document.getElementById('puEmail').value||'').trim().toLowerCase();
@@ -5395,6 +5404,8 @@ function permUserConfirm(){
   if(!permConfig.users)permConfig.users={};
   permConfig.users[email]={tags:tags,sections:secs};
   if(document.getElementById('puIsAdmin').checked)permConfig.users[email].is_admin=true;
+  var emailNotifiche=(document.getElementById('puEmailNotifiche').value||'').trim();
+  if(emailNotifiche)permConfig.users[email].email_notifiche=emailNotifiche;
   mClose('moPermUser');renderPermPanel();toast('✓ Utente salvato — premi Salva Config');
 }
 function delPermUser(email){showConf('Rimuovi utente','Rimuovere "'+email+'"?',function(){if(permConfig.users)delete permConfig.users[email];renderPermPanel();toast('✓ Rimosso');});}
@@ -8402,16 +8413,22 @@ function richParseExtraEmails(val){
   return String(val||'').split(/[,;\n]/).map(function(s){return s.trim();}).filter(Boolean);
 }
 // Co-approvatori configurati sul RESPONSABILE: sono utenti con il flag Admin
-// nel pannello Permessi, salvati direttamente come la loro email di login
-// (la stessa chiave usata in permConfig.users per l'autenticazione) — quindi
-// non serve risolvere nessun altro record, il confronto in richIsMe funziona
-// automaticamente perché l'identità coincide sempre con l'account con cui
-// quella persona si logga davvero.
+// nel pannello Permessi, salvati come la loro email di LOGIN (la chiave di
+// permConfig.users) — è quella che richIsForMe deve confrontare per stabilire
+// chi può approvare, quindi qui NON va sostituita con l'email aziendale: la
+// sostituzione (per le notifiche) avviene solo dentro richMailtoRichiesta.
 function richFindRespEmailExtra(nome){
   if(!nome||!permConfig) return [];
   var normN=normNome(nome);
   var rr=(permConfig.responsabili||[]).find(function(r){return normNome(r.nome)===normN&&!r._esempio;});
   return (rr&&rr.co_approvatori)?rr.co_approvatori.filter(Boolean):[];
+}
+// Email da usare per NOTIFICARE un co-approvatore (non per il controllo
+// permessi): preferisce l'email aziendale se configurata nel suo profilo
+// utente, altrimenti l'email di login.
+function richNotificaEmailPer(loginEmail){
+  var u=(permConfig&&permConfig.users||{})[loginEmail];
+  return (u&&u.email_notifiche)?u.email_notifiche:loginEmail;
 }
 // Una richiesta è "per me" se sono il responsabile principale OPPURE uno dei
 // responsabili aggiuntivi configurati per quel tag — questi ultimi possono
@@ -8897,7 +8914,7 @@ function moMailSend(){
 // ── Helper mailto ────────────────────────────────────────────────────────────
 function richMailtoRichiesta(req){
   if(!req.responsabile_email) return;
-  var destinatari = [req.responsabile_email].concat(req.responsabile_email_extra||[]);
+  var destinatari = [req.responsabile_email].concat((req.responsabile_email_extra||[]).map(richNotificaEmailPer));
   var tipoLabel = {F:'Ferie',HP:'Ore Permesso',104:'Giornata 104',H104:'Ore 104',CP:'Congedo Parentale',HPE:'Ore Permesso Esami',PE:'Permesso Esami'};
   var label = tipoLabel[req.tipo_code] || req.tipo_code || req.tipo;
   var dalIT = fmtDateIT(req.data_dal), alIT = fmtDateIT(req.data_al);
@@ -9298,7 +9315,7 @@ function richRenderAnagPanel(){
 
   h += '<div style="overflow-x:auto">';
   h += '<table class="anag-table">';
-  h += '<thead><tr><th>Nome</th><th>Email Google</th><th>Email Aziendale</th><th>Email Extra (CC esito Richieste)</th><th>Ext SAP</th><th>Plant</th><th>Responsabile</th><th>Ferie tot.</th><th>HP ore</th><th>Pausa std</th><th></th></tr></thead>';
+  h += '<thead><tr><th>Nome</th><th>Email Google</th><th>Email Aziendale</th><th>Email Extra (CC esito)</th><th>Ext SAP</th><th>Plant</th><th>Responsabile</th><th>Ferie tot.</th><th>HP ore</th><th>Pausa std</th><th></th></tr></thead>';
   h += '<tbody id="anagBody">';
   dips.forEach(function(d,i){
     h += richAnagRow(d,i,respOpts);
