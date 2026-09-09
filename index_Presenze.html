@@ -2968,6 +2968,15 @@ function applyPerm(){
     autoAdminIfSaved();
   } else if(uc){
     userTags=uc.tags||[];userSecs=uc.sections||[];isReadOnly=!uc.is_admin;
+    // "Admin" (può modificare le presenze) implica sempre File Import/Piano
+    // Ferie/Richieste, anche se al momento del salvataggio in "Modifica
+    // Utente" quei checkbox non erano stati spuntati esplicitamente — è
+    // quello che il pannello suggerisce visivamente (li pre-seleziona
+    // riaprendo un utente admin) ma prima non veniva davvero imposto qui,
+    // quindi un co-approvatore "solo Admin" restava senza accesso a Richieste.
+    if(uc.is_admin){
+      ['file','ferie','rich'].forEach(function(s){if(userSecs.indexOf(s)===-1)userSecs=userSecs.concat([s]);});
+    }
     document.getElementById('permBadge').textContent=isDipSelf?'DIP':(userTags.length?userTags.join('·'):'DEFAULT');
     document.getElementById('permBadge').className='pbadge';
   } else {
@@ -5403,7 +5412,10 @@ function permUserConfirm(){
   if(document.getElementById('puSecRich').checked)secs.push('rich');
   if(!permConfig.users)permConfig.users={};
   permConfig.users[email]={tags:tags,sections:secs};
-  if(document.getElementById('puIsAdmin').checked)permConfig.users[email].is_admin=true;
+  if(document.getElementById('puIsAdmin').checked){
+    permConfig.users[email].is_admin=true;
+    ['file','ferie','rich'].forEach(function(s){if(secs.indexOf(s)===-1)secs.push(s);});
+  }
   var emailNotifiche=(document.getElementById('puEmailNotifiche').value||'').trim();
   if(emailNotifiche)permConfig.users[email].email_notifiche=emailNotifiche;
   mClose('moPermUser');renderPermPanel();toast('✓ Utente salvato — premi Salva Config');
@@ -8645,7 +8657,10 @@ function richRender(){
   h += '<div class="rich-main">';
   h += '<div class="rich-main-hdr">';
 
-  var titleLabel = isResp ? 'Richieste del mio team' : (isSup||isAdm ? 'Tutte le richieste' : 'Le mie richieste');
+  var isCoApprovatore = richMyEmails().some(function(myEm){
+    return (permConfig&&permConfig.responsabili||[]).some(function(r){return (r.co_approvatori||[]).indexOf(myEm)!==-1;});
+  });
+  var titleLabel = (isResp||isCoApprovatore) ? 'Richieste del mio team' : (isSup||isAdm ? 'Tutte le richieste' : 'Le mie richieste');
   h += '<div class="rich-main-title">'+esc(titleLabel)+'</div>';
   h += '<div class="rich-filter-tabs">';
   ['tutte','in_attesa','approvata','rifiutata'].forEach(function(t){
@@ -8658,13 +8673,13 @@ function richRender(){
   var lista = richData.richieste.filter(function(r){
     if(richFilterTab!=='tutte' && r.stato!==richFilterTab) return false;
     if(isSup||isAdm) return true;
-    if(isResp && !isDip){
-      return richIsForMe(r);
-    }
-    if(isDip && !isResp){
-      return (r.dipendente_email||'').toLowerCase()===em;
-    }
-    // Sia dipendente che responsabile: vede sue e quelle del suo team
+    // Vede le proprie (se dipendente) + quelle per cui è responsabile
+    // principale O co-approvatore (richIsForMe già copre entrambi i casi).
+    // Prima qui c'era una distinzione isDip/isResp che escludeva del tutto
+    // richIsForMe per chi non era un Responsabile "formale" in anagrafica —
+    // ma un co-approvatore può essere un semplice utente Admin, non
+    // necessariamente registrato come Responsabile: veniva quindi filtrato
+    // fuori a monte, anche se richIsForMe() lo avrebbe correttamente incluso.
     return (r.dipendente_email||'').toLowerCase()===em || richIsForMe(r);
   }).slice().reverse(); // più recenti prima
 
@@ -9405,12 +9420,14 @@ function richCoAppAdd(i,selEl){
   if(!r.co_approvatori)r.co_approvatori=[];
   if(r.co_approvatori.indexOf(val)===-1)r.co_approvatori.push(val);
   richCoAppRefresh(i,r);
+  toast('✓ Co-approvatore aggiunto — premi Salva Config');
 }
 function richCoAppRemove(i,email){
   var resps=(permConfig.responsabili||[]).filter(function(r){return !r._esempio;});
   var r=resps[i]; if(!r||!r.co_approvatori)return;
   r.co_approvatori=r.co_approvatori.filter(function(e){return e!==email;});
   richCoAppRefresh(i,r);
+  toast('✓ Rimosso — premi Salva Config');
 }
 function richCoAppRefresh(i,r){
   var adminEmails=Object.keys((permConfig&&permConfig.users)||{}).filter(function(em){return permConfig.users[em]&&permConfig.users[em].is_admin;}).sort();
@@ -9448,6 +9465,7 @@ function richDipExtraAdd(i,email){
   if(extra.indexOf(email)===-1)extra.push(email);
   d.email_extra=extra;
   richDipExtraRefresh(i,d);
+  toast('✓ Email aggiunta — premi Salva Config');
 }
 function richDipExtraAddFromInput(i){
   var inp=document.getElementById('dipExtraInput_'+i);
