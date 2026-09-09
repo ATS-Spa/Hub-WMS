@@ -8388,23 +8388,17 @@ function richIsMe(email){
 function richParseExtraEmails(str){
   return String(str||'').split(/[,;\n]/).map(function(s){return s.trim();}).filter(Boolean);
 }
-// Email extra configurate sul RESPONSABILE (non sul dipendente): sono altri
-// responsabili già in anagrafica scelti come co-approvatori — si risolvono
-// ai LORO campi email_lavoro/email_google esistenti, non a testo libero,
-// così l'identità coincide sempre con l'account con cui quella persona si
-// logga davvero (altrimenti scrivendo a mano la mail aziendale ma loggando
-// con un altro account Google, il confronto in richIsMe non avrebbe mai
-// trovato corrispondenza).
+// Co-approvatori configurati sul RESPONSABILE: sono utenti con il flag Admin
+// nel pannello Permessi, salvati direttamente come la loro email di login
+// (la stessa chiave usata in permConfig.users per l'autenticazione) — quindi
+// non serve risolvere nessun altro record, il confronto in richIsMe funziona
+// automaticamente perché l'identità coincide sempre con l'account con cui
+// quella persona si logga davvero.
 function richFindRespEmailExtra(nome){
   if(!nome||!permConfig) return [];
   var normN=normNome(nome);
   var rr=(permConfig.responsabili||[]).find(function(r){return normNome(r.nome)===normN&&!r._esempio;});
-  if(!rr||!rr.co_responsabili||!rr.co_responsabili.length) return [];
-  return rr.co_responsabili.map(function(coNome){
-    var coNormN=normNome(coNome);
-    var coRr=(permConfig.responsabili||[]).find(function(r){return normNome(r.nome)===coNormN&&!r._esempio;});
-    return coRr?(coRr.email_lavoro||coRr.email_google||''):'';
-  }).filter(Boolean);
+  return (rr&&rr.co_approvatori)?rr.co_approvatori.filter(Boolean):[];
 }
 // Una richiesta è "per me" se sono il responsabile principale OPPURE uno dei
 // responsabili aggiuntivi configurati per quel tag — questi ultimi possono
@@ -9267,6 +9261,12 @@ function richRenderAnagPanel(){
   var dips  = (permConfig.dipendenti ||[]).filter(function(d){return !d._esempio;});
   var resps = (permConfig.responsabili||[]).filter(function(r){return !r._esempio;});
 
+  // Pool selezionabile per "Co-approvatori": utenti con il flag Admin (può
+  // modificare le presenze) nel pannello Permessi — non i Responsabili.
+  var adminEmails = Object.keys(permConfig.users||{}).filter(function(em){
+    return permConfig.users[em] && permConfig.users[em].is_admin;
+  }).sort();
+
   // Responsabili: SOLO dai nomi dei file Drive
   var respNomi = {};
   (permConfig.responsabili||[]).forEach(function(r){if(r.nome&&!r._esempio)respNomi[r.nome]=true;});
@@ -9304,10 +9304,10 @@ function richRenderAnagPanel(){
   h += '</div></div>';
   h += '<div style="overflow-x:auto">';
   h += '<table class="anag-table">';
-  h += '<thead><tr><th>Nome</th><th>Email Google</th><th>Email Aziendale</th><th>Co-approvatori</th><th>Superiore</th><th>Email Superiore</th><th></th></tr></thead>';
+  h += '<thead><tr><th>Nome</th><th>Email Google</th><th>Email Aziendale</th><th>Co-approvatori (utenti Admin)</th><th>Superiore</th><th>Email Superiore</th><th></th></tr></thead>';
   h += '<tbody id="anagRespBody">';
   resps.forEach(function(r,i){
-    h += richAnagRespRow(r,i,respOpts,respNomiArr);
+    h += richAnagRespRow(r,i,respOpts,adminEmails);
   });
   h += '</tbody></table></div>';
   h += '</div>';
@@ -9336,16 +9336,17 @@ function richAnagRow(d,i,respOpts){
     +'</tr>';
 }
 
-function richAnagRespRow(r,i,respOpts,respNomiArr){
-  var coSel = (r.co_responsabili||[]);
-  var coOpts = (respNomiArr||[]).filter(function(n){return n!==r.nome;}).map(function(n){
-    return '<option value="'+esc(n)+'"'+(coSel.indexOf(n)!==-1?' selected':'')+'>'+esc(n)+'</option>';
+function richAnagRespRow(r,i,respOpts,adminEmails){
+  var coSel = (r.co_approvatori||[]);
+  var ownEmails = [(r.email_google||'').toLowerCase(),(r.email_lavoro||'').toLowerCase()];
+  var coOpts = (adminEmails||[]).filter(function(em){return ownEmails.indexOf(em.toLowerCase())===-1;}).map(function(em){
+    return '<option value="'+esc(em)+'"'+(coSel.indexOf(em)!==-1?' selected':'')+'>'+esc(em)+'</option>';
   }).join('');
   return '<tr>'
     +'<td><input class="anag-input" value="'+esc(r.nome||'')+'" onchange="richAnagChange(\'resp\','+i+',\'nome\',this.value)"></td>'
     +'<td><input class="anag-input" value="'+esc(r.email_google||'')+'" onchange="richAnagChange(\'resp\','+i+',\'email_google\',this.value)"></td>'
     +'<td><input class="anag-input" placeholder="email@atsgruppo.eu" value="'+esc(r.email_lavoro||'')+'" onchange="richAnagChange(\'resp\','+i+',\'email_lavoro\',this.value)"></td>'
-    +'<td><select class="anag-select" multiple size="2" style="min-width:150px" title="Tieni premuto Ctrl/Cmd per selezionarne più di uno" onchange="richAnagChangeMulti(\'resp\','+i+',\'co_responsabili\',this)">'+coOpts+'</select></td>'
+    +'<td><select class="anag-select" multiple size="2" style="min-width:180px" title="Utenti con flag Admin nel pannello Permessi. Tieni premuto Ctrl/Cmd per selezionarne più di uno" onchange="richAnagChangeMulti(\'resp\','+i+',\'co_approvatori\',this)">'+coOpts+'</select></td>'
     +'<td><select class="anag-select" onchange="richAnagChange(\'resp\','+i+',\'superiore_nome\',this.value)"><option value="">—</option>'+respOpts+'</select></td>'
     +'<td><input class="anag-input" value="'+esc(r.superiore_email||'')+'" onchange="richAnagChange(\'resp\','+i+',\'superiore_email\',this.value)"></td>'
     +'<td><button class="anag-del-btn" onclick="richDelResp('+i+')">🗑</button></td>'
