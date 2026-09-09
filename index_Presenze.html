@@ -8453,13 +8453,19 @@ function richIsForMe(r){
 // ── Conta richieste pending per l'utente loggato ────────────────────────────
 function richCountPending(){
   if(!richData) return 0;
-  // Se responsabile: conta richieste in_attesa indirizzate a lui
-  if(currentRespProfile){
-    return richData.richieste.filter(function(r){
-      return r.stato==='in_attesa' && richIsForMe(r);
-    }).length;
+  var em = uEmail.toLowerCase().trim();
+  var isSup = (permConfig&&permConfig.super_users||[]).some(function(s){return s.toLowerCase()===em;});
+  var isAdm = isSup || ((permConfig&&permConfig.admins)||[]).some(function(a){return a.toLowerCase()===em;});
+  if(isSup||isAdm){
+    return richData.richieste.filter(function(r){return r.stato==='in_attesa';}).length;
   }
-  return 0;
+  // Conta richieste in_attesa indirizzate a me come responsabile principale
+  // O come co-approvatore — prima qui si guardava solo currentRespProfile,
+  // escludendo del tutto chi è co-approvatore ma non un Responsabile
+  // formale in anagrafica (es. un utente Admin aggiunto come co-approvatore).
+  return richData.richieste.filter(function(r){
+    return r.stato==='in_attesa' && richIsForMe(r);
+  }).length;
 }
 
 // ── Aggiorna il badge notifica ──────────────────────────────────────────────
@@ -9020,7 +9026,10 @@ function richInvia(){
   var respEmailExtra = richFindRespEmailExtra(respNome);
 
   var tipoInfo = RICH_TIPI.find(function(t){return t.code===richFormTipo;});
-  var sigla = (tipoInfo&&tipoInfo.hasQty&&qty!==1) ? qty+richFormTipo : richFormTipo;
+  // Sempre col numero davanti (anche per 1 ora), non solo per quantità >1:
+  // altrimenti nel foglio presenze compariva "HP" nudo invece di "1HP",
+  // incoerente con le altre righe che mostrano sempre la quantità.
+  var sigla = (tipoInfo&&tipoInfo.hasQty) ? qty+richFormTipo : richFormTipo;
 
   var req = {
     id: 'R'+Date.now(),
@@ -9058,6 +9067,7 @@ function richInvia(){
     richUpdateBadge();
     richRender();
     toast('✅ Richiesta inviata a '+respNome+' — notifica in partenza');
+    richMailtoRichiesta(req);
   }).catch(function(e){
     if(btn) btn.disabled=false;
     toast('✗ Errore: '+e.message,'err');
@@ -9087,6 +9097,7 @@ function richApprova(id){
         richUpdateBadge();
         richRender();
         toast('✅ Approvata — notifica al dipendente in partenza');
+        richMailtoEsito(req);
       }).catch(function(e){
         toast('✗ Errore scrittura: '+e.message,'err');
         saveRichieste().then(function(){richUpdateBadge();richRender();});
@@ -9111,6 +9122,7 @@ function richRifiuta(id){
         richUpdateBadge();
         richRender();
         toast('❌ Rifiutata — notifica al dipendente in partenza');
+        richMailtoEsito(req);
       });
     },
     'required'
