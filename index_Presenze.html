@@ -8383,13 +8383,34 @@ function richIsMe(email){
   return richMyEmails().indexOf(e)!==-1;
 }
 
+// Parsa un campo "email extra" (stringa libera, separata da virgola/punto e
+// virgola/a capo) in un array pulito di indirizzi.
+function richParseExtraEmails(str){
+  return String(str||'').split(/[,;\n]/).map(function(s){return s.trim();}).filter(Boolean);
+}
+// Email extra configurate sul RESPONSABILE (non sul dipendente): sono
+// persone che possono approvare al posto/insieme al responsabile principale.
+function richFindRespEmailExtra(nome){
+  if(!nome||!permConfig) return [];
+  var normN=normNome(nome);
+  var rr=(permConfig.responsabili||[]).find(function(r){return normNome(r.nome)===normN&&!r._esempio;});
+  return rr?richParseExtraEmails(rr.email_extra):[];
+}
+// Una richiesta è "per me" se sono il responsabile principale OPPURE uno dei
+// responsabili aggiuntivi configurati per quel tag — questi ultimi possono
+// approvare/rifiutare esattamente come il principale.
+function richIsForMe(r){
+  if(richIsMe(r.responsabile_email))return true;
+  return (r.responsabile_email_extra||[]).some(function(e){return richIsMe(e);});
+}
+
 // ── Conta richieste pending per l'utente loggato ────────────────────────────
 function richCountPending(){
   if(!richData) return 0;
   // Se responsabile: conta richieste in_attesa indirizzate a lui
   if(currentRespProfile){
     return richData.richieste.filter(function(r){
-      return r.stato==='in_attesa' && richIsMe(r.responsabile_email);
+      return r.stato==='in_attesa' && richIsForMe(r);
     }).length;
   }
   return 0;
@@ -8604,13 +8625,13 @@ function richRender(){
     if(richFilterTab!=='tutte' && r.stato!==richFilterTab) return false;
     if(isSup||isAdm) return true;
     if(isResp && !isDip){
-      return richIsMe(r.responsabile_email);
+      return richIsForMe(r);
     }
     if(isDip && !isResp){
       return (r.dipendente_email||'').toLowerCase()===em;
     }
     // Sia dipendente che responsabile: vede sue e quelle del suo team
-    return (r.dipendente_email||'').toLowerCase()===em || richIsMe(r.responsabile_email);
+    return (r.dipendente_email||'').toLowerCase()===em || richIsForMe(r);
   }).slice().reverse(); // più recenti prima
 
   if(!lista.length){
@@ -8686,7 +8707,7 @@ function fmtDateIT(s){
 
 function richBuildCard(r, em, isResp, isSup, isAdm){
   var isMyRequest = (r.dipendente_email||'').toLowerCase()===em;
-  var isForMe     = richIsMe(r.responsabile_email);
+  var isForMe     = richIsForMe(r);
   var statoLabel  = {in_attesa:'⏳ In attesa',approvata:'✅ Approvata',rifiutata:'❌ Rifiutata'};
   var dataStr = r.data_dal===r.data_al
     ? fmtDateIT(r.data_dal)
@@ -8859,6 +8880,7 @@ function moMailSend(){
 // ── Helper mailto ────────────────────────────────────────────────────────────
 function richMailtoRichiesta(req){
   if(!req.responsabile_email) return;
+  var destinatari = [req.responsabile_email].concat(req.responsabile_email_extra||[]);
   var tipoLabel = {F:'Ferie',HP:'Ore Permesso',104:'Giornata 104',H104:'Ore 104',CP:'Congedo Parentale',HPE:'Ore Permesso Esami',PE:'Permesso Esami'};
   var label = tipoLabel[req.tipo_code] || req.tipo_code || req.tipo;
   var dalIT = fmtDateIT(req.data_dal), alIT = fmtDateIT(req.data_al);
@@ -8876,17 +8898,20 @@ function richMailtoRichiesta(req){
     +'\r\nPuoi approvare o rifiutare direttamente dal portale WMS Presenze.\r\n\r\n'
     +'Cordiali saluti,\r\n'+req.dipendente_nome
   );
-  var href = 'mailto:'+encodeURIComponent(req.responsabile_email)+'?subject='+subj+'&body='+body;
+  var href = 'mailto:'+destinatari.map(encodeURIComponent).join(',')+'?subject='+subj+'&body='+body;
   showMail(
     '✉ Notifica al responsabile',
-    'Vuoi inviare una notifica a '+req.responsabile_nome+'?\nSi aprirà il tuo client di posta precompilato.',
-    req.responsabile_email,
+    'Vuoi inviare una notifica a '+req.responsabile_nome+(destinatari.length>1?' (+'+(destinatari.length-1)+' altri)':'')+'?\nSi aprirà il tuo client di posta precompilato.',
+    destinatari.join(', '),
     href
   );
 }
 
 function richMailtoEsito(req){
   if(!req.dipendente_email) return;
+  var destinatari = [req.dipendente_email].concat(req.dipendente_email_lavoro?[req.dipendente_email_lavoro]:[]).concat(req.dipendente_email_extra||[]);
+  // Dedup case-insensitive
+  var seen={};destinatari=destinatari.filter(function(e){var k=e.toLowerCase();if(seen[k])return false;seen[k]=true;return true;});
   var tipoLabel = {F:'Ferie',HP:'Ore Permesso',104:'Giornata 104',H104:'Ore 104',CP:'Congedo Parentale',HPE:'Ore Permesso Esami',PE:'Permesso Esami'};
   var label = tipoLabel[req.tipo_code] || req.tipo_code || req.tipo;
   var dalIT = fmtDateIT(req.data_dal), alIT = fmtDateIT(req.data_al);
@@ -8903,11 +8928,11 @@ function richMailtoEsito(req){
     +(approvata ? '\r\nLe presenze sono state aggiornate automaticamente sul foglio.\r\n' : '')
     +'\r\nCordiali saluti,\r\n'+req.responsabile_nome
   );
-  var href = 'mailto:'+encodeURIComponent(req.dipendente_email)+'?subject='+subj+'&body='+body;
+  var href = 'mailto:'+destinatari.map(encodeURIComponent).join(',')+'?subject='+subj+'&body='+body;
   showMail(
     approvata ? '✅ Notifica approvazione' : '❌ Notifica rifiuto',
-    'Vuoi notificare '+req.dipendente_nome+' dell\'esito?\nSi aprirà il tuo client di posta precompilato.',
-    req.dipendente_email,
+    'Vuoi notificare '+req.dipendente_nome+(destinatari.length>1?' (+'+(destinatari.length-1)+' altri)':'')+' dell\'esito?\nSi aprirà il tuo client di posta precompilato.',
+    destinatari.join(', '),
     href
   );
 }
@@ -8940,6 +8965,10 @@ function richInvia(){
     respEmail = currentRespProfile.superiore_email||'';
   }
   if(!respNome){toast('Nessun responsabile configurato per il tuo profilo','warn');return;}
+  // Email extra: quelle del dipendente vanno solo in CC sull'email di esito,
+  // quelle del responsabile danno anche diritto di approvare dall'app.
+  var dipEmailExtra = richParseExtraEmails(profile.email_extra);
+  var respEmailExtra = richFindRespEmailExtra(respNome);
 
   var tipoInfo = RICH_TIPI.find(function(t){return t.code===richFormTipo;});
   var sigla = (tipoInfo&&tipoInfo.hasQty&&qty!==1) ? qty+richFormTipo : richFormTipo;
@@ -8957,10 +8986,12 @@ function richInvia(){
     dipendente_nome:  profile.nome,
     dipendente_email: uEmail,
     dipendente_email_lavoro: profile.email_lavoro||'',
+    dipendente_email_extra: dipEmailExtra,
     dipendente_sap:   profile.sap||'',
     dipendente_plant: profile.plant||'',
     responsabile_nome:  respNome,
     responsabile_email: respEmail,
+    responsabile_email_extra: respEmailExtra,
     nota_resp: '',
     mail_inviata: false,
     mail_esito_inviata: false,
@@ -9243,7 +9274,7 @@ function richRenderAnagPanel(){
 
   h += '<div style="overflow-x:auto">';
   h += '<table class="anag-table">';
-  h += '<thead><tr><th>Nome</th><th>Email Google</th><th>Email Aziendale</th><th>Ext SAP</th><th>Plant</th><th>Responsabile</th><th>Ferie tot.</th><th>HP ore</th><th>Pausa std</th><th></th></tr></thead>';
+  h += '<thead><tr><th>Nome</th><th>Email Google</th><th>Email Aziendale</th><th>Email Extra (CC esito)</th><th>Ext SAP</th><th>Plant</th><th>Responsabile</th><th>Ferie tot.</th><th>HP ore</th><th>Pausa std</th><th></th></tr></thead>';
   h += '<tbody id="anagBody">';
   dips.forEach(function(d,i){
     h += richAnagRow(d,i,respOpts);
@@ -9262,7 +9293,7 @@ function richRenderAnagPanel(){
   h += '</div></div>';
   h += '<div style="overflow-x:auto">';
   h += '<table class="anag-table">';
-  h += '<thead><tr><th>Nome</th><th>Email Google</th><th>Email Aziendale</th><th>Superiore</th><th>Email Superiore</th><th></th></tr></thead>';
+  h += '<thead><tr><th>Nome</th><th>Email Google</th><th>Email Aziendale</th><th>Email Extra (co-approvatori)</th><th>Superiore</th><th>Email Superiore</th><th></th></tr></thead>';
   h += '<tbody id="anagRespBody">';
   resps.forEach(function(r,i){
     h += richAnagRespRow(r,i,respOpts);
@@ -9283,6 +9314,7 @@ function richAnagRow(d,i,respOpts){
     +'<td><input class="anag-input" value="'+esc(d.nome||'')+'" onchange="richAnagChange(\'dip\','+i+',\'nome\',this.value)"></td>'
     +'<td><input class="anag-input" value="'+esc(d.email_google||'')+'" onchange="richAnagChange(\'dip\','+i+',\'email_google\',this.value)"></td>'
     +'<td><input class="anag-input" placeholder="email@atsgruppo.eu" value="'+esc(d.email_lavoro||'')+'" onchange="richAnagChange(\'dip\','+i+',\'email_lavoro\',this.value)"></td>'
+    +'<td><input class="anag-input" placeholder="extra1@..., extra2@..." value="'+esc(d.email_extra||'')+'" onchange="richAnagChange(\'dip\','+i+',\'email_extra\',this.value)"></td>'
     +'<td><input class="anag-input" value="'+esc(d.sap||'')+'" style="width:70px" onchange="richAnagChange(\'dip\','+i+',\'sap\',this.value)"></td>'
     +'<td><input class="anag-input" value="'+esc(d.plant||'')+'" style="width:60px" onchange="richAnagChange(\'dip\','+i+',\'plant\',this.value)"></td>'
     +'<td><select class="anag-select" data-resp-cur="'+esc(d.responsabile_nome||'')+'" onchange="richAnagChange(\'dip\','+i+',\'responsabile_nome\',this.value)"><option value="">—</option>'+respOpts+'</select></td>'
@@ -9298,6 +9330,7 @@ function richAnagRespRow(r,i,respOpts){
     +'<td><input class="anag-input" value="'+esc(r.nome||'')+'" onchange="richAnagChange(\'resp\','+i+',\'nome\',this.value)"></td>'
     +'<td><input class="anag-input" value="'+esc(r.email_google||'')+'" onchange="richAnagChange(\'resp\','+i+',\'email_google\',this.value)"></td>'
     +'<td><input class="anag-input" placeholder="email@atsgruppo.eu" value="'+esc(r.email_lavoro||'')+'" onchange="richAnagChange(\'resp\','+i+',\'email_lavoro\',this.value)"></td>'
+    +'<td><input class="anag-input" placeholder="extra1@..., extra2@..." value="'+esc(r.email_extra||'')+'" onchange="richAnagChange(\'resp\','+i+',\'email_extra\',this.value)"></td>'
     +'<td><select class="anag-select" onchange="richAnagChange(\'resp\','+i+',\'superiore_nome\',this.value)"><option value="">—</option>'+respOpts+'</select></td>'
     +'<td><input class="anag-input" value="'+esc(r.superiore_email||'')+'" onchange="richAnagChange(\'resp\','+i+',\'superiore_email\',this.value)"></td>'
     +'<td><button class="anag-del-btn" onclick="richDelResp('+i+')">🗑</button></td>'
