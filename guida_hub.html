@@ -549,8 +549,8 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
           <div style="background:var(--surface);border:1px solid rgba(245,158,11,.3);border-radius:8px;padding:14px;display:flex;align-items:flex-start;gap:12px">
             <span class="role-badge rb-super">SUPER</span>
             <div>
-              <div style="font-weight:600;font-size:13px;margin-bottom:3px">Super Utente</div>
-              <div style="font-size:12px;color:var(--muted);line-height:1.6">Accesso completo a tutte le funzioni inclusa la gestione dei permessi utente (tab Permessi).</div>
+              <div style="font-weight:600;font-size:13px;margin-bottom:3px">Super Utente (Superadmin)</div>
+              <div style="font-size:12px;color:var(--muted);line-height:1.6">Accesso completo a tutte le funzioni. È l'<strong>unico</strong> ruolo che vede ed usa il tab <span class="tag amber">Permessi</span>, dove si gestiscono gli accessi di tutti gli altri utenti.</div>
             </div>
           </div>
         </div>
@@ -641,8 +641,8 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
       <div class="step-header">
         <span class="step-num">●</span>
         <div>
-          <div class="step-title"><span class="tag amber">Permessi</span> — Solo Super</div>
-          <div class="step-body">Gestione degli accessi utente. Aggiunta, modifica e rimozione di utenti autorizzati. Visibile solo al Super Utente.</div>
+          <div class="step-title"><span class="tag amber">Permessi</span> — Solo Superadmin</div>
+          <div class="step-body">Gestione degli accessi utente: aggiunta, modifica e rimozione degli utenti autorizzati e dei loro ruoli. Il tab è visibile <strong>esclusivamente</strong> agli utenti con ruolo Superadmin (Super Utente) — Admin e Visualizzatore non lo vedono in barra.</div>
         </div>
       </div>
     </div>
@@ -919,12 +919,25 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
           </div>
           <div class="mm-btns">
             <button class="mm-btn cancel">Annulla</button>
+            <button class="mm-btn" style="background:rgba(245,158,11,.12);border:1px solid rgba(245,158,11,.35);color:var(--amber);border-radius:8px;padding:8px 14px;font-family:var(--ffc);font-size:12px;font-weight:700;cursor:pointer">📝 Nota</button>
             <button class="mm-btn ok">Imposta</button>
           </div>
         </div>
         <div class="infobox tip">
           <span class="ib-icon">💡</span>
-          <div class="ib-body">Per le sigle che richiedono orari (X, SW, TFS…) il sistema calcola automaticamente le ore ordinarie e straordinarie in base all'orario inserito. Le sigle F, M, CP, 104, PE, Lutto non richiedono orario.</div>
+          <div class="ib-body">Per le sigle che richiedono orari (X, SW, TFS, HP…) il sistema calcola automaticamente le ore ordinarie e straordinarie in base all'orario inserito. Le sigle F, M, CP, 104, PE, Lutto non richiedono orario.</div>
+        </div>
+        <div class="infobox warn">
+          <span class="ib-icon">⏱️</span>
+          <div class="ib-body">
+            <strong>Come compilare Ingresso/Uscita e permesso nello stesso giorno:</strong> nei campi <strong>Ingresso</strong> e <strong>Uscita</strong> va sempre inserito l'orario <strong>standard del turno</strong> del dipendente (es. <code>08:00</code> – <code>18:00</code>), non l'orario realmente osservato. Se nella giornata è stato preso un permesso, seleziona in aggiunta la sigla <strong style="color:var(--purple)">HP</strong> e indica la quantità di ore nel campo Quantità: il sistema scrive automaticamente la sigla come <strong style="color:var(--purple)">2HP</strong> (numero di ore + sigla).
+          </div>
+        </div>
+        <div class="infobox info">
+          <span class="ib-icon">📝</span>
+          <div class="ib-body">
+            L'orario <strong>realmente</strong> osservato (es. il dipendente è entrato alle 8:30 o è uscito alle 17:15) <strong>non va messo in Ingresso/Uscita</strong>: va scritto nel campo <strong>Nota</strong> (pulsante 📝 in basso nel modale). Esempio: <em>"uscito alle 17:15"</em> oppure <em>"entrato alle 8:30"</em>. Le celle con una nota mostrano un piccolo triangolo ambra nell'angolo, cliccabile per rileggerla o modificarla.
+          </div>
         </div>
       </div>
     </div>
@@ -1318,8 +1331,8 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
       <div class="step-header">
         <span class="step-num">6</span>
         <div>
-          <div class="step-title">Gestione Permessi utenti (Super)</div>
-          <div class="step-body">Il tab <span class="tag amber">Permessi</span> è visibile solo al Super Utente. Permette di aggiungere, modificare e rimuovere gli accessi al modulo.</div>
+          <div class="step-title">Gestione Permessi utenti (Superadmin)</div>
+          <div class="step-body">Il tab <span class="tag amber">Permessi</span> è visibile e utilizzabile solo dagli utenti con ruolo <strong>Superadmin</strong>. Permette di aggiungere, modificare e rimuovere gli accessi al modulo, oltre a definire ruolo, tag responsabile e sezioni visibili per ciascun utente.</div>
         </div>
       </div>
       <div class="step-detail">
