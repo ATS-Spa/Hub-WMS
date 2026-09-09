@@ -8388,13 +8388,23 @@ function richIsMe(email){
 function richParseExtraEmails(str){
   return String(str||'').split(/[,;\n]/).map(function(s){return s.trim();}).filter(Boolean);
 }
-// Email extra configurate sul RESPONSABILE (non sul dipendente): sono
-// persone che possono approvare al posto/insieme al responsabile principale.
+// Email extra configurate sul RESPONSABILE (non sul dipendente): sono altri
+// responsabili già in anagrafica scelti come co-approvatori — si risolvono
+// ai LORO campi email_lavoro/email_google esistenti, non a testo libero,
+// così l'identità coincide sempre con l'account con cui quella persona si
+// logga davvero (altrimenti scrivendo a mano la mail aziendale ma loggando
+// con un altro account Google, il confronto in richIsMe non avrebbe mai
+// trovato corrispondenza).
 function richFindRespEmailExtra(nome){
   if(!nome||!permConfig) return [];
   var normN=normNome(nome);
   var rr=(permConfig.responsabili||[]).find(function(r){return normNome(r.nome)===normN&&!r._esempio;});
-  return rr?richParseExtraEmails(rr.email_extra):[];
+  if(!rr||!rr.co_responsabili||!rr.co_responsabili.length) return [];
+  return rr.co_responsabili.map(function(coNome){
+    var coNormN=normNome(coNome);
+    var coRr=(permConfig.responsabili||[]).find(function(r){return normNome(r.nome)===coNormN&&!r._esempio;});
+    return coRr?(coRr.email_lavoro||coRr.email_google||''):'';
+  }).filter(Boolean);
 }
 // Una richiesta è "per me" se sono il responsabile principale OPPURE uno dei
 // responsabili aggiuntivi configurati per quel tag — questi ultimi possono
@@ -9261,7 +9271,8 @@ function richRenderAnagPanel(){
   var respNomi = {};
   (permConfig.responsabili||[]).forEach(function(r){if(r.nome&&!r._esempio)respNomi[r.nome]=true;});
   (allFiles||[]).forEach(function(f){var p=parseFileName(f.name);if(p&&p.resp)respNomi[p.resp]=true;});
-  var respOpts = Object.keys(respNomi).sort().map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
+  var respNomiArr = Object.keys(respNomi).sort();
+  var respOpts = respNomiArr.map(function(n){return '<option value="'+esc(n)+'">'+esc(n)+'</option>';}).join('');
 
   var h = '<div class="anag-panel">';
   h += '<div class="anag-hdr"><div class="anag-title">👥 Anagrafica Dipendenti</div>';
@@ -9293,10 +9304,10 @@ function richRenderAnagPanel(){
   h += '</div></div>';
   h += '<div style="overflow-x:auto">';
   h += '<table class="anag-table">';
-  h += '<thead><tr><th>Nome</th><th>Email Google</th><th>Email Aziendale</th><th>Email Extra (co-approvatori)</th><th>Superiore</th><th>Email Superiore</th><th></th></tr></thead>';
+  h += '<thead><tr><th>Nome</th><th>Email Google</th><th>Email Aziendale</th><th>Co-approvatori</th><th>Superiore</th><th>Email Superiore</th><th></th></tr></thead>';
   h += '<tbody id="anagRespBody">';
   resps.forEach(function(r,i){
-    h += richAnagRespRow(r,i,respOpts);
+    h += richAnagRespRow(r,i,respOpts,respNomiArr);
   });
   h += '</tbody></table></div>';
   h += '</div>';
@@ -9325,18 +9336,31 @@ function richAnagRow(d,i,respOpts){
     +'</tr>';
 }
 
-function richAnagRespRow(r,i,respOpts){
+function richAnagRespRow(r,i,respOpts,respNomiArr){
+  var coSel = (r.co_responsabili||[]);
+  var coOpts = (respNomiArr||[]).filter(function(n){return n!==r.nome;}).map(function(n){
+    return '<option value="'+esc(n)+'"'+(coSel.indexOf(n)!==-1?' selected':'')+'>'+esc(n)+'</option>';
+  }).join('');
   return '<tr>'
     +'<td><input class="anag-input" value="'+esc(r.nome||'')+'" onchange="richAnagChange(\'resp\','+i+',\'nome\',this.value)"></td>'
     +'<td><input class="anag-input" value="'+esc(r.email_google||'')+'" onchange="richAnagChange(\'resp\','+i+',\'email_google\',this.value)"></td>'
     +'<td><input class="anag-input" placeholder="email@atsgruppo.eu" value="'+esc(r.email_lavoro||'')+'" onchange="richAnagChange(\'resp\','+i+',\'email_lavoro\',this.value)"></td>'
-    +'<td><input class="anag-input" placeholder="extra1@..., extra2@..." value="'+esc(r.email_extra||'')+'" onchange="richAnagChange(\'resp\','+i+',\'email_extra\',this.value)"></td>'
+    +'<td><select class="anag-select" multiple size="2" style="min-width:150px" title="Tieni premuto Ctrl/Cmd per selezionarne più di uno" onchange="richAnagChangeMulti(\'resp\','+i+',\'co_responsabili\',this)">'+coOpts+'</select></td>'
     +'<td><select class="anag-select" onchange="richAnagChange(\'resp\','+i+',\'superiore_nome\',this.value)"><option value="">—</option>'+respOpts+'</select></td>'
     +'<td><input class="anag-input" value="'+esc(r.superiore_email||'')+'" onchange="richAnagChange(\'resp\','+i+',\'superiore_email\',this.value)"></td>'
     +'<td><button class="anag-del-btn" onclick="richDelResp('+i+')">🗑</button></td>'
     +'</tr>';
 }
 
+// Come richAnagChange, ma per i campi <select multiple> (es. co-approvatori):
+// salva l'array delle opzioni selezionate invece di un singolo valore stringa.
+function richAnagChangeMulti(tipo,i,field,selEl){
+  if(!permConfig) return;
+  var arr = tipo==='dip' ? (permConfig.dipendenti||[]).filter(function(d){return !d._esempio;})
+                         : (permConfig.responsabili||[]).filter(function(r){return !r._esempio;});
+  if(!arr[i]) return;
+  arr[i][field] = Array.prototype.map.call(selEl.selectedOptions, function(o){return o.value;});
+}
 function richAnagChange(tipo,i,field,val){
   if(!permConfig) return;
   var arr = tipo==='dip' ? (permConfig.dipendenti||[]).filter(function(d){return !d._esempio;})
