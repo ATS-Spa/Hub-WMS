@@ -9067,7 +9067,6 @@ function richInvia(){
     richUpdateBadge();
     richRender();
     toast('✅ Richiesta inviata a '+respNome+' — notifica in partenza');
-    richMailtoRichiesta(req);
   }).catch(function(e){
     if(btn) btn.disabled=false;
     toast('✗ Errore: '+e.message,'err');
@@ -9097,7 +9096,6 @@ function richApprova(id){
         richUpdateBadge();
         richRender();
         toast('✅ Approvata — notifica al dipendente in partenza');
-        richMailtoEsito(req);
       }).catch(function(e){
         toast('✗ Errore scrittura: '+e.message,'err');
         saveRichieste().then(function(){richUpdateBadge();richRender();});
@@ -9122,7 +9120,6 @@ function richRifiuta(id){
         richUpdateBadge();
         richRender();
         toast('❌ Rifiutata — notifica al dipendente in partenza');
-        richMailtoEsito(req);
       });
     },
     'required'
