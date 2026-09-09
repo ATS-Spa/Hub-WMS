@@ -9147,6 +9147,30 @@ function parseLocalDate(s){
   return new Date(s);
 }
 function richScriviSuDrive(req){
+  // Scrive la nota della richiesta come commento nativo sulle celle dei
+  // giorni interessati — stesso meccanismo di notaSave() (updateCells con
+  // campo 'note', serve il sheetId numerico via metadata, non l'A1).
+  // Best-effort: se fallisce non blocca l'approvazione, che resta comunque
+  // valida (la sigla è già scritta a quel punto).
+  function scriviNoteSuCelle(fileId, sheetName, rowIdx, colIdxs, noteText){
+    if(!noteText || !colIdxs.length) return Promise.resolve();
+    return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties')
+      .then(function(meta){
+        var sh=(meta.sheets||[]).find(function(s){return s.properties.title===sheetName;});
+        if(!sh) return;
+        var requests=colIdxs.map(function(col){
+          return {updateCells:{
+            range:{sheetId:sh.properties.sheetId,startRowIndex:rowIdx,endRowIndex:rowIdx+1,startColumnIndex:col,endColumnIndex:col+1},
+            rows:[{values:[{note:noteText}]}],fields:'note'
+          }};
+        });
+        return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+':batchUpdate',{
+          method:'POST',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+          body:JSON.stringify({requests:requests})
+        });
+      }).catch(function(e){console.warn('[WMS RICH] nota non scritta su '+sheetName+':',e.message);});
+  }
+
   var sap   = req.dipendente_sap||'';
   var nome  = req.dipendente_nome||'';
   var plant = req.dipendente_plant||'';
@@ -9218,13 +9242,16 @@ function richScriviSuDrive(req){
         ]).then(function(){return ssId;});
       }).then(function(ssId){
         var sname2=mName2+'_ATS';
-        var updates2=[];var DST2=3;
+        var updates2=[];var DST2=3;var colIdxs2=[];
         info.giorni.forEach(function(giorno){
           var di2=dates2.findIndex(function(dt){return dt.day===giorno;});
           if(di2<0) return;
           updates2.push({range:sname2+'!'+colToLetter(DST2+di2)+'3',values:[[sigla]]});
+          colIdxs2.push(DST2+di2);
         });
         if(updates2.length) return sheetsBatchUpdate(ssId,updates2).then(function(){
+          return scriviNoteSuCelle(ssId, sname2, 2, colIdxs2, req.note);
+        }).then(function(){
           toast('✅ File '+fname2+' creato e ferie scritte'); loadAllFiles();
         });
         toast('✅ File '+fname2+' creato'); loadAllFiles();
@@ -9254,14 +9281,18 @@ function richScriviSuDrive(req){
         if(!emp){console.warn('[WMS RICH] Dipendente '+nome+' non trovato in '+f.name);return tryFile(idx+1);}
         var DST=d.dayStart||3;
         var updates=[];
+        var colIdxs=[];
         info.giorni.forEach(function(giorno){
           var di=d.dates.findIndex(function(dt){return dt.day===giorno;});
           if(di<0||!emp.sheetRows||emp.sheetRows.n===undefined)return;
           var col=colToLetter(DST+di);
           updates.push({range:sname+'!'+col+(emp.sheetRows.n+1),values:[[sigla]]});
+          colIdxs.push(DST+di);
         });
         if(!updates.length) return;
-        return sheetsBatchUpdate(f.id, updates);
+        return sheetsBatchUpdate(f.id, updates).then(function(){
+          return scriviNoteSuCelle(f.id, sname, emp.sheetRows.n, colIdxs, req.note);
+        });
       }).catch(function(e){console.warn('[WMS RICH] errore lettura '+f.name+':',e.message);return tryFile(idx+1);});
     };
     return tryFile(0);
