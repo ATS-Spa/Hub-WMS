@@ -1634,6 +1634,18 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
   transition: all .15s;
 }
 .anag-del-btn:hover { background: rgba(239,68,68,.1); }
+.coapp-chips { display: flex; flex-wrap: wrap; gap: 4px; margin-bottom: 4px; min-height: 18px; }
+.coapp-chip {
+  display: inline-flex; align-items: center; gap: 4px;
+  background: rgba(20,184,166,.12); border: 1px solid rgba(20,184,166,.35);
+  color: var(--teal); border-radius: 10px; padding: 2px 4px 2px 8px;
+  font-size: 11px; font-family: var(--ffc); font-weight: 700; white-space: nowrap;
+}
+.coapp-chip button {
+  background: none; border: none; color: var(--teal); cursor: pointer;
+  font-size: 13px; line-height: 1; padding: 0 3px; opacity: .7;
+}
+.coapp-chip button:hover { opacity: 1; color: var(--red); }
 
 /* Responsive richieste */
 @media (max-width: 768px) {
@@ -9337,31 +9349,57 @@ function richAnagRow(d,i,respOpts){
 }
 
 function richAnagRespRow(r,i,respOpts,adminEmails){
-  var coSel = (r.co_approvatori||[]);
-  var ownEmails = [(r.email_google||'').toLowerCase(),(r.email_lavoro||'').toLowerCase()];
-  var coOpts = (adminEmails||[]).filter(function(em){return ownEmails.indexOf(em.toLowerCase())===-1;}).map(function(em){
-    return '<option value="'+esc(em)+'"'+(coSel.indexOf(em)!==-1?' selected':'')+'>'+esc(em)+'</option>';
-  }).join('');
   return '<tr>'
     +'<td><input class="anag-input" value="'+esc(r.nome||'')+'" onchange="richAnagChange(\'resp\','+i+',\'nome\',this.value)"></td>'
     +'<td><input class="anag-input" value="'+esc(r.email_google||'')+'" onchange="richAnagChange(\'resp\','+i+',\'email_google\',this.value)"></td>'
     +'<td><input class="anag-input" placeholder="email@atsgruppo.eu" value="'+esc(r.email_lavoro||'')+'" onchange="richAnagChange(\'resp\','+i+',\'email_lavoro\',this.value)"></td>'
-    +'<td><select class="anag-select" multiple size="2" style="min-width:180px" title="Utenti con flag Admin nel pannello Permessi. Tieni premuto Ctrl/Cmd per selezionarne più di uno" onchange="richAnagChangeMulti(\'resp\','+i+',\'co_approvatori\',this)">'+coOpts+'</select></td>'
+    +'<td style="min-width:180px">'+richCoAppWidget(r,i,adminEmails)+'</td>'
     +'<td><select class="anag-select" onchange="richAnagChange(\'resp\','+i+',\'superiore_nome\',this.value)"><option value="">—</option>'+respOpts+'</select></td>'
     +'<td><input class="anag-input" value="'+esc(r.superiore_email||'')+'" onchange="richAnagChange(\'resp\','+i+',\'superiore_email\',this.value)"></td>'
     +'<td><button class="anag-del-btn" onclick="richDelResp('+i+')">🗑</button></td>'
     +'</tr>';
 }
 
-// Come richAnagChange, ma per i campi <select multiple> (es. co-approvatori):
-// salva l'array delle opzioni selezionate invece di un singolo valore stringa.
-function richAnagChangeMulti(tipo,i,field,selEl){
-  if(!permConfig) return;
-  var arr = tipo==='dip' ? (permConfig.dipendenti||[]).filter(function(d){return !d._esempio;})
-                         : (permConfig.responsabili||[]).filter(function(r){return !r._esempio;});
-  if(!arr[i]) return;
-  arr[i][field] = Array.prototype.map.call(selEl.selectedOptions, function(o){return o.value;});
+// Widget "co-approvatori": chip rimuovibili per gli email già scelti, più una
+// tendina separata per aggiungerne altri — mostra solo quello che hai
+// selezionato, non l'intera lista come un <select multiple> nativo.
+function richCoAppWidget(r,i,adminEmails){
+  var coSel = r.co_approvatori||[];
+  var ownEmails = [(r.email_google||'').toLowerCase(),(r.email_lavoro||'').toLowerCase()];
+  var chips = coSel.map(function(em){
+    return '<span class="coapp-chip">'+esc(em)+'<button type="button" onclick="richCoAppRemove('+i+',\''+esc(em).replace(/'/g,"\\'")+'\')">✕</button></span>';
+  }).join('');
+  var avail = (adminEmails||[]).filter(function(em){
+    return ownEmails.indexOf(em.toLowerCase())===-1 && coSel.indexOf(em)===-1;
+  });
+  var opts = '<option value="">'+(avail.length?'+ Aggiungi…':'— Nessun altro admin —')+'</option>'
+    +avail.map(function(em){return '<option value="'+esc(em)+'">'+esc(em)+'</option>';}).join('');
+  return '<div class="coapp-chips" id="coappChips_'+i+'">'+chips+'</div>'
+    +'<select class="anag-select" id="coappSelect_'+i+'" onchange="richCoAppAdd('+i+',this)"'+(avail.length?'':' disabled')+'>'+opts+'</select>';
 }
+
+// Aggiunge/rimuove un co-approvatore e ridisegna solo il widget di quella riga
+// (non l'intera tabella, per non perdere il focus su altri campi in edit).
+function richCoAppAdd(i,selEl){
+  var val=selEl.value; if(!val)return;
+  var resps=(permConfig.responsabili||[]).filter(function(r){return !r._esempio;});
+  var r=resps[i]; if(!r)return;
+  if(!r.co_approvatori)r.co_approvatori=[];
+  if(r.co_approvatori.indexOf(val)===-1)r.co_approvatori.push(val);
+  richCoAppRefresh(i,r);
+}
+function richCoAppRemove(i,email){
+  var resps=(permConfig.responsabili||[]).filter(function(r){return !r._esempio;});
+  var r=resps[i]; if(!r||!r.co_approvatori)return;
+  r.co_approvatori=r.co_approvatori.filter(function(e){return e!==email;});
+  richCoAppRefresh(i,r);
+}
+function richCoAppRefresh(i,r){
+  var adminEmails=Object.keys((permConfig&&permConfig.users)||{}).filter(function(em){return permConfig.users[em]&&permConfig.users[em].is_admin;}).sort();
+  var wrap=document.getElementById('coappChips_'+i);
+  if(wrap&&wrap.parentNode)wrap.parentNode.innerHTML=richCoAppWidget(r,i,adminEmails);
+}
+
 function richAnagChange(tipo,i,field,val){
   if(!permConfig) return;
   var arr = tipo==='dip' ? (permConfig.dipendenti||[]).filter(function(d){return !d._esempio;})
