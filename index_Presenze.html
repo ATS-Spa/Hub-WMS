@@ -8397,8 +8397,9 @@ function richIsMe(email){
 
 // Parsa un campo "email extra" (stringa libera, separata da virgola/punto e
 // virgola/a capo) in un array pulito di indirizzi.
-function richParseExtraEmails(str){
-  return String(str||'').split(/[,;\n]/).map(function(s){return s.trim();}).filter(Boolean);
+function richParseExtraEmails(val){
+  if(Array.isArray(val))return val.map(function(s){return String(s||'').trim();}).filter(Boolean);
+  return String(val||'').split(/[,;\n]/).map(function(s){return s.trim();}).filter(Boolean);
 }
 // Co-approvatori configurati sul RESPONSABILE: sono utenti con il flag Admin
 // nel pannello Permessi, salvati direttamente come la loro email di login
@@ -9337,7 +9338,7 @@ function richAnagRow(d,i,respOpts){
     +'<td><input class="anag-input" value="'+esc(d.nome||'')+'" onchange="richAnagChange(\'dip\','+i+',\'nome\',this.value)"></td>'
     +'<td><input class="anag-input" value="'+esc(d.email_google||'')+'" onchange="richAnagChange(\'dip\','+i+',\'email_google\',this.value)"></td>'
     +'<td><input class="anag-input" placeholder="email@atsgruppo.eu" value="'+esc(d.email_lavoro||'')+'" onchange="richAnagChange(\'dip\','+i+',\'email_lavoro\',this.value)"></td>'
-    +'<td><input class="anag-input" placeholder="extra1@..., extra2@..." value="'+esc(d.email_extra||'')+'" onchange="richAnagChange(\'dip\','+i+',\'email_extra\',this.value)"></td>'
+    +'<td style="min-width:170px">'+richDipExtraWidget(d,i)+'</td>'
     +'<td><input class="anag-input" value="'+esc(d.sap||'')+'" style="width:70px" onchange="richAnagChange(\'dip\','+i+',\'sap\',this.value)"></td>'
     +'<td><input class="anag-input" value="'+esc(d.plant||'')+'" style="width:60px" onchange="richAnagChange(\'dip\','+i+',\'plant\',this.value)"></td>'
     +'<td><select class="anag-select" data-resp-cur="'+esc(d.responsabile_nome||'')+'" onchange="richAnagChange(\'dip\','+i+',\'responsabile_nome\',this.value)"><option value="">—</option>'+respOpts+'</select></td>'
@@ -9398,6 +9399,56 @@ function richCoAppRefresh(i,r){
   var adminEmails=Object.keys((permConfig&&permConfig.users)||{}).filter(function(em){return permConfig.users[em]&&permConfig.users[em].is_admin;}).sort();
   var wrap=document.getElementById('coappChips_'+i);
   if(wrap&&wrap.parentNode)wrap.parentNode.innerHTML=richCoAppWidget(r,i,adminEmails);
+}
+
+// Widget "email extra" del dipendente (CC sull'esito): chip rimuovibili, un
+// pulsante rapido per aggiungere la mail Google già scritta in quella riga
+// (comodissimo se l'utente si registra con un account diverso da quello
+// aziendale), e un campo libero per qualunque altra email — a differenza dei
+// co-approvatori qui non c'è un elenco chiuso da cui scegliere.
+function richDipExtraWidget(d,i){
+  var extra = Array.isArray(d.email_extra) ? d.email_extra.filter(Boolean) : richParseExtraEmails(d.email_extra);
+  var gmail = (d.email_google||'').trim();
+  var chips = extra.map(function(em){
+    return '<span class="coapp-chip">'+esc(em)+'<button type="button" onclick="richDipExtraRemove('+i+',\''+esc(em).replace(/'/g,"\\'")+'\')">✕</button></span>';
+  }).join('');
+  var h = '<div class="coapp-chips" id="dipExtraChips_'+i+'">'+chips+'</div>';
+  h += '<div style="display:flex;gap:4px">';
+  if(gmail && extra.indexOf(gmail)===-1){
+    h += '<button type="button" class="ba bghost" style="font-size:10px;padding:3px 7px;white-space:nowrap;max-width:110px;overflow:hidden;text-overflow:ellipsis" title="Aggiungi la mail Google già presente in questa riga" onclick="richDipExtraAdd('+i+',\''+esc(gmail).replace(/'/g,"\\'")+'\')">+ '+esc(gmail)+'</button>';
+  }
+  h += '<input type="email" class="anag-input" placeholder="altra email…" id="dipExtraInput_'+i+'" style="flex:1;min-width:70px" onkeydown="if(event.key===\'Enter\'){event.preventDefault();richDipExtraAddFromInput('+i+');}">'
+    +'<button type="button" class="anag-del-btn" style="color:var(--teal);border-color:rgba(20,184,166,.35)" onclick="richDipExtraAddFromInput('+i+')">＋</button>';
+  h += '</div>';
+  return h;
+}
+function richDipExtraAdd(i,email){
+  email=(email||'').trim();
+  if(!email)return;
+  var dips=(permConfig.dipendenti||[]).filter(function(d){return !d._esempio;});
+  var d=dips[i]; if(!d)return;
+  var extra = Array.isArray(d.email_extra) ? d.email_extra.filter(Boolean) : richParseExtraEmails(d.email_extra);
+  if(extra.indexOf(email)===-1)extra.push(email);
+  d.email_extra=extra;
+  richDipExtraRefresh(i,d);
+}
+function richDipExtraAddFromInput(i){
+  var inp=document.getElementById('dipExtraInput_'+i);
+  if(!inp||!inp.value.trim())return;
+  var email=inp.value.trim();
+  if(!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)){toast('Email non valida','warn');return;}
+  richDipExtraAdd(i,email);
+}
+function richDipExtraRemove(i,email){
+  var dips=(permConfig.dipendenti||[]).filter(function(d){return !d._esempio;});
+  var d=dips[i]; if(!d||!d.email_extra)return;
+  var extra = Array.isArray(d.email_extra) ? d.email_extra : richParseExtraEmails(d.email_extra);
+  d.email_extra=extra.filter(function(e){return e!==email;});
+  richDipExtraRefresh(i,d);
+}
+function richDipExtraRefresh(i,d){
+  var wrap=document.getElementById('dipExtraChips_'+i);
+  if(wrap&&wrap.parentNode)wrap.parentNode.innerHTML=richDipExtraWidget(d,i);
 }
 
 function richAnagChange(tipo,i,field,val){
