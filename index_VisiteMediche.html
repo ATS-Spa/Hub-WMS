@@ -746,6 +746,7 @@ function renderDashboard(){
     h+='<div class="fg"><span class="fl">Data prevista</span><select class="fc" id="fPrevista" onchange="dashApplyFilter()"><option value="">Tutte</option>';
     datePreviste.forEach(function(d){ h+='<option value="'+esc(d)+'">'+esc(d)+'</option>'; });
     h+='</select></div>';
+    if(canConfermareVisita()) h+='<div class="fg"><button class="btn ghost" onclick="inviaMailComunicazione()">✉️ Invia mail di comunicazione</button></div>';
     if(canConfermareVisita()) h+='<div class="fg"><button class="btn ghost" id="btnTogglePanel" onclick="dashTogglePanel()">🗂 Conferma visite effettuate</button></div>';
     h+='</div>';
 
@@ -860,6 +861,54 @@ function confermaVisiteMassivo(){
       renderDashboard();
     })
     .catch(function(e){ showToast('Errore: '+e.message,'err'); });
+}
+
+// ── INVIA MAIL DI COMUNICAZIONE (convocazione ai dipendenti) → apre Outlook precompilato ──
+function inviaMailComunicazione(){
+  if(!canConfermareVisita()){ showToast('Solo un admin può inviare la comunicazione','err'); return; }
+  if(!dashFilPrevista){ showToast('Seleziona prima una Data prevista dal filtro qui sopra','err'); return; }
+
+  // Usa TUTTI i dipendenti con quella data prevista, a prescindere dai filtri Filiale/Stato
+  // (per non escludere per errore qualcuno che rientra nel filtro attivo).
+  var persone = allPersone.filter(function(p){
+    return filialeVisibile(p.filiale) && p.dataPrevista && fmtDataIt(p.dataPrevista)===dashFilPrevista;
+  });
+  if(!persone.length){ showToast('Nessun dipendente trovato per questa data','err'); return; }
+
+  var conEmail = persone.filter(function(p){ return !!p.email; });
+  var senzaEmail = persone.filter(function(p){ return !p.email; });
+  if(!conEmail.length){ showToast('Nessuno dei dipendenti di questa data ha un\'email in anagrafica','err'); return; }
+
+  var plant = persone.map(function(p){return p.plant;}).filter(Boolean)[0] || '(plant da specificare)';
+  var elenco = persone.map(function(p){ return '- '+p.nominativo+' ('+p.filiale+')'; }).join('\n');
+
+  var corpo = 'Si comunica che la visita medica periodica è stata fissata per il giorno '+dashFilPrevista+' presso '+plant+'.\n\n'
+    + 'Dipendenti convocati:\n'+elenco+'\n\n'
+    + 'Si prega ai rispettivi responsabili di effettuare la comunicazione diretta nel caso in cui un dipendente non trovi il proprio nominativo nell\'elenco sopra riportato.\n\n'
+    + 'Cordiali saluti,\nATS Spa';
+
+  var oggetto = 'Convocazione visita medica del '+dashFilPrevista;
+  var to = conEmail.map(function(p){ return p.email; }).join(',');
+
+  var mailto = 'mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(oggetto)+'&body='+encodeURIComponent(corpo);
+
+  if(mailto.length > 1800){
+    // Corpo troppo lungo per un link mailto: copia il testo e apre Outlook solo con oggetto/destinatari,
+    // l'admin incolla il corpo manualmente (limite tecnico dei link mailto, non del modulo).
+    var mailtoCorto = 'mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(oggetto);
+    navigator.clipboard.writeText(corpo).then(function(){
+      showToast('Elenco troppo lungo per il link diretto: corpo copiato negli appunti, incollalo in Outlook (Ctrl+V)','ok');
+    }).catch(function(){
+      showToast('Elenco troppo lungo per il link diretto: copia il corpo manualmente','err');
+    });
+    window.location.href = mailtoCorto;
+  } else {
+    window.location.href = mailto;
+  }
+
+  if(senzaEmail.length){
+    showToast(senzaEmail.length+' dipendenti di questa data non hanno email e sono stati esclusi dalla convocazione','err');
+  }
 }
 
 // ── ANAGRAFICA ──
