@@ -746,11 +746,12 @@ function renderDashboard(){
     h+='<div class="fg"><span class="fl">Data prevista</span><select class="fc" id="fPrevista" onchange="dashApplyFilter()"><option value="">Tutte</option>';
     datePreviste.forEach(function(d){ h+='<option value="'+esc(d)+'">'+esc(d)+'</option>'; });
     h+='</select></div>';
+    if(canConfermareVisita()) h+='<div class="fg"><button class="btn ghost" id="btnTogglePanel" onclick="dashTogglePanel()">🗂 Conferma visite effettuate</button></div>';
     h+='</div>';
 
     if(canConfermareVisita()){
-      h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:14px">';
-      h+='<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Conferma massiva: filtra per Data prevista, seleziona i dipendenti che si sono effettivamente presentati, imposta la data reale e conferma tutti insieme.</div>';
+      h+='<div id="bulkConfirmPanel" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:14px">';
+      h+='<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Filtra per Data prevista qui sopra, seleziona chi si è presentato: la data effettiva si precompila da sola da quella prevista, modificala solo se serve.</div>';
       h+='<div class="filters" style="margin-bottom:0">';
       h+='<div class="fg"><button class="btn ghost" onclick="dashSelectAllFiltered()">Seleziona tutti i filtrati</button></div>';
       h+='<div class="fg"><button class="btn ghost" onclick="dashClearSelection()">Deseleziona tutti</button></div>';
@@ -766,10 +767,20 @@ function renderDashboard(){
     dashApplyFilter();
   });
 }
+function dashTogglePanel(){
+  var panel = document.getElementById('bulkConfirmPanel');
+  var btn = document.getElementById('btnTogglePanel');
+  var open = panel.style.display !== 'none';
+  panel.style.display = open ? 'none' : 'block';
+  if(btn) btn.textContent = open ? '🗂 Conferma visite effettuate' : '✕ Chiudi pannello conferma';
+}
 function dashApplyFilter(){
   dashFilFiliale  = document.getElementById('fFiliale') ? document.getElementById('fFiliale').value : '';
   dashFilStato    = document.getElementById('fStato') ? document.getElementById('fStato').value : '';
   dashFilPrevista = document.getElementById('fPrevista') ? document.getElementById('fPrevista').value : '';
+  // Precompila la data effettiva dal filtro Data prevista, invece di doverla scrivere a mano
+  var confirmDataEl = document.getElementById('confirmData');
+  if(confirmDataEl && dashFilPrevista) confirmDataEl.value = dashFilPrevista;
   var rows = dashFilteredList();
   var badgeClass={'SCADUTO':'badge-scaduto','IN SCADENZA':'badge-scadenza','VALIDO':'badge-valido','DA PROGRAMMARE':'badge-programmare'};
   var h='';
