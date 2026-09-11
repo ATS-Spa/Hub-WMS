@@ -1,0 +1,753 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Visite Mediche</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🩺</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#0b0f18;--surface:#131929;--card:#1a2236;--border:#243048;
+  --blue:#3b82f6;--green:#10b981;--red:#ef4444;--amber:#f59e0b;--teal:#14b8a6;
+  --text:#e2e8f0;--muted:#64748b;--subtle:#94a3b8;
+  --ff-sans:'IBM Plex Sans',sans-serif;--ff-mono:'IBM Plex Mono',monospace;--ff-cond:'Barlow Condensed',sans-serif;
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--ff-sans);font-size:14px}
+
+/* ── LOGIN ── */
+#loginScreen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at 30% 40%,rgba(59,130,246,.06) 0%,transparent 60%),var(--bg);z-index:200}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:52px 56px;text-align:center;max-width:420px;width:90%;box-shadow:0 32px 80px rgba(0,0,0,.5)}
+.login-logo{font-family:var(--ff-cond);font-size:32px;font-weight:800;letter-spacing:2px;color:var(--blue)}
+.login-logo span{color:var(--subtle);font-weight:600}
+.login-sub{font-size:11px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin:6px 0 40px}
+.login-note{font-size:11px;color:var(--muted);margin-top:22px;line-height:1.6}
+
+/* ── SHELL ── */
+#appShell{display:none;flex-direction:column;height:100vh;overflow:hidden}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px 0 24px;height:52px;display:flex;align-items:center;gap:14px;flex-shrink:0;z-index:100}
+.topbar-logo{font-family:var(--ff-cond);font-size:22px;font-weight:800;letter-spacing:1.5px;color:var(--blue);text-transform:uppercase;white-space:nowrap}
+.topbar-logo span{color:var(--subtle);font-weight:600}
+.topbar-div{width:1px;height:24px;background:var(--border)}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.user-badge{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:4px 12px 4px 6px;font-size:12px;color:var(--subtle)}
+.user-avatar{width:24px;height:24px;border-radius:50%;object-fit:cover}
+.role-tag{font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:2px 8px;border-radius:10px;background:rgba(59,130,246,.15);color:var(--blue)}
+.btn-perm{background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--subtle);cursor:pointer}
+.btn-perm:hover{border-color:var(--blue);color:var(--blue)}
+
+/* ── TABS ── */
+.tabbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;gap:4px;flex-shrink:0}
+.tab-btn{background:none;border:none;padding:12px 16px;color:var(--muted);font-family:var(--ff-sans);font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s}
+.tab-btn:hover{color:var(--subtle)}
+.tab-btn.active{color:var(--text);border-bottom-color:var(--blue)}
+
+.main{flex:1;overflow-y:auto;padding:20px 24px}
+
+/* ── BADGES / STATS ── */
+.stats-row{display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 18px;min-width:140px}
+.stat-num{font-family:var(--ff-cond);font-size:26px;font-weight:800}
+.stat-lbl{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-top:2px}
+.stat-red .stat-num{color:var(--red)} .stat-amber .stat-num{color:var(--amber)}
+.stat-green .stat-num{color:var(--green)} .stat-muted .stat-num{color:var(--subtle)}
+
+/* ── FILTERS ── */
+.filters{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.fg{display:flex;flex-direction:column;gap:4px}
+.fl{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+.fc{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-family:var(--ff-sans);font-size:12px;outline:none}
+.fc:focus{border-color:var(--blue)}
+.btn{background:var(--blue);border:none;border-radius:7px;padding:8px 16px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--ff-sans)}
+.btn:hover{filter:brightness(1.1)}
+.btn.ghost{background:none;border:1px solid var(--border);color:var(--subtle)}
+.btn.ghost:hover{border-color:var(--blue);color:var(--blue)}
+.btn.danger{background:var(--red)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+/* ── TABLE ── */
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+thead th{text-align:left;font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;background:var(--bg)}
+tbody td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
+tbody tr:hover{background:var(--card)}
+.badge{display:inline-block;padding:2px 9px;border-radius:10px;font-size:10.5px;font-weight:700;letter-spacing:.3px}
+.badge-scaduto{background:rgba(239,68,68,.15);color:var(--red)}
+.badge-scadenza{background:rgba(245,158,11,.15);color:var(--amber)}
+.badge-valido{background:rgba(16,185,129,.15);color:var(--green)}
+.badge-programmare{background:rgba(148,163,184,.15);color:var(--subtle)}
+input.cell-edit{background:var(--card);border:1px solid var(--border);border-radius:5px;padding:4px 6px;color:var(--text);font-size:12px;width:100%}
+.icon-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 6px}
+.icon-btn:hover{color:var(--text)}
+.icon-btn.del:hover{color:var(--red)}
+
+/* ── MODAL / OVERLAY ── */
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:300}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:26px 28px;width:92%;max-width:560px;max-height:82vh;overflow-y:auto}
+.modal h3{font-family:var(--ff-cond);font-size:18px;font-weight:700;margin-bottom:16px}
+.modal-row{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.modal-row label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.modal-row input,.modal-row select{background:var(--card);border:1px solid var(--border);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13px;outline:none}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+.chip{display:inline-flex;align-items:center;gap:5px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:3px 10px 3px 12px;font-size:11px;cursor:pointer;user-select:none}
+.chip.on{background:rgba(59,130,246,.15);border-color:var(--blue);color:var(--blue)}
+
+#toast{position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;font-size:12px;display:none;z-index:400}
+#toast.ok{border-color:var(--green);color:var(--green)}
+#toast.err{border-color:var(--red);color:var(--red)}
+
+.state{text-align:center;padding:60px 0;color:var(--muted);font-size:13px}
+
+/* Programmazione */
+.prog-list{display:flex;flex-direction:column;gap:6px;max-height:420px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:8px}
+.prog-item{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px}
+.prog-item:hover{background:var(--card)}
+.prog-item input[type=checkbox]{width:15px;height:15px;accent-color:var(--blue)}
+.prog-item .who{flex:1}
+.prog-item .who b{font-size:12.5px}
+.prog-item .who small{display:block;color:var(--muted);font-size:10.5px}
+.prog-bar-actions{display:flex;align-items:center;gap:10px;margin-top:14px;padding-top:14px;border-top:1px solid var(--border)}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">ATS <span>Visite Mediche</span></div>
+    <div class="login-sub">Modulo WMS Hub</div>
+    <div class="login-note">Apri questo modulo dal WMS Hub per accedere con il tuo account Google aziendale.</div>
+  </div>
+</div>
+
+<div id="appShell">
+  <div class="topbar">
+    <div class="topbar-logo">ATS <span>Visite Mediche</span></div>
+    <div class="topbar-div"></div>
+    <div class="topbar-right">
+      <button class="btn-perm" id="btnPerm" style="display:none" onclick="openPermPanel()">⚙ Permessi</button>
+      <div class="user-badge">
+        <img id="userAvatar" class="user-avatar" src="" style="display:none">
+        <span id="userName"></span>
+        <span class="role-tag" id="roleTag">—</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
+    <button class="tab-btn" data-tab="anagrafica" onclick="switchTab('anagrafica')">👤 Anagrafica</button>
+    <button class="tab-btn" data-tab="programmazione" onclick="switchTab('programmazione')">📅 Programmazione visite</button>
+  </div>
+
+  <div class="main" id="content"></div>
+</div>
+
+<!-- ── MODAL ANAGRAFICA (add/edit dipendente) ── -->
+<div class="overlay" id="anagModal">
+  <div class="modal">
+    <h3 id="anagModalTitle">Nuovo dipendente</h3>
+    <div class="modal-row"><label>Filiale</label><input id="mFiliale" placeholder="es. Maddaloni"></div>
+    <div class="modal-row"><label>Cognome</label><input id="mCognome"></div>
+    <div class="modal-row"><label>Nome</label><input id="mNome"></div>
+    <div class="modal-row"><label>Codice fiscale</label><input id="mCf" style="text-transform:uppercase"></div>
+    <div class="modal-row"><label>Email</label><input id="mEmail" type="email"></div>
+    <div class="modal-row"><label>Note</label><input id="mNote"></div>
+    <div class="modal-row"><label>Data ultima visita (gg/mm/aaaa)</label><input id="mDataUltima" placeholder="gg/mm/aaaa"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeAnagModal()">Annulla</button>
+      <button class="btn" onclick="saveAnagModal()">Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- ── MODAL PERMESSI ── -->
+<div class="overlay" id="permOverlay">
+  <div class="modal" style="max-width:680px">
+    <h3>⚙ Gestione permessi — Visite Mediche</h3>
+    <div id="permCfgStatus" style="font-size:11px;color:var(--muted);margin-bottom:14px"></div>
+    <div id="permPanelBody" style="display:flex;flex-direction:column;gap:16px"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closePermPanel()">Chiudi</button>
+      <button class="btn" onclick="savePermConfig()">💾 Salva su Drive</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════════
+// CONFIGURAZIONE — da valorizzare prima del deploy
+// ══════════════════════════════════════════════════════════════════════════
+var SPREADSHEET_ID = null; // risolto/creato in automatico in DATA_FOLDER_ID, vedi ensureSpreadsheet()
+var SHEET_NAME      = 'Visite Mediche';
+var SHEET_FILE_NAME = 'Visite Mediche - DB';         // nome del file Google Sheet su Drive
+var DATA_FOLDER_ID  = '1-fkHbfhuLj2jZg8rTEEqo-BywE-mcVz7'; // cartella Drive indicata per i dati del modulo
+var CONFIG_FOLDER_ID= '1LGoR9SKDthz1tUDLxbZhClqA-xhkjoNY'; // stessa cartella config degli altri moduli Hub
+var PERM_FNAME       = 'config_visitemediche.json';
+var SUPER_USERS      = ['atssegnalazioni@gmail.com']; // allinea coi super_users già in uso negli altri moduli
+
+// Colonne foglio dati (1-based)
+var COL = {FILIALE:1,COGNOME:2,NOME:3,NOMINATIVO:4,CF:5,EMAIL:6,NOTE:7,
+           DATA_ULTIMA:8,DATA_PREVISTA:9,MAIL_INVIATA:10,DATA_INVIO:11,PLANT:12};
+var SHEET_HEADER = ['Filiale','Cognome','Nome','Nominativo','CF','Email','Note',
+                     'Data ultima visita','Data visita prevista','Mail inviata','Data invio mail','Plant'];
+var SOGLIA_SCADENZA_GG = 30; // giorni entro cui "IN SCADENZA"
+
+// ══════════════════════════════════════════════════════════════════════════
+// AUTH — delegata al WMS Hub (stesso pattern degli altri moduli)
+// ══════════════════════════════════════════════════════════════════════════
+var TOKEN = null, CURRENT_USER = {};
+
+(function(){
+  try{
+    var ht = localStorage.getItem('wms_hub_token');
+    var hu = localStorage.getItem('wms_hub_user');
+    if(ht && hu){
+      window._HUB_TOKEN = JSON.parse(ht);
+      window._HUB_USER  = JSON.parse(hu);
+      window.addEventListener('storage', function(e){
+        if(e.key==='wms_hub_token' && e.newValue) try{ window._HUB_TOKEN=JSON.parse(e.newValue); TOKEN=window._HUB_TOKEN; }catch(x){}
+      });
+    }
+  }catch(ex){}
+})();
+
+var _gsiRetry = 0;
+function waitGsi(){
+  if(!window._HUB_TOKEN){
+    if(_gsiRetry < 20){ _gsiRetry++; setTimeout(waitGsi,100); return; }
+    document.getElementById('loginScreen').style.display='flex';
+    document.getElementById('appShell').style.display='none';
+    return;
+  }
+  TOKEN = window._HUB_TOKEN;
+  CURRENT_USER = window._HUB_USER || {};
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('appShell').style.display='flex';
+  document.getElementById('userName').textContent = CURRENT_USER.name || CURRENT_USER.email || '';
+  if(CURRENT_USER.picture){ var av=document.getElementById('userAvatar'); av.src=CURRENT_USER.picture; av.style.display=''; }
+  loadPermConfig((CURRENT_USER.email||'').toLowerCase());
+}
+function getToken(){ if(window._HUB_TOKEN) TOKEN=window._HUB_TOKEN; return TOKEN; }
+window.onload = waitGsi;
+
+// ══════════════════════════════════════════════════════════════════════════
+// PERMESSI — admin / scheduler / viewer, scoped per filiale
+// ══════════════════════════════════════════════════════════════════════════
+var permConfig=null, permFileId=null, isSuperUser=false;
+var myRole='viewer', myFiliali=null; // null = tutte
+
+function defaultPermConfig(){
+  return {super_users:SUPER_USERS.slice(), filiali:['Maddaloni','Palermo','Milano'], users:{}, default:{ruolo:'viewer',filiali:[]},
+          admin_reminder_emails:[], spreadsheet_id:null};
+}
+
+function loadPermConfig(email){
+  driveListFiles('"'+CONFIG_FOLDER_ID+'" in parents and name="'+PERM_FNAME+'" and trashed=false')
+  .then(function(files){
+    if(!files.length){ permConfig=defaultPermConfig(); permFileId=null; applyUserPermissions(email); return; }
+    permFileId=files[0].id;
+    return driveDownloadText(permFileId).then(function(txt){
+      try{ permConfig=JSON.parse(txt); }catch(e){ permConfig=defaultPermConfig(); }
+      if(!permConfig.filiali) permConfig.filiali=['Maddaloni','Palermo','Milano'];
+      applyUserPermissions(email);
+    });
+  })
+  .catch(function(){ permConfig=defaultPermConfig(); applyUserPermissions(email); });
+}
+
+function applyUserPermissions(email){
+  var em=(email||'').toLowerCase();
+  var sus=(permConfig.super_users||[]).map(function(s){return s.toLowerCase();});
+  isSuperUser = sus.indexOf(em)!==-1;
+
+  if(isSuperUser){
+    myRole='admin'; myFiliali=null;
+    document.getElementById('btnPerm').style.display='';
+  } else {
+    var u=(permConfig.users||{})[em];
+    if(u){ myRole=u.ruolo||'viewer'; myFiliali=u.filiali||[]; }
+    else { var d=permConfig.default||{}; myRole=d.ruolo||'viewer'; myFiliali=d.filiali||[]; }
+    document.getElementById('btnPerm').style.display='none';
+  }
+  document.getElementById('roleTag').textContent = myRole.toUpperCase();
+  ensureSpreadsheet().then(function(){ switchTab('dashboard'); });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// AUTO-PROVISIONING FOGLIO DATI — crea "Visite Mediche - DB" in DATA_FOLDER_ID
+// se non esiste ancora, e ne memorizza l'id nel config permessi condiviso.
+// ══════════════════════════════════════════════════════════════════════════
+function ensureSpreadsheet(){
+  if(permConfig.spreadsheet_id){ SPREADSHEET_ID = permConfig.spreadsheet_id; return Promise.resolve(); }
+
+  setContent(spinner('Primo avvio: verifico se il foglio dati esiste già…'));
+
+  return driveListFiles('"'+DATA_FOLDER_ID+'" in parents and name="'+SHEET_FILE_NAME+'" and trashed=false')
+  .then(function(files){
+    if(files.length){ return files[0].id; }
+    setContent(spinner('Foglio dati non trovato: lo creo in cartella…'));
+    return createSpreadsheetWithHeader();
+  })
+  .then(function(id){
+    SPREADSHEET_ID = id;
+    permConfig.spreadsheet_id = id;
+    return saveConfigSilent(); // persiste l'id per tutti gli utenti, senza richiedere ruolo admin
+  })
+  .catch(function(e){
+    setContent('<div class="state">Errore creazione/collegamento foglio dati: '+esc(e.message)+'</div>');
+    throw e;
+  });
+}
+
+function createSpreadsheetWithHeader(){
+  var metaBody = JSON.stringify({
+    name: SHEET_FILE_NAME,
+    parents: [DATA_FOLDER_ID],
+    mimeType: 'application/vnd.google-apps.spreadsheet'
+  });
+  return fetch('https://www.googleapis.com/drive/v3/files?fields=id',{
+    method:'POST', headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'}, body: metaBody
+  }).then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); })
+  .then(function(f){
+    var newId = f.id;
+    // Rinomina il tab di default "Foglio1"/"Sheet1" in SHEET_NAME e scrive l'header
+    return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+newId+'?fields=sheets(properties(sheetId,title))',
+      {headers:{Authorization:'Bearer '+getToken()}})
+      .then(function(r){return r.json();})
+      .then(function(meta){
+        var gid = meta.sheets[0].properties.sheetId;
+        var body = {requests:[{updateSheetProperties:{properties:{sheetId:gid,title:SHEET_NAME},fields:'title'}}]};
+        return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+newId+':batchUpdate',{
+          method:'POST', headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'}, body: JSON.stringify(body)
+        });
+      })
+      .then(function(){
+        var tmp = SPREADSHEET_ID; SPREADSHEET_ID = newId; // sheetsUpdateValues usa la globale
+        return sheetsUpdateValues("'"+SHEET_NAME+"'!A1:L1", [SHEET_HEADER]).then(function(){ SPREADSHEET_ID = tmp; return newId; });
+      });
+  });
+}
+
+function saveConfigSilent(){
+  var json=JSON.stringify(permConfig,null,2);
+  var blob=new Blob([json],{type:'application/json'});
+  return permFileId ? driveUploadText(permFileId,blob,PERM_FNAME)
+                     : driveCreateFile(CONFIG_FOLDER_ID,PERM_FNAME,blob).then(function(f){ permFileId=f.id; return f; });
+}
+
+function canEditAnagrafica(){ return myRole==='admin'; }
+function canProgrammare(){ return myRole==='admin' || myRole==='scheduler'; }
+function filialeVisibile(f){ return myFiliali===null || myFiliali.indexOf(f)!==-1; }
+
+function savePermConfig(){
+  if(!isSuperUser){ showToast('Solo i super utenti possono salvare la configurazione','err'); return; }
+  var json=JSON.stringify(permConfig,null,2);
+  var blob=new Blob([json],{type:'application/json'});
+  var p = permFileId ? driveUploadText(permFileId,blob,PERM_FNAME) : driveCreateFile(CONFIG_FOLDER_ID,PERM_FNAME,blob).then(function(f){ permFileId=f.id; return f; });
+  p.then(function(){ showToast('✓ '+PERM_FNAME+' salvato su Drive','ok'); document.getElementById('permCfgStatus').textContent='✅ salvato su Drive'; })
+   .catch(function(e){ showToast('Errore salvataggio permessi: '+e.message,'err'); });
+}
+
+function openPermPanel(){ if(!isSuperUser) return; renderPermPanel(); document.getElementById('permOverlay').style.display='flex'; }
+function closePermPanel(){ document.getElementById('permOverlay').style.display='none'; }
+
+function renderPermPanel(){
+  var status = permFileId ? '✅ '+PERM_FNAME+' caricato da Drive' : '⚠️ Non ancora presente su Drive — verrà creato al salvataggio';
+  document.getElementById('permCfgStatus').textContent = status;
+
+  var h='';
+  // Filiali master
+  h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+  h+='<div style="font-family:var(--ff-cond);font-size:14px;font-weight:700;color:var(--teal)">📍 Filiali</div>';
+  h+='<button class="btn ghost" style="padding:4px 10px;font-size:11px" onclick="addFiliale()">＋ Aggiungi</button></div>';
+  h+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+  (permConfig.filiali||[]).forEach(function(f){ h+='<span class="chip on">'+esc(f)+'</span>'; });
+  h+='</div></div>';
+
+  // Utenti
+  h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+  h+='<div style="font-family:var(--ff-cond);font-size:14px;font-weight:700;color:var(--blue)">👥 Utenti abilitati</div>';
+  h+='<button class="btn ghost" style="padding:4px 10px;font-size:11px" onclick="addPermUser()">＋ Aggiungi utente</button></div>';
+  h+='<table><thead><tr><th>Email</th><th>Ruolo</th><th>Filiali</th><th></th></tr></thead><tbody>';
+  var users=permConfig.users||{};
+  Object.keys(users).forEach(function(em){
+    var u=users[em];
+    h+='<tr><td>'+esc(em)+'</td><td>'+esc(u.ruolo||'viewer')+'</td><td>'+esc((u.filiali||[]).join(', ')||'—')+'</td>';
+    h+='<td><button class="icon-btn del" onclick="removePermUser(\''+escAttr(em)+'\')">✕</button></td></tr>';
+  });
+  if(!Object.keys(users).length) h+='<tr><td colspan="4" style="color:var(--muted)">Nessun utente configurato — vale il default.</td></tr>';
+  h+='</tbody></table></div>';
+
+  // Destinatari reminder scadenze (usato dal servizio mail, non ancora attivo)
+  h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+  h+='<div><div style="font-family:var(--ff-cond);font-size:14px;font-weight:700;color:var(--amber)">🔔 Destinatari reminder scadenze</div>';
+  h+='<div style="font-size:10px;color:var(--muted);margin-top:2px">Riceveranno il digest giornaliero di chi scade a breve (quando colleghiamo il servizio mail)</div></div>';
+  h+='<button class="btn ghost" style="padding:4px 10px;font-size:11px" onclick="addReminderEmail()">＋ Aggiungi</button></div>';
+  h+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+  (permConfig.admin_reminder_emails||[]).forEach(function(em){
+    h+='<span class="chip on">'+esc(em)+' <span onclick="removeReminderEmail(\''+escAttr(em)+'\')" style="cursor:pointer">✕</span></span>';
+  });
+  if(!(permConfig.admin_reminder_emails||[]).length) h+='<div style="font-size:12px;color:var(--muted)">Nessun destinatario configurato.</div>';
+  h+='</div></div>';
+
+  document.getElementById('permPanelBody').innerHTML=h;
+}
+function addReminderEmail(){
+  var em=prompt('Email amministratore da avvisare:'); if(!em) return;
+  permConfig.admin_reminder_emails = permConfig.admin_reminder_emails||[];
+  if(permConfig.admin_reminder_emails.indexOf(em)===-1) permConfig.admin_reminder_emails.push(em);
+  renderPermPanel();
+}
+function removeReminderEmail(em){
+  permConfig.admin_reminder_emails = (permConfig.admin_reminder_emails||[]).filter(function(x){return x!==em;});
+  renderPermPanel();
+}
+
+function addFiliale(){
+  var f=prompt('Nome nuova filiale:'); if(!f) return;
+  permConfig.filiali = permConfig.filiali||[];
+  if(permConfig.filiali.indexOf(f)===-1) permConfig.filiali.push(f);
+  renderPermPanel();
+}
+function addPermUser(){
+  var em=prompt('Email utente:'); if(!em) return;
+  var ruolo=prompt('Ruolo (admin / scheduler / viewer):','viewer'); if(!ruolo) return;
+  var fil=prompt('Filiali visibili separate da virgola (vuoto = tutte):','');
+  permConfig.users = permConfig.users||{};
+  permConfig.users[em.toLowerCase()] = {ruolo:ruolo.trim(), filiali: fil? fil.split(',').map(function(s){return s.trim();}) : []};
+  renderPermPanel();
+}
+function removePermUser(em){ delete permConfig.users[em]; renderPermPanel(); }
+
+// ══════════════════════════════════════════════════════════════════════════
+// GOOGLE SHEETS API
+// ══════════════════════════════════════════════════════════════════════════
+var _sheetGid = null;
+
+function sheetsGetValues(range){
+  var url='https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+'/values/'+encodeURIComponent(range);
+  return fetch(url,{headers:{Authorization:'Bearer '+getToken()}}).then(function(r){return r.json();}).then(function(j){ return j.values||[]; });
+}
+function sheetsUpdateValues(range, values2d){
+  var url='https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+'/values/'+encodeURIComponent(range)+'?valueInputOption=USER_ENTERED';
+  return fetch(url,{method:'PUT',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({values:values2d})})
+    .then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
+}
+function sheetsAppendValues(range, values2d){
+  var url='https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+'/values/'+encodeURIComponent(range)+':append?valueInputOption=USER_ENTERED';
+  return fetch(url,{method:'POST',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({values:values2d})})
+    .then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
+}
+function sheetsGetGid(){
+  if(_sheetGid!==null) return Promise.resolve(_sheetGid);
+  var url='https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+'?fields=sheets(properties(sheetId,title))';
+  return fetch(url,{headers:{Authorization:'Bearer '+getToken()}}).then(function(r){return r.json();}).then(function(j){
+    var sh=(j.sheets||[]).find(function(s){ return s.properties.title===SHEET_NAME; });
+    _sheetGid = sh ? sh.properties.sheetId : 0;
+    return _sheetGid;
+  });
+}
+function sheetsDeleteRow(rowIndex1based){
+  return sheetsGetGid().then(function(gid){
+    var url='https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+':batchUpdate';
+    var body={requests:[{deleteDimension:{range:{sheetId:gid,dimension:'ROWS',startIndex:rowIndex1based-1,endIndex:rowIndex1based}}}]};
+    return fetch(url,{method:'POST',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify(body)})
+      .then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// DRIVE API (per config permessi)
+// ══════════════════════════════════════════════════════════════════════════
+function driveListFiles(q){
+  var url='https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name)';
+  return fetch(url,{headers:{Authorization:'Bearer '+getToken()}}).then(function(r){return r.json();}).then(function(j){return j.files||[];});
+}
+function driveDownloadText(id){
+  return fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media',{headers:{Authorization:'Bearer '+getToken()}}).then(function(r){return r.text();});
+}
+function driveUploadText(fileId, blob, name){
+  var boundary='vm_'+Date.now(), meta=JSON.stringify({name:name});
+  return blob.text().then(function(txt){
+    var body='--'+boundary+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+meta+'\r\n--'+boundary+'\r\nContent-Type: application/json\r\n\r\n'+txt+'\r\n--'+boundary+'--';
+    return fetch('https://www.googleapis.com/upload/drive/v3/files/'+fileId+'?uploadType=multipart',{
+      method:'PATCH', headers:{Authorization:'Bearer '+getToken(),'Content-Type':'multipart/related; boundary='+boundary}, body:body
+    }).then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
+  });
+}
+function driveCreateFile(folderId, name, blob){
+  var boundary='vm_'+Date.now(), meta=JSON.stringify({name:name, parents:[folderId]});
+  return blob.text().then(function(txt){
+    var body='--'+boundary+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+meta+'\r\n--'+boundary+'\r\nContent-Type: application/json\r\n\r\n'+txt+'\r\n--'+boundary+'--';
+    return fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{
+      method:'POST', headers:{Authorization:'Bearer '+getToken(),'Content-Type':'multipart/related; boundary='+boundary}, body:body
+    }).then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// DATI VISITE — lettura + calcolo stato
+// ══════════════════════════════════════════════════════════════════════════
+var allPersone = []; // {rowIndex, filiale, cognome, nome, nominativo, cf, email, note, dataUltima, dataPrevista, mailInviata, dataScadenza, stato}
+
+function parseDataIt(s){
+  if(!s) return null;
+  var m = String(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(m) return new Date(+m[3], +m[2]-1, +m[1]);
+  var d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+function fmtDataIt(d){
+  if(!d) return '';
+  return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();
+}
+function addDays(d, n){ var r=new Date(d); r.setDate(r.getDate()+n); return r; }
+
+function calcolaStato(dataScadenza){
+  if(!dataScadenza) return 'DA PROGRAMMARE';
+  var oggi=new Date(); oggi.setHours(0,0,0,0);
+  if(dataScadenza < oggi) return 'SCADUTO';
+  if(dataScadenza <= addDays(oggi, SOGLIA_SCADENZA_GG)) return 'IN SCADENZA';
+  return 'VALIDO';
+}
+
+function loadVisiteData(){
+  setContent(spinner('Carico dati dal foglio…'));
+  return sheetsGetValues("'"+SHEET_NAME+"'!A2:L").then(function(rows){
+    allPersone = rows.map(function(row,i){
+      row = row.concat(new Array(12).fill(''));
+      var dataUltima = parseDataIt(row[COL.DATA_ULTIMA-1]);
+      var dataScadenza = dataUltima ? addDays(dataUltima,365) : null;
+      return {
+        rowIndex: i+2,
+        filiale: row[COL.FILIALE-1]||'',
+        cognome: row[COL.COGNOME-1]||'',
+        nome: row[COL.NOME-1]||'',
+        nominativo: row[COL.NOMINATIVO-1] || ((row[COL.COGNOME-1]||'')+' '+(row[COL.NOME-1]||'')).trim(),
+        cf: row[COL.CF-1]||'',
+        email: row[COL.EMAIL-1]||'',
+        note: row[COL.NOTE-1]||'',
+        dataUltima: dataUltima,
+        dataPrevista: parseDataIt(row[COL.DATA_PREVISTA-1]),
+        mailInviata: String(row[COL.MAIL_INVIATA-1]).toUpperCase()==='TRUE',
+        plant: row[COL.PLANT-1]||'',
+        dataScadenza: dataScadenza,
+        stato: calcolaStato(dataScadenza)
+      };
+    });
+  }).catch(function(e){
+    setContent('<div class="state">Errore caricamento dati: '+esc(e.message)+'<br><br>Verifica che SPREADSHEET_ID sia corretto e che il foglio si chiami esattamente "'+esc(SHEET_NAME)+'".</div>');
+    throw e;
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════════════════════════════════════
+var activeTab='dashboard';
+function switchTab(tab){
+  activeTab=tab;
+  document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===tab); });
+  if(tab==='dashboard') renderDashboard();
+  else if(tab==='anagrafica') renderAnagrafica();
+  else if(tab==='programmazione') renderProgrammazione();
+}
+
+// ── DASHBOARD ──
+var dashFilFiliale='', dashFilStato='';
+function renderDashboard(){
+  loadVisiteData().then(function(){
+    var visibili = allPersone.filter(function(p){ return filialeVisibile(p.filiale); });
+    var cnt={SCADUTO:0,'IN SCADENZA':0,VALIDO:0,'DA PROGRAMMARE':0};
+    visibili.forEach(function(p){ cnt[p.stato]=(cnt[p.stato]||0)+1; });
+
+    var filiali = permConfig.filiali||[];
+    var h='';
+    h+='<div class="stats-row">';
+    h+='<div class="stat-card stat-red"><div class="stat-num">'+cnt.SCADUTO+'</div><div class="stat-lbl">Scaduti</div></div>';
+    h+='<div class="stat-card stat-amber"><div class="stat-num">'+cnt['IN SCADENZA']+'</div><div class="stat-lbl">In scadenza ('+SOGLIA_SCADENZA_GG+'gg)</div></div>';
+    h+='<div class="stat-card stat-green"><div class="stat-num">'+cnt.VALIDO+'</div><div class="stat-lbl">Validi</div></div>';
+    h+='<div class="stat-card stat-muted"><div class="stat-num">'+cnt['DA PROGRAMMARE']+'</div><div class="stat-lbl">Da programmare</div></div>';
+    h+='</div>';
+
+    h+='<div class="filters">';
+    h+='<div class="fg"><span class="fl">Filiale</span><select class="fc" id="fFiliale" onchange="dashApplyFilter()"><option value="">Tutte</option>';
+    filiali.forEach(function(f){ if(filialeVisibile(f)) h+='<option value="'+esc(f)+'">'+esc(f)+'</option>'; });
+    h+='</select></div>';
+    h+='<div class="fg"><span class="fl">Stato</span><select class="fc" id="fStato" onchange="dashApplyFilter()"><option value="">Tutti</option><option>SCADUTO</option><option>IN SCADENZA</option><option>VALIDO</option><option>DA PROGRAMMARE</option></select></div>';
+    h+='</div>';
+
+    h+='<table><thead><tr><th>Filiale</th><th>Nominativo</th><th>CF</th><th>Data visita</th><th>Scadenza</th><th>Stato</th><th>Data prevista</th><th>Plant</th></tr></thead><tbody id="dashBody"></tbody></table>';
+
+    setContent(h);
+    dashApplyFilter();
+  });
+}
+function dashApplyFilter(){
+  dashFilFiliale = document.getElementById('fFiliale') ? document.getElementById('fFiliale').value : '';
+  dashFilStato   = document.getElementById('fStato') ? document.getElementById('fStato').value : '';
+  var rows = allPersone.filter(function(p){
+    if(!filialeVisibile(p.filiale)) return false;
+    if(dashFilFiliale && p.filiale!==dashFilFiliale) return false;
+    if(dashFilStato && p.stato!==dashFilStato) return false;
+    return true;
+  });
+  var badgeClass={'SCADUTO':'badge-scaduto','IN SCADENZA':'badge-scadenza','VALIDO':'badge-valido','DA PROGRAMMARE':'badge-programmare'};
+  var h='';
+  rows.forEach(function(p){
+    h+='<tr><td>'+esc(p.filiale)+'</td><td>'+esc(p.nominativo)+'</td><td style="font-family:var(--ff-mono);font-size:11px">'+esc(p.cf)+'</td>';
+    h+='<td>'+fmtDataIt(p.dataUltima)+'</td><td>'+fmtDataIt(p.dataScadenza)+'</td>';
+    h+='<td><span class="badge '+badgeClass[p.stato]+'">'+p.stato+'</span></td>';
+    h+='<td>'+(fmtDataIt(p.dataPrevista)||'—')+'</td><td>'+esc(p.plant||'—')+'</td></tr>';
+  });
+  if(!rows.length) h='<tr><td colspan="8" style="color:var(--muted);text-align:center;padding:30px 0">Nessun record per questo filtro.</td></tr>';
+  document.getElementById('dashBody').innerHTML=h;
+}
+
+// ── ANAGRAFICA ──
+var editingRowIndex = null;
+function renderAnagrafica(){
+  loadVisiteData().then(function(){
+    var visibili = allPersone.filter(function(p){ return filialeVisibile(p.filiale); });
+    var h='';
+    h+='<div class="filters"><div style="flex:1"></div>';
+    if(canEditAnagrafica()) h+='<button class="btn" onclick="openAnagModal()">＋ Nuovo dipendente</button>';
+    h+='</div>';
+    h+='<table><thead><tr><th>Filiale</th><th>Cognome</th><th>Nome</th><th>CF</th><th>Email</th><th>Note</th><th>Data ultima visita</th>'+(canEditAnagrafica()?'<th></th>':'')+'</tr></thead><tbody>';
+    visibili.forEach(function(p){
+      h+='<tr><td>'+esc(p.filiale)+'</td><td>'+esc(p.cognome)+'</td><td>'+esc(p.nome)+'</td>';
+      h+='<td style="font-family:var(--ff-mono);font-size:11px">'+esc(p.cf)+'</td><td>'+esc(p.email)+'</td><td>'+esc(p.note)+'</td><td>'+fmtDataIt(p.dataUltima)+'</td>';
+      if(canEditAnagrafica()){
+        h+='<td><button class="icon-btn" onclick="openAnagModal('+p.rowIndex+')">✎</button>';
+        h+='<button class="icon-btn del" onclick="deleteAnagRow('+p.rowIndex+')">✕</button></td>';
+      }
+      h+='</tr>';
+    });
+    if(!visibili.length) h+='<tr><td colspan="8" style="color:var(--muted);text-align:center;padding:30px 0">Nessun dipendente. '+(canEditAnagrafica()?'Aggiungine uno.':'')+'</td></tr>';
+    h+='</tbody></table>';
+    setContent(h);
+  });
+}
+
+function openAnagModal(rowIndex){
+  editingRowIndex = rowIndex || null;
+  var p = rowIndex ? allPersone.find(function(x){return x.rowIndex===rowIndex;}) : null;
+  document.getElementById('anagModalTitle').textContent = p ? 'Modifica dipendente' : 'Nuovo dipendente';
+  document.getElementById('mFiliale').value = p ? p.filiale : '';
+  document.getElementById('mCognome').value = p ? p.cognome : '';
+  document.getElementById('mNome').value = p ? p.nome : '';
+  document.getElementById('mCf').value = p ? p.cf : '';
+  document.getElementById('mEmail').value = p ? p.email : '';
+  document.getElementById('mNote').value = p ? p.note : '';
+  document.getElementById('mDataUltima').value = p ? fmtDataIt(p.dataUltima) : '';
+  document.getElementById('anagModal').style.display='flex';
+}
+function closeAnagModal(){ document.getElementById('anagModal').style.display='none'; }
+
+function saveAnagModal(){
+  var filiale=document.getElementById('mFiliale').value.trim();
+  var cognome=document.getElementById('mCognome').value.trim();
+  var nome=document.getElementById('mNome').value.trim();
+  var cf=document.getElementById('mCf').value.trim().toUpperCase();
+  var email=document.getElementById('mEmail').value.trim();
+  var note=document.getElementById('mNote').value.trim();
+  var dataUltima=document.getElementById('mDataUltima').value.trim();
+
+  if(!filiale || !cognome || !nome){ showToast('Filiale, Cognome e Nome sono obbligatori','err'); return; }
+
+  var nominativo=(cognome+' '+nome).toUpperCase();
+  var rowValues=[filiale,cognome,nome,nominativo,cf,email,note,dataUltima,'','',''];
+
+  var p;
+  if(editingRowIndex){
+    p = sheetsUpdateValues("'"+SHEET_NAME+"'!A"+editingRowIndex+":K"+editingRowIndex, [rowValues]);
+  } else {
+    p = sheetsAppendValues("'"+SHEET_NAME+"'!A:K", [rowValues]);
+  }
+  p.then(function(){ showToast('✓ Salvato','ok'); closeAnagModal(); renderAnagrafica(); })
+   .catch(function(e){ showToast('Errore salvataggio: '+e.message,'err'); });
+}
+
+function deleteAnagRow(rowIndex){
+  var p = allPersone.find(function(x){return x.rowIndex===rowIndex;});
+  if(!confirm('Eliminare definitivamente '+(p?p.nominativo:'questo dipendente')+'?')) return;
+  sheetsDeleteRow(rowIndex).then(function(){ showToast('✓ Eliminato','ok'); renderAnagrafica(); })
+    .catch(function(e){ showToast('Errore eliminazione: '+e.message,'err'); });
+}
+
+// ── PROGRAMMAZIONE VISITE ──
+var progSelected = {};
+function renderProgrammazione(){
+  if(!canProgrammare()){ setContent('<div class="state">Non hai i permessi per programmare le visite.</div>'); return; }
+  loadVisiteData().then(function(){
+    progSelected = {};
+    var visibili = allPersone.filter(function(p){ return filialeVisibile(p.filiale); })
+      .sort(function(a,b){ return (a.dataScadenza||0) - (b.dataScadenza||0); });
+
+    var h='<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Seleziona i dipendenti da convocare, imposta la data concordata con il centro medico e conferma. La data verrà scritta sul foglio; l\\'invio della convocazione via mail è gestito separatamente.</div>';
+    h+='<div class="prog-list">';
+    visibili.forEach(function(p){
+      var badgeClass={'SCADUTO':'badge-scaduto','IN SCADENZA':'badge-scadenza','VALIDO':'badge-valido','DA PROGRAMMARE':'badge-programmare'}[p.stato];
+      h+='<label class="prog-item"><input type="checkbox" onchange="toggleProgSel('+p.rowIndex+',this.checked)">';
+      h+='<span class="who"><b>'+esc(p.nominativo)+'</b><small>'+esc(p.filiale)+' · scadenza '+(fmtDataIt(p.dataScadenza)||'—')+(p.dataPrevista?' · prevista già impostata: '+fmtDataIt(p.dataPrevista)+(p.plant?' presso '+esc(p.plant):''):'')+'</small></span>';
+      h+='<span class="badge '+badgeClass+'">'+p.stato+'</span></label>';
+    });
+    h+='</div>';
+    h+='<div class="prog-bar-actions">';
+    h+='<div class="fg"><span class="fl">Data visita concordata</span><input class="fc" id="progData" placeholder="gg/mm/aaaa"></div>';
+    h+='<div class="fg"><span class="fl">Plant / sede analisi</span><input class="fc" id="progPlant" placeholder="es. Poliambulatorio Maddaloni"></div>';
+    h+='<button class="btn" onclick="confermaProgrammazione()">Assegna a selezionati</button>';
+    h+='<span id="progSelCount" style="font-size:12px;color:var(--muted)">0 selezionati</span>';
+    h+='</div>';
+    setContent(h);
+  });
+}
+function toggleProgSel(rowIndex, checked){
+  if(checked) progSelected[rowIndex]=true; else delete progSelected[rowIndex];
+  document.getElementById('progSelCount').textContent = Object.keys(progSelected).length+' selezionati';
+}
+function confermaProgrammazione(){
+  var dataStr = document.getElementById('progData').value.trim();
+  var plantStr = document.getElementById('progPlant').value.trim();
+  var rows = Object.keys(progSelected);
+  if(!dataStr){ showToast('Inserisci la data della visita','err'); return; }
+  if(!plantStr){ showToast('Inserisci il plant/sede analisi','err'); return; }
+  if(!rows.length){ showToast('Seleziona almeno un dipendente','err'); return; }
+  if(!parseDataIt(dataStr)){ showToast('Formato data non valido (gg/mm/aaaa)','err'); return; }
+
+  // Scrive Data prevista (I), resetta Mail inviata (J) e Data invio (K) per far ripartire
+  // la notifica sul nuovo appuntamento, e scrive Plant (L).
+  var writes = rows.map(function(rowIndex){
+    return sheetsUpdateValues("'"+SHEET_NAME+"'!I"+rowIndex+":L"+rowIndex, [[dataStr,'FALSE','',plantStr]]);
+  });
+  Promise.all(writes).then(function(){
+    showToast('✓ Assegnati a '+rows.length+' dipendenti','ok');
+    renderProgrammazione();
+  }).catch(function(e){ showToast('Errore: '+e.message,'err'); });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// UTILITY
+// ══════════════════════════════════════════════════════════════════════════
+function setContent(h){ document.getElementById('content').innerHTML=h; }
+function spinner(msg){ return '<div class="state">'+esc(msg)+'</div>'; }
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escAttr(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+var toastTimer=null;
+function showToast(msg, type){
+  var t=document.getElementById('toast');
+  t.textContent=msg; t.className=type||''; t.style.display='block';
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(function(){ t.style.display='none'; }, 3200);
+}
+</script>
+</body>
+</html>
