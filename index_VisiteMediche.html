@@ -55,6 +55,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--ff-sans);font-size
 /* ── LOGIN ── */
 #loginScreen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
   background:radial-gradient(ellipse at 30% 40%,rgba(59,130,246,.06) 0%,transparent 60%),var(--bg);z-index:200}
+#accessDenied{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at 30% 40%,rgba(239,68,68,.06) 0%,transparent 60%),var(--bg);z-index:200}
+.ad-ico{font-size:40px;margin-bottom:6px}
+.ad-title{font-family:var(--ff-cond);font-size:26px;font-weight:800;color:var(--red)}
+.ad-sub{font-size:12.5px;color:var(--subtle);margin-top:10px;max-width:340px;line-height:1.6}
 .login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:52px 56px;text-align:center;max-width:420px;width:90%;box-shadow:0 32px 80px rgba(0,0,0,.5)}
 .login-logo{font-family:var(--ff-cond);font-size:32px;font-weight:800;letter-spacing:2px;color:var(--blue)}
 .login-logo span{color:var(--subtle);font-weight:600}
@@ -154,6 +159,14 @@ input.cell-edit{background:var(--card);border:1px solid var(--border);border-rad
     <div class="login-logo">ATS <span>Visite Mediche</span></div>
     <div class="login-sub">Modulo WMS Hub</div>
     <div class="login-note">Apri questo modulo dal WMS Hub per accedere con il tuo account Google aziendale.</div>
+  </div>
+</div>
+
+<div id="accessDenied">
+  <div style="text-align:center">
+    <div class="ad-ico">🔒</div>
+    <div class="ad-title">Accesso Negato</div>
+    <p class="ad-sub" id="adMsg">Il tuo account non è autorizzato per questo modulo. Contatta l'amministratore.</p>
   </div>
 </div>
 
@@ -300,7 +313,6 @@ function waitGsi(){
   TOKEN = window._HUB_TOKEN;
   CURRENT_USER = window._HUB_USER || {};
   document.getElementById('loginScreen').style.display='none';
-  document.getElementById('appShell').style.display='flex';
   document.getElementById('userName').textContent = CURRENT_USER.name || CURRENT_USER.email || '';
   if(CURRENT_USER.picture){ var av=document.getElementById('userAvatar'); av.src=CURRENT_USER.picture; av.style.display=''; }
   loadPermConfig((CURRENT_USER.email||'').toLowerCase());
@@ -313,39 +325,73 @@ window.onload = function(){ loadThemePref(); waitGsi(); };
 // ══════════════════════════════════════════════════════════════════════════
 var permConfig=null, permFileId=null, isSuperUser=false;
 var myRole='viewer', myFiliali=null; // null = tutte
+var PRESENZE_CONFIG_FNAME = 'config_presenze.json'; // stessa cartella CONFIG_FOLDER_ID
 
 function defaultPermConfig(){
   return {super_users:SUPER_USERS.slice(), filiali:['Maddaloni','Palermo','Milano'], users:{}, default:{ruolo:'viewer',filiali:[]},
           admin_reminder_emails:[], spreadsheet_id:null};
 }
 
+// Legge i super_users già definiti in config_presenze.json (stessa cartella Drive),
+// così i superadmin sono un'unica fonte condivisa tra i moduli, senza doverli duplicare.
+function loadPresenzeSuperUsers(){
+  return driveListFiles('"'+CONFIG_FOLDER_ID+'" in parents and name="'+PRESENZE_CONFIG_FNAME+'" and trashed=false')
+    .then(function(files){
+      if(!files.length) return [];
+      return driveDownloadText(files[0].id).then(function(txt){
+        try{ var cfg=JSON.parse(txt); return (cfg.super_users||[]).map(function(s){return s.toLowerCase();}); }
+        catch(e){ return []; }
+      });
+    })
+    .catch(function(){ return []; });
+}
+
 function loadPermConfig(email){
-  driveListFiles('"'+CONFIG_FOLDER_ID+'" in parents and name="'+PERM_FNAME+'" and trashed=false')
-  .then(function(files){
-    if(!files.length){ permConfig=defaultPermConfig(); permFileId=null; applyUserPermissions(email); return; }
+  Promise.all([
+    driveListFiles('"'+CONFIG_FOLDER_ID+'" in parents and name="'+PERM_FNAME+'" and trashed=false'),
+    loadPresenzeSuperUsers()
+  ])
+  .then(function(results){
+    var files = results[0];
+    var presenzeSupers = results[1];
+    if(!files.length){
+      permConfig=defaultPermConfig(); permFileId=null;
+      applyUserPermissions(email, presenzeSupers);
+      return;
+    }
     permFileId=files[0].id;
     return driveDownloadText(permFileId).then(function(txt){
       try{ permConfig=JSON.parse(txt); }catch(e){ permConfig=defaultPermConfig(); }
       if(!permConfig.filiali) permConfig.filiali=['Maddaloni','Palermo','Milano'];
-      applyUserPermissions(email);
+      applyUserPermissions(email, presenzeSupers);
     });
   })
-  .catch(function(){ permConfig=defaultPermConfig(); applyUserPermissions(email); });
+  .catch(function(){ permConfig=defaultPermConfig(); applyUserPermissions(email, []); });
 }
 
-function applyUserPermissions(email){
+function applyUserPermissions(email, presenzeSupers){
   var em=(email||'').toLowerCase();
   var sus=(permConfig.super_users||[]).map(function(s){return s.toLowerCase();});
+  sus = sus.concat(presenzeSupers||[]); // unione: super_users propri + quelli condivisi da Presenze
   isSuperUser = sus.indexOf(em)!==-1;
 
   if(isSuperUser){
     myRole='admin'; myFiliali=null;
     document.getElementById('btnPerm').style.display='';
+    document.getElementById('appShell').style.display='flex';
   } else {
     var u=(permConfig.users||{})[em];
-    if(u){ myRole=u.ruolo||'viewer'; myFiliali=u.filiali||[]; }
-    else { var d=permConfig.default||{}; myRole=d.ruolo||'viewer'; myFiliali=d.filiali||[]; }
+    if(!u){
+      // Non in lista: accesso negato, nessun fallback silenzioso a un ruolo di default.
+      document.getElementById('loginScreen').style.display='none';
+      document.getElementById('appShell').style.display='none';
+      document.getElementById('adMsg').textContent = "Il tuo account (" + email + ") non è autorizzato per il modulo Visite Mediche. Contatta l'amministratore.";
+      document.getElementById('accessDenied').style.display='flex';
+      return;
+    }
+    myRole=u.ruolo||'viewer'; myFiliali=u.filiali||[];
     document.getElementById('btnPerm').style.display='none';
+    document.getElementById('appShell').style.display='flex';
   }
   document.getElementById('roleTag').textContent = myRole.toUpperCase();
   ensureSpreadsheet().then(function(){ switchTab('dashboard'); });
@@ -850,7 +896,7 @@ function renderProgrammazione(){
 
     h+='<div class="filters" style="margin-bottom:0">';
     h+='<div class="fg"><span class="fl">Data visita concordata</span><input class="fc" id="progData" placeholder="gg/mm/aaaa"></div>';
-    h+='<div class="fg"><span class="fl">Plant / sede analisi</span><input class="fc" id="progPlant" placeholder="es. P52 Maddaloni"></div>';
+    h+='<div class="fg"><span class="fl">Plant / sede analisi</span><input class="fc" id="progPlant" placeholder="es. Poliambulatorio Maddaloni"></div>';
     h+='<button class="btn" onclick="confermaProgrammazione()">Assegna a selezionati</button>';
     h+='<span id="progSelCount" style="font-size:12px;color:var(--muted);align-self:center">0 selezionati</span>';
     h+='</div>';
