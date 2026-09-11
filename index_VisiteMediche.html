@@ -156,6 +156,7 @@ input.cell-edit{background:var(--card);border:1px solid var(--border);border-rad
     <div class="modal-row"><label>Email</label><input id="mEmail" type="email"></div>
     <div class="modal-row"><label>Note</label><input id="mNote"></div>
     <div class="modal-row"><label>Data ultima visita (gg/mm/aaaa)</label><input id="mDataUltima" placeholder="gg/mm/aaaa"></div>
+    <div class="modal-row"><label>Periodicità visita (mesi — 12 = annuale, 24 = biennale, ecc.)</label><input id="mPeriodicita" type="number" min="1" placeholder="12"></div>
     <div class="modal-actions">
       <button class="btn ghost" onclick="closeAnagModal()">Annulla</button>
       <button class="btn" onclick="saveAnagModal()">Salva</button>
@@ -192,9 +193,9 @@ var SUPER_USERS      = ['atssegnalazioni@gmail.com']; // allinea coi super_users
 
 // Colonne foglio dati (1-based)
 var COL = {FILIALE:1,COGNOME:2,NOME:3,NOMINATIVO:4,CF:5,EMAIL:6,NOTE:7,
-           DATA_ULTIMA:8,DATA_PREVISTA:9,MAIL_INVIATA:10,DATA_INVIO:11,PLANT:12};
+           DATA_ULTIMA:8,PERIODICITA:9,DATA_PREVISTA:10,MAIL_INVIATA:11,DATA_INVIO:12,PLANT:13};
 var SHEET_HEADER = ['Filiale','Cognome','Nome','Nominativo','CF','Email','Note',
-                     'Data ultima visita','Data visita prevista','Mail inviata','Data invio mail','Plant'];
+                     'Data ultima visita','Periodicità (mesi)','Data visita prevista','Mail inviata','Data invio mail','Plant'];
 var SOGLIA_SCADENZA_GG = 30; // giorni entro cui "IN SCADENZA"
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -328,7 +329,7 @@ function createSpreadsheetWithHeader(){
       })
       .then(function(){
         var tmp = SPREADSHEET_ID; SPREADSHEET_ID = newId; // sheetsUpdateValues usa la globale
-        return sheetsUpdateValues("'"+SHEET_NAME+"'!A1:L1", [SHEET_HEADER]).then(function(){ SPREADSHEET_ID = tmp; return newId; });
+        return sheetsUpdateValues("'"+SHEET_NAME+"'!A1:M1", [SHEET_HEADER]).then(function(){ SPREADSHEET_ID = tmp; return newId; });
       });
   });
 }
@@ -510,6 +511,7 @@ function fmtDataIt(d){
   return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();
 }
 function addDays(d, n){ var r=new Date(d); r.setDate(r.getDate()+n); return r; }
+function addMonths(d, n){ var r=new Date(d); r.setMonth(r.getMonth()+n); return r; }
 
 function calcolaStato(dataScadenza){
   if(!dataScadenza) return 'DA PROGRAMMARE';
@@ -521,11 +523,12 @@ function calcolaStato(dataScadenza){
 
 function loadVisiteData(){
   setContent(spinner('Carico dati dal foglio…'));
-  return sheetsGetValues("'"+SHEET_NAME+"'!A2:L").then(function(rows){
+  return sheetsGetValues("'"+SHEET_NAME+"'!A2:M").then(function(rows){
     allPersone = rows.map(function(row,i){
-      row = row.concat(new Array(12).fill(''));
+      row = row.concat(new Array(13).fill(''));
       var dataUltima = parseDataIt(row[COL.DATA_ULTIMA-1]);
-      var dataScadenza = dataUltima ? addDays(dataUltima,365) : null;
+      var periodicita = parseInt(row[COL.PERIODICITA-1],10); if(!periodicita || periodicita<=0) periodicita=12;
+      var dataScadenza = dataUltima ? addMonths(dataUltima, periodicita) : null;
       return {
         rowIndex: i+2,
         filiale: row[COL.FILIALE-1]||'',
@@ -536,6 +539,7 @@ function loadVisiteData(){
         email: row[COL.EMAIL-1]||'',
         note: row[COL.NOTE-1]||'',
         dataUltima: dataUltima,
+        periodicita: periodicita,
         dataPrevista: parseDataIt(row[COL.DATA_PREVISTA-1]),
         mailInviata: String(row[COL.MAIL_INVIATA-1]).toUpperCase()==='TRUE',
         plant: row[COL.PLANT-1]||'',
@@ -621,17 +625,18 @@ function renderAnagrafica(){
     h+='<div class="filters"><div style="flex:1"></div>';
     if(canEditAnagrafica()) h+='<button class="btn" onclick="openAnagModal()">＋ Nuovo dipendente</button>';
     h+='</div>';
-    h+='<table><thead><tr><th>Filiale</th><th>Cognome</th><th>Nome</th><th>CF</th><th>Email</th><th>Note</th><th>Data ultima visita</th>'+(canEditAnagrafica()?'<th></th>':'')+'</tr></thead><tbody>';
+    h+='<table><thead><tr><th>Filiale</th><th>Cognome</th><th>Nome</th><th>CF</th><th>Email</th><th>Note</th><th>Data ultima visita</th><th>Periodicità</th>'+(canEditAnagrafica()?'<th></th>':'')+'</tr></thead><tbody>';
     visibili.forEach(function(p){
       h+='<tr><td>'+esc(p.filiale)+'</td><td>'+esc(p.cognome)+'</td><td>'+esc(p.nome)+'</td>';
       h+='<td style="font-family:var(--ff-mono);font-size:11px">'+esc(p.cf)+'</td><td>'+esc(p.email)+'</td><td>'+esc(p.note)+'</td><td>'+fmtDataIt(p.dataUltima)+'</td>';
+      h+='<td>'+(p.periodicita===12?'12 mesi (annuale)':p.periodicita+' mesi')+'</td>';
       if(canEditAnagrafica()){
         h+='<td><button class="icon-btn" onclick="openAnagModal('+p.rowIndex+')">✎</button>';
         h+='<button class="icon-btn del" onclick="deleteAnagRow('+p.rowIndex+')">✕</button></td>';
       }
       h+='</tr>';
     });
-    if(!visibili.length) h+='<tr><td colspan="8" style="color:var(--muted);text-align:center;padding:30px 0">Nessun dipendente. '+(canEditAnagrafica()?'Aggiungine uno.':'')+'</td></tr>';
+    if(!visibili.length) h+='<tr><td colspan="9" style="color:var(--muted);text-align:center;padding:30px 0">Nessun dipendente. '+(canEditAnagrafica()?'Aggiungine uno.':'')+'</td></tr>';
     h+='</tbody></table>';
     setContent(h);
   });
@@ -648,6 +653,7 @@ function openAnagModal(rowIndex){
   document.getElementById('mEmail').value = p ? p.email : '';
   document.getElementById('mNote').value = p ? p.note : '';
   document.getElementById('mDataUltima').value = p ? fmtDataIt(p.dataUltima) : '';
+  document.getElementById('mPeriodicita').value = p ? p.periodicita : 12;
   document.getElementById('anagModal').style.display='flex';
 }
 function closeAnagModal(){ document.getElementById('anagModal').style.display='none'; }
@@ -660,17 +666,18 @@ function saveAnagModal(){
   var email=document.getElementById('mEmail').value.trim();
   var note=document.getElementById('mNote').value.trim();
   var dataUltima=document.getElementById('mDataUltima').value.trim();
+  var periodicita=parseInt(document.getElementById('mPeriodicita').value,10); if(!periodicita||periodicita<=0) periodicita=12;
 
   if(!filiale || !cognome || !nome){ showToast('Filiale, Cognome e Nome sono obbligatori','err'); return; }
 
   var nominativo=(cognome+' '+nome).toUpperCase();
-  var rowValues=[filiale,cognome,nome,nominativo,cf,email,note,dataUltima,'','',''];
+  var rowValues=[filiale,cognome,nome,nominativo,cf,email,note,dataUltima,periodicita];
 
   var p;
   if(editingRowIndex){
-    p = sheetsUpdateValues("'"+SHEET_NAME+"'!A"+editingRowIndex+":K"+editingRowIndex, [rowValues]);
+    p = sheetsUpdateValues("'"+SHEET_NAME+"'!A"+editingRowIndex+":I"+editingRowIndex, [rowValues]);
   } else {
-    p = sheetsAppendValues("'"+SHEET_NAME+"'!A:K", [rowValues]);
+    p = sheetsAppendValues("'"+SHEET_NAME+"'!A:I", [rowValues]);
   }
   p.then(function(){ showToast('✓ Salvato','ok'); closeAnagModal(); renderAnagrafica(); })
    .catch(function(e){ showToast('Errore salvataggio: '+e.message,'err'); });
@@ -726,7 +733,7 @@ function confermaProgrammazione(){
   // Scrive Data prevista (I), resetta Mail inviata (J) e Data invio (K) per far ripartire
   // la notifica sul nuovo appuntamento, e scrive Plant (L).
   var writes = rows.map(function(rowIndex){
-    return sheetsUpdateValues("'"+SHEET_NAME+"'!I"+rowIndex+":L"+rowIndex, [[dataStr,'FALSE','',plantStr]]);
+    return sheetsUpdateValues("'"+SHEET_NAME+"'!J"+rowIndex+":M"+rowIndex, [[dataStr,'FALSE','',plantStr]]);
   });
   Promise.all(writes).then(function(){
     showToast('✓ Assegnati a '+rows.length+' dipendenti','ok');
