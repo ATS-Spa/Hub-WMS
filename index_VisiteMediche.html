@@ -86,11 +86,11 @@ body{background:var(--bg);color:var(--text);font-family:var(--ff-sans);font-size
 .tab-btn:hover{color:var(--subtle)}
 .tab-btn.active{color:var(--text);border-bottom-color:var(--blue)}
 
-.main{flex:1;overflow-y:auto;padding:20px 24px}
+.main{flex:1;min-height:0;overflow:hidden;padding:20px 24px;display:flex;flex-direction:column}
 
 /* ── BADGES / STATS ── */
 .stats-row{display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap}
-.tbl-scroll{max-height:calc(100vh - 280px);min-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:10px}
+.tbl-scroll{flex:1;min-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:10px}
 .tbl-scroll table{border:none}
 .stat-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 18px;min-width:140px}
 .stat-num{font-family:var(--ff-cond);font-size:26px;font-weight:800}
@@ -144,7 +144,7 @@ input.cell-edit{background:var(--card);border:1px solid var(--border);border-rad
 .state{text-align:center;padding:60px 0;color:var(--muted);font-size:13px}
 
 /* Programmazione */
-.prog-list{display:flex;flex-direction:column;gap:6px;border:1px solid var(--border);border-radius:10px;padding:8px}
+.prog-list{flex:1;min-height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;border:1px solid var(--border);border-radius:10px;padding:8px}
 .prog-item{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px}
 .prog-item:hover{background:var(--card)}
 .prog-item input[type=checkbox]{width:15px;height:15px;accent-color:var(--blue)}
@@ -563,6 +563,12 @@ function sheetsUpdateValues(range, values2d){
   return fetch(url,{method:'PUT',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({values:values2d})})
     .then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
 }
+// Aggiorna più range in una sola chiamata (es. conferma massiva su N dipendenti) invece di N chiamate separate.
+function sheetsBatchUpdateValues(dataArr){
+  var url='https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+'/values:batchUpdate';
+  return fetch(url,{method:'POST',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({valueInputOption:'USER_ENTERED', data:dataArr})})
+    .then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
+}
 function sheetsAppendValues(range, values2d){
   var url='https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+'/values/'+encodeURIComponent(range)+':append?valueInputOption=USER_ENTERED';
   return fetch(url,{method:'POST',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({values:values2d})})
@@ -706,14 +712,24 @@ function switchTab(tab){
 }
 
 // ── DASHBOARD ──
-var dashFilFiliale='', dashFilStato='';
+var dashFilFiliale='', dashFilStato='', dashFilPrevista='';
+var confirmSelected = {};
+
 function renderDashboard(){
   loadVisiteData().then(function(){
+    confirmSelected = {};
     var visibili = allPersone.filter(function(p){ return filialeVisibile(p.filiale); });
     var cnt={SCADUTO:0,'IN SCADENZA':0,VALIDO:0,'DA PROGRAMMARE':0};
     visibili.forEach(function(p){ cnt[p.stato]=(cnt[p.stato]||0)+1; });
 
     var filiali = permConfig.filiali||[];
+    // Date previste distinte presenti nei dati, per il filtro dedicato
+    var datePreviste = [];
+    visibili.forEach(function(p){
+      if(p.dataPrevista){ var d=fmtDataIt(p.dataPrevista); if(datePreviste.indexOf(d)===-1) datePreviste.push(d); }
+    });
+    datePreviste.sort(function(a,b){ return parseDataIt(a)-parseDataIt(b); });
+
     var h='';
     h+='<div class="stats-row">';
     h+='<div class="stat-card stat-red"><div class="stat-num">'+cnt.SCADUTO+'</div><div class="stat-lbl">Scaduti</div></div>';
@@ -727,64 +743,109 @@ function renderDashboard(){
     filiali.forEach(function(f){ if(filialeVisibile(f)) h+='<option value="'+esc(f)+'">'+esc(f)+'</option>'; });
     h+='</select></div>';
     h+='<div class="fg"><span class="fl">Stato</span><select class="fc" id="fStato" onchange="dashApplyFilter()"><option value="">Tutti</option><option>SCADUTO</option><option>IN SCADENZA</option><option>VALIDO</option><option>DA PROGRAMMARE</option></select></div>';
+    h+='<div class="fg"><span class="fl">Data prevista</span><select class="fc" id="fPrevista" onchange="dashApplyFilter()"><option value="">Tutte</option>';
+    datePreviste.forEach(function(d){ h+='<option value="'+esc(d)+'">'+esc(d)+'</option>'; });
+    h+='</select></div>';
     h+='</div>';
 
-    h+='<div class="tbl-scroll"><table><thead><tr><th>Filiale</th><th>Nominativo</th><th>CF</th><th>Data visita</th><th>Scadenza</th><th>Stato</th><th>Data prevista</th><th>Plant</th>'+(canConfermareVisita()?'<th></th>':'')+'</tr></thead><tbody id="dashBody"></tbody></table></div>';
+    if(canConfermareVisita()){
+      h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:14px">';
+      h+='<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Conferma massiva: filtra per Data prevista, seleziona i dipendenti che si sono effettivamente presentati, imposta la data reale e conferma tutti insieme.</div>';
+      h+='<div class="filters" style="margin-bottom:0">';
+      h+='<div class="fg"><button class="btn ghost" onclick="dashSelectAllFiltered()">Seleziona tutti i filtrati</button></div>';
+      h+='<div class="fg"><button class="btn ghost" onclick="dashClearSelection()">Deseleziona tutti</button></div>';
+      h+='<div class="fg"><span class="fl">Data effettiva visita</span><input class="fc" id="confirmData" placeholder="gg/mm/aaaa"></div>';
+      h+='<button class="btn" onclick="confermaVisiteMassivo()">✓ Conferma effettuate</button>';
+      h+='<span id="confirmSelCount" style="font-size:12px;color:var(--muted);align-self:center">0 selezionati</span>';
+      h+='</div></div>';
+    }
+
+    h+='<div class="tbl-scroll"><table><thead><tr>'+(canConfermareVisita()?'<th></th>':'')+'<th>Filiale</th><th>Nominativo</th><th>CF</th><th>Data visita</th><th>Scadenza</th><th>Stato</th><th>Data prevista</th><th>Plant</th></tr></thead><tbody id="dashBody"></tbody></table></div>';
 
     setContent(h);
     dashApplyFilter();
   });
 }
 function dashApplyFilter(){
-  dashFilFiliale = document.getElementById('fFiliale') ? document.getElementById('fFiliale').value : '';
-  dashFilStato   = document.getElementById('fStato') ? document.getElementById('fStato').value : '';
-  var rows = allPersone.filter(function(p){
-    if(!filialeVisibile(p.filiale)) return false;
-    if(dashFilFiliale && p.filiale!==dashFilFiliale) return false;
-    if(dashFilStato && p.stato!==dashFilStato) return false;
-    return true;
-  });
+  dashFilFiliale  = document.getElementById('fFiliale') ? document.getElementById('fFiliale').value : '';
+  dashFilStato    = document.getElementById('fStato') ? document.getElementById('fStato').value : '';
+  dashFilPrevista = document.getElementById('fPrevista') ? document.getElementById('fPrevista').value : '';
+  var rows = dashFilteredList();
   var badgeClass={'SCADUTO':'badge-scaduto','IN SCADENZA':'badge-scadenza','VALIDO':'badge-valido','DA PROGRAMMARE':'badge-programmare'};
   var h='';
   rows.forEach(function(p){
-    h+='<tr><td>'+esc(p.filiale)+'</td><td>'+esc(p.nominativo)+'</td><td style="font-family:var(--ff-mono);font-size:11px">'+esc(p.cf)+'</td>';
+    h+='<tr>';
+    if(canConfermareVisita()){
+      var checked = confirmSelected[p.rowIndex] ? 'checked' : '';
+      h+='<td>'+(p.dataPrevista ? '<input type="checkbox" '+checked+' onchange="toggleConfirmSel('+p.rowIndex+',this.checked)">' : '')+'</td>';
+    }
+    h+='<td>'+esc(p.filiale)+'</td><td>'+esc(p.nominativo)+'</td><td style="font-family:var(--ff-mono);font-size:11px">'+esc(p.cf)+'</td>';
     h+='<td>'+fmtDataIt(p.dataUltima)+'</td><td>'+fmtDataIt(p.dataScadenza)+'</td>';
     h+='<td><span class="badge '+badgeClass[p.stato]+'">'+p.stato+'</span></td>';
     h+='<td>'+(fmtDataIt(p.dataPrevista)||'—')+'</td><td>'+esc(p.plant||'—')+'</td>';
-    if(canConfermareVisita()){
-      h+='<td>'+(p.dataPrevista ? '<button class="btn ghost" style="padding:4px 10px;font-size:11px" onclick="confermaVisitaEffettuata('+p.rowIndex+')">✓ Effettuata</button>' : '')+'</td>';
-    }
     h+='</tr>';
   });
   if(!rows.length) h='<tr><td colspan="9" style="color:var(--muted);text-align:center;padding:30px 0">Nessun record per questo filtro.</td></tr>';
   document.getElementById('dashBody').innerHTML=h;
+  updateConfirmSelCount();
+}
+function dashFilteredList(){
+  return allPersone.filter(function(p){
+    if(!filialeVisibile(p.filiale)) return false;
+    if(dashFilFiliale && p.filiale!==dashFilFiliale) return false;
+    if(dashFilStato && p.stato!==dashFilStato) return false;
+    if(dashFilPrevista && fmtDataIt(p.dataPrevista)!==dashFilPrevista) return false;
+    return true;
+  });
 }
 
-// ── CONFERMA VISITA EFFETTUATA → aggiorna anagrafica + storico ──
-function confermaVisitaEffettuata(rowIndex){
-  if(!canConfermareVisita()){ showToast('Solo un admin può confermare una visita effettuata','err'); return; }
-  var p = allPersone.find(function(x){return x.rowIndex===rowIndex;});
-  if(!p) return;
-  var defaultData = fmtDataIt(p.dataPrevista) || fmtDataIt(new Date());
-  var dataStr = prompt('Data in cui è stata effettuata la visita per '+p.nominativo+' (gg/mm/aaaa):', defaultData);
-  if(!dataStr) return;
+function toggleConfirmSel(rowIndex, checked){
+  if(checked) confirmSelected[rowIndex]=true; else delete confirmSelected[rowIndex];
+  updateConfirmSelCount();
+}
+function updateConfirmSelCount(){
+  var el=document.getElementById('confirmSelCount');
+  if(el) el.textContent = Object.keys(confirmSelected).length+' selezionati';
+}
+function dashSelectAllFiltered(){
+  dashFilteredList().forEach(function(p){ if(p.dataPrevista) confirmSelected[p.rowIndex]=true; });
+  dashApplyFilter();
+}
+function dashClearSelection(){
+  confirmSelected = {};
+  dashApplyFilter();
+}
+
+// ── CONFERMA MASSIVA VISITE EFFETTUATE → aggiorna anagrafica + storico in blocco ──
+function confermaVisiteMassivo(){
+  if(!canConfermareVisita()){ showToast('Solo un admin può confermare','err'); return; }
+  var rowIndexes = Object.keys(confirmSelected);
+  if(!rowIndexes.length){ showToast('Seleziona almeno un dipendente','err'); return; }
+  var dataStr = document.getElementById('confirmData').value.trim();
+  if(!dataStr){ showToast('Inserisci la data in cui sono state effettuate le visite','err'); return; }
   if(!parseDataIt(dataStr)){ showToast('Formato data non valido (gg/mm/aaaa)','err'); return; }
+
+  var persone = rowIndexes.map(function(ri){
+    return allPersone.find(function(x){ return String(x.rowIndex)===String(ri); });
+  }).filter(Boolean);
 
   ensureStoricoSheet()
     .then(function(){
-      return sheetsAppendValues("'"+STORICO_SHEET_NAME+"'!A:G", [[
-        fmtDataIt(new Date()), p.filiale, p.nominativo, p.cf, dataStr, p.plant||'', (CURRENT_USER.email||'')
-      ]]);
+      var storicoRows = persone.map(function(p){
+        return [fmtDataIt(new Date()), p.filiale, p.nominativo, p.cf, dataStr, p.plant||'', (CURRENT_USER.email||'')];
+      });
+      return sheetsAppendValues("'"+STORICO_SHEET_NAME+"'!A:G", storicoRows);
     })
     .then(function(){
-      // Aggiorna Data ultima visita (H) e azzera Data prevista/Mail inviata/Data invio/Plant (J:M)
-      return Promise.all([
-        sheetsUpdateValues("'"+SHEET_NAME+"'!H"+rowIndex, [[dataStr]]),
-        sheetsUpdateValues("'"+SHEET_NAME+"'!J"+rowIndex+":M"+rowIndex, [['','','','']])
-      ]);
+      var updates = [];
+      persone.forEach(function(p){
+        updates.push({range:"'"+SHEET_NAME+"'!H"+p.rowIndex, values:[[dataStr]]});
+        updates.push({range:"'"+SHEET_NAME+"'!J"+p.rowIndex+":M"+p.rowIndex, values:[['','','','']]});
+      });
+      return sheetsBatchUpdateValues(updates);
     })
     .then(function(){
-      showToast('✓ Visita registrata, scadenza aggiornata automaticamente','ok');
+      showToast('✓ '+persone.length+' visite confermate, scadenze aggiornate automaticamente','ok');
       renderDashboard();
     })
     .catch(function(e){ showToast('Errore: '+e.message,'err'); });
