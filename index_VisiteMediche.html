@@ -140,6 +140,7 @@ input.cell-edit{background:var(--card);border:1px solid var(--border);border-rad
     <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
     <button class="tab-btn" data-tab="anagrafica" onclick="switchTab('anagrafica')">👤 Anagrafica</button>
     <button class="tab-btn" data-tab="programmazione" onclick="switchTab('programmazione')">📅 Programmazione visite</button>
+    <button class="tab-btn" data-tab="storico" onclick="switchTab('storico')">🗂 Storico visite</button>
   </div>
 
   <div class="main" id="content"></div>
@@ -196,6 +197,8 @@ var COL = {FILIALE:1,COGNOME:2,NOME:3,NOMINATIVO:4,CF:5,EMAIL:6,NOTE:7,
            DATA_ULTIMA:8,PERIODICITA:9,DATA_PREVISTA:10,MAIL_INVIATA:11,DATA_INVIO:12,PLANT:13};
 var SHEET_HEADER = ['Filiale','Cognome','Nome','Nominativo','CF','Email','Note',
                      'Data ultima visita','Periodicità (mesi)','Data visita prevista','Mail inviata','Data invio mail','Plant'];
+var STORICO_SHEET_NAME = 'Storico Visite';
+var STORICO_HEADER = ['Data conferma','Filiale','Nominativo','CF','Data visita effettuata','Plant','Confermato da'];
 var SOGLIA_SCADENZA_GG = 30; // giorni entro cui "IN SCADENZA"
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -343,6 +346,7 @@ function saveConfigSilent(){
 
 function canEditAnagrafica(){ return myRole==='admin'; }
 function canProgrammare(){ return myRole==='admin' || myRole==='scheduler'; }
+function canConfermareVisita(){ return myRole==='admin'; }
 function filialeVisibile(f){ return myFiliali===null || myFiliali.indexOf(f)!==-1; }
 
 function savePermConfig(){
@@ -465,6 +469,24 @@ function sheetsDeleteRow(rowIndex1based){
   });
 }
 
+// ── Foglio "Storico Visite" — creato al bisogno nello stesso spreadsheet ──
+var _storicoChecked = false;
+function ensureStoricoSheet(){
+  if(_storicoChecked) return Promise.resolve();
+  var url='https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+'?fields=sheets(properties(title))';
+  return fetch(url,{headers:{Authorization:'Bearer '+getToken()}}).then(function(r){return r.json();}).then(function(meta){
+    var exists = (meta.sheets||[]).some(function(s){ return s.properties.title===STORICO_SHEET_NAME; });
+    if(exists){ _storicoChecked=true; return; }
+    var body={requests:[{addSheet:{properties:{title:STORICO_SHEET_NAME}}}]};
+    return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+':batchUpdate',{
+      method:'POST', headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'}, body:JSON.stringify(body)
+    })
+    .then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); })
+    .then(function(){ return sheetsUpdateValues("'"+STORICO_SHEET_NAME+"'!A1:G1", [STORICO_HEADER]); })
+    .then(function(){ _storicoChecked=true; });
+  });
+}
+
 // ══════════════════════════════════════════════════════════════════════════
 // DRIVE API (per config permessi)
 // ══════════════════════════════════════════════════════════════════════════
@@ -563,6 +585,7 @@ function switchTab(tab){
   if(tab==='dashboard') renderDashboard();
   else if(tab==='anagrafica') renderAnagrafica();
   else if(tab==='programmazione') renderProgrammazione();
+  else if(tab==='storico') renderStorico();
 }
 
 // ── DASHBOARD ──
@@ -589,7 +612,7 @@ function renderDashboard(){
     h+='<div class="fg"><span class="fl">Stato</span><select class="fc" id="fStato" onchange="dashApplyFilter()"><option value="">Tutti</option><option>SCADUTO</option><option>IN SCADENZA</option><option>VALIDO</option><option>DA PROGRAMMARE</option></select></div>';
     h+='</div>';
 
-    h+='<table><thead><tr><th>Filiale</th><th>Nominativo</th><th>CF</th><th>Data visita</th><th>Scadenza</th><th>Stato</th><th>Data prevista</th><th>Plant</th></tr></thead><tbody id="dashBody"></tbody></table>';
+    h+='<table><thead><tr><th>Filiale</th><th>Nominativo</th><th>CF</th><th>Data visita</th><th>Scadenza</th><th>Stato</th><th>Data prevista</th><th>Plant</th>'+(canConfermareVisita()?'<th></th>':'')+'</tr></thead><tbody id="dashBody"></tbody></table>';
 
     setContent(h);
     dashApplyFilter();
@@ -610,10 +633,44 @@ function dashApplyFilter(){
     h+='<tr><td>'+esc(p.filiale)+'</td><td>'+esc(p.nominativo)+'</td><td style="font-family:var(--ff-mono);font-size:11px">'+esc(p.cf)+'</td>';
     h+='<td>'+fmtDataIt(p.dataUltima)+'</td><td>'+fmtDataIt(p.dataScadenza)+'</td>';
     h+='<td><span class="badge '+badgeClass[p.stato]+'">'+p.stato+'</span></td>';
-    h+='<td>'+(fmtDataIt(p.dataPrevista)||'—')+'</td><td>'+esc(p.plant||'—')+'</td></tr>';
+    h+='<td>'+(fmtDataIt(p.dataPrevista)||'—')+'</td><td>'+esc(p.plant||'—')+'</td>';
+    if(canConfermareVisita()){
+      h+='<td>'+(p.dataPrevista ? '<button class="btn ghost" style="padding:4px 10px;font-size:11px" onclick="confermaVisitaEffettuata('+p.rowIndex+')">✓ Effettuata</button>' : '')+'</td>';
+    }
+    h+='</tr>';
   });
-  if(!rows.length) h='<tr><td colspan="8" style="color:var(--muted);text-align:center;padding:30px 0">Nessun record per questo filtro.</td></tr>';
+  if(!rows.length) h='<tr><td colspan="9" style="color:var(--muted);text-align:center;padding:30px 0">Nessun record per questo filtro.</td></tr>';
   document.getElementById('dashBody').innerHTML=h;
+}
+
+// ── CONFERMA VISITA EFFETTUATA → aggiorna anagrafica + storico ──
+function confermaVisitaEffettuata(rowIndex){
+  if(!canConfermareVisita()){ showToast('Solo un admin può confermare una visita effettuata','err'); return; }
+  var p = allPersone.find(function(x){return x.rowIndex===rowIndex;});
+  if(!p) return;
+  var defaultData = fmtDataIt(p.dataPrevista) || fmtDataIt(new Date());
+  var dataStr = prompt('Data in cui è stata effettuata la visita per '+p.nominativo+' (gg/mm/aaaa):', defaultData);
+  if(!dataStr) return;
+  if(!parseDataIt(dataStr)){ showToast('Formato data non valido (gg/mm/aaaa)','err'); return; }
+
+  ensureStoricoSheet()
+    .then(function(){
+      return sheetsAppendValues("'"+STORICO_SHEET_NAME+"'!A:G", [[
+        fmtDataIt(new Date()), p.filiale, p.nominativo, p.cf, dataStr, p.plant||'', (CURRENT_USER.email||'')
+      ]]);
+    })
+    .then(function(){
+      // Aggiorna Data ultima visita (H) e azzera Data prevista/Mail inviata/Data invio/Plant (J:M)
+      return Promise.all([
+        sheetsUpdateValues("'"+SHEET_NAME+"'!H"+rowIndex, [[dataStr]]),
+        sheetsUpdateValues("'"+SHEET_NAME+"'!J"+rowIndex+":M"+rowIndex, [['','','','']])
+      ]);
+    })
+    .then(function(){
+      showToast('✓ Visita registrata, scadenza aggiornata automaticamente','ok');
+      renderDashboard();
+    })
+    .catch(function(e){ showToast('Errore: '+e.message,'err'); });
 }
 
 // ── ANAGRAFICA ──
@@ -739,6 +796,30 @@ function confermaProgrammazione(){
     showToast('✓ Assegnati a '+rows.length+' dipendenti','ok');
     renderProgrammazione();
   }).catch(function(e){ showToast('Errore: '+e.message,'err'); });
+}
+
+// ── STORICO VISITE (sola lettura) ──
+var storicoRows = [];
+function renderStorico(){
+  setContent(spinner('Carico storico visite…'));
+  ensureStoricoSheet()
+    .then(function(){ return sheetsGetValues("'"+STORICO_SHEET_NAME+"'!A2:G"); })
+    .then(function(rows){
+      storicoRows = rows.map(function(r){
+        return {dataConferma:r[0]||'', filiale:r[1]||'', nominativo:r[2]||'', cf:r[3]||'', dataVisita:r[4]||'', plant:r[5]||'', confermatoDa:r[6]||''};
+      }).filter(function(r){ return filialeVisibile(r.filiale); })
+        .sort(function(a,b){ var da=parseDataIt(a.dataVisita), db=parseDataIt(b.dataVisita); return (db?db.getTime():0)-(da?da.getTime():0); });
+
+      var h='<table><thead><tr><th>Data visita</th><th>Filiale</th><th>Nominativo</th><th>CF</th><th>Plant</th><th>Confermato da</th><th>Registrato il</th></tr></thead><tbody>';
+      storicoRows.forEach(function(r){
+        h+='<tr><td>'+esc(r.dataVisita)+'</td><td>'+esc(r.filiale)+'</td><td>'+esc(r.nominativo)+'</td>';
+        h+='<td style="font-family:var(--ff-mono);font-size:11px">'+esc(r.cf)+'</td><td>'+esc(r.plant)+'</td><td>'+esc(r.confermatoDa)+'</td><td>'+esc(r.dataConferma)+'</td></tr>';
+      });
+      if(!storicoRows.length) h+='<tr><td colspan="7" style="color:var(--muted);text-align:center;padding:30px 0">Nessuna visita registrata ancora.</td></tr>';
+      h+='</tbody></table>';
+      setContent(h);
+    })
+    .catch(function(e){ setContent('<div class="state">Errore caricamento storico: '+esc(e.message)+'</div>'); });
 }
 
 // ══════════════════════════════════════════════════════════════════════════
