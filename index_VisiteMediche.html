@@ -85,7 +85,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ff-sans);font-size
 .btn:disabled{opacity:.4;cursor:not-allowed}
 
 /* ── TABLE ── */
-table{width:100%;border-collapse:collapse;font-size:12.5px}
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
 thead th{text-align:left;font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;background:var(--bg)}
 tbody td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
 tbody tr:hover{background:var(--card)}
@@ -790,34 +790,98 @@ function deleteAnagRow(rowIndex){
 
 // ── PROGRAMMAZIONE VISITE ──
 var progSelected = {};
+var progAllVisibili = [];
+var progFilFiliale='', progFilStato='', progSearch='';
+
 function renderProgrammazione(){
   if(!canProgrammare()){ setContent('<div class="state">Non hai i permessi per programmare le visite.</div>'); return; }
   loadVisiteData().then(function(){
     progSelected = {};
-    var visibili = allPersone.filter(function(p){ return filialeVisibile(p.filiale); })
+    progFilFiliale=''; progFilStato=''; progSearch='';
+    progAllVisibili = allPersone.filter(function(p){ return filialeVisibile(p.filiale); })
       .sort(function(a,b){ return (a.dataScadenza||0) - (b.dataScadenza||0); });
 
-    var h='<div style="font-size:12px;color:var(--muted);margin-bottom:10px">Seleziona i dipendenti da convocare, imposta la data concordata con il centro medico e conferma. La data verrà scritta sul foglio; l\'invio della convocazione via mail è gestito separatamente.</div>';
-    h+='<div class="prog-list">';
-    visibili.forEach(function(p){
-      var badgeClass={'SCADUTO':'badge-scaduto','IN SCADENZA':'badge-scadenza','VALIDO':'badge-valido','DA PROGRAMMARE':'badge-programmare'}[p.stato];
-      h+='<label class="prog-item"><input type="checkbox" onchange="toggleProgSel('+p.rowIndex+',this.checked)">';
-      h+='<span class="who"><b>'+esc(p.nominativo)+'</b><small>'+esc(p.filiale)+' · scadenza '+(fmtDataIt(p.dataScadenza)||'—')+(p.dataPrevista?' · prevista già impostata: '+fmtDataIt(p.dataPrevista)+(p.plant?' presso '+esc(p.plant):''):'')+'</small></span>';
-      h+='<span class="badge '+badgeClass+'">'+p.stato+'</span></label>';
-    });
+    var filiali = permConfig.filiali||[];
+    var h='';
+
+    // ── Pannello controlli, in alto ──
+    h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:14px">';
+    h+='<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Filtra i dipendenti, selezionali, poi imposta data e plant e conferma. La convocazione via mail resta un passo separato.</div>';
+
+    h+='<div class="filters" style="margin-bottom:14px">';
+    h+='<div class="fg"><span class="fl">Filiale</span><select class="fc" id="progFFiliale" onchange="progApplyFilter()"><option value="">Tutte</option>';
+    filiali.forEach(function(f){ if(filialeVisibile(f)) h+='<option value="'+esc(f)+'">'+esc(f)+'</option>'; });
+    h+='</select></div>';
+    h+='<div class="fg"><span class="fl">Stato</span><select class="fc" id="progFStato" onchange="progApplyFilter()"><option value="">Tutti</option><option>SCADUTO</option><option>IN SCADENZA</option><option>VALIDO</option><option>DA PROGRAMMARE</option></select></div>';
+    h+='<div class="fg"><span class="fl">Cerca nominativo</span><input class="fc" id="progFSearch" placeholder="cognome o nome…" oninput="progApplyFilter()"></div>';
+    h+='<div class="fg"><button class="btn ghost" onclick="progSelectAllFiltered()">Seleziona tutti i filtrati</button></div>';
+    h+='<div class="fg"><button class="btn ghost" onclick="progClearSelection()">Deseleziona tutti</button></div>';
     h+='</div>';
-    h+='<div class="prog-bar-actions">';
+
+    h+='<div style="height:1px;background:var(--border);margin:14px 0"></div>';
+
+    h+='<div class="filters" style="margin-bottom:0">';
     h+='<div class="fg"><span class="fl">Data visita concordata</span><input class="fc" id="progData" placeholder="gg/mm/aaaa"></div>';
     h+='<div class="fg"><span class="fl">Plant / sede analisi</span><input class="fc" id="progPlant" placeholder="es. Poliambulatorio Maddaloni"></div>';
     h+='<button class="btn" onclick="confermaProgrammazione()">Assegna a selezionati</button>';
-    h+='<span id="progSelCount" style="font-size:12px;color:var(--muted)">0 selezionati</span>';
+    h+='<span id="progSelCount" style="font-size:12px;color:var(--muted);align-self:center">0 selezionati</span>';
     h+='</div>';
+    h+='</div>';
+
+    h+='<div class="prog-list" id="progListBody"></div>';
     setContent(h);
+    progRenderList();
   });
 }
+
+function progApplyFilter(){
+  progFilFiliale = document.getElementById('progFFiliale').value;
+  progFilStato   = document.getElementById('progFStato').value;
+  progSearch     = document.getElementById('progFSearch').value.trim().toLowerCase();
+  progRenderList();
+}
+
+function progFilteredList(){
+  return progAllVisibili.filter(function(p){
+    if(progFilFiliale && p.filiale!==progFilFiliale) return false;
+    if(progFilStato && p.stato!==progFilStato) return false;
+    if(progSearch && p.nominativo.toLowerCase().indexOf(progSearch)===-1) return false;
+    return true;
+  });
+}
+
+function progRenderList(){
+  var list = progFilteredList();
+  var badgeClass={'SCADUTO':'badge-scaduto','IN SCADENZA':'badge-scadenza','VALIDO':'badge-valido','DA PROGRAMMARE':'badge-programmare'};
+  var h='';
+  list.forEach(function(p){
+    var checked = progSelected[p.rowIndex] ? 'checked' : '';
+    h+='<label class="prog-item"><input type="checkbox" '+checked+' onchange="toggleProgSel('+p.rowIndex+',this.checked)">';
+    h+='<span class="who"><b>'+esc(p.nominativo)+'</b><small>'+esc(p.filiale)+' · scadenza '+(fmtDataIt(p.dataScadenza)||'—')+(p.dataPrevista?' · prevista già impostata: '+fmtDataIt(p.dataPrevista)+(p.plant?' presso '+esc(p.plant):''):'')+'</small></span>';
+    h+='<span class="badge '+badgeClass[p.stato]+'">'+p.stato+'</span></label>';
+  });
+  if(!list.length) h='<div style="color:var(--muted);text-align:center;padding:30px 0;font-size:12px">Nessun dipendente per questo filtro.</div>';
+  document.getElementById('progListBody').innerHTML=h;
+}
+
+function progSelectAllFiltered(){
+  progFilteredList().forEach(function(p){ progSelected[p.rowIndex]=true; });
+  progRenderList();
+  updateProgSelCount();
+}
+function progClearSelection(){
+  progSelected = {};
+  progRenderList();
+  updateProgSelCount();
+}
+function updateProgSelCount(){
+  var el=document.getElementById('progSelCount');
+  if(el) el.textContent = Object.keys(progSelected).length+' selezionati';
+}
+
 function toggleProgSel(rowIndex, checked){
   if(checked) progSelected[rowIndex]=true; else delete progSelected[rowIndex];
-  document.getElementById('progSelCount').textContent = Object.keys(progSelected).length+' selezionati';
+  updateProgSelCount();
 }
 function confermaProgrammazione(){
   var dataStr = document.getElementById('progData').value.trim();
@@ -828,8 +892,8 @@ function confermaProgrammazione(){
   if(!rows.length){ showToast('Seleziona almeno un dipendente','err'); return; }
   if(!parseDataIt(dataStr)){ showToast('Formato data non valido (gg/mm/aaaa)','err'); return; }
 
-  // Scrive Data prevista (I), resetta Mail inviata (J) e Data invio (K) per far ripartire
-  // la notifica sul nuovo appuntamento, e scrive Plant (L).
+  // Scrive Data prevista (J), resetta Mail inviata (K) e Data invio (L) per far ripartire
+  // la notifica sul nuovo appuntamento, e scrive Plant (M).
   var writes = rows.map(function(rowIndex){
     return sheetsUpdateValues("'"+SHEET_NAME+"'!J"+rowIndex+":M"+rowIndex, [[dataStr,'FALSE','',plantStr]]);
   });
