@@ -90,6 +90,8 @@ body{background:var(--bg);color:var(--text);font-family:var(--ff-sans);font-size
 
 /* ── BADGES / STATS ── */
 .stats-row{display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+.tbl-scroll{max-height:calc(100vh - 280px);min-height:200px;overflow-y:auto;border:1px solid var(--border);border-radius:10px}
+.tbl-scroll table{border:none}
 .stat-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 18px;min-width:140px}
 .stat-num{font-family:var(--ff-cond);font-size:26px;font-weight:800}
 .stat-lbl{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-top:2px}
@@ -142,7 +144,7 @@ input.cell-edit{background:var(--card);border:1px solid var(--border);border-rad
 .state{text-align:center;padding:60px 0;color:var(--muted);font-size:13px}
 
 /* Programmazione */
-.prog-list{display:flex;flex-direction:column;gap:6px;max-height:420px;overflow-y:auto;border:1px solid var(--border);border-radius:10px;padding:8px}
+.prog-list{display:flex;flex-direction:column;gap:6px;border:1px solid var(--border);border-radius:10px;padding:8px}
 .prog-item{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px}
 .prog-item:hover{background:var(--card)}
 .prog-item input[type=checkbox]{width:15px;height:15px;accent-color:var(--blue)}
@@ -727,7 +729,7 @@ function renderDashboard(){
     h+='<div class="fg"><span class="fl">Stato</span><select class="fc" id="fStato" onchange="dashApplyFilter()"><option value="">Tutti</option><option>SCADUTO</option><option>IN SCADENZA</option><option>VALIDO</option><option>DA PROGRAMMARE</option></select></div>';
     h+='</div>';
 
-    h+='<table><thead><tr><th>Filiale</th><th>Nominativo</th><th>CF</th><th>Data visita</th><th>Scadenza</th><th>Stato</th><th>Data prevista</th><th>Plant</th>'+(canConfermareVisita()?'<th></th>':'')+'</tr></thead><tbody id="dashBody"></tbody></table>';
+    h+='<div class="tbl-scroll"><table><thead><tr><th>Filiale</th><th>Nominativo</th><th>CF</th><th>Data visita</th><th>Scadenza</th><th>Stato</th><th>Data prevista</th><th>Plant</th>'+(canConfermareVisita()?'<th></th>':'')+'</tr></thead><tbody id="dashBody"></tbody></table></div>';
 
     setContent(h);
     dashApplyFilter();
@@ -797,7 +799,7 @@ function renderAnagrafica(){
     h+='<div class="filters"><div style="flex:1"></div>';
     if(canEditAnagrafica()) h+='<button class="btn" onclick="openAnagModal()">＋ Nuovo dipendente</button>';
     h+='</div>';
-    h+='<table><thead><tr><th>Filiale</th><th>Cognome</th><th>Nome</th><th>CF</th><th>Email</th><th>Note</th><th>Data ultima visita</th><th>Periodicità</th>'+(canEditAnagrafica()?'<th></th>':'')+'</tr></thead><tbody>';
+    h+='<div class="tbl-scroll"><table><thead><tr><th>Filiale</th><th>Cognome</th><th>Nome</th><th>CF</th><th>Email</th><th>Note</th><th>Data ultima visita</th><th>Periodicità</th>'+(canEditAnagrafica()?'<th></th>':'')+'</tr></thead><tbody>';
     visibili.forEach(function(p){
       h+='<tr><td>'+esc(p.filiale)+'</td><td>'+esc(p.cognome)+'</td><td>'+esc(p.nome)+'</td>';
       h+='<td style="font-family:var(--ff-mono);font-size:11px">'+esc(p.cf)+'</td><td>'+esc(p.email)+'</td><td>'+esc(p.note)+'</td><td>'+fmtDataIt(p.dataUltima)+'</td>';
@@ -809,7 +811,7 @@ function renderAnagrafica(){
       h+='</tr>';
     });
     if(!visibili.length) h+='<tr><td colspan="9" style="color:var(--muted);text-align:center;padding:30px 0">Nessun dipendente. '+(canEditAnagrafica()?'Aggiungine uno.':'')+'</td></tr>';
-    h+='</tbody></table>';
+    h+='</tbody></table></div>';
     setContent(h);
   });
 }
@@ -989,13 +991,13 @@ function renderStorico(){
       }).filter(function(r){ return filialeVisibile(r.filiale); })
         .sort(function(a,b){ var da=parseDataIt(a.dataVisita), db=parseDataIt(b.dataVisita); return (db?db.getTime():0)-(da?da.getTime():0); });
 
-      var h='<table><thead><tr><th>Data visita</th><th>Filiale</th><th>Nominativo</th><th>CF</th><th>Plant</th><th>Confermato da</th><th>Registrato il</th></tr></thead><tbody>';
+      var h='<div class="tbl-scroll"><table><thead><tr><th>Data visita</th><th>Filiale</th><th>Nominativo</th><th>CF</th><th>Plant</th><th>Confermato da</th><th>Registrato il</th></tr></thead><tbody>';
       storicoRows.forEach(function(r){
         h+='<tr><td>'+esc(r.dataVisita)+'</td><td>'+esc(r.filiale)+'</td><td>'+esc(r.nominativo)+'</td>';
         h+='<td style="font-family:var(--ff-mono);font-size:11px">'+esc(r.cf)+'</td><td>'+esc(r.plant)+'</td><td>'+esc(r.confermatoDa)+'</td><td>'+esc(r.dataConferma)+'</td></tr>';
       });
       if(!storicoRows.length) h+='<tr><td colspan="7" style="color:var(--muted);text-align:center;padding:30px 0">Nessuna visita registrata ancora.</td></tr>';
-      h+='</tbody></table>';
+      h+='</tbody></table></div>';
       setContent(h);
     })
     .catch(function(e){ setContent('<div class="state">Errore caricamento storico: '+esc(e.message)+'</div>'); });
