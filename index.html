@@ -166,6 +166,8 @@
   .dr-item.app-tickets.active .dr-item-name { color: var(--orange); }
   .dr-item.app-chart.active    { border-color: rgba(6,182,212,.3); }
   .dr-item.app-chart.active .dr-item-name   { color: var(--cyan); }
+  .dr-item.app-visite.active   { border-color: rgba(239,68,68,.3); }
+  .dr-item.app-visite.active .dr-item-name  { color: var(--red); }
 
   .dr-item-icon { font-size: 17px; flex-shrink: 0; width: 22px; text-align: center; }
   .dr-item-info { display: flex; flex-direction: column; gap: 1px; }
@@ -258,6 +260,7 @@
   .card-ats::before        { background: radial-gradient(ellipse at top left, rgba(244,63,94,.1),  transparent 70%); }
   .card-tickets::before    { background: radial-gradient(ellipse at top left, rgba(249,115,22,.1), transparent 70%); }
   .card-chart::before      { background: radial-gradient(ellipse at top left, rgba(6,182,212,.1),  transparent 70%); }
+  .card-visite::before    { background: radial-gradient(ellipse at top left, rgba(239,68,68,.1),  transparent 70%); }
   .card-presenze:hover  { border-color: rgba(59,130,246,.35); }
   .card-spedizioni:hover { border-color: rgba(245,158,11,.35); }
   .card-grn:hover        { border-color: rgba(16,185,129,.35); }
@@ -265,6 +268,7 @@
   .card-ats:hover        { border-color: rgba(244,63,94,.35); }
   .card-tickets:hover    { border-color: rgba(249,115,22,.35); }
   .card-chart:hover      { border-color: rgba(6,182,212,.35); }
+  .card-visite:hover    { border-color: rgba(239,68,68,.35); }
 
   /* 6 card in griglia: 3 colonne */
   .welcome-grid {
@@ -287,6 +291,7 @@
   .card-ats .card-title        { color: var(--rose); }
   .card-tickets .card-title    { color: var(--orange); }
   .card-chart .card-title      { color: var(--cyan); }
+  .card-visite .card-title     { color: var(--red); }
   .card-desc { font-size: 11px; color: var(--muted); line-height: 1.6; }
   .card-arrow { font-size: 15px; color: var(--muted); margin-top: 4px; transition: transform 0.18s, color 0.18s; }
   .app-card:hover .card-arrow { transform: translateX(5px); }
@@ -297,6 +302,7 @@
   .card-ats:hover .card-arrow        { color: var(--rose); }
   .card-tickets:hover .card-arrow    { color: var(--orange); }
   .card-chart:hover .card-arrow      { color: var(--cyan); }
+  .card-visite:hover .card-arrow     { color: var(--red); }
 
   /* ══ IFRAMES ══ */
   .app-frame {
@@ -626,6 +632,14 @@
       </div>
     </div>
 
+    <div class="dr-item app-visite" id="nav-visite" onclick="openApp('visite')">
+      <span class="dr-item-icon">🩺</span>
+      <div class="dr-item-info">
+        <span class="dr-item-name">Visite Mediche</span>
+        <span class="dr-item-desc">Scadenzario e convocazioni</span>
+      </div>
+    </div>
+
     <div class="dr-sect" id="sectAdmin" style="display:none">Admin</div>
     <div class="dr-item" id="nav-admin" style="display:none" onclick="openAdminPanel()">
       <span class="dr-item-icon">👥</span>
@@ -709,6 +723,12 @@
         <div class="card-desc">Dashboard interattive, grafici KPI e analisi dati da file Excel.</div>
         <div class="card-arrow">→</div>
       </div>
+      <div class="app-card card-visite" onclick="openApp('visite')">
+        <div class="card-icon">🩺</div>
+        <div class="card-title">Visite Mediche</div>
+        <div class="card-desc">Scadenzario visite, anagrafica dipendenti e programmazione convocazioni.</div>
+        <div class="card-arrow">→</div>
+      </div>
     </div>
   </div>
 
@@ -743,6 +763,7 @@
   <iframe class="app-frame" id="frame-ats"   src="" data-src="Etichetta-Logistica-ATS.html"        title="Etichetta ATS"></iframe>
   <iframe class="app-frame" id="frame-tickets" src="" data-src="index_Tickets.html"                title="Ticket Manager"></iframe>
   <iframe class="app-frame" id="frame-chart"   src="" data-src="index_Chart_Studio.html"               title="Chart Studio"></iframe>
+  <iframe class="app-frame" id="frame-visite"  src="" data-src="index_VisiteMediche.html"              title="Visite Mediche"></iframe>
 
 </main>
 
@@ -763,7 +784,7 @@
   var tcl;
 
   // Moduli disponibili e loro chiavi
-  var ALL_MODULI = ['presenze','spedizioni','grn','stock','ats','tickets','guida','chart'];
+  var ALL_MODULI = ['presenze','spedizioni','grn','stock','ats','tickets','guida','chart','visite'];
 
   // Config default
   var DEFAULT_HUB_CONFIG = {
