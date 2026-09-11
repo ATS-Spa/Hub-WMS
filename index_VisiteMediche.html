@@ -14,6 +14,20 @@
   --text:#e2e8f0;--muted:#64748b;--subtle:#94a3b8;
   --ff-sans:'IBM Plex Sans',sans-serif;--ff-mono:'IBM Plex Mono',monospace;--ff-cond:'Barlow Condensed',sans-serif;
 }
+body.theme-light{
+  --bg:#f1f5f9;--surface:#ffffff;--card:#f8fafc;--border:#e2e8f0;
+  --text:#1e293b;--muted:#94a3b8;--subtle:#64748b;
+}
+body.theme-dim{
+  --bg:#1e2433;--surface:#252d3d;--card:#2d3748;--border:#3d4f6b;
+}
+body.theme-grafite{
+  --bg:#1a1c20;--surface:#22252b;--card:#2a2e36;--border:#3a3f4a;
+}
+body.theme-salvia{
+  --bg:#f0f5ee;--surface:#e8f0e4;--card:#ddebd6;--border:#aac4a2;
+  --text:#243021;--muted:#6b8062;--subtle:#4a5c40;
+}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden}
 body{background:var(--bg);color:var(--text);font-family:var(--ff-sans);font-size:14px}
@@ -29,7 +43,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ff-sans);font-size
 
 /* ── SHELL ── */
 #appShell{display:none;flex-direction:column;height:100vh;overflow:hidden}
-.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px 0 24px;height:52px;display:flex;align-items:center;gap:14px;flex-shrink:0;z-index:100}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px 0 64px;height:52px;display:flex;align-items:center;gap:14px;flex-shrink:0;z-index:100}
 .topbar-logo{font-family:var(--ff-cond);font-size:22px;font-weight:800;letter-spacing:1.5px;color:var(--blue);text-transform:uppercase;white-space:nowrap}
 .topbar-logo span{color:var(--subtle);font-weight:600}
 .topbar-div{width:1px;height:24px;background:var(--border)}
@@ -39,6 +53,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ff-sans);font-size
 .role-tag{font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:2px 8px;border-radius:10px;background:rgba(59,130,246,.15);color:var(--blue)}
 .btn-perm{background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--subtle);cursor:pointer}
 .btn-perm:hover{border-color:var(--blue);color:var(--blue)}
+.theme-select{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:11px;color:var(--subtle);cursor:pointer;font-family:var(--ff-sans)}
 
 /* ── TABS ── */
 .tabbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;gap:4px;flex-shrink:0}
@@ -127,6 +142,13 @@ input.cell-edit{background:var(--card);border:1px solid var(--border);border-rad
     <div class="topbar-logo">ATS <span>Visite Mediche</span></div>
     <div class="topbar-div"></div>
     <div class="topbar-right">
+      <select class="theme-select" id="themeSelect" onchange="applyTheme(this.value); saveThemePref(this.value)">
+        <option value="scuro">🌑 Scuro</option>
+        <option value="dim">🌘 Dim</option>
+        <option value="grafite">⬛ Grafite</option>
+        <option value="chiaro">☀️ Chiaro</option>
+        <option value="salvia">🌿 Salvia</option>
+      </select>
       <button class="btn-perm" id="btnPerm" style="display:none" onclick="openPermPanel()">⚙ Permessi</button>
       <div class="user-badge">
         <img id="userAvatar" class="user-avatar" src="" style="display:none">
@@ -206,6 +228,25 @@ var SOGLIA_SCADENZA_GG = 30; // giorni entro cui "IN SCADENZA"
 // ══════════════════════════════════════════════════════════════════════════
 var TOKEN = null, CURRENT_USER = {};
 
+// ══════════════════════════════════════════════════════════════════════════
+// TEMA — persistito per singolo browser/utente, indipendente dal Hub
+// ══════════════════════════════════════════════════════════════════════════
+function applyTheme(t){
+  document.body.classList.remove('theme-dim','theme-grafite','theme-light','theme-salvia');
+  if(t==='dim') document.body.classList.add('theme-dim');
+  else if(t==='grafite') document.body.classList.add('theme-grafite');
+  else if(t==='chiaro') document.body.classList.add('theme-light');
+  else if(t==='salvia') document.body.classList.add('theme-salvia');
+  // 'scuro' = nessuna classe, è il tema di default (:root)
+}
+function saveThemePref(t){ try{ localStorage.setItem('vm_theme', t); }catch(e){} }
+function loadThemePref(){
+  var t='scuro';
+  try{ t = localStorage.getItem('vm_theme') || 'scuro'; }catch(e){}
+  var sel=document.getElementById('themeSelect'); if(sel) sel.value=t;
+  applyTheme(t);
+}
+
 (function(){
   try{
     var ht = localStorage.getItem('wms_hub_token');
@@ -237,7 +278,7 @@ function waitGsi(){
   loadPermConfig((CURRENT_USER.email||'').toLowerCase());
 }
 function getToken(){ if(window._HUB_TOKEN) TOKEN=window._HUB_TOKEN; return TOKEN; }
-window.onload = waitGsi;
+window.onload = function(){ loadThemePref(); waitGsi(); };
 
 // ══════════════════════════════════════════════════════════════════════════
 // PERMESSI — admin / scheduler / viewer, scoped per filiale
