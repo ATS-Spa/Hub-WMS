@@ -21,12 +21,32 @@ body.theme-light{
 body.theme-dim{
   --bg:#1e2433;--surface:#252d3d;--card:#2d3748;--border:#3d4f6b;
 }
+body.theme-sap{
+  --bg:#0a1628;--surface:#0f2040;--card:#162a52;--border:#1e3d6e;
+  --text:#e8eef8;--muted:#6a8ab0;--subtle:#9ab0cc;
+  --blue:#4a9fd4;--teal:#3ab0c8;--green:#5ab878;--amber:#e8a030;--red:#d45050;
+}
 body.theme-grafite{
   --bg:#1a1c20;--surface:#22252b;--card:#2a2e36;--border:#3a3f4a;
 }
 body.theme-salvia{
   --bg:#f0f5ee;--surface:#e8f0e4;--card:#ddebd6;--border:#aac4a2;
   --text:#243021;--muted:#6b8062;--subtle:#4a5c40;
+}
+body.theme-rovere{
+  --bg:#f2ebe0;--surface:#ebe2d4;--card:#e0d4c0;--border:#bfad95;
+  --blue:#5a6e9a;--teal:#5a7a5a;--green:#4a6e3a;--amber:#8a6a1a;--red:#8a3a2a;
+  --text:#1e140a;--muted:#6a5a40;--subtle:#4a3a20;
+}
+body.theme-oceano{
+  --bg:#030b18;--surface:#071828;--card:#0a2038;--border:#1a4a6a;
+  --text:#e0f0ff;--muted:#5a9fc8;--subtle:#90c0e8;
+  --blue:#38bdf8;--teal:#22d3ee;
+}
+body.theme-avorio{
+  --bg:#f5f0e8;--surface:#ede8df;--card:#e5dfd3;--border:#c9bfaf;
+  --blue:#3b6fa0;--teal:#2a7d5f;--green:#2d7a3a;--amber:#b5620a;--red:#b53030;
+  --text:#100a02;--muted:#4a3828;--subtle:#2e2014;
 }
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden}
@@ -144,10 +164,14 @@ input.cell-edit{background:var(--card);border:1px solid var(--border);border-rad
     <div class="topbar-right">
       <select class="theme-select" id="themeSelect" onchange="applyTheme(this.value); saveThemePref(this.value)">
         <option value="scuro">🌑 Scuro</option>
-        <option value="dim">🌘 Dim</option>
-        <option value="grafite">⬛ Grafite</option>
         <option value="chiaro">☀️ Chiaro</option>
+        <option value="dim">🌘 Dim</option>
+        <option value="sap">🔷 SAP</option>
+        <option value="grafite">⬛ Grafite</option>
         <option value="salvia">🌿 Salvia</option>
+        <option value="rovere">🪵 Rovere</option>
+        <option value="oceano">🌊 Oceano</option>
+        <option value="avorio">🦴 Avorio</option>
       </select>
       <button class="btn-perm" id="btnPerm" style="display:none" onclick="openPermPanel()">⚙ Permessi</button>
       <div class="user-badge">
@@ -232,11 +256,15 @@ var TOKEN = null, CURRENT_USER = {};
 // TEMA — persistito per singolo browser/utente, indipendente dal Hub
 // ══════════════════════════════════════════════════════════════════════════
 function applyTheme(t){
-  document.body.classList.remove('theme-dim','theme-grafite','theme-light','theme-salvia');
+  document.body.classList.remove('theme-dim','theme-grafite','theme-light','theme-salvia','theme-sap','theme-rovere','theme-oceano','theme-avorio');
   if(t==='dim') document.body.classList.add('theme-dim');
   else if(t==='grafite') document.body.classList.add('theme-grafite');
   else if(t==='chiaro') document.body.classList.add('theme-light');
   else if(t==='salvia') document.body.classList.add('theme-salvia');
+  else if(t==='sap') document.body.classList.add('theme-sap');
+  else if(t==='rovere') document.body.classList.add('theme-rovere');
+  else if(t==='oceano') document.body.classList.add('theme-oceano');
+  else if(t==='avorio') document.body.classList.add('theme-avorio');
   // 'scuro' = nessuna classe, è il tema di default (:root)
 }
 function saveThemePref(t){ try{ localStorage.setItem('vm_theme', t); }catch(e){} }
@@ -822,7 +850,7 @@ function renderProgrammazione(){
 
     h+='<div class="filters" style="margin-bottom:0">';
     h+='<div class="fg"><span class="fl">Data visita concordata</span><input class="fc" id="progData" placeholder="gg/mm/aaaa"></div>';
-    h+='<div class="fg"><span class="fl">Plant / sede analisi</span><input class="fc" id="progPlant" placeholder="es. Poliambulatorio Maddaloni"></div>';
+    h+='<div class="fg"><span class="fl">Plant / sede analisi</span><input class="fc" id="progPlant" placeholder="es. P52 Maddaloni"></div>';
     h+='<button class="btn" onclick="confermaProgrammazione()">Assegna a selezionati</button>';
     h+='<span id="progSelCount" style="font-size:12px;color:var(--muted);align-self:center">0 selezionati</span>';
     h+='</div>';
