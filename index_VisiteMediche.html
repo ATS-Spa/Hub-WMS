@@ -402,7 +402,7 @@ function applyUserPermissions(email, presenzeSupers){
     document.getElementById('appShell').style.display='flex';
   }
   document.getElementById('roleTag').textContent = myRole.toUpperCase();
-  ensureSpreadsheet().then(function(){ switchTab('dashboard'); });
+  ensureSpreadsheet().then(ensureSchemaCurrent).then(function(){ switchTab('dashboard'); });
 }
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -595,6 +595,27 @@ function sheetsDeleteRow(rowIndex1based){
     var body={requests:[{deleteDimension:{range:{sheetId:gid,dimension:'ROWS',startIndex:rowIndex1based-1,endIndex:rowIndex1based}}}]};
     return fetch(url,{method:'POST',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify(body)})
       .then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
+  });
+}
+function sheetsInsertColumns(startIndex, count){
+  return sheetsGetGid().then(function(gid){
+    var url='https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+':batchUpdate';
+    var body={requests:[{insertDimension:{range:{sheetId:gid,dimension:'COLUMNS',startIndex:startIndex,endIndex:startIndex+count},inheritFromBefore:false}}]};
+    return fetch(url,{method:'POST',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify(body)})
+      .then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
+  });
+}
+
+// ── MIGRAZIONE SCHEMA — fogli creati prima dell'aggiunta di Responsabile/Reminder ──
+// Se manca la colonna "Responsabile" in J, inserisce 2 colonne lì (i dati esistenti
+// si spostano da soli, nessuna riscrittura manuale) e riscrive l'intestazione completa.
+function ensureSchemaCurrent(){
+  return sheetsGetValues("'"+SHEET_NAME+"'!A1:Q1").then(function(rows){
+    var header = (rows && rows[0]) || [];
+    if(header[9]==='Responsabile') return; // schema già aggiornato
+    return sheetsInsertColumns(9,2).then(function(){
+      return sheetsUpdateValues("'"+SHEET_NAME+"'!A1:Q1", [SHEET_HEADER]);
+    });
   });
 }
 
