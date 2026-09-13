@@ -143,6 +143,45 @@ input.cell-edit{background:var(--card);border:1px solid var(--border);border-rad
 
 .state{text-align:center;padding:60px 0;color:var(--muted);font-size:13px}
 
+/* ══════════════════════════════════════════════════════════════════════
+   RESPONSIVE — mobile (≤768px): tabelle → card impilate, filtri a colonna
+   ══════════════════════════════════════════════════════════════════════ */
+@media(max-width:768px){
+  body{overflow-x:hidden}
+  .topbar{padding:0 12px 0 56px;height:auto;min-height:52px;flex-wrap:wrap;gap:8px;padding-top:8px;padding-bottom:8px}
+  .topbar-logo{font-size:18px}
+  .theme-select{font-size:10px;padding:4px 6px}
+  .user-badge{padding:3px 8px 3px 4px}
+  .user-badge span{max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tabbar{overflow-x:auto;-webkit-overflow-scrolling:touch;padding:0 12px}
+  .tab-btn{white-space:nowrap;padding:10px 12px;font-size:12px}
+  .main{padding:14px 12px}
+  .filters{flex-direction:column;align-items:stretch;gap:8px}
+  .fg{width:100%}
+  .fc,.fg select,.fg input{width:100%}
+  .stats-row{gap:8px}
+  .stat-card{min-width:calc(50% - 4px);flex:1 1 calc(50% - 4px)}
+  .modal{width:96%;padding:18px 16px;max-height:90vh}
+
+  /* Tabelle → card: intestazione nascosta, ogni cella diventa una riga etichetta+valore */
+  .tbl-scroll table, .tbl-scroll thead, .tbl-scroll tbody, .tbl-scroll th, .tbl-scroll td, .tbl-scroll tr{ display:block; }
+  .tbl-scroll thead{ position:absolute; left:-9999px; top:-9999px; }
+  .tbl-scroll tr{ border:1px solid var(--border); border-radius:10px; margin:8px; padding:8px 10px; background:var(--card) }
+  .tbl-scroll td{ border:none !important; padding:5px 0 5px 45%; position:relative; text-align:right; min-height:20px }
+  .tbl-scroll td[data-label]:before{
+    content:attr(data-label); position:absolute; left:0; top:5px; width:42%;
+    text-align:left; font-size:10px; font-weight:600; letter-spacing:.5px;
+    text-transform:uppercase; color:var(--muted); white-space:normal;
+  }
+  .tbl-scroll td[data-label=""]:before{ content:none; }
+  .tbl-scroll td[data-label=""]{ padding-left:0; text-align:left }
+
+  /* Programmazione: righe dipendente più leggibili in colonna */
+  .prog-item{flex-wrap:wrap}
+  .prog-bar-actions{flex-direction:column;align-items:stretch}
+  .prog-bar-actions .fg{width:100%}
+}
+
 /* Programmazione */
 .prog-list{flex:1;min-height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;border:1px solid var(--border);border-radius:10px;padding:8px}
 .prog-item{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px}
@@ -818,12 +857,12 @@ function dashApplyFilter(){
     h+='<tr>';
     if(canConfermareVisita()){
       var checked = confirmSelected[p.rowIndex] ? 'checked' : '';
-      h+='<td>'+(p.dataPrevista ? '<input type="checkbox" '+checked+' onchange="toggleConfirmSel('+p.rowIndex+',this.checked)">' : '')+'</td>';
+      h+='<td data-label="">'+(p.dataPrevista ? '<input type="checkbox" '+checked+' onchange="toggleConfirmSel('+p.rowIndex+',this.checked)">' : '')+'</td>';
     }
-    h+='<td>'+esc(p.filiale)+'</td><td>'+esc(p.nominativo)+'</td><td style="font-family:var(--ff-mono);font-size:11px">'+esc(p.cf)+'</td>';
-    h+='<td>'+fmtDataIt(p.dataUltima)+'</td><td>'+fmtDataIt(p.dataScadenza)+'</td>';
-    h+='<td><span class="badge '+badgeClass[p.stato]+'">'+p.stato+'</span></td>';
-    h+='<td>'+(fmtDataIt(p.dataPrevista)||'—')+'</td><td>'+esc(p.plant||'—')+'</td>';
+    h+='<td data-label="Filiale">'+esc(p.filiale)+'</td><td data-label="Nominativo">'+esc(p.nominativo)+'</td><td data-label="CF" style="font-family:var(--ff-mono);font-size:11px">'+esc(p.cf)+'</td>';
+    h+='<td data-label="Data visita">'+fmtDataIt(p.dataUltima)+'</td><td data-label="Scadenza">'+fmtDataIt(p.dataScadenza)+'</td>';
+    h+='<td data-label="Stato"><span class="badge '+badgeClass[p.stato]+'">'+p.stato+'</span></td>';
+    h+='<td data-label="Data prevista">'+(fmtDataIt(p.dataPrevista)||'—')+'</td><td data-label="Plant">'+esc(p.plant||'—')+'</td>';
     h+='</tr>';
   });
   if(!rows.length) h='<tr><td colspan="9" style="color:var(--muted);text-align:center;padding:30px 0">Nessun record per questo filtro.</td></tr>';
@@ -977,12 +1016,12 @@ function renderAnagrafica(){
     h+='</div>';
     h+='<div class="tbl-scroll"><table><thead><tr><th>Filiale</th><th>Cognome</th><th>Nome</th><th>CF</th><th>Email</th><th>Note</th><th>Data ultima visita</th><th>Periodicità</th><th>Responsabile</th>'+(canEditAnagrafica()?'<th></th>':'')+'</tr></thead><tbody>';
     visibili.forEach(function(p){
-      h+='<tr><td>'+esc(p.filiale)+'</td><td>'+esc(p.cognome)+'</td><td>'+esc(p.nome)+'</td>';
-      h+='<td style="font-family:var(--ff-mono);font-size:11px">'+esc(p.cf)+'</td><td>'+esc(p.email)+'</td><td>'+esc(p.note)+'</td><td>'+fmtDataIt(p.dataUltima)+'</td>';
-      h+='<td>'+(p.periodicita===12?'12 mesi (annuale)':p.periodicita+' mesi')+'</td>';
-      h+='<td>'+(p.responsabileNome?esc(p.responsabileNome):'<span style="color:var(--muted)">—</span>')+'</td>';
+      h+='<tr><td data-label="Filiale">'+esc(p.filiale)+'</td><td data-label="Cognome">'+esc(p.cognome)+'</td><td data-label="Nome">'+esc(p.nome)+'</td>';
+      h+='<td data-label="CF" style="font-family:var(--ff-mono);font-size:11px">'+esc(p.cf)+'</td><td data-label="Email">'+esc(p.email)+'</td><td data-label="Note">'+esc(p.note)+'</td><td data-label="Data ultima visita">'+fmtDataIt(p.dataUltima)+'</td>';
+      h+='<td data-label="Periodicità">'+(p.periodicita===12?'12 mesi (annuale)':p.periodicita+' mesi')+'</td>';
+      h+='<td data-label="Responsabile">'+(p.responsabileNome?esc(p.responsabileNome):'<span style="color:var(--muted)">—</span>')+'</td>';
       if(canEditAnagrafica()){
-        h+='<td><button class="icon-btn" onclick="openAnagModal('+p.rowIndex+')">✎</button>';
+        h+='<td data-label="">'+'<button class="icon-btn" onclick="openAnagModal('+p.rowIndex+')">✎</button>';
         h+='<button class="icon-btn del" onclick="deleteAnagRow('+p.rowIndex+')">✕</button></td>';
       }
       h+='</tr>';
@@ -1182,8 +1221,8 @@ function renderStorico(){
 
       var h='<div class="tbl-scroll"><table><thead><tr><th>Data visita</th><th>Filiale</th><th>Nominativo</th><th>CF</th><th>Plant</th><th>Confermato da</th><th>Registrato il</th></tr></thead><tbody>';
       storicoRows.forEach(function(r){
-        h+='<tr><td>'+esc(r.dataVisita)+'</td><td>'+esc(r.filiale)+'</td><td>'+esc(r.nominativo)+'</td>';
-        h+='<td style="font-family:var(--ff-mono);font-size:11px">'+esc(r.cf)+'</td><td>'+esc(r.plant)+'</td><td>'+esc(r.confermatoDa)+'</td><td>'+esc(r.dataConferma)+'</td></tr>';
+        h+='<tr><td data-label="Data visita">'+esc(r.dataVisita)+'</td><td data-label="Filiale">'+esc(r.filiale)+'</td><td data-label="Nominativo">'+esc(r.nominativo)+'</td>';
+        h+='<td data-label="CF" style="font-family:var(--ff-mono);font-size:11px">'+esc(r.cf)+'</td><td data-label="Plant">'+esc(r.plant)+'</td><td data-label="Confermato da">'+esc(r.confermatoDa)+'</td><td data-label="Registrato il">'+esc(r.dataConferma)+'</td></tr>';
       });
       if(!storicoRows.length) h+='<tr><td colspan="7" style="color:var(--muted);text-align:center;padding:30px 0">Nessuna visita registrata ancora.</td></tr>';
       h+='</tbody></table></div>';
