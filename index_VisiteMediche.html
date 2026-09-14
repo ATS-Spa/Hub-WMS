@@ -7,6 +7,7 @@
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🩺</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
 <style>
 :root{
   --bg:#0b0f18;--surface:#131929;--card:#1a2236;--border:#243048;
@@ -854,6 +855,7 @@ function renderDashboard(){
     h+='</select></div>';
     if(canConfermareVisita()) h+='<div class="fg"><button class="btn ghost" onclick="inviaMailComunicazione()">✉️ Invia mail di comunicazione</button></div>';
     if(canConfermareVisita()) h+='<div class="fg"><button class="btn ghost" id="btnTogglePanel" onclick="dashTogglePanel()">🗂 Conferma visite effettuate</button></div>';
+    h+='<div class="fg"><button class="btn ghost" onclick="exportDashboardExcel()">⬇️ Esporta Excel</button></div>';
     h+='</div>';
 
     if(canConfermareVisita()){
@@ -920,6 +922,12 @@ function dashFilteredList(){
     if(dashFilPrevista && fmtDataIt(p.dataPrevista)!==dashFilPrevista) return false;
     return true;
   });
+}
+function exportDashboardExcel(){
+  var rows = dashFilteredList().map(function(p){
+    return [p.filiale,p.nominativo,p.cf,fmtDataIt(p.dataUltima),fmtDataIt(p.dataScadenza),p.stato,fmtDataIt(p.dataPrevista)||'',p.plant||''];
+  });
+  exportExcel(['Filiale','Nominativo','CF','Data visita','Scadenza','Stato','Data prevista','Plant'], rows, 'VisiteMediche_Dashboard.xlsx');
 }
 
 function toggleConfirmSel(rowIndex, checked){
@@ -1063,7 +1071,13 @@ function renderAnagrafica(){
     var visibili = allPersone.filter(function(p){ return filialeVisibile(p.filiale); });
     var h='';
     h+='<div class="filters"><div style="flex:1"></div>';
-    if(canEditAnagrafica()) h+='<button class="btn" onclick="openAnagModal()">＋ Nuovo dipendente</button>';
+    h+='<button class="btn ghost" onclick="exportAnagraficaExcel()">⬇️ Esporta Excel</button>';
+    if(canEditAnagrafica()){
+      h+='<button class="btn ghost" onclick="scaricaTemplateImport()">📥 Template import</button>';
+      h+='<button class="btn ghost" onclick="triggerImportFile()">📤 Importa/Aggiorna da Excel</button>';
+      h+='<input type="file" id="importFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleImportFile(event)">';
+      h+='<button class="btn" onclick="openAnagModal()">＋ Nuovo dipendente</button>';
+    }
     h+='</div>';
     h+='<div class="tbl-scroll"><table><thead><tr><th>Filiale</th><th>Cognome</th><th>Nome</th><th>CF</th><th>Email</th><th>Note</th><th>Data ultima visita</th><th>Periodicità</th><th>Responsabile</th>'+(canEditAnagrafica()?'<th></th>':'')+'</tr></thead><tbody>';
     visibili.forEach(function(p){
@@ -1143,6 +1157,102 @@ function deleteAnagRow(rowIndex){
     .catch(function(e){ showToast('Errore eliminazione: '+e.message,'err'); });
 }
 
+// ── EXPORT / TEMPLATE / IMPORT ANAGRAFICA ──
+function exportAnagraficaExcel(){
+  var visibili = allPersone.filter(function(p){ return filialeVisibile(p.filiale); });
+  var rows = visibili.map(function(p){
+    return [p.filiale,p.cognome,p.nome,p.cf,p.email,p.note,fmtDataIt(p.dataUltima)||'',p.periodicita,p.responsabileNome||'',p.responsabileEmail||''];
+  });
+  exportExcel(
+    ['Filiale','Cognome','Nome','CF','Email','Note','Data ultima visita','Periodicità (mesi)','Responsabile','Email Responsabile'],
+    rows, 'VisiteMediche_Anagrafica.xlsx'
+  );
+}
+
+function scaricaTemplateImport(){
+  var esempio = ['Maddaloni','Rossi','Mario','RSSMRA80A01F839X','mario.rossi@atsgruppo.eu','','15/03/2026','12','Nome Responsabile','responsabile@atsgruppo.eu'];
+  exportExcel(
+    ['Filiale','Cognome','Nome','CF','Email','Note','Data ultima visita (gg/mm/aaaa)','Periodicità (mesi)','Responsabile','Email Responsabile'],
+    [esempio], 'Template_Import_VisiteMediche.xlsx'
+  );
+}
+
+function triggerImportFile(){ document.getElementById('importFileInput').click(); }
+
+function handleImportFile(evt){
+  var file = evt.target.files[0];
+  if(!file) return;
+  var reader = new FileReader();
+  reader.onload = function(e){
+    try{
+      var data = new Uint8Array(e.target.result);
+      var wb = XLSX.read(data, {type:'array', cellDates:true});
+      var ws = wb.Sheets[wb.SheetNames[0]];
+      var rows = XLSX.utils.sheet_to_json(ws, {header:1, raw:false, dateNF:'dd/mm/yyyy'});
+      processImportRows(rows);
+    }catch(err){
+      showToast('Errore lettura file: '+err.message,'err');
+    }
+    evt.target.value=''; // permette di re-importare lo stesso file se serve ripetere
+  };
+  reader.readAsArrayBuffer(file);
+}
+
+function processImportRows(rows){
+  if(!canEditAnagrafica()){ showToast('Solo un admin può importare','err'); return; }
+  var body = rows.slice(1); // riga 0 = intestazione
+  var aggiornamenti = [];   // {rowIndex, values}
+  var resetReminder = [];   // range da azzerare se Data ultima è cambiata
+  var nuovi = [];           // righe da accodare
+  var saltati = 0;
+
+  body.forEach(function(r){
+    var filiale=(r[0]||'').toString().trim();
+    var cognome=(r[1]||'').toString().trim();
+    var nome=(r[2]||'').toString().trim();
+    var cf=(r[3]||'').toString().trim().toUpperCase();
+    var email=(r[4]||'').toString().trim();
+    var note=(r[5]||'').toString().trim();
+    var dataUltima=(r[6]||'').toString().trim();
+    var periodicita=parseInt(r[7],10); if(!periodicita||periodicita<=0) periodicita=12;
+    var responsabileNome=(r[8]||'').toString().trim();
+    var responsabileEmail=(r[9]||'').toString().trim();
+
+    if(!filiale && !cognome && !nome && !cf) return; // riga vuota
+    if(!filiale || !cognome || !nome){ saltati++; return; }
+
+    var nominativo=(cognome+' '+nome).toUpperCase();
+    var values=[filiale,cognome,nome,nominativo,cf,email,note,dataUltima,periodicita,responsabileNome,responsabileEmail];
+
+    var esistente = cf ? allPersone.find(function(p){ return p.cf && p.cf.toUpperCase()===cf; }) : null;
+    if(esistente){
+      aggiornamenti.push({rowIndex:esistente.rowIndex, values:values});
+      if((fmtDataIt(esistente.dataUltima)||'') !== dataUltima){
+        resetReminder.push({range:"'"+SHEET_NAME+"'!P"+esistente.rowIndex+":Q"+esistente.rowIndex, values:[['','']]});
+      }
+    } else {
+      nuovi.push(values);
+    }
+  });
+
+  if(!aggiornamenti.length && !nuovi.length){
+    showToast('Nessuna riga valida nel file'+(saltati?' ('+saltati+' saltate per dati mancanti)':''),'err');
+    return;
+  }
+
+  var ops = [];
+  var batchUpdates = aggiornamenti.map(function(a){
+    return {range:"'"+SHEET_NAME+"'!A"+a.rowIndex+":K"+a.rowIndex, values:[a.values]};
+  }).concat(resetReminder);
+  if(batchUpdates.length) ops.push(sheetsBatchUpdateValues(batchUpdates));
+  if(nuovi.length) ops.push(sheetsAppendValues("'"+SHEET_NAME+"'!A:K", nuovi));
+
+  Promise.all(ops).then(function(){
+    showToast('✓ Import completato: '+aggiornamenti.length+' aggiornati, '+nuovi.length+' nuovi'+(saltati?', '+saltati+' saltati':''), 'ok');
+    renderAnagrafica();
+  }).catch(function(e){ showToast('Errore import: '+e.message,'err'); });
+}
+
 // ── PROGRAMMAZIONE VISITE ──
 var progSelected = {};
 var progAllVisibili = [];
@@ -1174,13 +1284,14 @@ function renderProgrammazione(){
     h+='<div class="fg"><span class="fl">Cerca nominativo</span><input class="fc" id="progFSearch" placeholder="cognome o nome…" oninput="progApplyFilter()"></div>';
     h+='<div class="fg"><button class="btn ghost" onclick="progSelectAllFiltered()">Seleziona tutti i filtrati</button></div>';
     h+='<div class="fg"><button class="btn ghost" onclick="progClearSelection()">Deseleziona tutti</button></div>';
+    h+='<div class="fg"><button class="btn ghost" onclick="exportProgrammazioneExcel()">⬇️ Esporta Excel</button></div>';
     h+='</div>';
 
     h+='<div style="height:1px;background:var(--border);margin:14px 0"></div>';
 
     h+='<div class="filters" style="margin-bottom:0">';
     h+='<div class="fg"><span class="fl">Data visita concordata</span><input class="fc" id="progData" placeholder="gg/mm/aaaa"></div>';
-    h+='<div class="fg"><span class="fl">Plant / sede analisi</span><input class="fc" id="progPlant" placeholder="es. P52 Maddaloni"></div>';
+    h+='<div class="fg"><span class="fl">Plant / sede analisi</span><input class="fc" id="progPlant" placeholder="es. Poliambulatorio Maddaloni"></div>';
     h+='<button class="btn" onclick="confermaProgrammazione()">Assegna a selezionati</button>';
     h+='<span id="progSelCount" style="font-size:12px;color:var(--muted);align-self:center">0 selezionati</span>';
     h+='</div>';
@@ -1211,6 +1322,12 @@ function progFilteredList(){
     if(progSearch && p.nominativo.toLowerCase().indexOf(progSearch)===-1) return false;
     return true;
   });
+}
+function exportProgrammazioneExcel(){
+  var rows = progFilteredList().map(function(p){
+    return [p.filiale,p.nominativo,p.cf,fmtDataIt(p.dataScadenza),p.stato,fmtDataIt(p.dataPrevista)||'',p.plant||''];
+  });
+  exportExcel(['Filiale','Nominativo','CF','Scadenza','Stato','Data prevista','Plant'], rows, 'VisiteMediche_Programmazione.xlsx');
 }
 
 function progRenderList(){
@@ -1278,7 +1395,8 @@ function renderStorico(){
       }).filter(function(r){ return filialeVisibile(r.filiale); })
         .sort(function(a,b){ var da=parseDataIt(a.dataVisita), db=parseDataIt(b.dataVisita); return (db?db.getTime():0)-(da?da.getTime():0); });
 
-      var h='<div class="tbl-scroll"><table><thead><tr><th>Data visita</th><th>Filiale</th><th>Nominativo</th><th>CF</th><th>Plant</th><th>Confermato da</th><th>Registrato il</th></tr></thead><tbody>';
+      var h='<div class="filters"><div style="flex:1"></div><button class="btn ghost" onclick="exportStoricoExcel()">⬇️ Esporta Excel</button></div>';
+      h+='<div class="tbl-scroll"><table><thead><tr><th>Data visita</th><th>Filiale</th><th>Nominativo</th><th>CF</th><th>Plant</th><th>Confermato da</th><th>Registrato il</th></tr></thead><tbody>';
       storicoRows.forEach(function(r){
         h+='<tr><td data-label="Data visita">'+esc(r.dataVisita)+'</td><td data-label="Filiale">'+esc(r.filiale)+'</td><td data-label="Nominativo">'+esc(r.nominativo)+'</td>';
         h+='<td data-label="CF" style="font-family:var(--ff-mono);font-size:11px">'+esc(r.cf)+'</td><td data-label="Plant">'+esc(r.plant)+'</td><td data-label="Confermato da">'+esc(r.confermatoDa)+'</td><td data-label="Registrato il">'+esc(r.dataConferma)+'</td></tr>';
@@ -1289,11 +1407,26 @@ function renderStorico(){
     })
     .catch(function(e){ setContent('<div class="state">Errore caricamento storico: '+esc(e.message)+'</div>'); });
 }
+function exportStoricoExcel(){
+  var rows = storicoRows.map(function(r){
+    return [r.dataVisita,r.filiale,r.nominativo,r.cf,r.plant,r.confermatoDa,r.dataConferma];
+  });
+  exportExcel(['Data visita','Filiale','Nominativo','CF','Plant','Confermato da','Registrato il'], rows, 'VisiteMediche_Storico.xlsx');
+}
 
 // ══════════════════════════════════════════════════════════════════════════
 // UTILITY
 // ══════════════════════════════════════════════════════════════════════════
 function setContent(h){ document.getElementById('content').innerHTML=h; }
+// ── EXPORT EXCEL (generico, usato da tutte le tab) ──
+function exportExcel(headers, rows2d, filename){
+  if(typeof XLSX==='undefined'){ showToast('Libreria Excel non ancora caricata, riprova tra un istante','err'); return; }
+  var data=[headers].concat(rows2d);
+  var ws=XLSX.utils.aoa_to_sheet(data);
+  var wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Dati');
+  XLSX.writeFile(wb, filename);
+}
 // Apre un link mailto: in modo affidabile anche dentro iframe (più robusto di window.location.href,
 // che alcuni browser bloccano silenziosamente se lanciato dentro un frame). Se anche questo non parte
 // per policy del browser/PC, l'utente deve impostare un'app di posta predefinita — non è un limite del modulo.
