@@ -177,14 +177,17 @@ input.cell-edit{background:var(--card);border:1px solid var(--border);border-rad
   .tbl-scroll td[data-label=""]{ padding-left:0; text-align:left }
 
   /* Programmazione: righe dipendente più leggibili in colonna */
-  .prog-item{flex-wrap:wrap}
+  .prog-item{flex-wrap:wrap;align-items:flex-start;padding:8px 6px}
+  .prog-item .who{flex:1 1 70%;min-width:0}
+  .prog-item .badge{margin-top:2px}
   .prog-bar-actions{flex-direction:column;align-items:stretch}
   .prog-bar-actions .fg{width:100%}
 }
 
 /* Programmazione */
 .prog-list{flex:1;min-height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;border:1px solid var(--border);border-radius:10px;padding:8px}
-.prog-item{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px}
+.prog-item{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;border-bottom:1px solid var(--border)}
+.prog-item:last-child{border-bottom:none}
 .prog-item:hover{background:var(--card)}
 .prog-item input[type=checkbox]{width:15px;height:15px;accent-color:var(--blue)}
 .prog-item .who{flex:1}
@@ -436,7 +439,7 @@ function applyUserPermissions(email, presenzeSupers){
       document.getElementById('accessDenied').style.display='flex';
       return;
     }
-    myRole=u.ruolo||'viewer'; myFiliali=u.filiali||[];
+    myRole=u.ruolo||'viewer'; myFiliali=(u.filiali && u.filiali.length) ? u.filiali : null; // vuoto = tutte, come promesso nel prompt
     document.getElementById('btnPerm').style.display='none';
     document.getElementById('appShell').style.display='flex';
   }
@@ -528,6 +531,20 @@ function renderPermPanel(){
   document.getElementById('permCfgStatus').textContent = status;
 
   var h='';
+
+  // Super Admin — gestiti qui, non dipendono più dal file di Presenze
+  h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+  h+='<div><div style="font-family:var(--ff-cond);font-size:14px;font-weight:700;color:var(--red)">🛡️ Super Admin</div>';
+  h+='<div style="font-size:10px;color:var(--muted);margin-top:2px">Accesso pieno indipendentemente da filiali/ruolo. Aggiunti qui, propri di questo modulo.</div></div>';
+  h+='<button class="btn ghost" style="padding:4px 10px;font-size:11px" onclick="addSuperUser()">＋ Aggiungi</button></div>';
+  h+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+  (permConfig.super_users||[]).forEach(function(em){
+    h+='<span class="chip on">'+esc(em)+' <span onclick="removeSuperUser(\''+escAttr(em)+'\')" style="cursor:pointer">✕</span></span>';
+  });
+  if(!(permConfig.super_users||[]).length) h+='<div style="font-size:12px;color:var(--muted)">Nessuno oltre al default di sistema.</div>';
+  h+='</div></div>';
+
   // Filiali master
   h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">';
   h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
@@ -578,6 +595,17 @@ function removeReminderEmail(em){
   renderPermPanel();
 }
 
+function addSuperUser(){
+  var em=prompt('Email da rendere Super Admin di questo modulo:'); if(!em) return;
+  permConfig.super_users = permConfig.super_users||[];
+  em = em.trim().toLowerCase();
+  if(permConfig.super_users.indexOf(em)===-1) permConfig.super_users.push(em);
+  renderPermPanel();
+}
+function removeSuperUser(em){
+  permConfig.super_users = (permConfig.super_users||[]).filter(function(x){return x!==em;});
+  renderPermPanel();
+}
 function addFiliale(){
   var f=prompt('Nome nuova filiale:'); if(!f) return;
   permConfig.filiali = permConfig.filiali||[];
@@ -799,6 +827,10 @@ function renderDashboard(){
     datePreviste.sort(function(a,b){ return parseDataIt(a)-parseDataIt(b); });
 
     var h='';
+    var wrapOpen = window.innerWidth > 768 ? '' : 'display:none;';
+    h+='<button class="btn ghost" id="dashFiltersToggleBtn" onclick="dashToggleFilters()" style="width:100%;margin-bottom:10px">🔍 Filtri e azioni</button>';
+    h+='<div id="dashFiltersWrap" style="'+wrapOpen+'">';
+
     h+='<div class="stats-row">';
     h+='<div class="stat-card stat-red"><div class="stat-num">'+cnt.SCADUTO+'</div><div class="stat-lbl">Scaduti</div></div>';
     h+='<div class="stat-card stat-amber"><div class="stat-num">'+cnt['IN SCADENZA']+'</div><div class="stat-lbl">In scadenza ('+SOGLIA_SCADENZA_GG+'gg)</div></div>';
@@ -829,12 +861,17 @@ function renderDashboard(){
       h+='<span id="confirmSelCount" style="font-size:12px;color:var(--muted);align-self:center">0 selezionati</span>';
       h+='</div></div>';
     }
+    h+='</div>'; // chiude #dashFiltersWrap
 
     h+='<div class="tbl-scroll"><table><thead><tr>'+(canConfermareVisita()?'<th></th>':'')+'<th>Filiale</th><th>Nominativo</th><th>CF</th><th>Data visita</th><th>Scadenza</th><th>Stato</th><th>Data prevista</th><th>Plant</th></tr></thead><tbody id="dashBody"></tbody></table></div>';
 
     setContent(h);
     dashApplyFilter();
   });
+}
+function dashToggleFilters(){
+  var wrap = document.getElementById('dashFiltersWrap');
+  wrap.style.display = (wrap.style.display==='none') ? 'block' : 'none';
 }
 function dashTogglePanel(){
   var panel = document.getElementById('bulkConfirmPanel');
@@ -1107,6 +1144,9 @@ function renderProgrammazione(){
 
     var filiali = permConfig.filiali||[];
     var h='';
+    var wrapOpen = window.innerWidth > 768 ? '' : 'display:none;';
+    h+='<button class="btn ghost" id="progFiltersToggleBtn" onclick="progToggleFilters()" style="width:100%;margin-bottom:10px">🔍 Filtri e azioni</button>';
+    h+='<div id="progFiltersWrap" style="'+wrapOpen+'">';
 
     // ── Pannello controlli, in alto ──
     h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:14px">';
@@ -1131,11 +1171,16 @@ function renderProgrammazione(){
     h+='<span id="progSelCount" style="font-size:12px;color:var(--muted);align-self:center">0 selezionati</span>';
     h+='</div>';
     h+='</div>';
+    h+='</div>'; // chiude #progFiltersWrap
 
     h+='<div class="prog-list" id="progListBody"></div>';
     setContent(h);
     progRenderList();
   });
+}
+function progToggleFilters(){
+  var wrap = document.getElementById('progFiltersWrap');
+  wrap.style.display = (wrap.style.display==='none') ? 'block' : 'none';
 }
 
 function progApplyFilter(){
