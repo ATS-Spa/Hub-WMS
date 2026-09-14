@@ -143,6 +143,12 @@ input.cell-edit{background:var(--card);border:1px solid var(--border);border-rad
 
 .state{text-align:center;padding:60px 0;color:var(--muted);font-size:13px}
 
+/* Il pulsante "Filtri e azioni" esiste solo per lo stato chiuso su mobile: su desktop il pannello
+   è sempre aperto, quindi il pulsante è superfluo (e non deve permettere di chiuderlo per errore). */
+@media(min-width:769px){
+  #dashFiltersToggleBtn, #progFiltersToggleBtn{ display:none; }
+}
+
 /* ══════════════════════════════════════════════════════════════════════
    RESPONSIVE — mobile (≤768px): tabelle → card impilate, filtri a colonna
    ══════════════════════════════════════════════════════════════════════ */
@@ -974,16 +980,24 @@ function inviaMailComunicazione(){
   if(!canConfermareVisita()){ showToast('Solo un admin può inviare la comunicazione','err'); return; }
   if(!dashFilPrevista){ showToast('Seleziona prima una Data prevista dal filtro qui sopra','err'); return; }
 
-  // Usa TUTTI i dipendenti con quella data prevista, a prescindere dai filtri Filiale/Stato
-  // (per non escludere per errore qualcuno che rientra nel filtro attivo).
-  var persone = allPersone.filter(function(p){
-    return filialeVisibile(p.filiale) && p.dataPrevista && fmtDataIt(p.dataPrevista)===dashFilPrevista;
-  });
-  if(!persone.length){ showToast('Nessun dipendente trovato per questa data','err'); return; }
+  // Se hai selezionato manualmente delle checkbox, usa SOLO quelle (per questa data).
+  // Altrimenti prende tutti quelli con quella data prevista, per non escludere nessuno per errore.
+  var idSelezionati = Object.keys(confirmSelected);
+  var persone;
+  if(idSelezionati.length){
+    persone = idSelezionati
+      .map(function(id){ return allPersone.find(function(x){ return String(x.rowIndex)===String(id); }); })
+      .filter(function(p){ return p && filialeVisibile(p.filiale) && p.dataPrevista && fmtDataIt(p.dataPrevista)===dashFilPrevista; });
+  } else {
+    persone = allPersone.filter(function(p){
+      return filialeVisibile(p.filiale) && p.dataPrevista && fmtDataIt(p.dataPrevista)===dashFilPrevista;
+    });
+  }
+  if(!persone.length){ showToast('Nessun dipendente trovato per questa data (controlla la selezione)','err'); return; }
 
   var conEmail = persone.filter(function(p){ return !!p.email; });
   var senzaEmail = persone.filter(function(p){ return !p.email; });
-  if(!conEmail.length){ showToast('Nessuno dei dipendenti di questa data ha un\'email in anagrafica','err'); return; }
+  if(!conEmail.length){ showToast('Nessuno dei dipendenti selezionati ha un\'email in anagrafica','err'); return; }
 
   // Raggruppa per Plant → Responsabile, per struttura del corpo mail e per raccogliere i CC
   var perPlant = {}; // { plant: { responsabileNome: [persone] } }
@@ -1032,9 +1046,9 @@ function inviaMailComunicazione(){
     }).catch(function(){
       showToast('Elenco troppo lungo per il link diretto: copia il corpo manualmente','err');
     });
-    window.location.href = mailtoCorto;
+    apriMailto(mailtoCorto);
   } else {
-    window.location.href = mailto;
+    apriMailto(mailto);
   }
 
   if(senzaEmail.length){
@@ -1166,7 +1180,7 @@ function renderProgrammazione(){
 
     h+='<div class="filters" style="margin-bottom:0">';
     h+='<div class="fg"><span class="fl">Data visita concordata</span><input class="fc" id="progData" placeholder="gg/mm/aaaa"></div>';
-    h+='<div class="fg"><span class="fl">Plant / sede analisi</span><input class="fc" id="progPlant" placeholder="es. Poliambulatorio Maddaloni"></div>';
+    h+='<div class="fg"><span class="fl">Plant / sede analisi</span><input class="fc" id="progPlant" placeholder="es. P52 Maddaloni"></div>';
     h+='<button class="btn" onclick="confermaProgrammazione()">Assegna a selezionati</button>';
     h+='<span id="progSelCount" style="font-size:12px;color:var(--muted);align-self:center">0 selezionati</span>';
     h+='</div>';
@@ -1280,6 +1294,18 @@ function renderStorico(){
 // UTILITY
 // ══════════════════════════════════════════════════════════════════════════
 function setContent(h){ document.getElementById('content').innerHTML=h; }
+// Apre un link mailto: in modo affidabile anche dentro iframe (più robusto di window.location.href,
+// che alcuni browser bloccano silenziosamente se lanciato dentro un frame). Se anche questo non parte
+// per policy del browser/PC, l'utente deve impostare un'app di posta predefinita — non è un limite del modulo.
+function apriMailto(url){
+  var a = document.createElement('a');
+  a.href = url;
+  a.target = '_blank';
+  a.rel = 'noopener';
+  document.body.appendChild(a);
+  a.click();
+  document.body.removeChild(a);
+}
 function spinner(msg){ return '<div class="state">'+esc(msg)+'</div>'; }
 function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
 function escAttr(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
