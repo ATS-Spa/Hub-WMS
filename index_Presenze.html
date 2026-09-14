@@ -2400,7 +2400,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
   <div class="mt" id="spTitle">Imposta Presenza</div>
   <div class="ms" id="spSub"></div>
   <div class="sgrid" id="spGrid"></div>
-  <div class="qty-row" id="spQty" style="display:none"><label>Quantità:</label><input class="mi" id="spQtyV" type="number" min="0.5" max="8" step="0.5" value="1" style="width:75px"></div>
+  <div class="qty-row" id="spQty" style="display:none"><label>Quantità:</label><input class="mi" id="spQtyV" type="number" min="0.5" max="8" step="0.5" value="1" style="width:75px" oninput="spCalcLive()"></div>
   <div id="spOrariWrap" style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
     <!-- Campi standard Ingresso/Uscita -->
     <div id="spStdOrari" style="display:flex;flex-direction:column;gap:10px">
@@ -2918,7 +2918,13 @@ function loadConfig(){
 function reloadConfig(){mClose('moPermUser');loadConfig();toast('↻ Config ricaricata');}
 
 function autoAdminIfSaved(){
-  if(wmsConfig.stayAdmin&&!adminMode&&isAdminUser){
+  // Il pulsante "Admin" è visibile per chiunque non sia in sola lettura
+  // (isReadOnly=false) — sia per chi è nella lista admin globale sia per chi
+  // ha solo il flag "Admin" per-utente (Modifica Utente). Prima qui si
+  // controllava solo isAdminUser (la lista globale), quindi chi aveva solo
+  // il flag per-utente non otteneva mai il riaccesso automatico anche con
+  // "Resta in modalità admin" spuntato.
+  if(wmsConfig.stayAdmin&&!adminMode&&!isReadOnly){
     adminMode=true;
     document.getElementById('btnAdmin').classList.add('admin-on');
     document.body.classList.add('admin-mode');
@@ -3004,6 +3010,11 @@ function applyPerm(){
   document.getElementById('accessDenied').style.display='none';
   if(isReadOnly)document.body.classList.add('readonly-mode');
   else document.body.classList.remove('readonly-mode');
+  // Copre anche il caso "solo flag Admin per-utente" (branch uc sopra), che
+  // prima non chiamava mai autoAdminIfSaved(). Per isAdminUser/isSuperUser è
+  // ridondante con la chiamata già fatta nei rispettivi rami sopra, ma
+  // innocua (autoAdminIfSaved non fa nulla se adminMode è già true).
+  autoAdminIfSaved();
   if(userSecs.indexOf('coop')===-1&&userSecs.indexOf('ats')!==-1)switchSec('ats');
   if(userSecs.indexOf('rich')!==-1)richInit();
 }
@@ -4071,6 +4082,10 @@ function openPickerGeneric(mode,ri,di){
   var dates=(mode==='ats'?atsData:coopData)?((mode==='ats'?atsData:coopData).dates):getDates(y,m);
   var dt=dates[di];
   var cs=(emp.sigla||[])[di]||'';
+  // Pre-compila la quantità già impostata (es. "1HP" → 1), altrimenti riaprendo
+  // un giorno con permesso già messo il campo mostrava sempre il default.
+  var csQtyMatch=/^([\d.]+)/.exec(cs);
+  document.getElementById('spQtyV').value=csQtyMatch?csQtyMatch[1]:'1';
   var curPs=getPausaDip(emp,di);
   var nome=mode==='ats'?(emp.nome||''):(emp.nom2||emp.nome||'');
   document.getElementById('spTitle').textContent='Presenza · '+nome;
@@ -4163,8 +4178,17 @@ function spCalcLive(){renderCommesseGrid();
   document.getElementById('spCalcTot').textContent=fmtOre(o.tot)+'h';
   document.getElementById('spCalcPausa').textContent=(hasPausa?'-'+fmtOre(pausaH):'0')+'h';
   document.getElementById('spCalcEff').textContent=fmtOre(o.eff)+'h';
-  document.getElementById('spCalcOrd').textContent=fmtOre(o.ord)+'h';
-  document.getElementById('spCalcStr').textContent=(o.str>0?fmtOre(o.str)+'h':'—');
+  // Per i tipi a quantità (HP/H104) le ore di permesso vanno sottratte dalle
+  // ordinarie — stessa identica formula di calcTots() usata nei report
+  // mensili. Prima qui non veniva considerato: il pannello mostrava sempre
+  // le ore piene della giornata anche con un permesso già impostato.
+  var ord=o.ord, str=o.str;
+  if(sig==='HP'||sig==='H104'){
+    var qty=parseFloat(document.getElementById('spQtyV').value)||1;
+    ord=Math.max(0,(o.ord+o.str)-qty);
+  }
+  document.getElementById('spCalcOrd').textContent=fmtOre(ord)+'h';
+  document.getElementById('spCalcStr').textContent=(str>0?fmtOre(str)+'h':'—');
 }
 function spConfirm(){
   if(spSigla===null){toast('Seleziona una sigla','warn');return;}
@@ -8339,6 +8363,22 @@ function loadRichieste(){
   }).catch(function(){richData={richieste:[]};return richData;});
 }
 
+// Applica UNA modifica specifica al file richieste, rileggendolo fresco da
+// Drive subito prima di scrivere: evita di sovrascrivere con la copia
+// locale del browser (caricata magari minuti prima) eventuali cambi fatti
+// nel frattempo da altrove — in particolare il servizio Python che segna le
+// mail come inviate. Stesso principio già applicato lato Python per lo
+// stesso identico motivo (altrimenti "chi scrive per ultimo vince" e si
+// perdono aggiornamenti). mutateFn riceve i dati appena riletti e li muta
+// in place; dopo il salvataggio richData punta alla versione più recente.
+function richSaveChange(mutateFn){
+  return loadRichieste().then(function(fresh){
+    mutateFn(fresh);
+    richData = fresh;
+    return saveRichieste();
+  });
+}
+
 // ── Salva file richieste su Drive ──────────────────────────────────────────
 function saveRichieste(){
   if(!richData) return Promise.resolve();
@@ -9057,13 +9097,13 @@ function richInvia(){
     mail_esito_inviata: false
   };
 
-  if(!richData) richData={richieste:[]};
-  richData.richieste.push(req);
-
   var btn = document.getElementById('richSendBtn');
   if(btn) btn.disabled=true;
   toast('⏳ Salvataggio richiesta…','warn');
-  saveRichieste().then(function(){
+  richSaveChange(function(fresh){
+    if(!fresh.richieste) fresh.richieste=[];
+    fresh.richieste.push(req);
+  }).then(function(){
     richUpdateBadge();
     richRender();
     toast('✅ Richiesta inviata a '+respNome+' — notifica in partenza');
@@ -9090,15 +9130,19 @@ function richApprova(id){
       req.nota_resp=(note||'').trim();
       req.mail_esito_inviata=false;
       toast('⏳ Approvazione in corso…','warn');
+      var applyDecisione=function(fresh){
+        var fr=(fresh.richieste||[]).find(function(r){return r.id===id;});
+        if(fr){fr.stato=req.stato;fr.data_risposta=req.data_risposta;fr.nota_resp=req.nota_resp;fr.mail_esito_inviata=req.mail_esito_inviata;}
+      };
       richScriviSuDrive(req).then(function(){
-        return saveRichieste();
+        return richSaveChange(applyDecisione);
       }).then(function(){
         richUpdateBadge();
         richRender();
         toast('✅ Approvata — notifica al dipendente in partenza');
       }).catch(function(e){
         toast('✗ Errore scrittura: '+e.message,'err');
-        saveRichieste().then(function(){richUpdateBadge();richRender();});
+        richSaveChange(applyDecisione).then(function(){richUpdateBadge();richRender();});
       });
     },
     true
@@ -9116,7 +9160,10 @@ function richRifiuta(id){
       req.data_risposta=new Date().toLocaleDateString('it-IT');
       req.nota_resp=(note||'').trim();
       req.mail_esito_inviata=false;
-      saveRichieste().then(function(){
+      richSaveChange(function(fresh){
+        var fr=(fresh.richieste||[]).find(function(r){return r.id===id;});
+        if(fr){fr.stato=req.stato;fr.data_risposta=req.data_risposta;fr.nota_resp=req.nota_resp;fr.mail_esito_inviata=req.mail_esito_inviata;}
+      }).then(function(){
         richUpdateBadge();
         richRender();
         toast('❌ Rifiutata — notifica al dipendente in partenza');
@@ -9131,8 +9178,9 @@ function richAnnulla(id){
   var req = richData.richieste.find(function(r){return r.id===id;});
   if(!req) return;
   showConf('Annulla richiesta','Annullare la richiesta dal '+fmtDateIT(req.data_dal)+' al '+fmtDateIT(req.data_al)+'?',function(){
-    richData.richieste = richData.richieste.filter(function(r){return r.id!==id;});
-    saveRichieste().then(function(){toast('Richiesta annullata');richRender();});
+    richSaveChange(function(fresh){
+      fresh.richieste = (fresh.richieste||[]).filter(function(r){return r.id!==id;});
+    }).then(function(){toast('Richiesta annullata');richRender();});
   });
 }
 
