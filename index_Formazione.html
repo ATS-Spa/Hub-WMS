@@ -1,0 +1,1115 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Formazione</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>🎓</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{
+  --bg:#0b0f18;--surface:#131929;--card:#1a2236;--border:#243048;
+  --blue:#3b82f6;--green:#10b981;--red:#ef4444;--amber:#f59e0b;--teal:#14b8a6;
+  --text:#e2e8f0;--muted:#64748b;--subtle:#94a3b8;
+  --ff-sans:'IBM Plex Sans',sans-serif;--ff-mono:'IBM Plex Mono',monospace;--ff-cond:'Barlow Condensed',sans-serif;
+}
+body.theme-light{--bg:#f1f5f9;--surface:#ffffff;--card:#f8fafc;--border:#e2e8f0;--text:#1e293b;--muted:#94a3b8;--subtle:#64748b;}
+body.theme-dim{--bg:#1e2433;--surface:#252d3d;--card:#2d3748;--border:#3d4f6b;}
+body.theme-sap{--bg:#0a1628;--surface:#0f2040;--card:#162a52;--border:#1e3d6e;--text:#e8eef8;--muted:#6a8ab0;--subtle:#9ab0cc;--blue:#4a9fd4;--teal:#3ab0c8;--green:#5ab878;--amber:#e8a030;--red:#d45050;}
+body.theme-grafite{--bg:#1a1c20;--surface:#22252b;--card:#2a2e36;--border:#3a3f4a;}
+body.theme-salvia{--bg:#f0f5ee;--surface:#e8f0e4;--card:#ddebd6;--border:#aac4a2;--text:#243021;--muted:#6b8062;--subtle:#4a5c40;}
+body.theme-rovere{--bg:#f2ebe0;--surface:#ebe2d4;--card:#e0d4c0;--border:#bfad95;--blue:#5a6e9a;--teal:#5a7a5a;--green:#4a6e3a;--amber:#8a6a1a;--red:#8a3a2a;--text:#1e140a;--muted:#6a5a40;--subtle:#4a3a20;}
+body.theme-oceano{--bg:#030b18;--surface:#071828;--card:#0a2038;--border:#1a4a6a;--text:#e0f0ff;--muted:#5a9fc8;--subtle:#90c0e8;--blue:#38bdf8;--teal:#22d3ee;}
+body.theme-avorio{--bg:#f5f0e8;--surface:#ede8df;--card:#e5dfd3;--border:#c9bfaf;--blue:#3b6fa0;--teal:#2a7d5f;--green:#2d7a3a;--amber:#b5620a;--red:#b53030;--text:#100a02;--muted:#4a3828;--subtle:#2e2014;}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--ff-sans);font-size:14px}
+
+#loginScreen{position:fixed;inset:0;display:flex;align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at 30% 40%,rgba(59,130,246,.06) 0%,transparent 60%),var(--bg);z-index:200}
+#accessDenied{position:fixed;inset:0;display:none;align-items:center;justify-content:center;
+  background:radial-gradient(ellipse at 30% 40%,rgba(239,68,68,.06) 0%,transparent 60%),var(--bg);z-index:200}
+.ad-ico{font-size:40px;margin-bottom:6px}
+.ad-title{font-family:var(--ff-cond);font-size:26px;font-weight:800;color:var(--red)}
+.ad-sub{font-size:12.5px;color:var(--subtle);margin-top:10px;max-width:340px;line-height:1.6}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:52px 56px;text-align:center;max-width:420px;width:90%;box-shadow:0 32px 80px rgba(0,0,0,.5)}
+.login-logo{font-family:var(--ff-cond);font-size:32px;font-weight:800;letter-spacing:2px;color:var(--blue)}
+.login-logo span{color:var(--subtle);font-weight:600}
+.login-sub{font-size:11px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin:6px 0 40px}
+.login-note{font-size:11px;color:var(--muted);margin-top:22px;line-height:1.6}
+
+#appShell{display:none;flex-direction:column;height:100vh;overflow:hidden}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px 0 64px;height:52px;display:flex;align-items:center;gap:14px;flex-shrink:0;z-index:100}
+.topbar-logo{font-family:var(--ff-cond);font-size:22px;font-weight:800;letter-spacing:1.5px;color:var(--blue);text-transform:uppercase;white-space:nowrap}
+.topbar-logo span{color:var(--subtle);font-weight:600}
+.topbar-div{width:1px;height:24px;background:var(--border)}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.user-badge{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:4px 12px 4px 6px;font-size:12px;color:var(--subtle)}
+.user-avatar{width:24px;height:24px;border-radius:50%;object-fit:cover}
+.role-tag{font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:2px 8px;border-radius:10px;background:rgba(59,130,246,.15);color:var(--blue)}
+.btn-perm{background:none;border:1px solid var(--border);border-radius:6px;padding:5px 12px;font-size:11px;color:var(--subtle);cursor:pointer}
+.btn-perm:hover{border-color:var(--blue);color:var(--blue)}
+.theme-select{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:5px 10px;font-size:11px;color:var(--subtle);cursor:pointer;font-family:var(--ff-sans)}
+
+.tabbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 24px;display:flex;gap:4px;flex-shrink:0;overflow-x:auto}
+.tab-btn{background:none;border:none;padding:12px 16px;color:var(--muted);font-family:var(--ff-sans);font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;transition:all .15s;white-space:nowrap}
+.tab-btn:hover{color:var(--subtle)}
+.tab-btn.active{color:var(--text);border-bottom-color:var(--blue)}
+
+.main{flex:1;min-height:0;overflow:hidden;padding:20px 24px;display:flex;flex-direction:column}
+
+.stats-row{display:flex;gap:12px;margin-bottom:18px;flex-wrap:wrap}
+.tbl-scroll{flex:1;min-height:150px;overflow-y:auto;border:1px solid var(--border);border-radius:10px}
+.tbl-scroll table{border:none}
+.stat-card{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:12px 18px;min-width:140px}
+.stat-num{font-family:var(--ff-cond);font-size:26px;font-weight:800}
+.stat-lbl{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-top:2px}
+.stat-red .stat-num{color:var(--red)} .stat-amber .stat-num{color:var(--amber)}
+.stat-green .stat-num{color:var(--green)} .stat-muted .stat-num{color:var(--subtle)}
+
+.filters{display:flex;align-items:flex-end;gap:12px;flex-wrap:wrap;margin-bottom:14px}
+.fg{display:flex;flex-direction:column;gap:4px}
+.fl{font-size:10px;font-weight:600;letter-spacing:1.5px;text-transform:uppercase;color:var(--muted)}
+.fc{background:var(--card);border:1px solid var(--border);border-radius:6px;padding:6px 10px;color:var(--text);font-family:var(--ff-sans);font-size:12px;outline:none}
+.fc:focus{border-color:var(--blue)}
+.btn{background:var(--blue);border:none;border-radius:7px;padding:8px 16px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;font-family:var(--ff-sans)}
+.btn:hover{filter:brightness(1.1)}
+.btn.ghost{background:none;border:1px solid var(--border);color:var(--subtle)}
+.btn.ghost:hover{border-color:var(--blue);color:var(--blue)}
+.btn.danger{background:var(--red)}
+.btn:disabled{opacity:.4;cursor:not-allowed}
+
+table{width:100%;border-collapse:separate;border-spacing:0;font-size:12.5px}
+thead th{text-align:left;font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);padding:8px 10px;border-bottom:1px solid var(--border);white-space:nowrap;position:sticky;top:0;background:var(--bg)}
+tbody td{padding:8px 10px;border-bottom:1px solid var(--border);vertical-align:middle}
+tbody tr:hover{background:var(--card)}
+.badge{display:inline-block;padding:2px 9px;border-radius:10px;font-size:10.5px;font-weight:700;letter-spacing:.3px}
+.badge-scaduto{background:rgba(239,68,68,.15);color:var(--red)}
+.badge-scadenza{background:rgba(245,158,11,.15);color:var(--amber)}
+.badge-valido{background:rgba(16,185,129,.15);color:var(--green)}
+.badge-programmare{background:rgba(148,163,184,.15);color:var(--subtle)}
+.icon-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 6px}
+.icon-btn:hover{color:var(--text)}
+.icon-btn.del:hover{color:var(--red)}
+
+.overlay{position:fixed;inset:0;background:rgba(0,0,0,.6);display:none;align-items:center;justify-content:center;z-index:300}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:26px 28px;width:92%;max-width:560px;max-height:82vh;overflow-y:auto}
+.modal h3{font-family:var(--ff-cond);font-size:18px;font-weight:700;margin-bottom:16px}
+.modal-row{display:flex;flex-direction:column;gap:4px;margin-bottom:12px}
+.modal-row label{font-size:10px;color:var(--muted);text-transform:uppercase;letter-spacing:.6px}
+.modal-row input,.modal-row select{background:var(--card);border:1px solid var(--border);border-radius:7px;padding:8px 10px;color:var(--text);font-size:13px;outline:none}
+.modal-actions{display:flex;gap:8px;justify-content:flex-end;margin-top:18px}
+.chip{display:inline-flex;align-items:center;gap:5px;background:var(--card);border:1px solid var(--border);border-radius:14px;padding:3px 10px 3px 12px;font-size:11px;cursor:pointer;user-select:none}
+.chip.on{background:rgba(59,130,246,.15);border-color:var(--blue);color:var(--blue)}
+
+#toast{position:fixed;bottom:20px;right:20px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px 16px;font-size:12px;display:none;z-index:400}
+#toast.ok{border-color:var(--green);color:var(--green)}
+#toast.err{border-color:var(--red);color:var(--red)}
+.state{text-align:center;padding:60px 0;color:var(--muted);font-size:13px}
+
+/* ── ANAGRAFICA CORSI: card dipendente con elenco corsi annidato ── */
+.dip-card{background:var(--card);border:1px solid var(--border);border-radius:10px;margin-bottom:10px;overflow:hidden}
+.dip-head{display:flex;align-items:center;gap:12px;padding:12px 14px;cursor:pointer}
+.dip-head:hover{background:rgba(255,255,255,.02)}
+.dip-head .nome{font-weight:600;flex:1}
+.dip-head .sub{font-size:11px;color:var(--muted)}
+.dip-corsi{display:none;border-top:1px solid var(--border)}
+.dip-corsi.open{display:block}
+.corso-row{display:flex;align-items:center;gap:10px;padding:8px 14px;border-bottom:1px solid var(--border);font-size:12.5px}
+.corso-row:last-child{border-bottom:none}
+.corso-row .cnome{flex:1;min-width:0}
+.corso-row .cdate{color:var(--muted);white-space:nowrap}
+.dip-corsi-add{padding:8px 14px}
+
+@media(min-width:769px){ #dashFiltersToggleBtn{ display:none; } }
+@media(max-width:768px){
+  body{overflow-x:hidden}
+  .topbar{padding:0 12px 0 56px;height:auto;min-height:52px;flex-wrap:wrap;gap:8px;padding-top:8px;padding-bottom:8px}
+  .topbar-logo{font-size:18px}
+  .theme-select{font-size:10px;padding:4px 6px}
+  .user-badge{padding:3px 8px 3px 4px}
+  .user-badge span{max-width:80px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tabbar{overflow-x:auto;-webkit-overflow-scrolling:touch;padding:0 12px}
+  .tab-btn{white-space:nowrap;padding:10px 12px;font-size:12px}
+  .main{padding:14px 12px}
+  .filters{flex-direction:column;align-items:stretch;gap:8px}
+  .fg{width:100%}
+  .fc,.fg select,.fg input{width:100%}
+  .stats-row{gap:8px}
+  .stat-card{min-width:calc(50% - 4px);flex:1 1 calc(50% - 4px)}
+  .modal{width:96%;padding:18px 16px;max-height:90vh}
+  .tbl-scroll table, .tbl-scroll thead, .tbl-scroll tbody, .tbl-scroll th, .tbl-scroll td, .tbl-scroll tr{ display:block; }
+  .tbl-scroll thead{ position:absolute; left:-9999px; top:-9999px; }
+  .tbl-scroll tr{ border:1px solid var(--border); border-radius:10px; margin:8px; padding:8px 10px; background:var(--card) }
+  .tbl-scroll td{ border:none !important; padding:5px 0 5px 45%; position:relative; text-align:right; min-height:20px }
+  .tbl-scroll td[data-label]:before{ content:attr(data-label); position:absolute; left:0; top:5px; width:42%; text-align:left; font-size:10px; font-weight:600; letter-spacing:.5px; text-transform:uppercase; color:var(--muted); white-space:normal; }
+  .tbl-scroll td[data-label=""]:before{ content:none; }
+  .tbl-scroll td[data-label=""]{ padding-left:0; text-align:left }
+}
+</style>
+</head>
+<body>
+
+<div id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">ATS <span>Formazione</span></div>
+    <div class="login-sub">Modulo WMS Hub</div>
+    <div class="login-note">Apri questo modulo dal WMS Hub per accedere con il tuo account Google aziendale.</div>
+  </div>
+</div>
+<div id="accessDenied">
+  <div style="text-align:center">
+    <div class="ad-ico">🔒</div>
+    <div class="ad-title">Accesso Negato</div>
+    <p class="ad-sub" id="adMsg">Il tuo account non è autorizzato per questo modulo. Contatta l'amministratore.</p>
+  </div>
+</div>
+
+<div id="appShell">
+  <div class="topbar">
+    <div class="topbar-logo">ATS <span>Formazione</span></div>
+    <div class="topbar-div"></div>
+    <div class="topbar-right">
+      <select class="theme-select" id="themeSelect" onchange="applyTheme(this.value); saveThemePref(this.value)">
+        <option value="scuro">🌑 Scuro</option>
+        <option value="chiaro">☀️ Chiaro</option>
+        <option value="dim">🌘 Dim</option>
+        <option value="sap">🔷 SAP</option>
+        <option value="grafite">⬛ Grafite</option>
+        <option value="salvia">🌿 Salvia</option>
+        <option value="rovere">🪵 Rovere</option>
+        <option value="oceano">🌊 Oceano</option>
+        <option value="avorio">🦴 Avorio</option>
+      </select>
+      <button class="btn-perm" id="btnPerm" style="display:none" onclick="openPermPanel()">⚙ Permessi</button>
+      <div class="user-badge">
+        <img id="userAvatar" class="user-avatar" src="" style="display:none">
+        <span id="userName"></span>
+        <span class="role-tag" id="roleTag">—</span>
+      </div>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
+    <button class="tab-btn" data-tab="anagrafica" onclick="switchTab('anagrafica')">👤 Anagrafica</button>
+    <button class="tab-btn" data-tab="corsi" onclick="switchTab('corsi')">🎓 Corsi e Durate</button>
+  </div>
+
+  <div class="main" id="content"></div>
+</div>
+
+<!-- MODAL: aggiungi/modifica dipendente (dati anagrafici) -->
+<div class="overlay" id="dipModal">
+  <div class="modal">
+    <h3 id="dipModalTitle">Nuovo dipendente</h3>
+    <div class="modal-row"><label>Filiale</label><input id="mFiliale" placeholder="es. CE"></div>
+    <div class="modal-row"><label>Plant</label><input id="mPlant" placeholder="es. P52"></div>
+    <div class="modal-row"><label>Cognome</label><input id="mCognome"></div>
+    <div class="modal-row"><label>Nome</label><input id="mNome"></div>
+    <div class="modal-row"><label>Codice fiscale</label><input id="mCf" style="text-transform:uppercase"></div>
+    <div class="modal-row"><label>Email</label><input id="mEmail" type="email"></div>
+    <div class="modal-row"><label>Responsabile</label><input id="mRespNome"></div>
+    <div class="modal-row"><label>Email responsabile</label><input id="mRespEmail" type="email"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeDipModal()">Annulla</button>
+      <button class="btn" onclick="saveDipModal()">Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL: aggiungi/modifica corso -->
+<div class="overlay" id="corsoModal">
+  <div class="modal">
+    <h3 id="corsoModalTitle">Nuovo corso</h3>
+    <div class="modal-row"><label>Corso</label><input id="mCorsoNome" list="listaCorsi" placeholder="es. Antincendio"></div>
+    <datalist id="listaCorsi"></datalist>
+    <div class="modal-row"><label>Data inizio (gg/mm/aaaa)</label><input id="mCorsoData" placeholder="gg/mm/aaaa"></div>
+    <div class="modal-row"><label>Durata override (anni) — lascia vuoto per usare la tabella Corsi/Durate</label><input id="mCorsoDurata" type="number" min="1" placeholder=""></div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closeCorsoModal()">Annulla</button>
+      <button class="btn" onclick="saveCorsoModal()">Salva</button>
+    </div>
+  </div>
+</div>
+
+<!-- MODAL PERMESSI -->
+<div class="overlay" id="permOverlay">
+  <div class="modal" style="max-width:680px">
+    <h3>⚙ Gestione permessi — Formazione</h3>
+    <div id="permCfgStatus" style="font-size:11px;color:var(--muted);margin-bottom:14px"></div>
+    <div id="permPanelBody" style="display:flex;flex-direction:column;gap:16px"></div>
+    <div class="modal-actions">
+      <button class="btn ghost" onclick="closePermPanel()">Chiudi</button>
+      <button class="btn" onclick="savePermConfig()">💾 Salva su Drive</button>
+    </div>
+  </div>
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ══════════════════════════════════════════════════════════════════════════
+// CONFIGURAZIONE
+// ══════════════════════════════════════════════════════════════════════════
+var SPREADSHEET_ID   = null;
+var SHEET_CORSI      = 'Corsi Frequentati';
+var SHEET_DURATE     = 'Corsi e Durate';
+var SHEET_FILE_NAME  = 'Formazione - DB';
+var DATA_FOLDER_ID   = '1-fkHbfhuLj2jZg8rTEEqo-BywE-mcVz7';
+var CONFIG_FOLDER_ID = '1LGoR9SKDthz1tUDLxbZhClqA-xhkjoNY';
+var PERM_FNAME       = 'config_formazione.json';
+var PRESENZE_CONFIG_FNAME = 'config_presenze.json';
+var VISITEMED_CONFIG_FNAME = 'config_visitemediche.json';
+var SUPER_USERS      = ['atssegnalazioni@gmail.com'];
+var SOGLIA_SCADENZA_GG = 30;
+var DURATA_DEFAULT_ANNI = 5;
+
+// Colonne "Corsi Frequentati" (1-based)
+var COL = {FILIALE:1,PLANT:2,COGNOME:3,NOME:4,NOMINATIVO:5,CF:6,EMAIL:7,RESP_NOME:8,RESP_EMAIL:9,
+           CORSO:10,DATA_INIZIO:11,DURATA_OVERRIDE:12};
+var SHEET_HEADER = ['Filiale','Plant','Cognome','Nome','Nominativo','CF','Email','Responsabile','Email Responsabile',
+                     'Corso','Data Inizio','Durata override (anni)'];
+var DURATE_HEADER = ['Corso','Durata (anni)'];
+var DURATE_DEFAULT = [['Tutti i corsi', DURATA_DEFAULT_ANNI], ['Primo Soccorso',3], ['Preposto',2], ['RLS',1]];
+
+// ══════════════════════════════════════════════════════════════════════════
+// AUTH — delegata al WMS Hub
+// ══════════════════════════════════════════════════════════════════════════
+var TOKEN = null, CURRENT_USER = {};
+
+function applyTheme(t){
+  document.body.classList.remove('theme-dim','theme-grafite','theme-light','theme-salvia','theme-sap','theme-rovere','theme-oceano','theme-avorio');
+  if(t==='dim') document.body.classList.add('theme-dim');
+  else if(t==='grafite') document.body.classList.add('theme-grafite');
+  else if(t==='chiaro') document.body.classList.add('theme-light');
+  else if(t==='salvia') document.body.classList.add('theme-salvia');
+  else if(t==='sap') document.body.classList.add('theme-sap');
+  else if(t==='rovere') document.body.classList.add('theme-rovere');
+  else if(t==='oceano') document.body.classList.add('theme-oceano');
+  else if(t==='avorio') document.body.classList.add('theme-avorio');
+}
+function saveThemePref(t){ try{ localStorage.setItem('formazione_theme', t); }catch(e){} }
+function loadThemePref(){
+  var t='scuro';
+  try{ t = localStorage.getItem('formazione_theme') || 'scuro'; }catch(e){}
+  var sel=document.getElementById('themeSelect'); if(sel) sel.value=t;
+  applyTheme(t);
+}
+
+(function(){
+  try{
+    var ht = localStorage.getItem('wms_hub_token');
+    var hu = localStorage.getItem('wms_hub_user');
+    if(ht && hu){
+      window._HUB_TOKEN = JSON.parse(ht);
+      window._HUB_USER  = JSON.parse(hu);
+      window.addEventListener('storage', function(e){
+        if(e.key==='wms_hub_token' && e.newValue) try{ window._HUB_TOKEN=JSON.parse(e.newValue); TOKEN=window._HUB_TOKEN; }catch(x){}
+      });
+    }
+  }catch(ex){}
+})();
+
+var _gsiRetry = 0;
+function waitGsi(){
+  if(!window._HUB_TOKEN){
+    if(_gsiRetry < 20){ _gsiRetry++; setTimeout(waitGsi,100); return; }
+    document.getElementById('loginScreen').style.display='flex';
+    document.getElementById('appShell').style.display='none';
+    return;
+  }
+  TOKEN = window._HUB_TOKEN;
+  CURRENT_USER = window._HUB_USER || {};
+  document.getElementById('loginScreen').style.display='none';
+  document.getElementById('userName').textContent = CURRENT_USER.name || CURRENT_USER.email || '';
+  if(CURRENT_USER.picture){ var av=document.getElementById('userAvatar'); av.src=CURRENT_USER.picture; av.style.display=''; }
+  loadPermConfig((CURRENT_USER.email||'').toLowerCase());
+}
+function getToken(){ if(window._HUB_TOKEN) TOKEN=window._HUB_TOKEN; return TOKEN; }
+window.onload = function(){ loadThemePref(); waitGsi(); };
+
+// ══════════════════════════════════════════════════════════════════════════
+// PERMESSI
+// ══════════════════════════════════════════════════════════════════════════
+var permConfig=null, permFileId=null, isSuperUser=false;
+var myRole='viewer', myFiliali=null;
+
+function defaultPermConfig(){
+  return {super_users:SUPER_USERS.slice(), filiali:['CE','PA','HQ','MI'], users:{}, default:{ruolo:'viewer',filiali:[]},
+          admin_reminder_emails:[], spreadsheet_id:null};
+}
+
+function loadSuperUsersDaModulo(fname){
+  return driveListFiles('"'+CONFIG_FOLDER_ID+'" in parents and name="'+fname+'" and trashed=false')
+    .then(function(files){
+      if(!files.length) return [];
+      return driveDownloadText(files[0].id).then(function(txt){
+        try{ var cfg=JSON.parse(txt); return (cfg.super_users||[]).map(function(s){return s.toLowerCase();}); }
+        catch(e){ return []; }
+      });
+    }).catch(function(){ return []; });
+}
+
+function loadPermConfig(email){
+  Promise.all([
+    driveListFiles('"'+CONFIG_FOLDER_ID+'" in parents and name="'+PERM_FNAME+'" and trashed=false'),
+    loadSuperUsersDaModulo(PRESENZE_CONFIG_FNAME),
+    loadSuperUsersDaModulo(VISITEMED_CONFIG_FNAME)
+  ])
+  .then(function(results){
+    var files = results[0];
+    var superEsterni = results[1].concat(results[2]);
+    if(!files.length){ permConfig=defaultPermConfig(); permFileId=null; applyUserPermissions(email, superEsterni); return; }
+    permFileId=files[0].id;
+    return driveDownloadText(permFileId).then(function(txt){
+      try{ permConfig=JSON.parse(txt); }catch(e){ permConfig=defaultPermConfig(); }
+      if(!permConfig.filiali) permConfig.filiali=['CE','PA','HQ','MI'];
+      applyUserPermissions(email, superEsterni);
+    });
+  })
+  .catch(function(){ permConfig=defaultPermConfig(); applyUserPermissions(email, []); });
+}
+
+function applyUserPermissions(email, superEsterni){
+  var em=(email||'').toLowerCase();
+  var sus=(permConfig.super_users||[]).map(function(s){return s.toLowerCase();}).concat(superEsterni||[]);
+  isSuperUser = sus.indexOf(em)!==-1;
+
+  if(isSuperUser){
+    myRole='admin'; myFiliali=null;
+    document.getElementById('btnPerm').style.display='';
+    document.getElementById('appShell').style.display='flex';
+  } else {
+    var u=(permConfig.users||{})[em];
+    if(!u){
+      document.getElementById('loginScreen').style.display='none';
+      document.getElementById('appShell').style.display='none';
+      document.getElementById('adMsg').textContent = "Il tuo account (" + email + ") non è autorizzato per il modulo Formazione. Contatta l'amministratore.";
+      document.getElementById('accessDenied').style.display='flex';
+      return;
+    }
+    myRole=u.ruolo||'viewer'; myFiliali=(u.filiali && u.filiali.length) ? u.filiali : null;
+    document.getElementById('btnPerm').style.display='none';
+    document.getElementById('appShell').style.display='flex';
+  }
+  document.getElementById('roleTag').textContent = myRole.toUpperCase();
+  ensureSpreadsheet().then(ensureDurateSheet).then(function(){ switchTab('dashboard'); });
+}
+
+function canEdit(){ return myRole==='admin'; }
+function filialeVisibile(f){ return myFiliali===null || myFiliali.indexOf(f)!==-1; }
+
+function savePermConfig(){
+  if(!isSuperUser){ showToast('Solo i super utenti possono salvare la configurazione','err'); return; }
+  var json=JSON.stringify(permConfig,null,2);
+  var blob=new Blob([json],{type:'application/json'});
+  var p = permFileId ? driveUploadText(permFileId,blob,PERM_FNAME) : driveCreateFile(CONFIG_FOLDER_ID,PERM_FNAME,blob).then(function(f){ permFileId=f.id; return f; });
+  p.then(function(){ showToast('✓ '+PERM_FNAME+' salvato su Drive','ok'); document.getElementById('permCfgStatus').textContent='✅ salvato su Drive'; })
+   .catch(function(e){ showToast('Errore salvataggio permessi: '+e.message,'err'); });
+}
+function openPermPanel(){ if(!isSuperUser) return; renderPermPanel(); document.getElementById('permOverlay').style.display='flex'; }
+function closePermPanel(){ document.getElementById('permOverlay').style.display='none'; }
+
+function renderPermPanel(){
+  var status = permFileId ? '✅ '+PERM_FNAME+' caricato da Drive' : '⚠️ Non ancora presente su Drive — verrà creato al salvataggio';
+  document.getElementById('permCfgStatus').textContent = status;
+  var h='';
+
+  h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+  h+='<div><div style="font-family:var(--ff-cond);font-size:14px;font-weight:700;color:var(--red)">🛡️ Super Admin</div>';
+  h+='<div style="font-size:10px;color:var(--muted);margin-top:2px">Accesso pieno, propri di questo modulo (oltre a chi è già super admin in Presenze/Visite Mediche).</div></div>';
+  h+='<button class="btn ghost" style="padding:4px 10px;font-size:11px" onclick="addSuperUser()">＋ Aggiungi</button></div>';
+  h+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+  (permConfig.super_users||[]).forEach(function(em){ h+='<span class="chip on">'+esc(em)+' <span onclick="removeSuperUser(\''+escAttr(em)+'\')" style="cursor:pointer">✕</span></span>'; });
+  if(!(permConfig.super_users||[]).length) h+='<div style="font-size:12px;color:var(--muted)">Nessuno oltre al default di sistema.</div>';
+  h+='</div></div>';
+
+  h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+  h+='<div style="font-family:var(--ff-cond);font-size:14px;font-weight:700;color:var(--teal)">📍 Filiali</div>';
+  h+='<button class="btn ghost" style="padding:4px 10px;font-size:11px" onclick="addFiliale()">＋ Aggiungi</button></div>';
+  h+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+  (permConfig.filiali||[]).forEach(function(f){ h+='<span class="chip on">'+esc(f)+'</span>'; });
+  h+='</div></div>';
+
+  h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+  h+='<div style="font-family:var(--ff-cond);font-size:14px;font-weight:700;color:var(--blue)">👥 Utenti abilitati</div>';
+  h+='<button class="btn ghost" style="padding:4px 10px;font-size:11px" onclick="addPermUser()">＋ Aggiungi utente</button></div>';
+  h+='<table><thead><tr><th>Email</th><th>Ruolo</th><th>Filiali</th><th></th></tr></thead><tbody>';
+  var users=permConfig.users||{};
+  Object.keys(users).forEach(function(em){
+    var u=users[em];
+    h+='<tr><td>'+esc(em)+'</td><td>'+esc(u.ruolo||'viewer')+'</td><td>'+esc((u.filiali||[]).join(', ')||'—')+'</td>';
+    h+='<td><button class="icon-btn del" onclick="removePermUser(\''+escAttr(em)+'\')">✕</button></td></tr>';
+  });
+  if(!Object.keys(users).length) h+='<tr><td colspan="4" style="color:var(--muted)">Nessun utente configurato.</td></tr>';
+  h+='</tbody></table></div>';
+
+  document.getElementById('permPanelBody').innerHTML=h;
+}
+function addSuperUser(){
+  var em=prompt('Email da rendere Super Admin di questo modulo:'); if(!em) return;
+  permConfig.super_users=permConfig.super_users||[]; em=em.trim().toLowerCase();
+  if(permConfig.super_users.indexOf(em)===-1) permConfig.super_users.push(em);
+  renderPermPanel();
+}
+function removeSuperUser(em){ permConfig.super_users=(permConfig.super_users||[]).filter(function(x){return x!==em;}); renderPermPanel(); }
+function addFiliale(){
+  var f=prompt('Nome/sigla nuova filiale:'); if(!f) return;
+  permConfig.filiali=permConfig.filiali||[]; if(permConfig.filiali.indexOf(f)===-1) permConfig.filiali.push(f);
+  renderPermPanel();
+}
+function addPermUser(){
+  var em=prompt('Email utente:'); if(!em) return;
+  var ruolo=prompt('Ruolo (admin / viewer):','viewer'); if(!ruolo) return;
+  var fil=prompt('Filiali visibili separate da virgola (vuoto = tutte):','');
+  permConfig.users=permConfig.users||{};
+  permConfig.users[em.toLowerCase()]={ruolo:ruolo.trim(), filiali: fil? fil.split(',').map(function(s){return s.trim();}) : []};
+  renderPermPanel();
+}
+function removePermUser(em){ delete permConfig.users[em]; renderPermPanel(); }
+
+// ══════════════════════════════════════════════════════════════════════════
+// GOOGLE SHEETS API
+// ══════════════════════════════════════════════════════════════════════════
+var _sheetGidCache = {};
+function sheetsGetValues(range){
+  var url='https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+'/values/'+encodeURIComponent(range);
+  return fetch(url,{headers:{Authorization:'Bearer '+getToken()}}).then(function(r){return r.json();}).then(function(j){ return j.values||[]; });
+}
+function sheetsUpdateValues(range, values2d){
+  var url='https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+'/values/'+encodeURIComponent(range)+'?valueInputOption=USER_ENTERED';
+  return fetch(url,{method:'PUT',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({values:values2d})})
+    .then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
+}
+function sheetsBatchUpdateValues(dataArr){
+  var url='https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+'/values:batchUpdate';
+  return fetch(url,{method:'POST',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({valueInputOption:'USER_ENTERED', data:dataArr})})
+    .then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
+}
+function sheetsAppendValues(range, values2d){
+  var url='https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+'/values/'+encodeURIComponent(range)+':append?valueInputOption=USER_ENTERED';
+  return fetch(url,{method:'POST',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({values:values2d})})
+    .then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
+}
+function sheetsGetGid(sheetName){
+  if(_sheetGidCache[sheetName]!==undefined) return Promise.resolve(_sheetGidCache[sheetName]);
+  var url='https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+'?fields=sheets(properties(sheetId,title))';
+  return fetch(url,{headers:{Authorization:'Bearer '+getToken()}}).then(function(r){return r.json();}).then(function(j){
+    var sh=(j.sheets||[]).find(function(s){ return s.properties.title===sheetName; });
+    var gid = sh ? sh.properties.sheetId : 0;
+    _sheetGidCache[sheetName]=gid;
+    return gid;
+  });
+}
+function sheetsDeleteRow(sheetName, rowIndex1based){
+  return sheetsGetGid(sheetName).then(function(gid){
+    var url='https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+':batchUpdate';
+    var body={requests:[{deleteDimension:{range:{sheetId:gid,dimension:'ROWS',startIndex:rowIndex1based-1,endIndex:rowIndex1based}}}]};
+    return fetch(url,{method:'POST',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify(body)})
+      .then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// DRIVE API
+// ══════════════════════════════════════════════════════════════════════════
+function driveListFiles(q){
+  var url='https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name)';
+  return fetch(url,{headers:{Authorization:'Bearer '+getToken()}}).then(function(r){return r.json();}).then(function(j){return j.files||[];});
+}
+function driveDownloadText(id){
+  return fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media',{headers:{Authorization:'Bearer '+getToken()}}).then(function(r){return r.text();});
+}
+function driveUploadText(fileId, blob, name){
+  var boundary='fm_'+Date.now(), meta=JSON.stringify({name:name});
+  return blob.text().then(function(txt){
+    var body='--'+boundary+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+meta+'\r\n--'+boundary+'\r\nContent-Type: application/json\r\n\r\n'+txt+'\r\n--'+boundary+'--';
+    return fetch('https://www.googleapis.com/upload/drive/v3/files/'+fileId+'?uploadType=multipart',{
+      method:'PATCH', headers:{Authorization:'Bearer '+getToken(),'Content-Type':'multipart/related; boundary='+boundary}, body:body
+    }).then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
+  });
+}
+function driveCreateFile(folderId, name, blob){
+  var boundary='fm_'+Date.now(), meta=JSON.stringify({name:name, parents:[folderId]});
+  return blob.text().then(function(txt){
+    var body='--'+boundary+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+meta+'\r\n--'+boundary+'\r\nContent-Type: application/json\r\n\r\n'+txt+'\r\n--'+boundary+'--';
+    return fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart',{
+      method:'POST', headers:{Authorization:'Bearer '+getToken(),'Content-Type':'multipart/related; boundary='+boundary}, body:body
+    }).then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// AUTO-PROVISIONING FOGLIO DATI
+// ══════════════════════════════════════════════════════════════════════════
+function ensureSpreadsheet(){
+  if(permConfig.spreadsheet_id){ SPREADSHEET_ID = permConfig.spreadsheet_id; return Promise.resolve(); }
+  setContent(spinner('Primo avvio: verifico se il foglio dati esiste già…'));
+  return driveListFiles('"'+DATA_FOLDER_ID+'" in parents and name="'+SHEET_FILE_NAME+'" and trashed=false')
+  .then(function(files){
+    if(files.length){ return files[0].id; }
+    setContent(spinner('Foglio dati non trovato: lo creo in cartella…'));
+    return createSpreadsheetWithHeader();
+  })
+  .then(function(id){
+    SPREADSHEET_ID = id;
+    permConfig.spreadsheet_id = id;
+    return saveConfigSilent();
+  })
+  .catch(function(e){
+    setContent('<div class="state">Errore creazione/collegamento foglio dati: '+esc(e.message)+'</div>');
+    throw e;
+  });
+}
+function createSpreadsheetWithHeader(){
+  var metaBody = JSON.stringify({ name: SHEET_FILE_NAME, parents: [DATA_FOLDER_ID], mimeType: 'application/vnd.google-apps.spreadsheet' });
+  return fetch('https://www.googleapis.com/drive/v3/files?fields=id',{
+    method:'POST', headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'}, body: metaBody
+  }).then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); })
+  .then(function(f){
+    var newId = f.id;
+    return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+newId+'?fields=sheets(properties(sheetId,title))',
+      {headers:{Authorization:'Bearer '+getToken()}})
+      .then(function(r){return r.json();})
+      .then(function(meta){
+        var gid = meta.sheets[0].properties.sheetId;
+        var body = {requests:[{updateSheetProperties:{properties:{sheetId:gid,title:SHEET_CORSI},fields:'title'}}]};
+        return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+newId+':batchUpdate',{
+          method:'POST', headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'}, body: JSON.stringify(body)
+        });
+      })
+      .then(function(){
+        var tmp = SPREADSHEET_ID; SPREADSHEET_ID = newId;
+        return sheetsUpdateValues("'"+SHEET_CORSI+"'!A1:L1", [SHEET_HEADER]).then(function(){ SPREADSHEET_ID = tmp; return newId; });
+      });
+  });
+}
+function saveConfigSilent(){
+  var json=JSON.stringify(permConfig,null,2);
+  var blob=new Blob([json],{type:'application/json'});
+  return permFileId ? driveUploadText(permFileId,blob,PERM_FNAME)
+                     : driveCreateFile(CONFIG_FOLDER_ID,PERM_FNAME,blob).then(function(f){ permFileId=f.id; return f; });
+}
+// Crea la scheda "Corsi e Durate" se manca, con le regole di default
+var _durateChecked = false;
+function ensureDurateSheet(){
+  if(_durateChecked) return Promise.resolve();
+  var url='https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+'?fields=sheets(properties(title))';
+  return fetch(url,{headers:{Authorization:'Bearer '+getToken()}}).then(function(r){return r.json();}).then(function(meta){
+    var exists=(meta.sheets||[]).some(function(s){return s.properties.title===SHEET_DURATE;});
+    if(exists){ _durateChecked=true; return; }
+    var body={requests:[{addSheet:{properties:{title:SHEET_DURATE}}}]};
+    return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+':batchUpdate',{
+      method:'POST', headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'}, body:JSON.stringify(body)
+    })
+    .then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); })
+    .then(function(){ return sheetsUpdateValues("'"+SHEET_DURATE+"'!A1:B1", [DURATE_HEADER]); })
+    .then(function(){ return sheetsUpdateValues("'"+SHEET_DURATE+"'!A2:B"+(DURATE_DEFAULT.length+1), DURATE_DEFAULT); })
+    .then(function(){ _durateChecked=true; });
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// DATI — corsi frequentati + tabella durate
+// ══════════════════════════════════════════════════════════════════════════
+var allCorsi = [];   // ogni riga = un corso di un dipendente
+var durateMap = {};  // { 'nome corso lowercase': anni }
+var durateDefault = DURATA_DEFAULT_ANNI;
+var listaCorsiDistinct = [];
+
+function parseDataIt(s){
+  if(!s) return null;
+  var m = String(s).match(/^(\d{1,2})\/(\d{1,2})\/(\d{4})$/);
+  if(m) return new Date(+m[3], +m[2]-1, +m[1]);
+  var d = new Date(s);
+  return isNaN(d) ? null : d;
+}
+function fmtDataIt(d){
+  if(!d) return '';
+  return ('0'+d.getDate()).slice(-2)+'/'+('0'+(d.getMonth()+1)).slice(-2)+'/'+d.getFullYear();
+}
+function addYears(d, n){ var r=new Date(d); r.setFullYear(r.getFullYear()+n); return r; }
+function calcolaStato(dataScadenza){
+  if(!dataScadenza) return 'DA PROGRAMMARE';
+  var oggi=new Date(); oggi.setHours(0,0,0,0);
+  if(dataScadenza < oggi) return 'SCADUTO';
+  var soglia=new Date(oggi); soglia.setDate(soglia.getDate()+SOGLIA_SCADENZA_GG);
+  if(dataScadenza <= soglia) return 'IN SCADENZA';
+  return 'VALIDO';
+}
+function durataPerCorso(nomeCorso){
+  var k=(nomeCorso||'').trim().toLowerCase();
+  if(durateMap.hasOwnProperty(k)) return durateMap[k];
+  return durateDefault;
+}
+
+function loadDurate(){
+  return sheetsGetValues("'"+SHEET_DURATE+"'!A2:B").then(function(rows){
+    durateMap = {};
+    durateDefault = DURATA_DEFAULT_ANNI;
+    rows.forEach(function(r){
+      var nome=(r[0]||'').trim();
+      var anni=parseInt(r[1],10); if(!anni||anni<=0) return;
+      if(nome.toLowerCase()==='tutti i corsi'){ durateDefault = anni; return; }
+      if(nome) durateMap[nome.toLowerCase()] = anni;
+    });
+  });
+}
+
+function loadCorsiData(){
+  return Promise.all([
+    sheetsGetValues("'"+SHEET_CORSI+"'!A2:L"),
+    loadDurate()
+  ]).then(function(results){
+    var rows = results[0];
+    listaCorsiDistinct = [];
+    var seen={};
+    allCorsi = rows.map(function(row,i){
+      row = row.concat(new Array(12).fill(''));
+      var corso = row[COL.CORSO-1]||'';
+      if(corso && !seen[corso.toLowerCase()]){ seen[corso.toLowerCase()]=true; listaCorsiDistinct.push(corso); }
+      var dataInizio = parseDataIt(row[COL.DATA_INIZIO-1]);
+      var durataOverride = parseInt(row[COL.DURATA_OVERRIDE-1],10);
+      var durata = (durataOverride && durataOverride>0) ? durataOverride : durataPerCorso(corso);
+      var dataScadenza = dataInizio ? addYears(dataInizio, durata) : null;
+      return {
+        rowIndex: i+2,
+        filiale: row[COL.FILIALE-1]||'',
+        plant: row[COL.PLANT-1]||'',
+        cognome: row[COL.COGNOME-1]||'',
+        nome: row[COL.NOME-1]||'',
+        nominativo: row[COL.NOMINATIVO-1] || ((row[COL.COGNOME-1]||'')+' '+(row[COL.NOME-1]||'')).trim(),
+        cf: row[COL.CF-1]||'',
+        email: row[COL.EMAIL-1]||'',
+        responsabileNome: row[COL.RESP_NOME-1]||'',
+        responsabileEmail: row[COL.RESP_EMAIL-1]||'',
+        corso: corso,
+        dataInizio: dataInizio,
+        durataOverride: durataOverride||null,
+        durata: durata,
+        dataScadenza: dataScadenza,
+        stato: calcolaStato(dataScadenza)
+      };
+    });
+    listaCorsiDistinct.sort();
+  });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// TABS
+// ══════════════════════════════════════════════════════════════════════════
+var activeTab='dashboard';
+function switchTab(tab){
+  activeTab=tab;
+  document.querySelectorAll('.tab-btn').forEach(function(b){ b.classList.toggle('active', b.dataset.tab===tab); });
+  if(tab==='dashboard') renderDashboard();
+  else if(tab==='anagrafica') renderAnagrafica();
+  else if(tab==='corsi') renderCorsiDurate();
+}
+
+// ── DASHBOARD ──
+var dashFilFiliale='', dashFilStato='', dashFilCorso='';
+function renderDashboard(){
+  loadCorsiData().then(function(){
+    var visibili = allCorsi.filter(function(c){ return filialeVisibile(c.filiale); });
+    var cnt={SCADUTO:0,'IN SCADENZA':0,VALIDO:0,'DA PROGRAMMARE':0};
+    visibili.forEach(function(c){ cnt[c.stato]=(cnt[c.stato]||0)+1; });
+
+    var filiali = permConfig.filiali||[];
+    var h='';
+    var wrapOpen = window.innerWidth > 768 ? '' : 'display:none;';
+    h+='<button class="btn ghost" id="dashFiltersToggleBtn" onclick="dashToggleFilters()" style="width:100%;margin-bottom:10px">🔍 Filtri</button>';
+    h+='<div id="dashFiltersWrap" style="'+wrapOpen+'">';
+
+    h+='<div class="stats-row">';
+    h+='<div class="stat-card stat-red"><div class="stat-num">'+cnt.SCADUTO+'</div><div class="stat-lbl">Scaduti</div></div>';
+    h+='<div class="stat-card stat-amber"><div class="stat-num">'+cnt['IN SCADENZA']+'</div><div class="stat-lbl">In scadenza ('+SOGLIA_SCADENZA_GG+'gg)</div></div>';
+    h+='<div class="stat-card stat-green"><div class="stat-num">'+cnt.VALIDO+'</div><div class="stat-lbl">Validi</div></div>';
+    h+='<div class="stat-card stat-muted"><div class="stat-num">'+cnt['DA PROGRAMMARE']+'</div><div class="stat-lbl">Da programmare</div></div>';
+    h+='</div>';
+
+    h+='<div class="filters">';
+    h+='<div class="fg"><span class="fl">Filiale</span><select class="fc" id="fFiliale" onchange="dashApplyFilter()"><option value="">Tutte</option>';
+    filiali.forEach(function(f){ if(filialeVisibile(f)) h+='<option value="'+esc(f)+'">'+esc(f)+'</option>'; });
+    h+='</select></div>';
+    h+='<div class="fg"><span class="fl">Stato</span><select class="fc" id="fStato" onchange="dashApplyFilter()"><option value="">Tutti</option><option>SCADUTO</option><option>IN SCADENZA</option><option>VALIDO</option><option>DA PROGRAMMARE</option></select></div>';
+    h+='<div class="fg"><span class="fl">Corso</span><select class="fc" id="fCorso" onchange="dashApplyFilter()"><option value="">Tutti</option>';
+    listaCorsiDistinct.forEach(function(c){ h+='<option value="'+esc(c)+'">'+esc(c)+'</option>'; });
+    h+='</select></div>';
+    h+='<div class="fg"><button class="btn ghost" onclick="exportDashboardExcel()">⬇️ Esporta Excel</button></div>';
+    h+='</div>';
+    h+='</div>'; // chiude wrap
+
+    h+='<div class="tbl-scroll"><table><thead><tr><th>Filiale</th><th>Plant</th><th>Nominativo</th><th>CF</th><th>Corso</th><th>Data inizio</th><th>Scadenza</th><th>Stato</th></tr></thead><tbody id="dashBody"></tbody></table></div>';
+
+    setContent(h);
+    dashApplyFilter();
+  });
+}
+function dashToggleFilters(){
+  var wrap=document.getElementById('dashFiltersWrap');
+  wrap.style.display=(wrap.style.display==='none')?'block':'none';
+}
+function dashFilteredList(){
+  return allCorsi.filter(function(c){
+    if(!filialeVisibile(c.filiale)) return false;
+    if(dashFilFiliale && c.filiale!==dashFilFiliale) return false;
+    if(dashFilStato && c.stato!==dashFilStato) return false;
+    if(dashFilCorso && c.corso!==dashFilCorso) return false;
+    return true;
+  });
+}
+function dashApplyFilter(){
+  dashFilFiliale = document.getElementById('fFiliale') ? document.getElementById('fFiliale').value : '';
+  dashFilStato   = document.getElementById('fStato') ? document.getElementById('fStato').value : '';
+  dashFilCorso   = document.getElementById('fCorso') ? document.getElementById('fCorso').value : '';
+  var rows = dashFilteredList();
+  var badgeClass={'SCADUTO':'badge-scaduto','IN SCADENZA':'badge-scadenza','VALIDO':'badge-valido','DA PROGRAMMARE':'badge-programmare'};
+  var h='';
+  rows.forEach(function(c){
+    h+='<tr><td data-label="Filiale">'+esc(c.filiale)+'</td><td data-label="Plant">'+esc(c.plant)+'</td><td data-label="Nominativo">'+esc(c.nominativo)+'</td>';
+    h+='<td data-label="CF" style="font-family:var(--ff-mono);font-size:11px">'+esc(c.cf)+'</td><td data-label="Corso">'+esc(c.corso)+'</td>';
+    h+='<td data-label="Data inizio">'+fmtDataIt(c.dataInizio)+'</td><td data-label="Scadenza">'+fmtDataIt(c.dataScadenza)+'</td>';
+    h+='<td data-label="Stato"><span class="badge '+badgeClass[c.stato]+'">'+c.stato+'</span></td></tr>';
+  });
+  if(!rows.length) h='<tr><td colspan="8" style="color:var(--muted);text-align:center;padding:30px 0">Nessun record per questo filtro.</td></tr>';
+  document.getElementById('dashBody').innerHTML=h;
+}
+function exportDashboardExcel(){
+  var rows = dashFilteredList().map(function(c){
+    return [c.filiale,c.plant,c.nominativo,c.cf,c.corso,fmtDataIt(c.dataInizio),fmtDataIt(c.dataScadenza),c.stato];
+  });
+  exportExcel(['Filiale','Plant','Nominativo','CF','Corso','Data inizio','Scadenza','Stato'], rows, 'Formazione_Dashboard.xlsx');
+}
+
+// ── ANAGRAFICA: card dipendente con corsi annidati ──
+var dipOpenState = {}; // cf -> true/false (espanso)
+function renderAnagrafica(){
+  loadCorsiData().then(function(){
+    var visibiliCorsi = allCorsi.filter(function(c){ return filialeVisibile(c.filiale); });
+    // Raggruppa per CF (o nominativo se CF assente)
+    var perDip = {};
+    var ordine = [];
+    visibiliCorsi.forEach(function(c){
+      var key = c.cf || ('__'+c.nominativo);
+      if(!perDip[key]){ perDip[key]=[]; ordine.push(key); }
+      perDip[key].push(c);
+    });
+    ordine.sort(function(a,b){
+      var na=perDip[a][0].nominativo, nb=perDip[b][0].nominativo;
+      return na.localeCompare(nb);
+    });
+
+    var h='<div class="filters"><div style="flex:1"></div>';
+    h+='<button class="btn ghost" onclick="exportAnagraficaExcel()">⬇️ Esporta Excel</button>';
+    if(canEdit()){
+      h+='<button class="btn ghost" onclick="scaricaTemplateImport()">📥 Template import</button>';
+      h+='<button class="btn ghost" onclick="triggerImportFile()">📤 Importa/Aggiorna da Excel</button>';
+      h+='<input type="file" id="importFileInput" accept=".xlsx,.xls" style="display:none" onchange="handleImportFile(event)">';
+      h+='<button class="btn" onclick="openDipModal()">＋ Nuovo dipendente</button>';
+    }
+    h+='</div>';
+
+    h+='<div class="tbl-scroll" style="border:none"><div style="padding-right:4px">';
+    ordine.forEach(function(key){
+      var corsi = perDip[key];
+      var d = corsi[0];
+      var scaduti = corsi.filter(function(c){return c.stato==='SCADUTO';}).length;
+      var open = dipOpenState[key] ? 'open' : '';
+      h+='<div class="dip-card">';
+      h+='<div class="dip-head" onclick="toggleDip(\''+escAttr(key)+'\')">';
+      h+='<span>'+(dipOpenState[key]?'▾':'▸')+'</span>';
+      h+='<span class="nome">'+esc(d.nominativo)+'</span>';
+      h+='<span class="sub">'+esc(d.filiale)+' · '+esc(d.plant)+' · '+corsi.length+' corsi'+(scaduti?' · <span style="color:var(--red)">'+scaduti+' scaduti</span>':'')+'</span>';
+      if(canEdit()) h+='<button class="icon-btn" onclick="event.stopPropagation();openDipModal(\''+escAttr(key)+'\')">✎ Dati</button>';
+      h+='</div>';
+      h+='<div class="dip-corsi '+open+'" id="dipCorsi_'+escAttr(key)+'">';
+      var badgeClass={'SCADUTO':'badge-scaduto','IN SCADENZA':'badge-scadenza','VALIDO':'badge-valido','DA PROGRAMMARE':'badge-programmare'};
+      corsi.forEach(function(c){
+        h+='<div class="corso-row"><span class="cnome">'+esc(c.corso)+'</span>';
+        h+='<span class="cdate">'+fmtDataIt(c.dataInizio)+' → '+ (fmtDataIt(c.dataScadenza)||'—') +'</span>';
+        h+='<span class="badge '+badgeClass[c.stato]+'">'+c.stato+'</span>';
+        if(canEdit()){
+          h+='<button class="icon-btn" onclick="openCorsoModal('+c.rowIndex+')">✎</button>';
+          h+='<button class="icon-btn del" onclick="deleteCorsoRow('+c.rowIndex+')">✕</button>';
+        }
+        h+='</div>';
+      });
+      if(canEdit()) h+='<div class="dip-corsi-add"><button class="btn ghost" style="padding:4px 10px;font-size:11px" onclick="openCorsoModal(null,\''+escAttr(key)+'\')">＋ Aggiungi corso</button></div>';
+      h+='</div></div>';
+    });
+    if(!ordine.length) h+='<div class="state">Nessun dipendente/corso. '+(canEdit()?'Aggiungine uno.':'')+'</div>';
+    h+='</div></div>';
+
+    setContent(h);
+  });
+}
+function toggleDip(key){
+  dipOpenState[key] = !dipOpenState[key];
+  var el = document.getElementById('dipCorsi_'+key.replace(/'/g,"\\'"));
+  // rigenera solo la freccia/stato senza re-render completo per scorrevolezza
+  renderAnagrafica();
+}
+function exportAnagraficaExcel(){
+  var visibili = allCorsi.filter(function(c){ return filialeVisibile(c.filiale); });
+  var rows = visibili.map(function(c){
+    return [c.filiale,c.plant,c.cognome,c.nome,c.cf,c.email,c.responsabileNome,c.responsabileEmail,c.corso,fmtDataIt(c.dataInizio)||'',c.durataOverride||''];
+  });
+  exportExcel(
+    ['Filiale','Plant','Cognome','Nome','CF','Email','Responsabile','Email Responsabile','Corso','Data Inizio','Durata override (anni)'],
+    rows, 'Formazione_Anagrafica.xlsx'
+  );
+}
+
+// ── MODALE DIPENDENTE (dati anagrafici, applicati a tutte le sue righe corso) ──
+var editingDipKey = null;
+function openDipModal(key){
+  editingDipKey = key || null;
+  var corsi = key ? allCorsi.filter(function(c){ return (c.cf||('__'+c.nominativo))===key; }) : [];
+  var d = corsi[0];
+  document.getElementById('dipModalTitle').textContent = d ? 'Modifica dati dipendente' : 'Nuovo dipendente';
+  document.getElementById('mFiliale').value = d ? d.filiale : '';
+  document.getElementById('mPlant').value = d ? d.plant : '';
+  document.getElementById('mCognome').value = d ? d.cognome : '';
+  document.getElementById('mNome').value = d ? d.nome : '';
+  document.getElementById('mCf').value = d ? d.cf : '';
+  document.getElementById('mEmail').value = d ? d.email : '';
+  document.getElementById('mRespNome').value = d ? d.responsabileNome : '';
+  document.getElementById('mRespEmail').value = d ? d.responsabileEmail : '';
+  document.getElementById('dipModal').style.display='flex';
+}
+function closeDipModal(){ document.getElementById('dipModal').style.display='none'; }
+
+function saveDipModal(){
+  var filiale=document.getElementById('mFiliale').value.trim();
+  var plant=document.getElementById('mPlant').value.trim();
+  var cognome=document.getElementById('mCognome').value.trim();
+  var nome=document.getElementById('mNome').value.trim();
+  var cf=document.getElementById('mCf').value.trim().toUpperCase();
+  var email=document.getElementById('mEmail').value.trim();
+  var respNome=document.getElementById('mRespNome').value.trim();
+  var respEmail=document.getElementById('mRespEmail').value.trim();
+  if(!filiale||!cognome||!nome){ showToast('Filiale, Cognome e Nome sono obbligatori','err'); return; }
+  var nominativo=(cognome+' '+nome).toUpperCase();
+
+  if(editingDipKey){
+    // Aggiorna i dati anagrafici su TUTTE le righe corso di questo dipendente
+    var corsi = allCorsi.filter(function(c){ return (c.cf||('__'+c.nominativo))===editingDipKey; });
+    if(!corsi.length){ showToast('Nessun corso da aggiornare per questo dipendente','err'); closeDipModal(); return; }
+    var updates = corsi.map(function(c){
+      return {range:"'"+SHEET_CORSI+"'!A"+c.rowIndex+":I"+c.rowIndex, values:[[filiale,plant,cognome,nome,nominativo,cf,email,respNome,respEmail]]};
+    });
+    sheetsBatchUpdateValues(updates).then(function(){ showToast('✓ Dati aggiornati su '+corsi.length+' corsi','ok'); closeDipModal(); renderAnagrafica(); })
+      .catch(function(e){ showToast('Errore: '+e.message,'err'); });
+  } else {
+    // Nuovo dipendente: crea una prima riga "Nessun Corso" come placeholder, poi aggiungerà corsi veri
+    var row=[filiale,plant,cognome,nome,nominativo,cf,email,respNome,respEmail,'Nessun Corso','',''];
+    sheetsAppendValues("'"+SHEET_CORSI+"'!A:L", [row]).then(function(){ showToast('✓ Dipendente creato','ok'); closeDipModal(); renderAnagrafica(); })
+      .catch(function(e){ showToast('Errore: '+e.message,'err'); });
+  }
+}
+
+// ── MODALE CORSO (singola riga) ──
+var editingCorsoRow = null, editingCorsoDipKey = null;
+function openCorsoModal(rowIndex, dipKeyPerNuovo){
+  editingCorsoRow = rowIndex || null;
+  editingCorsoDipKey = dipKeyPerNuovo || null;
+  var c = rowIndex ? allCorsi.find(function(x){return x.rowIndex===rowIndex;}) : null;
+  document.getElementById('corsoModalTitle').textContent = c ? 'Modifica corso' : 'Nuovo corso';
+  document.getElementById('mCorsoNome').value = c ? c.corso : '';
+  document.getElementById('mCorsoData').value = c ? fmtDataIt(c.dataInizio) : '';
+  document.getElementById('mCorsoDurata').value = c && c.durataOverride ? c.durataOverride : '';
+  var dl = document.getElementById('listaCorsi');
+  dl.innerHTML = listaCorsiDistinct.map(function(x){ return '<option value="'+esc(x)+'">'; }).join('');
+  document.getElementById('corsoModal').style.display='flex';
+}
+function closeCorsoModal(){ document.getElementById('corsoModal').style.display='none'; }
+
+function saveCorsoModal(){
+  var corso=document.getElementById('mCorsoNome').value.trim();
+  var dataInizio=document.getElementById('mCorsoData').value.trim();
+  var durataOverride=document.getElementById('mCorsoDurata').value.trim();
+  if(!corso){ showToast('Il nome del corso è obbligatorio','err'); return; }
+
+  if(editingCorsoRow){
+    var updates=[
+      {range:"'"+SHEET_CORSI+"'!J"+editingCorsoRow, values:[[corso]]},
+      {range:"'"+SHEET_CORSI+"'!K"+editingCorsoRow, values:[[dataInizio]]},
+      {range:"'"+SHEET_CORSI+"'!L"+editingCorsoRow, values:[[durataOverride]]}
+    ];
+    sheetsBatchUpdateValues(updates).then(function(){ showToast('✓ Corso aggiornato','ok'); closeCorsoModal(); renderAnagrafica(); })
+      .catch(function(e){ showToast('Errore: '+e.message,'err'); });
+  } else {
+    if(!editingCorsoDipKey){ showToast('Errore interno: dipendente non identificato','err'); return; }
+    var d = allCorsi.find(function(c){ return (c.cf||('__'+c.nominativo))===editingCorsoDipKey; });
+    if(!d){ showToast('Dipendente non trovato','err'); return; }
+    var row=[d.filiale,d.plant,d.cognome,d.nome,d.nominativo,d.cf,d.email,d.responsabileNome,d.responsabileEmail,corso,dataInizio,durataOverride];
+    sheetsAppendValues("'"+SHEET_CORSI+"'!A:L", [row]).then(function(){
+      dipOpenState[editingCorsoDipKey]=true;
+      showToast('✓ Corso aggiunto','ok'); closeCorsoModal(); renderAnagrafica();
+    }).catch(function(e){ showToast('Errore: '+e.message,'err'); });
+  }
+}
+function deleteCorsoRow(rowIndex){
+  var c = allCorsi.find(function(x){return x.rowIndex===rowIndex;});
+  if(!confirm('Eliminare il corso "'+(c?c.corso:'')+'" di '+(c?c.nominativo:'')+'?')) return;
+  sheetsDeleteRow(SHEET_CORSI, rowIndex).then(function(){ showToast('✓ Eliminato','ok'); renderAnagrafica(); })
+    .catch(function(e){ showToast('Errore eliminazione: '+e.message,'err'); });
+}
+
+// ── TAB CORSI E DURATE ──
+function renderCorsiDurate(){
+  setContent(spinner('Carico tabella corsi/durate…'));
+  loadDurate().then(function(){
+    var h='<div style="font-size:12px;color:var(--muted);margin-bottom:14px">'+
+      'Regola generale: "Tutti i corsi" = '+durateDefault+' anni. Un corso elencato qui sotto usa la sua durata specifica invece del default. '+
+      'La durata di un singolo corso frequentato può comunque essere forzata riga per riga (campo "Durata override") in Anagrafica.</div>';
+    h+='<div class="filters"><div style="flex:1"></div>';
+    if(canEdit()) h+='<button class="btn" onclick="addDurataOverride()">＋ Aggiungi eccezione</button>';
+    h+='</div>';
+    h+='<div class="tbl-scroll"><table><thead><tr><th>Corso</th><th>Durata (anni)</th>'+(canEdit()?'<th></th>':'')+'</tr></thead><tbody>';
+    h+='<tr><td data-label="Corso"><b>Tutti i corsi (default)</b></td><td data-label="Durata (anni)">'+durateDefault+'</td>'+(canEdit()?'<td data-label=""><button class="icon-btn" onclick="editDurataDefault()">✎</button></td>':'')+'</tr>';
+    Object.keys(durateMap).sort().forEach(function(k){
+      h+='<tr><td data-label="Corso">'+esc(k)+'</td><td data-label="Durata (anni)">'+durateMap[k]+'</td>';
+      if(canEdit()) h+='<td data-label=""><button class="icon-btn" onclick="editDurataOverride(\''+escAttr(k)+'\')">✎</button><button class="icon-btn del" onclick="removeDurataOverride(\''+escAttr(k)+'\')">✕</button></td>';
+      h+='</tr>';
+    });
+    h+='</tbody></table></div>';
+    setContent(h);
+  });
+}
+function editDurataDefault(){
+  var v=prompt('Durata di default per "Tutti i corsi" (anni):', durateDefault);
+  if(!v) return;
+  var n=parseInt(v,10); if(!n||n<=0){ showToast('Valore non valido','err'); return; }
+  sheetsUpdateValues("'"+SHEET_DURATE+"'!A2:B2", [['Tutti i corsi', n]]).then(function(){ showToast('✓ Aggiornato','ok'); renderCorsiDurate(); })
+    .catch(function(e){ showToast('Errore: '+e.message,'err'); });
+}
+function addDurataOverride(){
+  var nome=prompt('Nome corso (esatto, come compare in Anagrafica):'); if(!nome) return;
+  var anni=prompt('Durata per questo corso (anni):','1'); if(!anni) return;
+  var n=parseInt(anni,10); if(!n||n<=0){ showToast('Valore non valido','err'); return; }
+  sheetsAppendValues("'"+SHEET_DURATE+"'!A:B", [[nome.trim(), n]]).then(function(){ showToast('✓ Aggiunto','ok'); renderCorsiDurate(); })
+    .catch(function(e){ showToast('Errore: '+e.message,'err'); });
+}
+function editDurataOverride(nomeLower){
+  var attuale = durateMap[nomeLower];
+  var anni=prompt('Nuova durata (anni):', attuale); if(!anni) return;
+  var n=parseInt(anni,10); if(!n||n<=0){ showToast('Valore non valido','err'); return; }
+  trovaRigaDurataEAggiorna(nomeLower, n);
+}
+function removeDurataOverride(nomeLower){
+  if(!confirm('Rimuovere l\'eccezione per questo corso? Tornerà al default.')) return;
+  trovaRigaDurataEEliminaOAggiorna(nomeLower, null);
+}
+function trovaRigaDurataEAggiorna(nomeLower, nuoviAnni){
+  sheetsGetValues("'"+SHEET_DURATE+"'!A2:B").then(function(rows){
+    var idx = rows.findIndex(function(r){ return (r[0]||'').trim().toLowerCase()===nomeLower; });
+    if(idx===-1){ showToast('Riga non trovata','err'); return; }
+    return sheetsUpdateValues("'"+SHEET_DURATE+"'!B"+(idx+2), [[nuoviAnni]]);
+  }).then(function(){ showToast('✓ Aggiornato','ok'); renderCorsiDurate(); })
+    .catch(function(e){ showToast('Errore: '+e.message,'err'); });
+}
+function trovaRigaDurataEEliminaOAggiorna(nomeLower){
+  sheetsGetValues("'"+SHEET_DURATE+"'!A2:B").then(function(rows){
+    var idx = rows.findIndex(function(r){ return (r[0]||'').trim().toLowerCase()===nomeLower; });
+    if(idx===-1){ showToast('Riga non trovata','err'); return Promise.resolve(); }
+    return sheetsDeleteRow(SHEET_DURATE, idx+2);
+  }).then(function(){ showToast('✓ Rimosso','ok'); renderCorsiDurate(); })
+    .catch(function(e){ showToast('Errore: '+e.message,'err'); });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// EXPORT / TEMPLATE / IMPORT
+// ══════════════════════════════════════════════════════════════════════════
+function exportExcel(headers, rows2d, filename){
+  if(typeof XLSX==='undefined'){ showToast('Libreria Excel non ancora caricata, riprova tra un istante','err'); return; }
+  var data=[headers].concat(rows2d);
+  var ws=XLSX.utils.aoa_to_sheet(data);
+  var wb=XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Dati');
+  XLSX.writeFile(wb, filename);
+}
+function scaricaTemplateImport(){
+  var esempio=['CE','P52','Rossi','Mario','RSSMRA80A01F839X','mario.rossi@atsgruppo.eu','Nome Responsabile','responsabile@atsgruppo.eu','Antincendio','15/03/2025',''];
+  exportExcel(
+    ['Filiale','Plant','Cognome','Nome','CF','Email','Responsabile','Email Responsabile','Corso','Data Inizio (gg/mm/aaaa)','Durata override (anni, opzionale)'],
+    [esempio], 'Template_Import_Formazione.xlsx'
+  );
+}
+function triggerImportFile(){ document.getElementById('importFileInput').click(); }
+function handleImportFile(evt){
+  var file=evt.target.files[0]; if(!file) return;
+  var reader=new FileReader();
+  reader.onload=function(e){
+    try{
+      var data=new Uint8Array(e.target.result);
+      var wb=XLSX.read(data,{type:'array', cellDates:true});
+      var ws=wb.Sheets[wb.SheetNames[0]];
+      var rows=XLSX.utils.sheet_to_json(ws,{header:1, raw:false, dateNF:'dd/mm/yyyy'});
+      processImportRows(rows);
+    }catch(err){ showToast('Errore lettura file: '+err.message,'err'); }
+    evt.target.value='';
+  };
+  reader.readAsArrayBuffer(file);
+}
+function processImportRows(rows){
+  if(!canEdit()){ showToast('Solo un admin può importare','err'); return; }
+  var body=rows.slice(1);
+  var nuovi=[]; var saltati=0;
+  // Import: ogni riga del file è SEMPRE un corso (nuovo o esistente per stessa persona+corso+data).
+  // Qui, per semplicità e sicurezza, ogni riga valida viene SEMPRE accodata come nuova riga corso:
+  // gestire l'aggiornamento "in place" di un corso già presente richiederebbe un confronto
+  // multi-campo (persona+corso) che è ambiguo se una persona ripete lo stesso corso nel tempo
+  // (rinnovi). Se vuoi aggiornare un corso già inserito, modificalo dalla card del dipendente.
+  body.forEach(function(r){
+    var filiale=(r[0]||'').toString().trim();
+    var plant=(r[1]||'').toString().trim();
+    var cognome=(r[2]||'').toString().trim();
+    var nome=(r[3]||'').toString().trim();
+    var cf=(r[4]||'').toString().trim().toUpperCase();
+    var email=(r[5]||'').toString().trim();
+    var respNome=(r[6]||'').toString().trim();
+    var respEmail=(r[7]||'').toString().trim();
+    var corso=(r[8]||'').toString().trim();
+    var dataInizio=(r[9]||'').toString().trim();
+    var durataOverride=(r[10]||'').toString().trim();
+
+    if(!filiale && !cognome && !nome && !cf && !corso) return;
+    if(!filiale || !cognome || !nome || !corso){ saltati++; return; }
+
+    var nominativo=(cognome+' '+nome).toUpperCase();
+    nuovi.push([filiale,plant,cognome,nome,nominativo,cf,email,respNome,respEmail,corso,dataInizio,durataOverride]);
+  });
+
+  if(!nuovi.length){ showToast('Nessuna riga valida nel file'+(saltati?' ('+saltati+' saltate)':''),'err'); return; }
+
+  sheetsAppendValues("'"+SHEET_CORSI+"'!A:L", nuovi).then(function(){
+    showToast('✓ Import completato: '+nuovi.length+' corsi aggiunti'+(saltati?', '+saltati+' saltati':''), 'ok');
+    renderAnagrafica();
+  }).catch(function(e){ showToast('Errore import: '+e.message,'err'); });
+}
+
+// ══════════════════════════════════════════════════════════════════════════
+// UTILITY
+// ══════════════════════════════════════════════════════════════════════════
+function setContent(h){ document.getElementById('content').innerHTML=h; }
+function spinner(msg){ return '<div class="state">'+esc(msg)+'</div>'; }
+function esc(s){ return String(s==null?'':s).replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); }
+function escAttr(s){ return String(s).replace(/\\/g,'\\\\').replace(/'/g,"\\'"); }
+var toastTimer=null;
+function showToast(msg, type){
+  var t=document.getElementById('toast');
+  t.textContent=msg; t.className=type||''; t.style.display='block';
+  clearTimeout(toastTimer);
+  toastTimer=setTimeout(function(){ t.style.display='none'; }, 3200);
+}
+</script>
+</body>
+</html>
