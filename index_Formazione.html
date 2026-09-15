@@ -123,7 +123,16 @@ tbody tr:hover{background:var(--card)}
 .corso-row .cdate{color:var(--muted);white-space:nowrap}
 .dip-corsi-add{padding:8px 14px}
 
-@media(min-width:769px){ #dashFiltersToggleBtn{ display:none; } }
+/* ── PROGRAMMAZIONE: lista dipendenti/corsi selezionabili ── */
+.prog-list{flex:1;min-height:150px;overflow-y:auto;display:flex;flex-direction:column;gap:6px;border:1px solid var(--border);border-radius:10px;padding:8px}
+.prog-item{display:flex;align-items:center;gap:10px;padding:6px 8px;border-radius:6px;border-bottom:1px solid var(--border)}
+.prog-item:last-child{border-bottom:none}
+.prog-item input[type=checkbox]{width:15px;height:15px;accent-color:var(--blue)}
+.prog-item .who{flex:1}
+.prog-item .who b{font-size:12.5px}
+.prog-item .who small{display:block;color:var(--muted);font-size:10.5px}
+
+@media(min-width:769px){ #dashFiltersToggleBtn, #progFiltersToggleBtn{ display:none; } }
 @media(max-width:768px){
   body{overflow-x:hidden}
   .topbar{padding:0 12px 0 56px;height:auto;min-height:52px;flex-wrap:wrap;gap:8px;padding-top:8px;padding-bottom:8px}
@@ -196,6 +205,7 @@ tbody tr:hover{background:var(--card)}
     <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
     <button class="tab-btn" data-tab="anagrafica" onclick="switchTab('anagrafica')">👤 Anagrafica</button>
     <button class="tab-btn" data-tab="corsi" onclick="switchTab('corsi')">🎓 Corsi e Durate</button>
+    <button class="tab-btn" data-tab="programmazione" onclick="switchTab('programmazione')">📅 Programmazione</button>
   </div>
 
   <div class="main" id="content"></div>
@@ -269,9 +279,11 @@ var DURATA_DEFAULT_ANNI = 5;
 
 // Colonne "Corsi Frequentati" (1-based)
 var COL = {FILIALE:1,PLANT:2,COGNOME:3,NOME:4,NOMINATIVO:5,CF:6,EMAIL:7,RESP_NOME:8,RESP_EMAIL:9,
-           CORSO:10,DATA_INIZIO:11,DURATA_OVERRIDE:12};
+           CORSO:10,DATA_INIZIO:11,DURATA_OVERRIDE:12,
+           DATA_PREVISTA:13,SEDE:14,MAIL_INVIATA:15,DATA_INVIO:16,REMINDER_INVIATO:17,DATA_REMINDER:18};
 var SHEET_HEADER = ['Filiale','Plant','Cognome','Nome','Nominativo','CF','Email','Responsabile','Email Responsabile',
-                     'Corso','Data Inizio','Durata override (anni)'];
+                     'Corso','Data Inizio','Durata override (anni)',
+                     'Data corso prevista','Sede corso','Mail inviata','Data invio mail','Reminder inviato','Data reminder'];
 var DURATE_HEADER = ['Corso','Durata (anni)'];
 var DURATE_DEFAULT = [['Tutti i corsi', DURATA_DEFAULT_ANNI], ['Primo Soccorso',3], ['Preposto',2], ['RLS',1]];
 
@@ -396,7 +408,7 @@ function applyUserPermissions(email, superEsterni){
     document.getElementById('appShell').style.display='flex';
   }
   document.getElementById('roleTag').textContent = myRole.toUpperCase();
-  ensureSpreadsheet().then(ensureDurateSheet).then(function(){ switchTab('dashboard'); });
+  ensureSpreadsheet().then(ensureDurateSheet).then(ensureCorsiSchemaCurrent).then(function(){ switchTab('dashboard'); });
 }
 
 function canEdit(){ return myRole==='admin'; }
@@ -586,7 +598,7 @@ function createSpreadsheetWithHeader(){
       })
       .then(function(){
         var tmp = SPREADSHEET_ID; SPREADSHEET_ID = newId;
-        return sheetsUpdateValues("'"+SHEET_CORSI+"'!A1:L1", [SHEET_HEADER]).then(function(){ SPREADSHEET_ID = tmp; return newId; });
+        return sheetsUpdateValues("'"+SHEET_CORSI+"'!A1:R1", [SHEET_HEADER]).then(function(){ SPREADSHEET_ID = tmp; return newId; });
       });
   });
 }
@@ -612,6 +624,17 @@ function ensureDurateSheet(){
     .then(function(){ return sheetsUpdateValues("'"+SHEET_DURATE+"'!A1:B1", [DURATE_HEADER]); })
     .then(function(){ return sheetsUpdateValues("'"+SHEET_DURATE+"'!A2:B"+(DURATE_DEFAULT.length+1), DURATE_DEFAULT); })
     .then(function(){ _durateChecked=true; });
+  });
+}
+
+// Migrazione: fogli creati prima dell'aggiunta di Data prevista/Sede/Mail/Reminder.
+// Qui le colonne nuove sono aggiunte IN CODA (M-R), non in mezzo come in Visite Mediche:
+// basta riscrivere l'intestazione, i dati esistenti non si spostano.
+function ensureCorsiSchemaCurrent(){
+  return sheetsGetValues("'"+SHEET_CORSI+"'!A1:R1").then(function(rows){
+    var header = (rows && rows[0]) || [];
+    if(header[12]==='Data corso prevista') return; // già aggiornato
+    return sheetsUpdateValues("'"+SHEET_CORSI+"'!A1:R1", [SHEET_HEADER]);
   });
 }
 
@@ -664,14 +687,14 @@ function loadDurate(){
 
 function loadCorsiData(){
   return Promise.all([
-    sheetsGetValues("'"+SHEET_CORSI+"'!A2:L"),
+    sheetsGetValues("'"+SHEET_CORSI+"'!A2:R"),
     loadDurate()
   ]).then(function(results){
     var rows = results[0];
     listaCorsiDistinct = [];
     var seen={};
     allCorsi = rows.map(function(row,i){
-      row = row.concat(new Array(12).fill(''));
+      row = row.concat(new Array(18).fill(''));
       var corso = row[COL.CORSO-1]||'';
       if(corso && !seen[corso.toLowerCase()]){ seen[corso.toLowerCase()]=true; listaCorsiDistinct.push(corso); }
       var dataInizio = parseDataIt(row[COL.DATA_INIZIO-1]);
@@ -693,6 +716,9 @@ function loadCorsiData(){
         dataInizio: dataInizio,
         durataOverride: durataOverride||null,
         durata: durata,
+        dataPrevista: parseDataIt(row[COL.DATA_PREVISTA-1]),
+        sede: row[COL.SEDE-1]||'',
+        mailInviata: String(row[COL.MAIL_INVIATA-1]).toUpperCase()==='TRUE',
         dataScadenza: dataScadenza,
         stato: calcolaStato(dataScadenza)
       };
@@ -711,20 +737,27 @@ function switchTab(tab){
   if(tab==='dashboard') renderDashboard();
   else if(tab==='anagrafica') renderAnagrafica();
   else if(tab==='corsi') renderCorsiDurate();
+  else if(tab==='programmazione') renderProgrammazione();
 }
 
 // ── DASHBOARD ──
-var dashFilFiliale='', dashFilStato='', dashFilCorso='';
+var dashFilFiliale='', dashFilStato='', dashFilCorso='', dashFilPrevista='';
+var confirmSelected = {};
 function renderDashboard(){
   loadCorsiData().then(function(){
+    confirmSelected = {};
     var visibili = allCorsi.filter(function(c){ return filialeVisibile(c.filiale); });
     var cnt={SCADUTO:0,'IN SCADENZA':0,VALIDO:0,'DA PROGRAMMARE':0};
     visibili.forEach(function(c){ cnt[c.stato]=(cnt[c.stato]||0)+1; });
 
+    var datePreviste = [];
+    visibili.forEach(function(c){ if(c.dataPrevista){ var d=fmtDataIt(c.dataPrevista); if(datePreviste.indexOf(d)===-1) datePreviste.push(d); } });
+    datePreviste.sort(function(a,b){ return parseDataIt(a)-parseDataIt(b); });
+
     var filiali = permConfig.filiali||[];
     var h='';
     var wrapOpen = window.innerWidth > 768 ? '' : 'display:none;';
-    h+='<button class="btn ghost" id="dashFiltersToggleBtn" onclick="dashToggleFilters()" style="width:100%;margin-bottom:10px">🔍 Filtri</button>';
+    h+='<button class="btn ghost" id="dashFiltersToggleBtn" onclick="dashToggleFilters()" style="width:100%;margin-bottom:10px">🔍 Filtri e azioni</button>';
     h+='<div id="dashFiltersWrap" style="'+wrapOpen+'">';
 
     h+='<div class="stats-row">';
@@ -742,11 +775,28 @@ function renderDashboard(){
     h+='<div class="fg"><span class="fl">Corso</span><select class="fc" id="fCorso" onchange="dashApplyFilter()"><option value="">Tutti</option>';
     listaCorsiDistinct.forEach(function(c){ h+='<option value="'+esc(c)+'">'+esc(c)+'</option>'; });
     h+='</select></div>';
+    h+='<div class="fg"><span class="fl">Data corso prevista</span><select class="fc" id="fPrevista" onchange="dashApplyFilter()"><option value="">Tutte</option>';
+    datePreviste.forEach(function(d){ h+='<option value="'+esc(d)+'">'+esc(d)+'</option>'; });
+    h+='</select></div>';
+    if(canEdit()) h+='<div class="fg"><button class="btn ghost" onclick="inviaMailComunicazioneCorso()">✉️ Invia mail di comunicazione</button></div>';
+    if(canEdit()) h+='<div class="fg"><button class="btn ghost" id="btnTogglePanel" onclick="dashTogglePanel()">🗂 Conferma corsi effettuati</button></div>';
     h+='<div class="fg"><button class="btn ghost" onclick="exportDashboardExcel()">⬇️ Esporta Excel</button></div>';
     h+='</div>';
+
+    if(canEdit()){
+      h+='<div id="bulkConfirmPanel" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:14px">';
+      h+='<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Filtra per Data corso prevista qui sopra, seleziona chi ha effettivamente svolto il corso: la data effettiva si precompila da quella prevista, modificala solo se serve.</div>';
+      h+='<div class="filters" style="margin-bottom:0">';
+      h+='<div class="fg"><button class="btn ghost" onclick="dashSelectAllFiltered()">Seleziona tutti i filtrati</button></div>';
+      h+='<div class="fg"><button class="btn ghost" onclick="dashClearSelection()">Deseleziona tutti</button></div>';
+      h+='<div class="fg"><span class="fl">Data effettiva corso</span><input class="fc" id="confirmData" placeholder="gg/mm/aaaa"></div>';
+      h+='<button class="btn" onclick="confermaCorsiMassivo()">✓ Conferma effettuati</button>';
+      h+='<span id="confirmSelCount" style="font-size:12px;color:var(--muted);align-self:center">0 selezionati</span>';
+      h+='</div></div>';
+    }
     h+='</div>'; // chiude wrap
 
-    h+='<div class="tbl-scroll"><table><thead><tr><th>Filiale</th><th>Plant</th><th>Nominativo</th><th>CF</th><th>Corso</th><th>Data inizio</th><th>Scadenza</th><th>Stato</th></tr></thead><tbody id="dashBody"></tbody></table></div>';
+    h+='<div class="tbl-scroll"><table><thead><tr>'+(canEdit()?'<th></th>':'')+'<th>Filiale</th><th>Plant</th><th>Nominativo</th><th>CF</th><th>Corso</th><th>Data inizio</th><th>Scadenza</th><th>Stato</th><th>Data prevista</th><th>Sede</th></tr></thead><tbody id="dashBody"></tbody></table></div>';
 
     setContent(h);
     dashApplyFilter();
@@ -756,12 +806,20 @@ function dashToggleFilters(){
   var wrap=document.getElementById('dashFiltersWrap');
   wrap.style.display=(wrap.style.display==='none')?'block':'none';
 }
+function dashTogglePanel(){
+  var panel=document.getElementById('bulkConfirmPanel');
+  var btn=document.getElementById('btnTogglePanel');
+  var open=panel.style.display!=='none';
+  panel.style.display=open?'none':'block';
+  if(btn) btn.textContent=open?'🗂 Conferma corsi effettuati':'✕ Chiudi pannello conferma';
+}
 function dashFilteredList(){
   return allCorsi.filter(function(c){
     if(!filialeVisibile(c.filiale)) return false;
     if(dashFilFiliale && c.filiale!==dashFilFiliale) return false;
     if(dashFilStato && c.stato!==dashFilStato) return false;
     if(dashFilCorso && c.corso!==dashFilCorso) return false;
+    if(dashFilPrevista && fmtDataIt(c.dataPrevista)!==dashFilPrevista) return false;
     return true;
   });
 }
@@ -769,17 +827,136 @@ function dashApplyFilter(){
   dashFilFiliale = document.getElementById('fFiliale') ? document.getElementById('fFiliale').value : '';
   dashFilStato   = document.getElementById('fStato') ? document.getElementById('fStato').value : '';
   dashFilCorso   = document.getElementById('fCorso') ? document.getElementById('fCorso').value : '';
+  dashFilPrevista= document.getElementById('fPrevista') ? document.getElementById('fPrevista').value : '';
+  var confirmDataEl = document.getElementById('confirmData');
+  if(confirmDataEl && dashFilPrevista) confirmDataEl.value = dashFilPrevista;
   var rows = dashFilteredList();
   var badgeClass={'SCADUTO':'badge-scaduto','IN SCADENZA':'badge-scadenza','VALIDO':'badge-valido','DA PROGRAMMARE':'badge-programmare'};
   var h='';
   rows.forEach(function(c){
-    h+='<tr><td data-label="Filiale">'+esc(c.filiale)+'</td><td data-label="Plant">'+esc(c.plant)+'</td><td data-label="Nominativo">'+esc(c.nominativo)+'</td>';
+    h+='<tr>';
+    if(canEdit()){
+      var checked=confirmSelected[c.rowIndex]?'checked':'';
+      h+='<td data-label="">'+(c.dataPrevista ? '<input type="checkbox" '+checked+' onchange="toggleConfirmSel('+c.rowIndex+',this.checked)">' : '')+'</td>';
+    }
+    h+='<td data-label="Filiale">'+esc(c.filiale)+'</td><td data-label="Plant">'+esc(c.plant)+'</td><td data-label="Nominativo">'+esc(c.nominativo)+'</td>';
     h+='<td data-label="CF" style="font-family:var(--ff-mono);font-size:11px">'+esc(c.cf)+'</td><td data-label="Corso">'+esc(c.corso)+'</td>';
     h+='<td data-label="Data inizio">'+fmtDataIt(c.dataInizio)+'</td><td data-label="Scadenza">'+fmtDataIt(c.dataScadenza)+'</td>';
-    h+='<td data-label="Stato"><span class="badge '+badgeClass[c.stato]+'">'+c.stato+'</span></td></tr>';
+    h+='<td data-label="Stato"><span class="badge '+badgeClass[c.stato]+'">'+c.stato+'</span></td>';
+    h+='<td data-label="Data prevista">'+(fmtDataIt(c.dataPrevista)||'—')+'</td><td data-label="Sede">'+esc(c.sede||'—')+'</td></tr>';
   });
-  if(!rows.length) h='<tr><td colspan="8" style="color:var(--muted);text-align:center;padding:30px 0">Nessun record per questo filtro.</td></tr>';
+  if(!rows.length) h='<tr><td colspan="10" style="color:var(--muted);text-align:center;padding:30px 0">Nessun record per questo filtro.</td></tr>';
   document.getElementById('dashBody').innerHTML=h;
+  updateConfirmSelCount();
+}
+function toggleConfirmSel(rowIndex, checked){
+  if(checked) confirmSelected[rowIndex]=true; else delete confirmSelected[rowIndex];
+  updateConfirmSelCount();
+}
+function updateConfirmSelCount(){
+  var el=document.getElementById('confirmSelCount');
+  if(el) el.textContent = Object.keys(confirmSelected).length+' selezionati';
+}
+function dashSelectAllFiltered(){
+  dashFilteredList().forEach(function(c){ if(c.dataPrevista) confirmSelected[c.rowIndex]=true; });
+  dashApplyFilter();
+}
+function dashClearSelection(){
+  confirmSelected={};
+  dashApplyFilter();
+}
+
+// ── CONFERMA MASSIVA CORSI EFFETTUATI ──
+// A differenza di Visite Mediche non serve uno storico separato: la riga del corso
+// È GIÀ il record dell'evento, quindi confermare aggiorna Data Inizio sulla stessa riga
+// (la scadenza si ricalcola da sola) e azzera i campi di programmazione/reminder.
+function confermaCorsiMassivo(){
+  if(!canEdit()){ showToast('Solo un admin può confermare','err'); return; }
+  var rowIndexes = Object.keys(confirmSelected);
+  if(!rowIndexes.length){ showToast('Seleziona almeno un corso','err'); return; }
+  var dataStr = document.getElementById('confirmData').value.trim();
+  if(!dataStr){ showToast('Inserisci la data in cui è stato effettuato il corso','err'); return; }
+  if(!parseDataIt(dataStr)){ showToast('Formato data non valido (gg/mm/aaaa)','err'); return; }
+
+  var righe = rowIndexes.map(function(ri){ return allCorsi.find(function(x){ return String(x.rowIndex)===String(ri); }); }).filter(Boolean);
+  var updates=[];
+  righe.forEach(function(c){
+    updates.push({range:"'"+SHEET_CORSI+"'!K"+c.rowIndex, values:[[dataStr]]});
+    updates.push({range:"'"+SHEET_CORSI+"'!M"+c.rowIndex+":P"+c.rowIndex, values:[['','','','']]});
+    updates.push({range:"'"+SHEET_CORSI+"'!Q"+c.rowIndex+":R"+c.rowIndex, values:[['','']]});
+  });
+  sheetsBatchUpdateValues(updates).then(function(){
+    showToast('✓ '+righe.length+' corsi confermati, scadenze aggiornate','ok');
+    renderDashboard();
+  }).catch(function(e){ showToast('Errore: '+e.message,'err'); });
+}
+
+// ── INVIA MAIL DI COMUNICAZIONE (convocazione ai dipendenti per il corso) ──
+function inviaMailComunicazioneCorso(){
+  if(!canEdit()){ showToast('Solo un admin può inviare la comunicazione','err'); return; }
+  if(!dashFilPrevista){ showToast('Seleziona prima una Data corso prevista dal filtro qui sopra','err'); return; }
+
+  var idSelezionati = Object.keys(confirmSelected);
+  var righe;
+  if(idSelezionati.length){
+    righe = idSelezionati.map(function(id){ return allCorsi.find(function(x){ return String(x.rowIndex)===String(id); }); })
+      .filter(function(c){ return c && filialeVisibile(c.filiale) && c.dataPrevista && fmtDataIt(c.dataPrevista)===dashFilPrevista; });
+  } else {
+    righe = allCorsi.filter(function(c){ return filialeVisibile(c.filiale) && c.dataPrevista && fmtDataIt(c.dataPrevista)===dashFilPrevista; });
+  }
+  if(!righe.length){ showToast('Nessun corso trovato per questa data (controlla la selezione)','err'); return; }
+
+  var conEmail = righe.filter(function(c){ return !!c.email; });
+  var senzaEmail = righe.filter(function(c){ return !c.email; });
+  if(!conEmail.length){ showToast('Nessuno dei corsi selezionati ha un\'email in anagrafica','err'); return; }
+
+  // Raggruppa per Corso → Sede, per struttura del corpo mail e per raccogliere i CC (responsabili)
+  var perCorso = {};
+  var ccEmails = {};
+  righe.forEach(function(c){
+    var corso = c.corso || '(corso non specificato)';
+    var sede = c.sede || '(sede non specificata)';
+    perCorso[corso] = perCorso[corso] || {};
+    perCorso[corso][sede] = perCorso[corso][sede] || [];
+    perCorso[corso][sede].push(c);
+    if(c.responsabileEmail) ccEmails[c.responsabileEmail.trim()]=true;
+  });
+
+  var blocchi=[];
+  Object.keys(perCorso).forEach(function(corso){
+    var b='🎓 CORSO: '+corso+'\n';
+    Object.keys(perCorso[corso]).forEach(function(sede){
+      b+='\nSede: '+sede+'\n';
+      perCorso[corso][sede].forEach(function(c){ b+='  - '+c.nominativo+' ('+c.filiale+')\n'; });
+    });
+    blocchi.push(b);
+  });
+
+  var corpo = 'Si comunica che è stato fissato il corso di formazione per il giorno '+dashFilPrevista+'.\n\n'
+    + blocchi.join('\n')+'\n'
+    + 'Si prega ai rispettivi responsabili di effettuare la comunicazione diretta nel caso in cui un dipendente non trovi il proprio nominativo nell\'elenco sopra riportato.\n\n'
+    + 'Cordiali saluti,\nATS Spa';
+
+  var oggetto = 'Convocazione corso di formazione del '+dashFilPrevista;
+  var to = conEmail.map(function(c){ return c.email; }).join(',');
+  var cc = Object.keys(ccEmails).join(',');
+
+  var mailto = 'mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(oggetto)+(cc?'&cc='+encodeURIComponent(cc):'')+'&body='+encodeURIComponent(corpo);
+
+  if(mailto.length > 1800){
+    var mailtoCorto = 'mailto:'+encodeURIComponent(to)+'?subject='+encodeURIComponent(oggetto)+(cc?'&cc='+encodeURIComponent(cc):'');
+    navigator.clipboard.writeText(corpo).then(function(){
+      showToast('Elenco troppo lungo per il link diretto: corpo copiato negli appunti, incollalo in Outlook (Ctrl+V)','ok');
+    }).catch(function(){ showToast('Elenco troppo lungo per il link diretto: copia il corpo manualmente','err'); });
+    apriMailto(mailtoCorto);
+  } else {
+    apriMailto(mailto);
+  }
+  if(senzaEmail.length) showToast(senzaEmail.length+' corsi di questa data senza email, esclusi dalla convocazione','err');
+}
+function apriMailto(url){
+  var a=document.createElement('a'); a.href=url; a.target='_blank'; a.rel='noopener';
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
 }
 function exportDashboardExcel(){
   var rows = dashFilteredList().map(function(c){
@@ -961,6 +1138,128 @@ function deleteCorsoRow(rowIndex){
   if(!confirm('Eliminare il corso "'+(c?c.corso:'')+'" di '+(c?c.nominativo:'')+'?')) return;
   sheetsDeleteRow(SHEET_CORSI, rowIndex).then(function(){ showToast('✓ Eliminato','ok'); renderAnagrafica(); })
     .catch(function(e){ showToast('Errore eliminazione: '+e.message,'err'); });
+}
+
+// ── PROGRAMMAZIONE CORSI ──
+var progSelected = {};
+var progAllVisibili = [];
+var progFilFiliale='', progFilStato='', progFilCorso='', progSearch='';
+
+function renderProgrammazione(){
+  if(!canEdit()){ setContent('<div class="state">Non hai i permessi per programmare i corsi.</div>'); return; }
+  loadCorsiData().then(function(){
+    progSelected = {};
+    progFilFiliale=''; progFilStato=''; progFilCorso=''; progSearch='';
+    progAllVisibili = allCorsi.filter(function(c){ return filialeVisibile(c.filiale); })
+      .sort(function(a,b){ return (a.dataScadenza||0)-(b.dataScadenza||0); });
+
+    var filiali = permConfig.filiali||[];
+    var h='';
+    var wrapOpen = window.innerWidth > 768 ? '' : 'display:none;';
+    h+='<button class="btn ghost" id="progFiltersToggleBtn" onclick="progToggleFilters()" style="width:100%;margin-bottom:10px">🔍 Filtri e azioni</button>';
+    h+='<div id="progFiltersWrap" style="'+wrapOpen+'">';
+
+    h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:16px 18px;margin-bottom:14px">';
+    h+='<div style="font-size:12px;color:var(--muted);margin-bottom:14px">Filtra i corsi, selezionali, poi imposta data e sede e conferma. La convocazione via mail resta un passo separato.</div>';
+
+    h+='<div class="filters" style="margin-bottom:14px">';
+    h+='<div class="fg"><span class="fl">Filiale</span><select class="fc" id="progFFiliale" onchange="progApplyFilter()"><option value="">Tutte</option>';
+    filiali.forEach(function(f){ if(filialeVisibile(f)) h+='<option value="'+esc(f)+'">'+esc(f)+'</option>'; });
+    h+='</select></div>';
+    h+='<div class="fg"><span class="fl">Stato</span><select class="fc" id="progFStato" onchange="progApplyFilter()"><option value="">Tutti</option><option>SCADUTO</option><option>IN SCADENZA</option><option>VALIDO</option><option>DA PROGRAMMARE</option></select></div>';
+    h+='<div class="fg"><span class="fl">Corso</span><select class="fc" id="progFCorso" onchange="progApplyFilter()"><option value="">Tutti</option>';
+    listaCorsiDistinct.forEach(function(c){ h+='<option value="'+esc(c)+'">'+esc(c)+'</option>'; });
+    h+='</select></div>';
+    h+='<div class="fg"><span class="fl">Cerca nominativo</span><input class="fc" id="progFSearch" placeholder="cognome o nome…" oninput="progApplyFilter()"></div>';
+    h+='<div class="fg"><button class="btn ghost" onclick="progSelectAllFiltered()">Seleziona tutti i filtrati</button></div>';
+    h+='<div class="fg"><button class="btn ghost" onclick="progClearSelection()">Deseleziona tutti</button></div>';
+    h+='<div class="fg"><button class="btn ghost" onclick="exportProgrammazioneExcel()">⬇️ Esporta Excel</button></div>';
+    h+='</div>';
+
+    h+='<div style="height:1px;background:var(--border);margin:14px 0"></div>';
+
+    h+='<div class="filters" style="margin-bottom:0">';
+    h+='<div class="fg"><span class="fl">Data corso concordata</span><input class="fc" id="progData" placeholder="gg/mm/aaaa"></div>';
+    h+='<div class="fg"><span class="fl">Sede corso</span><input class="fc" id="progSede" placeholder="es. Aula Maddaloni"></div>';
+    h+='<button class="btn" onclick="confermaProgrammazione()">Assegna a selezionati</button>';
+    h+='<span id="progSelCount" style="font-size:12px;color:var(--muted);align-self:center">0 selezionati</span>';
+    h+='</div>';
+    h+='</div>';
+    h+='</div>'; // chiude wrap
+
+    h+='<div class="prog-list" id="progListBody"></div>';
+    setContent(h);
+    progRenderList();
+  });
+}
+function progToggleFilters(){
+  var wrap=document.getElementById('progFiltersWrap');
+  wrap.style.display=(wrap.style.display==='none')?'block':'none';
+}
+function progApplyFilter(){
+  progFilFiliale = document.getElementById('progFFiliale').value;
+  progFilStato   = document.getElementById('progFStato').value;
+  progFilCorso   = document.getElementById('progFCorso').value;
+  progSearch     = document.getElementById('progFSearch').value.trim().toLowerCase();
+  progRenderList();
+}
+function progFilteredList(){
+  return progAllVisibili.filter(function(c){
+    if(progFilFiliale && c.filiale!==progFilFiliale) return false;
+    if(progFilStato && c.stato!==progFilStato) return false;
+    if(progFilCorso && c.corso!==progFilCorso) return false;
+    if(progSearch && c.nominativo.toLowerCase().indexOf(progSearch)===-1) return false;
+    return true;
+  });
+}
+function progRenderList(){
+  var list = progFilteredList();
+  var badgeClass={'SCADUTO':'badge-scaduto','IN SCADENZA':'badge-scadenza','VALIDO':'badge-valido','DA PROGRAMMARE':'badge-programmare'};
+  var h='';
+  list.forEach(function(c){
+    var checked = progSelected[c.rowIndex] ? 'checked' : '';
+    h+='<label class="prog-item"><input type="checkbox" '+checked+' onchange="toggleProgSel('+c.rowIndex+',this.checked)">';
+    h+='<span class="who"><b>'+esc(c.nominativo)+'</b><small>'+esc(c.corso)+' · '+esc(c.filiale)+' · scadenza '+(fmtDataIt(c.dataScadenza)||'—')+(c.dataPrevista?' · prevista già impostata: '+fmtDataIt(c.dataPrevista)+(c.sede?' presso '+esc(c.sede):''):'')+'</small></span>';
+    h+='<span class="badge '+badgeClass[c.stato]+'">'+c.stato+'</span></label>';
+  });
+  if(!list.length) h='<div style="color:var(--muted);text-align:center;padding:30px 0;font-size:12px">Nessun corso per questo filtro.</div>';
+  document.getElementById('progListBody').innerHTML=h;
+}
+function progSelectAllFiltered(){
+  progFilteredList().forEach(function(c){ progSelected[c.rowIndex]=true; });
+  progRenderList(); updateProgSelCount();
+}
+function progClearSelection(){ progSelected={}; progRenderList(); updateProgSelCount(); }
+function updateProgSelCount(){
+  var el=document.getElementById('progSelCount');
+  if(el) el.textContent = Object.keys(progSelected).length+' selezionati';
+}
+function toggleProgSel(rowIndex, checked){
+  if(checked) progSelected[rowIndex]=true; else delete progSelected[rowIndex];
+  updateProgSelCount();
+}
+function confermaProgrammazione(){
+  var dataStr = document.getElementById('progData').value.trim();
+  var sedeStr = document.getElementById('progSede').value.trim();
+  var rows = Object.keys(progSelected);
+  if(!dataStr){ showToast('Inserisci la data del corso','err'); return; }
+  if(!sedeStr){ showToast('Inserisci la sede del corso','err'); return; }
+  if(!rows.length){ showToast('Seleziona almeno un corso','err'); return; }
+  if(!parseDataIt(dataStr)){ showToast('Formato data non valido (gg/mm/aaaa)','err'); return; }
+
+  var writes = rows.map(function(rowIndex){
+    return sheetsUpdateValues("'"+SHEET_CORSI+"'!M"+rowIndex+":P"+rowIndex, [[dataStr,sedeStr,'FALSE','']]);
+  });
+  Promise.all(writes).then(function(){
+    showToast('✓ Assegnati a '+rows.length+' corsi','ok');
+    renderProgrammazione();
+  }).catch(function(e){ showToast('Errore: '+e.message,'err'); });
+}
+function exportProgrammazioneExcel(){
+  var rows = progFilteredList().map(function(c){
+    return [c.filiale,c.nominativo,c.cf,c.corso,fmtDataIt(c.dataScadenza),c.stato,fmtDataIt(c.dataPrevista)||'',c.sede||''];
+  });
+  exportExcel(['Filiale','Nominativo','CF','Corso','Scadenza','Stato','Data prevista','Sede'], rows, 'Formazione_Programmazione.xlsx');
 }
 
 // ── TAB CORSI E DURATE ──
