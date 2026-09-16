@@ -205,6 +205,7 @@ tbody tr:hover{background:var(--card)}
     <button class="tab-btn active" data-tab="dashboard" onclick="switchTab('dashboard')">📊 Dashboard</button>
     <button class="tab-btn" data-tab="anagrafica" onclick="switchTab('anagrafica')">👤 Anagrafica</button>
     <button class="tab-btn" data-tab="corsi" onclick="switchTab('corsi')">🎓 Corsi e Durate</button>
+    <button class="tab-btn" data-tab="catalogo" onclick="switchTab('catalogo')">📚 Catalogo Corsi</button>
     <button class="tab-btn" data-tab="programmazione" onclick="switchTab('programmazione')">📅 Programmazione</button>
   </div>
 
@@ -294,18 +295,32 @@ var SHEET_HEADER = ['Filiale','Plant','Codice SAP','Contratto','Sesso','Cognome'
                      'Corso','Data Inizio','Durata override (anni)',
                      'Data corso prevista','Sede corso','Mail inviata','Data invio mail','Reminder inviato','Data reminder',
                      'Attestato (link)'];
-var DURATE_HEADER = ['Corso','Durata (anni)'];
-var DURATE_DEFAULT = [['Tutti i corsi', DURATA_DEFAULT_ANNI], ['Primo Soccorso',3], ['Preposto',2], ['RLS',1]];
+var DURATE_HEADER = ['Tipo corso','Durata (anni)'];
+var DURATE_DEFAULT = [['Tutti i corsi', DURATA_DEFAULT_ANNI], ['Primo Soccorso',3], ['Preposto',2]];
+// Nota: RLS non ha più una durata propria — nel catalogo sotto è mappato sul tipo "Preposto"
+// (2 anni), come indicato. Se invece deve restare a 1 anno come prima, basta aggiungere
+// una riga "RLS" qui sopra e cambiare il tipo di RLS nel Catalogo Corsi da "Preposto" a "RLS".
 
-// Catalogo corsi fisso — usato per il menu a tendina del corso, così il nome scritto
-// combacia sempre esattamente con la tabella Corsi/Durate (niente refusi che fanno
-// perdere la durata giusta). Se ne serve uno nuovo, aggiungilo qui.
-var CATALOGO_CORSI = [
-  'Formazione Generale Lavoratori','Formazione Specifica Lavoratori','Antincendio','Primo Soccorso',
-  'Carrelli','Preposto','RLS','Aggiornamento Formazione Lavoratori','Defibrillatore',
-  'Sicurezza attrezzature magazzino (15635)','Aggiornamento Formazione Dirigenti','Nessun Corso',
-  'Tachigrafo','Privacy','Privacy, Sicurezza Dati, Videosorveglianza','4.0',
-  'Formazione personale alimentarista - HACCP'
+var SHEET_CATALOGO = 'Catalogo Corsi';
+var CATALOGO_HEADER = ['Nome corso','Tipo corso'];
+var CATALOGO_DEFAULT = [
+  ['Formazione Generale Lavoratori','Tutti i corsi'],
+  ['Formazione Specifica Lavoratori','Tutti i corsi'],
+  ['Antincendio','Tutti i corsi'],
+  ['Primo Soccorso','Primo Soccorso'],
+  ['Carrelli','Tutti i corsi'],
+  ['Preposto','Preposto'],
+  ['RLS','Preposto'],
+  ['Aggiornamento Formazione Lavoratori','Tutti i corsi'],
+  ['Defibrillatore','Tutti i corsi'],
+  ['Sicurezza attrezzature magazzino (15635)','Tutti i corsi'],
+  ['Aggiornamento Formazione Dirigenti','Tutti i corsi'],
+  ['Nessun Corso','Tutti i corsi'],
+  ['Tachigrafo','Tutti i corsi'],
+  ['Privacy','Tutti i corsi'],
+  ['Privacy, Sicurezza Dati, Videosorveglianza','Tutti i corsi'],
+  ['4.0','Tutti i corsi'],
+  ['Formazione personale alimentarista - HACCP','Tutti i corsi']
 ];
 
 // ══════════════════════════════════════════════════════════════════════════
@@ -429,7 +444,7 @@ function applyUserPermissions(email, superEsterni){
     document.getElementById('appShell').style.display='flex';
   }
   document.getElementById('roleTag').textContent = myRole.toUpperCase();
-  ensureSpreadsheet().then(ensureDurateSheet).then(ensureCorsiSchemaCurrent).then(function(){ switchTab('dashboard'); });
+  ensureSpreadsheet().then(ensureDurateSheet).then(ensureCatalogoSheet).then(ensureCorsiSchemaCurrent).then(function(){ switchTab('dashboard'); });
 }
 
 function canEdit(){ return myRole==='admin'; }
@@ -721,6 +736,24 @@ function ensureDurateSheet(){
     .then(function(){ _durateChecked=true; });
   });
 }
+// Crea la scheda "Catalogo Corsi" se manca, con la mappatura nome→tipo di default
+var _catalogoChecked = false;
+function ensureCatalogoSheet(){
+  if(_catalogoChecked) return Promise.resolve();
+  var url='https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+'?fields=sheets(properties(title))';
+  return fetch(url,{headers:{Authorization:'Bearer '+getToken()}}).then(function(r){return r.json();}).then(function(meta){
+    var exists=(meta.sheets||[]).some(function(s){return s.properties.title===SHEET_CATALOGO;});
+    if(exists){ _catalogoChecked=true; return; }
+    var body={requests:[{addSheet:{properties:{title:SHEET_CATALOGO}}}]};
+    return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+':batchUpdate',{
+      method:'POST', headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'}, body:JSON.stringify(body)
+    })
+    .then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); })
+    .then(function(){ return sheetsUpdateValues("'"+SHEET_CATALOGO+"'!A1:B1", [CATALOGO_HEADER]); })
+    .then(function(){ return sheetsUpdateValues("'"+SHEET_CATALOGO+"'!A2:B"+(CATALOGO_DEFAULT.length+1), CATALOGO_DEFAULT); })
+    .then(function(){ _catalogoChecked=true; });
+  });
+}
 
 // Migrazione: fogli creati prima dell'aggiunta di Data prevista/Sede/Mail/Reminder.
 // Qui le colonne nuove sono aggiunte IN CODA (M-R), non in mezzo come in Visite Mediche:
@@ -750,8 +783,10 @@ function ensureCorsiSchemaCurrent(){
 // DATI — corsi frequentati + tabella durate
 // ══════════════════════════════════════════════════════════════════════════
 var allCorsi = [];   // ogni riga = un corso di un dipendente
-var durateMap = {};  // { 'nome corso lowercase': anni }
+var durateMap = {};  // { 'tipo corso lowercase': anni }
 var durateDefault = DURATA_DEFAULT_ANNI;
+var catalogoMap = {}; // { 'nome corso lowercase': 'Tipo corso' }
+var catalogoNomi = []; // elenco nomi corso dal catalogo, per la tendina
 var listaCorsiDistinct = [];
 
 function parseDataIt(s){
@@ -774,10 +809,20 @@ function calcolaStato(dataScadenza){
   if(dataScadenza <= soglia) return 'IN SCADENZA';
   return 'VALIDO';
 }
-function durataPerCorso(nomeCorso){
+// Durata di un corso = due passaggi: nome corso → tipo (dal Catalogo Corsi) → durata (da Corsi e Durate).
+// Se il nome non è nel catalogo, o il tipo non ha una durata specifica, usa il default "Tutti i corsi".
+function tipoPerCorso(nomeCorso){
   var k=(nomeCorso||'').trim().toLowerCase();
+  return catalogoMap.hasOwnProperty(k) ? catalogoMap[k] : 'Tutti i corsi';
+}
+function durataPerTipo(tipo){
+  var k=(tipo||'').trim().toLowerCase();
+  if(k==='tutti i corsi' || !k) return durateDefault;
   if(durateMap.hasOwnProperty(k)) return durateMap[k];
   return durateDefault;
+}
+function durataPerCorso(nomeCorso){
+  return durataPerTipo(tipoPerCorso(nomeCorso));
 }
 
 function loadDurate(){
@@ -785,18 +830,33 @@ function loadDurate(){
     durateMap = {};
     durateDefault = DURATA_DEFAULT_ANNI;
     rows.forEach(function(r){
-      var nome=(r[0]||'').trim();
+      var tipo=(r[0]||'').trim();
       var anni=parseInt(r[1],10); if(!anni||anni<=0) return;
-      if(nome.toLowerCase()==='tutti i corsi'){ durateDefault = anni; return; }
-      if(nome) durateMap[nome.toLowerCase()] = anni;
+      if(tipo.toLowerCase()==='tutti i corsi'){ durateDefault = anni; return; }
+      if(tipo) durateMap[tipo.toLowerCase()] = anni;
     });
+  });
+}
+function loadCatalogo(){
+  return sheetsGetValues("'"+SHEET_CATALOGO+"'!A2:B").then(function(rows){
+    catalogoMap = {};
+    catalogoNomi = [];
+    rows.forEach(function(r){
+      var nome=(r[0]||'').trim();
+      var tipo=(r[1]||'').trim() || 'Tutti i corsi';
+      if(!nome) return;
+      catalogoMap[nome.toLowerCase()] = tipo;
+      catalogoNomi.push(nome);
+    });
+    catalogoNomi.sort();
   });
 }
 
 function loadCorsiData(){
   return Promise.all([
     sheetsGetValues("'"+SHEET_CORSI+"'!A2:W"),
-    loadDurate()
+    loadDurate(),
+    loadCatalogo()
   ]).then(function(results){
     var rows = results[0];
     listaCorsiDistinct = [];
@@ -850,6 +910,7 @@ function switchTab(tab){
   if(tab==='dashboard') renderDashboard();
   else if(tab==='anagrafica') renderAnagrafica();
   else if(tab==='corsi') renderCorsiDurate();
+  else if(tab==='catalogo') renderCatalogoCorsi();
   else if(tab==='programmazione') renderProgrammazione();
 }
 
@@ -1223,13 +1284,10 @@ function openCorsoModal(rowIndex, dipKeyPerNuovo){
   var c = rowIndex ? allCorsi.find(function(x){return x.rowIndex===rowIndex;}) : null;
   document.getElementById('corsoModalTitle').textContent = c ? 'Modifica corso' : 'Nuovo corso';
 
-  // Tendina corsi: catalogo fisso + eventuali corsi già usati/aggiunti in Corsi/Durate, senza duplicati
-  var elenco = CATALOGO_CORSI.slice();
-  listaCorsiDistinct.forEach(function(x){ if(elenco.indexOf(x)===-1) elenco.push(x); });
-  Object.keys(durateMap).forEach(function(k){
-    var nomeReale = listaCorsiDistinct.find(function(x){return x.toLowerCase()===k;}) || k;
-    if(elenco.map(function(e){return e.toLowerCase();}).indexOf(k)===-1) elenco.push(nomeReale);
-  });
+  // Tendina corsi: dal Catalogo Corsi (foglio), più eventuali nomi già usati nei dati che
+  // per qualche motivo non fossero ancora a catalogo, senza duplicati
+  var elenco = catalogoNomi.slice();
+  listaCorsiDistinct.forEach(function(x){ if(elenco.map(function(e){return e.toLowerCase();}).indexOf(x.toLowerCase())===-1) elenco.push(x); });
   var sel=document.getElementById('mCorsoNome');
   sel.innerHTML = elenco.map(function(x){ return '<option value="'+esc(x)+'">'+esc(x)+'</option>'; }).join('')
     + '<option value="__NEW__">➕ Nuovo corso…</option>';
@@ -1259,15 +1317,25 @@ function handleCorsoSelectChange(){
     return;
   }
   nome=nome.trim();
-  // Evita duplicati (case-insensitive) sulla tendina già aperta
   var esiste = Array.prototype.some.call(sel.options, function(o){ return o.value.toLowerCase()===nome.toLowerCase(); });
-  if(!esiste){
+  if(esiste){ sel.value=nome; return; }
+
+  var tipo=prompt('Tipo corso, per calcolare la durata (lascia vuoto = "Tutti i corsi" = '+durateDefault+' anni):','Tutti i corsi');
+  if(tipo===null){ sel.value = sel.options.length>1 ? sel.options[0].value : ''; return; } // annullato
+  tipo = tipo.trim() || 'Tutti i corsi';
+
+  sheetsAppendValues("'"+SHEET_CATALOGO+"'!A:B", [[nome, tipo]]).then(function(){
+    catalogoMap[nome.toLowerCase()] = tipo;
+    if(catalogoNomi.map(function(x){return x.toLowerCase();}).indexOf(nome.toLowerCase())===-1) catalogoNomi.push(nome);
     var opt=document.createElement('option');
     opt.value=nome; opt.textContent=nome;
     sel.insertBefore(opt, sel.querySelector('option[value="__NEW__"]'));
-  }
-  sel.value=nome;
-  showToast('"'+nome+'" userà la durata di default ('+durateDefault+' anni) finché non aggiungi un\'eccezione in Corsi e Durate','ok');
+    sel.value=nome;
+    showToast('✓ "'+nome+'" aggiunto al Catalogo Corsi (tipo: '+tipo+')','ok');
+  }).catch(function(e){
+    showToast('Errore salvataggio nel catalogo: '+e.message,'err');
+    sel.value = sel.options.length>1 ? sel.options[0].value : '';
+  });
 }
 
 function saveCorsoModal(){
@@ -1429,15 +1497,16 @@ function renderCorsiDurate(){
   setContent(spinner('Carico tabella corsi/durate…'));
   loadDurate().then(function(){
     var h='<div style="font-size:12px;color:var(--muted);margin-bottom:14px">'+
-      'Regola generale: "Tutti i corsi" = '+durateDefault+' anni. Un corso elencato qui sotto usa la sua durata specifica invece del default. '+
+      'Qui imposti quanti anni dura ogni <b>tipo</b> di corso. Regola generale: "Tutti i corsi" = '+durateDefault+' anni. '+
+      'Un tipo elencato qui sotto usa la sua durata specifica invece del default. Quale tipo ha ogni corso si decide nella tab "📚 Catalogo Corsi" — più corsi possono condividere lo stesso tipo. '+
       'La durata di un singolo corso frequentato può comunque essere forzata riga per riga (campo "Durata override") in Anagrafica.</div>';
     h+='<div class="filters"><div style="flex:1"></div>';
-    if(canEdit()) h+='<button class="btn" onclick="addDurataOverride()">＋ Aggiungi eccezione</button>';
+    if(canEdit()) h+='<button class="btn" onclick="addDurataOverride()">＋ Aggiungi tipo</button>';
     h+='</div>';
-    h+='<div class="tbl-scroll"><table><thead><tr><th>Corso</th><th>Durata (anni)</th>'+(canEdit()?'<th></th>':'')+'</tr></thead><tbody>';
-    h+='<tr><td data-label="Corso"><b>Tutti i corsi (default)</b></td><td data-label="Durata (anni)">'+durateDefault+'</td>'+(canEdit()?'<td data-label=""><button class="icon-btn" onclick="editDurataDefault()">✎</button></td>':'')+'</tr>';
+    h+='<div class="tbl-scroll"><table><thead><tr><th>Tipo corso</th><th>Durata (anni)</th>'+(canEdit()?'<th></th>':'')+'</tr></thead><tbody>';
+    h+='<tr><td data-label="Tipo corso"><b>Tutti i corsi (default)</b></td><td data-label="Durata (anni)">'+durateDefault+'</td>'+(canEdit()?'<td data-label=""><button class="icon-btn" onclick="editDurataDefault()">✎</button></td>':'')+'</tr>';
     Object.keys(durateMap).sort().forEach(function(k){
-      h+='<tr><td data-label="Corso">'+esc(k)+'</td><td data-label="Durata (anni)">'+durateMap[k]+'</td>';
+      h+='<tr><td data-label="Tipo corso">'+esc(k)+'</td><td data-label="Durata (anni)">'+durateMap[k]+'</td>';
       if(canEdit()) h+='<td data-label=""><button class="icon-btn" onclick="editDurataOverride(\''+escAttr(k)+'\')">✎</button><button class="icon-btn del" onclick="removeDurataOverride(\''+escAttr(k)+'\')">✕</button></td>';
       h+='</tr>';
     });
@@ -1453,8 +1522,8 @@ function editDurataDefault(){
     .catch(function(e){ showToast('Errore: '+e.message,'err'); });
 }
 function addDurataOverride(){
-  var nome=prompt('Nome corso (esatto, come compare in Anagrafica):'); if(!nome) return;
-  var anni=prompt('Durata per questo corso (anni):','1'); if(!anni) return;
+  var nome=prompt('Nome del nuovo tipo (es. "Preposto") — poi lo assoceresti ai corsi giusti nel Catalogo Corsi:'); if(!nome) return;
+  var anni=prompt('Durata per questo tipo (anni):','1'); if(!anni) return;
   var n=parseInt(anni,10); if(!n||n<=0){ showToast('Valore non valido','err'); return; }
   sheetsAppendValues("'"+SHEET_DURATE+"'!A:B", [[nome.trim(), n]]).then(function(){ showToast('✓ Aggiunto','ok'); renderCorsiDurate(); })
     .catch(function(e){ showToast('Errore: '+e.message,'err'); });
@@ -1483,6 +1552,67 @@ function trovaRigaDurataEEliminaOAggiorna(nomeLower){
     if(idx===-1){ showToast('Riga non trovata','err'); return Promise.resolve(); }
     return sheetsDeleteRow(SHEET_DURATE, idx+2);
   }).then(function(){ showToast('✓ Rimosso','ok'); renderCorsiDurate(); })
+    .catch(function(e){ showToast('Errore: '+e.message,'err'); });
+}
+
+// ── TAB CATALOGO CORSI (Nome corso → Tipo corso) ──
+function renderCatalogoCorsi(){
+  setContent(spinner('Carico catalogo corsi…'));
+  Promise.all([loadCatalogo(), loadDurate()]).then(function(){
+    var h='<div style="font-size:12px;color:var(--muted);margin-bottom:14px">'+
+      'Ogni corso qui elencato è associato a un <b>tipo</b>, che decide la sua durata (gestita nella tab "🎓 Corsi e Durate"). '+
+      'Più corsi possono condividere lo stesso tipo — es. RLS può usare il tipo "Preposto" se dura come un Preposto.</div>';
+    h+='<div class="filters"><div style="flex:1"></div>';
+    if(canEdit()) h+='<button class="btn" onclick="addCorsoCatalogo()">＋ Aggiungi corso</button>';
+    h+='</div>';
+    h+='<div class="tbl-scroll"><table><thead><tr><th>Nome corso</th><th>Tipo corso</th><th>Durata risultante</th>'+(canEdit()?'<th></th>':'')+'</tr></thead><tbody>';
+    catalogoNomi.forEach(function(nome){
+      var tipo = catalogoMap[nome.toLowerCase()] || 'Tutti i corsi';
+      var anni = durataPerTipo(tipo);
+      h+='<tr><td data-label="Nome corso">'+esc(nome)+'</td><td data-label="Tipo corso">'+esc(tipo)+'</td><td data-label="Durata risultante">'+anni+' anni</td>';
+      if(canEdit()) h+='<td data-label=""><button class="icon-btn" onclick="editCorsoCatalogo(\''+escAttr(nome)+'\')">✎</button><button class="icon-btn del" onclick="removeCorsoCatalogo(\''+escAttr(nome)+'\')">✕</button></td>';
+      h+='</tr>';
+    });
+    if(!catalogoNomi.length) h+='<tr><td colspan="4" style="color:var(--muted);text-align:center;padding:30px 0">Catalogo vuoto.</td></tr>';
+    h+='</tbody></table></div>';
+    setContent(h);
+  });
+}
+function tipiDisponibiliPrompt(){
+  var tipi = ['Tutti i corsi'].concat(Object.keys(durateMap).sort());
+  return tipi.join(', ');
+}
+function addCorsoCatalogo(){
+  var nome=prompt('Nome del nuovo corso:'); if(!nome||!nome.trim()) return;
+  nome=nome.trim();
+  if(catalogoNomi.map(function(x){return x.toLowerCase();}).indexOf(nome.toLowerCase())!==-1){
+    showToast('Questo corso è già nel catalogo','err'); return;
+  }
+  var tipo=prompt('Tipo corso (per la durata). Tipi esistenti: '+tipiDisponibiliPrompt(), 'Tutti i corsi');
+  if(tipo===null) return;
+  tipo = tipo.trim() || 'Tutti i corsi';
+  sheetsAppendValues("'"+SHEET_CATALOGO+"'!A:B", [[nome, tipo]]).then(function(){ showToast('✓ Aggiunto','ok'); renderCatalogoCorsi(); })
+    .catch(function(e){ showToast('Errore: '+e.message,'err'); });
+}
+function editCorsoCatalogo(nome){
+  var tipoAttuale = catalogoMap[nome.toLowerCase()] || 'Tutti i corsi';
+  var tipo=prompt('Nuovo tipo per "'+nome+'". Tipi esistenti: '+tipiDisponibiliPrompt(), tipoAttuale);
+  if(tipo===null) return;
+  tipo = tipo.trim() || 'Tutti i corsi';
+  sheetsGetValues("'"+SHEET_CATALOGO+"'!A2:B").then(function(rows){
+    var idx = rows.findIndex(function(r){ return (r[0]||'').trim().toLowerCase()===nome.toLowerCase(); });
+    if(idx===-1){ showToast('Riga non trovata','err'); return Promise.resolve(); }
+    return sheetsUpdateValues("'"+SHEET_CATALOGO+"'!B"+(idx+2), [[tipo]]);
+  }).then(function(){ showToast('✓ Aggiornato','ok'); renderCatalogoCorsi(); })
+    .catch(function(e){ showToast('Errore: '+e.message,'err'); });
+}
+function removeCorsoCatalogo(nome){
+  if(!confirm('Rimuovere "'+nome+'" dal catalogo? I corsi già registrati con questo nome nei dati non vengono toccati, ma non sarà più selezionabile per i nuovi.')) return;
+  sheetsGetValues("'"+SHEET_CATALOGO+"'!A2:B").then(function(rows){
+    var idx = rows.findIndex(function(r){ return (r[0]||'').trim().toLowerCase()===nome.toLowerCase(); });
+    if(idx===-1){ showToast('Riga non trovata','err'); return Promise.resolve(); }
+    return sheetsDeleteRow(SHEET_CATALOGO, idx+2);
+  }).then(function(){ showToast('✓ Rimosso','ok'); renderCatalogoCorsi(); })
     .catch(function(e){ showToast('Errore: '+e.message,'err'); });
 }
 
