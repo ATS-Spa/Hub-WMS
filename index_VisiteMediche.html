@@ -1066,10 +1066,22 @@ function inviaMailComunicazione(){
 
 // ── ANAGRAFICA ──
 var editingRowIndex = null;
+var anagFilFiliale='', anagFilStato='', anagSearch='';
 function renderAnagrafica(){
   loadVisiteData().then(function(){
-    var visibili = allPersone.filter(function(p){ return filialeVisibile(p.filiale); });
+    anagFilFiliale=''; anagFilStato=''; anagSearch='';
+    var filiali = permConfig.filiali||[];
     var h='';
+    h+='<button class="btn ghost" onclick="anagToggleFilters()" style="width:100%;margin-bottom:10px">🔍 Filtri</button>';
+    h+='<div id="anagFiltersWrap" style="display:none;margin-bottom:14px">';
+    h+='<div class="filters" style="margin-bottom:0">';
+    h+='<div class="fg"><span class="fl">Filiale</span><select class="fc" id="anagFFiliale" onchange="anagApplyFilter()"><option value="">Tutte</option>';
+    filiali.forEach(function(f){ if(filialeVisibile(f)) h+='<option value="'+esc(f)+'">'+esc(f)+'</option>'; });
+    h+='</select></div>';
+    h+='<div class="fg"><span class="fl">Stato</span><select class="fc" id="anagFStato" onchange="anagApplyFilter()"><option value="">Tutti</option><option>SCADUTO</option><option>IN SCADENZA</option><option>VALIDO</option><option>DA PROGRAMMARE</option></select></div>';
+    h+='<div class="fg"><span class="fl">Cerca nominativo</span><input class="fc" id="anagFSearch" placeholder="cognome o nome…" oninput="anagApplyFilter()"></div>';
+    h+='</div></div>';
+
     h+='<div class="filters"><div style="flex:1"></div>';
     h+='<button class="btn ghost" onclick="exportAnagraficaExcel()">⬇️ Esporta Excel</button>';
     if(canEditAnagrafica()){
@@ -1079,24 +1091,42 @@ function renderAnagrafica(){
       h+='<button class="btn" onclick="openAnagModal()">＋ Nuovo dipendente</button>';
     }
     h+='</div>';
-    h+='<div class="tbl-scroll"><table><thead><tr><th>Filiale</th><th>Cognome</th><th>Nome</th><th>CF</th><th>Email</th><th>Note</th><th>Data ultima visita</th><th>Periodicità</th><th>Responsabile</th>'+(canEditAnagrafica()?'<th></th>':'')+'</tr></thead><tbody>';
-    visibili.forEach(function(p){
-      h+='<tr><td data-label="Filiale">'+esc(p.filiale)+'</td><td data-label="Cognome">'+esc(p.cognome)+'</td><td data-label="Nome">'+esc(p.nome)+'</td>';
-      h+='<td data-label="CF" style="font-family:var(--ff-mono);font-size:11px">'+esc(p.cf)+'</td><td data-label="Email">'+esc(p.email)+'</td><td data-label="Note">'+esc(p.note)+'</td><td data-label="Data ultima visita">'+fmtDataIt(p.dataUltima)+'</td>';
-      h+='<td data-label="Periodicità">'+(p.periodicita===12?'12 mesi (annuale)':p.periodicita+' mesi')+'</td>';
-      h+='<td data-label="Responsabile">'+(p.responsabileNome?esc(p.responsabileNome):'<span style="color:var(--muted)">—</span>')+'</td>';
-      if(canEditAnagrafica()){
-        h+='<td data-label="">'+'<button class="icon-btn" onclick="openAnagModal('+p.rowIndex+')">✎</button>';
-        h+='<button class="icon-btn del" onclick="deleteAnagRow('+p.rowIndex+')">✕</button></td>';
-      }
-      h+='</tr>';
-    });
-    if(!visibili.length) h+='<tr><td colspan="10" style="color:var(--muted);text-align:center;padding:30px 0">Nessun dipendente. '+(canEditAnagrafica()?'Aggiungine uno.':'')+'</td></tr>';
-    h+='</tbody></table></div>';
+    h+='<div class="tbl-scroll"><table><thead><tr><th>Filiale</th><th>Cognome</th><th>Nome</th><th>CF</th><th>Email</th><th>Note</th><th>Data ultima visita</th><th>Periodicità</th><th>Responsabile</th>'+(canEditAnagrafica()?'<th></th>':'')+'</tr></thead><tbody id="anagBody"></tbody></table></div>';
     setContent(h);
+    anagApplyFilter();
   });
 }
+function anagToggleFilters(){
+  var wrap=document.getElementById('anagFiltersWrap');
+  wrap.style.display=(wrap.style.display==='none')?'block':'none';
+}
+function anagApplyFilter(){
+  anagFilFiliale = document.getElementById('anagFFiliale') ? document.getElementById('anagFFiliale').value : '';
+  anagFilStato   = document.getElementById('anagFStato') ? document.getElementById('anagFStato').value : '';
+  anagSearch     = document.getElementById('anagFSearch') ? document.getElementById('anagFSearch').value.trim().toLowerCase() : '';
 
+  var visibili = allPersone.filter(function(p){
+    if(!filialeVisibile(p.filiale)) return false;
+    if(anagFilFiliale && p.filiale!==anagFilFiliale) return false;
+    if(anagFilStato && p.stato!==anagFilStato) return false;
+    if(anagSearch && p.nominativo.toLowerCase().indexOf(anagSearch)===-1) return false;
+    return true;
+  });
+  var h='';
+  visibili.forEach(function(p){
+    h+='<tr><td data-label="Filiale">'+esc(p.filiale)+'</td><td data-label="Cognome">'+esc(p.cognome)+'</td><td data-label="Nome">'+esc(p.nome)+'</td>';
+    h+='<td data-label="CF" style="font-family:var(--ff-mono);font-size:11px">'+esc(p.cf)+'</td><td data-label="Email">'+esc(p.email)+'</td><td data-label="Note">'+esc(p.note)+'</td><td data-label="Data ultima visita">'+fmtDataIt(p.dataUltima)+'</td>';
+    h+='<td data-label="Periodicità">'+(p.periodicita===12?'12 mesi (annuale)':p.periodicita+' mesi')+'</td>';
+    h+='<td data-label="Responsabile">'+(p.responsabileNome?esc(p.responsabileNome):'<span style="color:var(--muted)">—</span>')+'</td>';
+    if(canEditAnagrafica()){
+      h+='<td data-label="">'+'<button class="icon-btn" onclick="openAnagModal('+p.rowIndex+')">✎</button>';
+      h+='<button class="icon-btn del" onclick="deleteAnagRow('+p.rowIndex+')">✕</button></td>';
+    }
+    h+='</tr>';
+  });
+  if(!visibili.length) h='<tr><td colspan="10" style="color:var(--muted);text-align:center;padding:30px 0">Nessun dipendente per questo filtro. '+(canEditAnagrafica()?'Aggiungine uno.':'')+'</td></tr>';
+  document.getElementById('anagBody').innerHTML=h;
+}
 function openAnagModal(rowIndex){
   editingRowIndex = rowIndex || null;
   var p = rowIndex ? allPersone.find(function(x){return x.rowIndex===rowIndex;}) : null;
@@ -1291,7 +1321,7 @@ function renderProgrammazione(){
 
     h+='<div class="filters" style="margin-bottom:0">';
     h+='<div class="fg"><span class="fl">Data visita concordata</span><input class="fc" id="progData" placeholder="gg/mm/aaaa"></div>';
-    h+='<div class="fg"><span class="fl">Plant / sede analisi</span><input class="fc" id="progPlant" placeholder="es. P52 Maddaloni"></div>';
+    h+='<div class="fg"><span class="fl">Plant / sede analisi</span><input class="fc" id="progPlant" placeholder="es. Poliambulatorio Maddaloni"></div>';
     h+='<button class="btn" onclick="confermaProgrammazione()">Assegna a selezionati</button>';
     h+='<span id="progSelCount" style="font-size:12px;color:var(--muted);align-self:center">0 selezionati</span>';
     h+='</div>';
