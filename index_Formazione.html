@@ -1166,23 +1166,26 @@ function exportDashboardExcel(){
 
 // ── ANAGRAFICA: card dipendente con corsi annidati ──
 var dipOpenState = {}; // cf -> true/false (espanso)
+var anagFilFiliale='', anagFilStato='', anagFilCorso='', anagSearch='';
 function renderAnagrafica(){
   loadCorsiData().then(function(){
-    var visibiliCorsi = allCorsi.filter(function(c){ return filialeVisibile(c.filiale); });
-    // Raggruppa per CF (o nominativo se CF assente)
-    var perDip = {};
-    var ordine = [];
-    visibiliCorsi.forEach(function(c){
-      var key = c.cf || ('__'+c.nominativo);
-      if(!perDip[key]){ perDip[key]=[]; ordine.push(key); }
-      perDip[key].push(c);
-    });
-    ordine.sort(function(a,b){
-      var na=perDip[a][0].nominativo, nb=perDip[b][0].nominativo;
-      return na.localeCompare(nb);
-    });
+    anagFilFiliale=''; anagFilStato=''; anagFilCorso=''; anagSearch='';
+    var filiali = permConfig.filiali||[];
 
-    var h='<div class="filters"><div style="flex:1"></div>';
+    var h='<button class="btn ghost" onclick="anagToggleFilters()" style="width:100%;margin-bottom:10px">🔍 Filtri</button>';
+    h+='<div id="anagFiltersWrap" style="display:none;margin-bottom:14px">';
+    h+='<div class="filters" style="margin-bottom:0">';
+    h+='<div class="fg"><span class="fl">Filiale</span><select class="fc" id="anagFFiliale" onchange="anagApplyFilter()"><option value="">Tutte</option>';
+    filiali.forEach(function(f){ if(filialeVisibile(f)) h+='<option value="'+esc(f)+'">'+esc(f)+'</option>'; });
+    h+='</select></div>';
+    h+='<div class="fg"><span class="fl">Stato</span><select class="fc" id="anagFStato" onchange="anagApplyFilter()"><option value="">Tutti</option><option>SCADUTO</option><option>IN SCADENZA</option><option>VALIDO</option><option>DA PROGRAMMARE</option></select></div>';
+    h+='<div class="fg"><span class="fl">Corso</span><select class="fc" id="anagFCorso" onchange="anagApplyFilter()"><option value="">Tutti</option>';
+    listaCorsiDistinct.forEach(function(c){ h+='<option value="'+esc(c)+'">'+esc(c)+'</option>'; });
+    h+='</select></div>';
+    h+='<div class="fg"><span class="fl">Cerca nominativo</span><input class="fc" id="anagFSearch" placeholder="cognome o nome…" oninput="anagApplyFilter()"></div>';
+    h+='</div></div>';
+
+    h+='<div class="filters"><div style="flex:1"></div>';
     h+='<button class="btn ghost" onclick="exportAnagraficaExcel()">⬇️ Esporta Excel</button>';
     if(canEdit()){
       h+='<button class="btn ghost" onclick="scaricaTemplateImport()">📥 Template import</button>';
@@ -1192,7 +1195,43 @@ function renderAnagrafica(){
     }
     h+='</div>';
 
-    h+='<div class="tbl-scroll" style="border:none"><div style="padding-right:4px">';
+    h+='<div class="tbl-scroll" style="border:none"><div style="padding-right:4px" id="anagCardsList"></div></div>';
+    setContent(h);
+    anagApplyFilter();
+  });
+}
+function anagToggleFilters(){
+  var wrap=document.getElementById('anagFiltersWrap');
+  wrap.style.display=(wrap.style.display==='none')?'block':'none';
+}
+function anagApplyFilter(){
+  anagFilFiliale = document.getElementById('anagFFiliale') ? document.getElementById('anagFFiliale').value : '';
+  anagFilStato   = document.getElementById('anagFStato') ? document.getElementById('anagFStato').value : '';
+  anagFilCorso   = document.getElementById('anagFCorso') ? document.getElementById('anagFCorso').value : '';
+  anagSearch     = document.getElementById('anagFSearch') ? document.getElementById('anagFSearch').value.trim().toLowerCase() : '';
+
+  var visibiliCorsi = allCorsi.filter(function(c){
+    if(!filialeVisibile(c.filiale)) return false;
+    if(anagFilFiliale && c.filiale!==anagFilFiliale) return false;
+    if(anagFilStato && c.stato!==anagFilStato) return false;
+    if(anagFilCorso && c.corso!==anagFilCorso) return false;
+    if(anagSearch && c.nominativo.toLowerCase().indexOf(anagSearch)===-1) return false;
+    return true;
+  });
+  // Raggruppa per CF (o nominativo se CF assente)
+  var perDip = {};
+  var ordine = [];
+  visibiliCorsi.forEach(function(c){
+    var key = c.cf || ('__'+c.nominativo);
+    if(!perDip[key]){ perDip[key]=[]; ordine.push(key); }
+    perDip[key].push(c);
+  });
+  ordine.sort(function(a,b){
+    var na=perDip[a][0].nominativo, nb=perDip[b][0].nominativo;
+    return na.localeCompare(nb);
+  });
+
+  var h='';
     ordine.forEach(function(key){
       var corsi = perDip[key];
       var d = corsi[0];
@@ -1225,17 +1264,13 @@ function renderAnagrafica(){
       if(canEdit()) h+='<div class="dip-corsi-add"><button class="btn ghost" style="padding:4px 10px;font-size:11px" onclick="openCorsoModal(null,\''+escAttr(key)+'\')">＋ Aggiungi corso</button></div>';
       h+='</div></div>';
     });
-    if(!ordine.length) h+='<div class="state">Nessun dipendente/corso. '+(canEdit()?'Aggiungine uno.':'')+'</div>';
-    h+='</div></div>';
+    if(!ordine.length) h+='<div class="state">Nessun dipendente/corso per questo filtro. '+(canEdit()?'Aggiungine uno.':'')+'</div>';
 
-    setContent(h);
-  });
+    document.getElementById('anagCardsList').innerHTML = h;
 }
 function toggleDip(key){
   dipOpenState[key] = !dipOpenState[key];
-  var el = document.getElementById('dipCorsi_'+key.replace(/'/g,"\\'"));
-  // rigenera solo la freccia/stato senza re-render completo per scorrevolezza
-  renderAnagrafica();
+  anagApplyFilter(); // ri-disegna solo le card, senza ricaricare i dati dal foglio
 }
 function exportAnagraficaExcel(){
   var visibili = allCorsi.filter(function(c){ return filialeVisibile(c.filiale); });
