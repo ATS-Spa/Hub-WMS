@@ -498,7 +498,30 @@ function renderPermPanel(){
   if(!Object.keys(users).length) h+='<tr><td colspan="4" style="color:var(--muted)">Nessun utente configurato.</td></tr>';
   h+='</tbody></table></div>';
 
+  // Destinatari reminder scadenze — usati dallo script Apps Script del reminder corsi
+  h+='<div style="background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px">';
+  h+='<div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">';
+  h+='<div><div style="font-family:var(--ff-cond);font-size:14px;font-weight:700;color:var(--amber)">🔔 Destinatari reminder scadenze</div>';
+  h+='<div style="font-size:10px;color:var(--muted);margin-top:2px">Ricevono il digest giornaliero di chi scade a breve, via lo script Apps Script collegato al foglio</div></div>';
+  h+='<button class="btn ghost" style="padding:4px 10px;font-size:11px" onclick="addReminderEmail()">＋ Aggiungi</button></div>';
+  h+='<div style="display:flex;flex-wrap:wrap;gap:6px">';
+  (permConfig.admin_reminder_emails||[]).forEach(function(em){
+    h+='<span class="chip on">'+esc(em)+' <span onclick="removeReminderEmail(\''+escAttr(em)+'\')" style="cursor:pointer">✕</span></span>';
+  });
+  if(!(permConfig.admin_reminder_emails||[]).length) h+='<div style="font-size:12px;color:var(--muted)">Nessun destinatario configurato.</div>';
+  h+='</div></div>';
+
   document.getElementById('permPanelBody').innerHTML=h;
+}
+function addReminderEmail(){
+  var em=prompt('Email amministratore da avvisare:'); if(!em) return;
+  permConfig.admin_reminder_emails = permConfig.admin_reminder_emails||[];
+  if(permConfig.admin_reminder_emails.indexOf(em)===-1) permConfig.admin_reminder_emails.push(em);
+  renderPermPanel();
+}
+function removeReminderEmail(em){
+  permConfig.admin_reminder_emails = (permConfig.admin_reminder_emails||[]).filter(function(x){return x!==em;});
+  renderPermPanel();
 }
 function addSuperUser(){
   var em=prompt('Email da rendere Super Admin di questo modulo:'); if(!em) return;
