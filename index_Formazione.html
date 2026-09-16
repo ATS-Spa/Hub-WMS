@@ -217,10 +217,14 @@ tbody tr:hover{background:var(--card)}
     <h3 id="dipModalTitle">Nuovo dipendente</h3>
     <div class="modal-row"><label>Filiale</label><input id="mFiliale" placeholder="es. CE"></div>
     <div class="modal-row"><label>Plant</label><input id="mPlant" placeholder="es. P52"></div>
+    <div class="modal-row"><label>Codice SAP</label><input id="mCodiceSap"></div>
+    <div class="modal-row"><label>Contratto</label><input id="mContratto" placeholder="es. Impiegato / Operaio"></div>
+    <div class="modal-row"><label>Sesso</label><input id="mSesso" placeholder="M / F" maxlength="1" style="text-transform:uppercase"></div>
     <div class="modal-row"><label>Cognome</label><input id="mCognome"></div>
     <div class="modal-row"><label>Nome</label><input id="mNome"></div>
     <div class="modal-row"><label>Codice fiscale</label><input id="mCf" style="text-transform:uppercase"></div>
     <div class="modal-row"><label>Email</label><input id="mEmail" type="email"></div>
+    <div class="modal-row"><label>Note</label><input id="mNote"></div>
     <div class="modal-row"><label>Responsabile</label><input id="mRespNome"></div>
     <div class="modal-row"><label>Email responsabile</label><input id="mRespEmail" type="email"></div>
     <div class="modal-actions">
@@ -278,10 +282,12 @@ var SOGLIA_SCADENZA_GG = 30;
 var DURATA_DEFAULT_ANNI = 5;
 
 // Colonne "Corsi Frequentati" (1-based)
-var COL = {FILIALE:1,PLANT:2,COGNOME:3,NOME:4,NOMINATIVO:5,CF:6,EMAIL:7,RESP_NOME:8,RESP_EMAIL:9,
-           CORSO:10,DATA_INIZIO:11,DURATA_OVERRIDE:12,
-           DATA_PREVISTA:13,SEDE:14,MAIL_INVIATA:15,DATA_INVIO:16,REMINDER_INVIATO:17,DATA_REMINDER:18};
-var SHEET_HEADER = ['Filiale','Plant','Cognome','Nome','Nominativo','CF','Email','Responsabile','Email Responsabile',
+var COL = {FILIALE:1,PLANT:2,CODICESAP:3,CONTRATTO:4,SESSO:5,COGNOME:6,NOME:7,NOMINATIVO:8,CF:9,EMAIL:10,NOTE:11,
+           RESP_NOME:12,RESP_EMAIL:13,
+           CORSO:14,DATA_INIZIO:15,DURATA_OVERRIDE:16,
+           DATA_PREVISTA:17,SEDE:18,MAIL_INVIATA:19,DATA_INVIO:20,REMINDER_INVIATO:21,DATA_REMINDER:22};
+var SHEET_HEADER = ['Filiale','Plant','Codice SAP','Contratto','Sesso','Cognome','Nome','Nominativo','CF','Email','Note',
+                     'Responsabile','Email Responsabile',
                      'Corso','Data Inizio','Durata override (anni)',
                      'Data corso prevista','Sede corso','Mail inviata','Data invio mail','Reminder inviato','Data reminder'];
 var DURATE_HEADER = ['Corso','Durata (anni)'];
@@ -527,6 +533,14 @@ function sheetsDeleteRow(sheetName, rowIndex1based){
       .then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
   });
 }
+function sheetsInsertColumns(sheetName, startIndex, count){
+  return sheetsGetGid(sheetName).then(function(gid){
+    var url='https://sheets.googleapis.com/v4/spreadsheets/'+SPREADSHEET_ID+':batchUpdate';
+    var body={requests:[{insertDimension:{range:{sheetId:gid,dimension:'COLUMNS',startIndex:startIndex,endIndex:startIndex+count},inheritFromBefore:false}}]};
+    return fetch(url,{method:'POST',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify(body)})
+      .then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
+  });
+}
 
 // ══════════════════════════════════════════════════════════════════════════
 // DRIVE API
@@ -598,7 +612,7 @@ function createSpreadsheetWithHeader(){
       })
       .then(function(){
         var tmp = SPREADSHEET_ID; SPREADSHEET_ID = newId;
-        return sheetsUpdateValues("'"+SHEET_CORSI+"'!A1:R1", [SHEET_HEADER]).then(function(){ SPREADSHEET_ID = tmp; return newId; });
+        return sheetsUpdateValues("'"+SHEET_CORSI+"'!A1:V1", [SHEET_HEADER]).then(function(){ SPREADSHEET_ID = tmp; return newId; });
       });
   });
 }
@@ -631,10 +645,18 @@ function ensureDurateSheet(){
 // Qui le colonne nuove sono aggiunte IN CODA (M-R), non in mezzo come in Visite Mediche:
 // basta riscrivere l'intestazione, i dati esistenti non si spostano.
 function ensureCorsiSchemaCurrent(){
-  return sheetsGetValues("'"+SHEET_CORSI+"'!A1:R1").then(function(rows){
+  return sheetsGetValues("'"+SHEET_CORSI+"'!A1:V1").then(function(rows){
     var header = (rows && rows[0]) || [];
-    if(header[12]==='Data corso prevista') return; // già aggiornato
-    return sheetsUpdateValues("'"+SHEET_CORSI+"'!A1:R1", [SHEET_HEADER]);
+    if(header[2]==='Codice SAP') return; // già aggiornato
+    if(header[9]!=='Corso' && header[9]!=='Responsabile'){
+      // Intestazione non riconosciuta (foglio nuovo/vuoto): scrive direttamente lo schema attuale
+      return sheetsUpdateValues("'"+SHEET_CORSI+"'!A1:V1", [SHEET_HEADER]);
+    }
+    // Schema precedente rilevato (senza Codice SAP/Contratto/Sesso/Note): inserisce le colonne
+    // mancanti nei punti giusti — i dati esistenti si spostano da soli, nessuna riscrittura a mano.
+    return sheetsInsertColumns(SHEET_CORSI, 2, 3)   // C,D,E: Codice SAP, Contratto, Sesso (prima di Cognome)
+      .then(function(){ return sheetsInsertColumns(SHEET_CORSI, 10, 1); }) // K: Note (dopo Email)
+      .then(function(){ return sheetsUpdateValues("'"+SHEET_CORSI+"'!A1:V1", [SHEET_HEADER]); });
   });
 }
 
@@ -687,14 +709,14 @@ function loadDurate(){
 
 function loadCorsiData(){
   return Promise.all([
-    sheetsGetValues("'"+SHEET_CORSI+"'!A2:R"),
+    sheetsGetValues("'"+SHEET_CORSI+"'!A2:V"),
     loadDurate()
   ]).then(function(results){
     var rows = results[0];
     listaCorsiDistinct = [];
     var seen={};
     allCorsi = rows.map(function(row,i){
-      row = row.concat(new Array(18).fill(''));
+      row = row.concat(new Array(22).fill(''));
       var corso = row[COL.CORSO-1]||'';
       if(corso && !seen[corso.toLowerCase()]){ seen[corso.toLowerCase()]=true; listaCorsiDistinct.push(corso); }
       var dataInizio = parseDataIt(row[COL.DATA_INIZIO-1]);
@@ -705,11 +727,15 @@ function loadCorsiData(){
         rowIndex: i+2,
         filiale: row[COL.FILIALE-1]||'',
         plant: row[COL.PLANT-1]||'',
+        codiceSap: row[COL.CODICESAP-1]||'',
+        contratto: row[COL.CONTRATTO-1]||'',
+        sesso: row[COL.SESSO-1]||'',
         cognome: row[COL.COGNOME-1]||'',
         nome: row[COL.NOME-1]||'',
         nominativo: row[COL.NOMINATIVO-1] || ((row[COL.COGNOME-1]||'')+' '+(row[COL.NOME-1]||'')).trim(),
         cf: row[COL.CF-1]||'',
         email: row[COL.EMAIL-1]||'',
+        note: row[COL.NOTE-1]||'',
         responsabileNome: row[COL.RESP_NOME-1]||'',
         responsabileEmail: row[COL.RESP_EMAIL-1]||'',
         corso: corso,
@@ -796,7 +822,7 @@ function renderDashboard(){
     }
     h+='</div>'; // chiude wrap
 
-    h+='<div class="tbl-scroll"><table><thead><tr>'+(canEdit()?'<th></th>':'')+'<th>Filiale</th><th>Plant</th><th>Nominativo</th><th>CF</th><th>Corso</th><th>Data inizio</th><th>Scadenza</th><th>Stato</th><th>Data prevista</th><th>Sede</th></tr></thead><tbody id="dashBody"></tbody></table></div>';
+    h+='<div class="tbl-scroll"><table><thead><tr>'+(canEdit()?'<th></th>':'')+'<th>Filiale</th><th>Plant</th><th>Nominativo</th><th>CF</th><th>Corso</th><th>Data inizio</th><th>Scadenza</th><th>Stato</th><th>Data prevista</th><th>Sede</th><th>Note</th></tr></thead><tbody id="dashBody"></tbody></table></div>';
 
     setContent(h);
     dashApplyFilter();
@@ -843,9 +869,9 @@ function dashApplyFilter(){
     h+='<td data-label="CF" style="font-family:var(--ff-mono);font-size:11px">'+esc(c.cf)+'</td><td data-label="Corso">'+esc(c.corso)+'</td>';
     h+='<td data-label="Data inizio">'+fmtDataIt(c.dataInizio)+'</td><td data-label="Scadenza">'+fmtDataIt(c.dataScadenza)+'</td>';
     h+='<td data-label="Stato"><span class="badge '+badgeClass[c.stato]+'">'+c.stato+'</span></td>';
-    h+='<td data-label="Data prevista">'+(fmtDataIt(c.dataPrevista)||'—')+'</td><td data-label="Sede">'+esc(c.sede||'—')+'</td></tr>';
+    h+='<td data-label="Data prevista">'+(fmtDataIt(c.dataPrevista)||'—')+'</td><td data-label="Sede">'+esc(c.sede||'—')+'</td><td data-label="Note">'+esc(c.note||'—')+'</td></tr>';
   });
-  if(!rows.length) h='<tr><td colspan="10" style="color:var(--muted);text-align:center;padding:30px 0">Nessun record per questo filtro.</td></tr>';
+  if(!rows.length) h='<tr><td colspan="11" style="color:var(--muted);text-align:center;padding:30px 0">Nessun record per questo filtro.</td></tr>';
   document.getElementById('dashBody').innerHTML=h;
   updateConfirmSelCount();
 }
@@ -881,9 +907,9 @@ function confermaCorsiMassivo(){
   var righe = rowIndexes.map(function(ri){ return allCorsi.find(function(x){ return String(x.rowIndex)===String(ri); }); }).filter(Boolean);
   var updates=[];
   righe.forEach(function(c){
-    updates.push({range:"'"+SHEET_CORSI+"'!K"+c.rowIndex, values:[[dataStr]]});
-    updates.push({range:"'"+SHEET_CORSI+"'!M"+c.rowIndex+":P"+c.rowIndex, values:[['','','','']]});
-    updates.push({range:"'"+SHEET_CORSI+"'!Q"+c.rowIndex+":R"+c.rowIndex, values:[['','']]});
+    updates.push({range:"'"+SHEET_CORSI+"'!O"+c.rowIndex, values:[[dataStr]]});
+    updates.push({range:"'"+SHEET_CORSI+"'!Q"+c.rowIndex+":T"+c.rowIndex, values:[['','','','']]});
+    updates.push({range:"'"+SHEET_CORSI+"'!U"+c.rowIndex+":V"+c.rowIndex, values:[['','']]});
   });
   sheetsBatchUpdateValues(updates).then(function(){
     showToast('✓ '+righe.length+' corsi confermati, scadenze aggiornate','ok');
@@ -960,9 +986,9 @@ function apriMailto(url){
 }
 function exportDashboardExcel(){
   var rows = dashFilteredList().map(function(c){
-    return [c.filiale,c.plant,c.nominativo,c.cf,c.corso,fmtDataIt(c.dataInizio),fmtDataIt(c.dataScadenza),c.stato];
+    return [c.filiale,c.plant,c.nominativo,c.cf,c.corso,fmtDataIt(c.dataInizio),fmtDataIt(c.dataScadenza),c.stato,fmtDataIt(c.dataPrevista)||'',c.sede||'',c.note||''];
   });
-  exportExcel(['Filiale','Plant','Nominativo','CF','Corso','Data inizio','Scadenza','Stato'], rows, 'Formazione_Dashboard.xlsx');
+  exportExcel(['Filiale','Plant','Nominativo','CF','Corso','Data inizio','Scadenza','Stato','Data prevista','Sede','Note'], rows, 'Formazione_Dashboard.xlsx');
 }
 
 // ── ANAGRAFICA: card dipendente con corsi annidati ──
@@ -1003,7 +1029,7 @@ function renderAnagrafica(){
       h+='<div class="dip-head" onclick="toggleDip(\''+escAttr(key)+'\')">';
       h+='<span>'+(dipOpenState[key]?'▾':'▸')+'</span>';
       h+='<span class="nome">'+esc(d.nominativo)+'</span>';
-      h+='<span class="sub">'+esc(d.filiale)+' · '+esc(d.plant)+' · '+corsi.length+' corsi'+(scaduti?' · <span style="color:var(--red)">'+scaduti+' scaduti</span>':'')+'</span>';
+      h+='<span class="sub">'+esc(d.filiale)+' · '+esc(d.plant)+(d.codiceSap?' · SAP '+esc(d.codiceSap):'')+(d.contratto?' · '+esc(d.contratto):'')+(d.sesso?' · '+esc(d.sesso):'')+' · '+corsi.length+' corsi'+(scaduti?' · <span style="color:var(--red)">'+scaduti+' scaduti</span>':'')+(d.note?' · 📝 '+esc(d.note):'')+'</span>';
       if(canEdit()) h+='<button class="icon-btn" onclick="event.stopPropagation();openDipModal(\''+escAttr(key)+'\')">✎ Dati</button>';
       h+='</div>';
       h+='<div class="dip-corsi '+open+'" id="dipCorsi_'+escAttr(key)+'">';
@@ -1036,10 +1062,10 @@ function toggleDip(key){
 function exportAnagraficaExcel(){
   var visibili = allCorsi.filter(function(c){ return filialeVisibile(c.filiale); });
   var rows = visibili.map(function(c){
-    return [c.filiale,c.plant,c.cognome,c.nome,c.cf,c.email,c.responsabileNome,c.responsabileEmail,c.corso,fmtDataIt(c.dataInizio)||'',c.durataOverride||''];
+    return [c.filiale,c.plant,c.codiceSap,c.contratto,c.sesso,c.cognome,c.nome,c.cf,c.email,c.note,c.responsabileNome,c.responsabileEmail,c.corso,fmtDataIt(c.dataInizio)||'',c.durataOverride||''];
   });
   exportExcel(
-    ['Filiale','Plant','Cognome','Nome','CF','Email','Responsabile','Email Responsabile','Corso','Data Inizio','Durata override (anni)'],
+    ['Filiale','Plant','Codice SAP','Contratto','Sesso','Cognome','Nome','CF','Email','Note','Responsabile','Email Responsabile','Corso','Data Inizio','Durata override (anni)'],
     rows, 'Formazione_Anagrafica.xlsx'
   );
 }
@@ -1053,10 +1079,14 @@ function openDipModal(key){
   document.getElementById('dipModalTitle').textContent = d ? 'Modifica dati dipendente' : 'Nuovo dipendente';
   document.getElementById('mFiliale').value = d ? d.filiale : '';
   document.getElementById('mPlant').value = d ? d.plant : '';
+  document.getElementById('mCodiceSap').value = d ? d.codiceSap : '';
+  document.getElementById('mContratto').value = d ? d.contratto : '';
+  document.getElementById('mSesso').value = d ? d.sesso : '';
   document.getElementById('mCognome').value = d ? d.cognome : '';
   document.getElementById('mNome').value = d ? d.nome : '';
   document.getElementById('mCf').value = d ? d.cf : '';
   document.getElementById('mEmail').value = d ? d.email : '';
+  document.getElementById('mNote').value = d ? d.note : '';
   document.getElementById('mRespNome').value = d ? d.responsabileNome : '';
   document.getElementById('mRespEmail').value = d ? d.responsabileEmail : '';
   document.getElementById('dipModal').style.display='flex';
@@ -1066,10 +1096,14 @@ function closeDipModal(){ document.getElementById('dipModal').style.display='non
 function saveDipModal(){
   var filiale=document.getElementById('mFiliale').value.trim();
   var plant=document.getElementById('mPlant').value.trim();
+  var codiceSap=document.getElementById('mCodiceSap').value.trim();
+  var contratto=document.getElementById('mContratto').value.trim();
+  var sesso=document.getElementById('mSesso').value.trim().toUpperCase();
   var cognome=document.getElementById('mCognome').value.trim();
   var nome=document.getElementById('mNome').value.trim();
   var cf=document.getElementById('mCf').value.trim().toUpperCase();
   var email=document.getElementById('mEmail').value.trim();
+  var note=document.getElementById('mNote').value.trim();
   var respNome=document.getElementById('mRespNome').value.trim();
   var respEmail=document.getElementById('mRespEmail').value.trim();
   if(!filiale||!cognome||!nome){ showToast('Filiale, Cognome e Nome sono obbligatori','err'); return; }
@@ -1080,14 +1114,14 @@ function saveDipModal(){
     var corsi = allCorsi.filter(function(c){ return (c.cf||('__'+c.nominativo))===editingDipKey; });
     if(!corsi.length){ showToast('Nessun corso da aggiornare per questo dipendente','err'); closeDipModal(); return; }
     var updates = corsi.map(function(c){
-      return {range:"'"+SHEET_CORSI+"'!A"+c.rowIndex+":I"+c.rowIndex, values:[[filiale,plant,cognome,nome,nominativo,cf,email,respNome,respEmail]]};
+      return {range:"'"+SHEET_CORSI+"'!A"+c.rowIndex+":M"+c.rowIndex, values:[[filiale,plant,codiceSap,contratto,sesso,cognome,nome,nominativo,cf,email,note,respNome,respEmail]]};
     });
     sheetsBatchUpdateValues(updates).then(function(){ showToast('✓ Dati aggiornati su '+corsi.length+' corsi','ok'); closeDipModal(); renderAnagrafica(); })
       .catch(function(e){ showToast('Errore: '+e.message,'err'); });
   } else {
     // Nuovo dipendente: crea una prima riga "Nessun Corso" come placeholder, poi aggiungerà corsi veri
-    var row=[filiale,plant,cognome,nome,nominativo,cf,email,respNome,respEmail,'Nessun Corso','',''];
-    sheetsAppendValues("'"+SHEET_CORSI+"'!A:L", [row]).then(function(){ showToast('✓ Dipendente creato','ok'); closeDipModal(); renderAnagrafica(); })
+    var row=[filiale,plant,codiceSap,contratto,sesso,cognome,nome,nominativo,cf,email,note,respNome,respEmail,'Nessun Corso','',''];
+    sheetsAppendValues("'"+SHEET_CORSI+"'!A:P", [row]).then(function(){ showToast('✓ Dipendente creato','ok'); closeDipModal(); renderAnagrafica(); })
       .catch(function(e){ showToast('Errore: '+e.message,'err'); });
   }
 }
@@ -1116,9 +1150,9 @@ function saveCorsoModal(){
 
   if(editingCorsoRow){
     var updates=[
-      {range:"'"+SHEET_CORSI+"'!J"+editingCorsoRow, values:[[corso]]},
-      {range:"'"+SHEET_CORSI+"'!K"+editingCorsoRow, values:[[dataInizio]]},
-      {range:"'"+SHEET_CORSI+"'!L"+editingCorsoRow, values:[[durataOverride]]}
+      {range:"'"+SHEET_CORSI+"'!N"+editingCorsoRow, values:[[corso]]},
+      {range:"'"+SHEET_CORSI+"'!O"+editingCorsoRow, values:[[dataInizio]]},
+      {range:"'"+SHEET_CORSI+"'!P"+editingCorsoRow, values:[[durataOverride]]}
     ];
     sheetsBatchUpdateValues(updates).then(function(){ showToast('✓ Corso aggiornato','ok'); closeCorsoModal(); renderAnagrafica(); })
       .catch(function(e){ showToast('Errore: '+e.message,'err'); });
@@ -1126,8 +1160,8 @@ function saveCorsoModal(){
     if(!editingCorsoDipKey){ showToast('Errore interno: dipendente non identificato','err'); return; }
     var d = allCorsi.find(function(c){ return (c.cf||('__'+c.nominativo))===editingCorsoDipKey; });
     if(!d){ showToast('Dipendente non trovato','err'); return; }
-    var row=[d.filiale,d.plant,d.cognome,d.nome,d.nominativo,d.cf,d.email,d.responsabileNome,d.responsabileEmail,corso,dataInizio,durataOverride];
-    sheetsAppendValues("'"+SHEET_CORSI+"'!A:L", [row]).then(function(){
+    var row=[d.filiale,d.plant,d.codiceSap,d.contratto,d.sesso,d.cognome,d.nome,d.nominativo,d.cf,d.email,d.note,d.responsabileNome,d.responsabileEmail,corso,dataInizio,durataOverride];
+    sheetsAppendValues("'"+SHEET_CORSI+"'!A:P", [row]).then(function(){
       dipOpenState[editingCorsoDipKey]=true;
       showToast('✓ Corso aggiunto','ok'); closeCorsoModal(); renderAnagrafica();
     }).catch(function(e){ showToast('Errore: '+e.message,'err'); });
@@ -1248,7 +1282,7 @@ function confermaProgrammazione(){
   if(!parseDataIt(dataStr)){ showToast('Formato data non valido (gg/mm/aaaa)','err'); return; }
 
   var writes = rows.map(function(rowIndex){
-    return sheetsUpdateValues("'"+SHEET_CORSI+"'!M"+rowIndex+":P"+rowIndex, [[dataStr,sedeStr,'FALSE','']]);
+    return sheetsUpdateValues("'"+SHEET_CORSI+"'!Q"+rowIndex+":T"+rowIndex, [[dataStr,sedeStr,'FALSE','']]);
   });
   Promise.all(writes).then(function(){
     showToast('✓ Assegnati a '+rows.length+' corsi','ok');
@@ -1336,9 +1370,9 @@ function exportExcel(headers, rows2d, filename){
   XLSX.writeFile(wb, filename);
 }
 function scaricaTemplateImport(){
-  var esempio=['CE','P52','Rossi','Mario','RSSMRA80A01F839X','mario.rossi@atsgruppo.eu','Nome Responsabile','responsabile@atsgruppo.eu','Antincendio','15/03/2025',''];
+  var esempio=['CE','P52','149','Impiegato','M','Rossi','Mario','RSSMRA80A01F839X','mario.rossi@atsgruppo.eu','','Nome Responsabile','responsabile@atsgruppo.eu','Antincendio','15/03/2025',''];
   exportExcel(
-    ['Filiale','Plant','Cognome','Nome','CF','Email','Responsabile','Email Responsabile','Corso','Data Inizio (gg/mm/aaaa)','Durata override (anni, opzionale)'],
+    ['Filiale','Plant','Codice SAP','Contratto','Sesso','Cognome','Nome','CF','Email','Note','Responsabile','Email Responsabile','Corso','Data Inizio (gg/mm/aaaa)','Durata override (anni, opzionale)'],
     [esempio], 'Template_Import_Formazione.xlsx'
   );
 }
@@ -1370,26 +1404,30 @@ function processImportRows(rows){
   body.forEach(function(r){
     var filiale=(r[0]||'').toString().trim();
     var plant=(r[1]||'').toString().trim();
-    var cognome=(r[2]||'').toString().trim();
-    var nome=(r[3]||'').toString().trim();
-    var cf=(r[4]||'').toString().trim().toUpperCase();
-    var email=(r[5]||'').toString().trim();
-    var respNome=(r[6]||'').toString().trim();
-    var respEmail=(r[7]||'').toString().trim();
-    var corso=(r[8]||'').toString().trim();
-    var dataInizio=(r[9]||'').toString().trim();
-    var durataOverride=(r[10]||'').toString().trim();
+    var codiceSap=(r[2]||'').toString().trim();
+    var contratto=(r[3]||'').toString().trim();
+    var sesso=(r[4]||'').toString().trim().toUpperCase();
+    var cognome=(r[5]||'').toString().trim();
+    var nome=(r[6]||'').toString().trim();
+    var cf=(r[7]||'').toString().trim().toUpperCase();
+    var email=(r[8]||'').toString().trim();
+    var note=(r[9]||'').toString().trim();
+    var respNome=(r[10]||'').toString().trim();
+    var respEmail=(r[11]||'').toString().trim();
+    var corso=(r[12]||'').toString().trim();
+    var dataInizio=(r[13]||'').toString().trim();
+    var durataOverride=(r[14]||'').toString().trim();
 
     if(!filiale && !cognome && !nome && !cf && !corso) return;
     if(!filiale || !cognome || !nome || !corso){ saltati++; return; }
 
     var nominativo=(cognome+' '+nome).toUpperCase();
-    nuovi.push([filiale,plant,cognome,nome,nominativo,cf,email,respNome,respEmail,corso,dataInizio,durataOverride]);
+    nuovi.push([filiale,plant,codiceSap,contratto,sesso,cognome,nome,nominativo,cf,email,note,respNome,respEmail,corso,dataInizio,durataOverride]);
   });
 
   if(!nuovi.length){ showToast('Nessuna riga valida nel file'+(saltati?' ('+saltati+' saltate)':''),'err'); return; }
 
-  sheetsAppendValues("'"+SHEET_CORSI+"'!A:L", nuovi).then(function(){
+  sheetsAppendValues("'"+SHEET_CORSI+"'!A:P", nuovi).then(function(){
     showToast('✓ Import completato: '+nuovi.length+' corsi aggiunti'+(saltati?', '+saltati+' saltati':''), 'ok');
     renderAnagrafica();
   }).catch(function(e){ showToast('Errore import: '+e.message,'err'); });
