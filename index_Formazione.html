@@ -238,8 +238,8 @@ tbody tr:hover{background:var(--card)}
 <div class="overlay" id="corsoModal">
   <div class="modal">
     <h3 id="corsoModalTitle">Nuovo corso</h3>
-    <div class="modal-row"><label>Corso</label><input id="mCorsoNome" list="listaCorsi" placeholder="es. Antincendio"></div>
-    <datalist id="listaCorsi"></datalist>
+    <div class="modal-row"><label>Corso</label><select id="mCorsoNome"></select></div>
+    <div class="modal-row" id="mAttestatoRow" style="display:none"><label>Attestato</label><div id="mAttestatoStatus" style="font-size:12px;color:var(--subtle)"></div></div>
     <div class="modal-row"><label>Data inizio (gg/mm/aaaa)</label><input id="mCorsoData" placeholder="gg/mm/aaaa"></div>
     <div class="modal-row"><label>Durata override (anni) — lascia vuoto per usare la tabella Corsi/Durate</label><input id="mCorsoDurata" type="number" min="1" placeholder=""></div>
     <div class="modal-actions">
@@ -262,6 +262,7 @@ tbody tr:hover{background:var(--card)}
   </div>
 </div>
 
+<input type="file" id="attestatoFileInput" accept=".pdf,.jpg,.jpeg,.png" style="display:none" onchange="handleAttestatoFile(event)">
 <div id="toast"></div>
 
 <script>
@@ -280,18 +281,32 @@ var VISITEMED_CONFIG_FNAME = 'config_visitemediche.json';
 var SUPER_USERS      = ['atssegnalazioni@gmail.com'];
 var SOGLIA_SCADENZA_GG = 30;
 var DURATA_DEFAULT_ANNI = 5;
+var ATTESTATI_FOLDER_NAME = 'Attestati Formazione'; // sottocartella dentro DATA_FOLDER_ID
 
 // Colonne "Corsi Frequentati" (1-based)
 var COL = {FILIALE:1,PLANT:2,CODICESAP:3,CONTRATTO:4,SESSO:5,COGNOME:6,NOME:7,NOMINATIVO:8,CF:9,EMAIL:10,NOTE:11,
            RESP_NOME:12,RESP_EMAIL:13,
            CORSO:14,DATA_INIZIO:15,DURATA_OVERRIDE:16,
-           DATA_PREVISTA:17,SEDE:18,MAIL_INVIATA:19,DATA_INVIO:20,REMINDER_INVIATO:21,DATA_REMINDER:22};
+           DATA_PREVISTA:17,SEDE:18,MAIL_INVIATA:19,DATA_INVIO:20,REMINDER_INVIATO:21,DATA_REMINDER:22,
+           ATTESTATO:23};
 var SHEET_HEADER = ['Filiale','Plant','Codice SAP','Contratto','Sesso','Cognome','Nome','Nominativo','CF','Email','Note',
                      'Responsabile','Email Responsabile',
                      'Corso','Data Inizio','Durata override (anni)',
-                     'Data corso prevista','Sede corso','Mail inviata','Data invio mail','Reminder inviato','Data reminder'];
+                     'Data corso prevista','Sede corso','Mail inviata','Data invio mail','Reminder inviato','Data reminder',
+                     'Attestato (link)'];
 var DURATE_HEADER = ['Corso','Durata (anni)'];
 var DURATE_DEFAULT = [['Tutti i corsi', DURATA_DEFAULT_ANNI], ['Primo Soccorso',3], ['Preposto',2], ['RLS',1]];
+
+// Catalogo corsi fisso — usato per il menu a tendina del corso, così il nome scritto
+// combacia sempre esattamente con la tabella Corsi/Durate (niente refusi che fanno
+// perdere la durata giusta). Se ne serve uno nuovo, aggiungilo qui.
+var CATALOGO_CORSI = [
+  'Formazione Generale Lavoratori','Formazione Specifica Lavoratori','Antincendio','Primo Soccorso',
+  'Carrelli','Preposto','RLS','Aggiornamento Formazione Lavoratori','Defibrillatore',
+  'Sicurezza attrezzature magazzino (15635)','Aggiornamento Formazione Dirigenti','Nessun Corso',
+  'Tachigrafo','Privacy','Privacy, Sicurezza Dati, Videosorveglianza','4.0',
+  'Formazione personale alimentarista - HACCP'
+];
 
 // ══════════════════════════════════════════════════════════════════════════
 // AUTH — delegata al WMS Hub
@@ -570,6 +585,72 @@ function driveCreateFile(folderId, name, blob){
     }).then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
   });
 }
+// Upload di un file binario qualsiasi (PDF/immagine) — diverso da driveCreateFile che è solo per testo/JSON
+function driveUploadBinaryFile(folderId, file){
+  return new Promise(function(resolve, reject){
+    var reader = new FileReader();
+    reader.onload = function(e){
+      var base64Data = e.target.result.split(',')[1];
+      var boundary = 'fmbin_'+Date.now();
+      var metadata = {name:file.name, parents:[folderId]};
+      var body = '--'+boundary+'\r\n'
+        + 'Content-Type: application/json; charset=UTF-8\r\n\r\n'+JSON.stringify(metadata)+'\r\n'
+        + '--'+boundary+'\r\n'
+        + 'Content-Type: '+(file.type||'application/octet-stream')+'\r\n'
+        + 'Content-Transfer-Encoding: base64\r\n\r\n'+base64Data+'\r\n'
+        + '--'+boundary+'--';
+      fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,webViewLink',{
+        method:'POST', headers:{Authorization:'Bearer '+getToken(),'Content-Type':'multipart/related; boundary='+boundary}, body:body
+      }).then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); })
+        .then(resolve).catch(reject);
+    };
+    reader.onerror=function(){ reject(new Error('Errore lettura file')); };
+    reader.readAsDataURL(file);
+  });
+}
+// Sottocartella "Attestati Formazione" dentro DATA_FOLDER_ID, creata al bisogno
+var _attestatiFolderId = null;
+function ensureAttestatiFolder(){
+  if(_attestatiFolderId) return Promise.resolve(_attestatiFolderId);
+  return driveListFiles('"'+DATA_FOLDER_ID+'" in parents and name="'+ATTESTATI_FOLDER_NAME+'" and mimeType="application/vnd.google-apps.folder" and trashed=false')
+  .then(function(files){
+    if(files.length){ _attestatiFolderId=files[0].id; return _attestatiFolderId; }
+    var metaBody = JSON.stringify({name:ATTESTATI_FOLDER_NAME, parents:[DATA_FOLDER_ID], mimeType:'application/vnd.google-apps.folder'});
+    return fetch('https://www.googleapis.com/drive/v3/files?fields=id',{
+      method:'POST', headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'}, body: metaBody
+    }).then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); })
+      .then(function(f){ _attestatiFolderId=f.id; return f.id; });
+  });
+}
+var attestatoTargetRow = null;
+function triggerUploadAttestato(rowIndex){
+  attestatoTargetRow = rowIndex;
+  document.getElementById('attestatoFileInput').click();
+}
+function handleAttestatoFile(evt){
+  var file = evt.target.files[0];
+  if(!file || !attestatoTargetRow){ evt.target.value=''; return; }
+  var rowIndex = attestatoTargetRow;
+  showToast('Caricamento attestato in corso…','ok');
+  ensureAttestatiFolder()
+    .then(function(folderId){ return driveUploadBinaryFile(folderId, file); })
+    .then(function(f){
+      var link = f.webViewLink || ('https://drive.google.com/file/d/'+f.id+'/view');
+      return sheetsUpdateValues("'"+SHEET_CORSI+"'!W"+rowIndex, [[link]]);
+    })
+    .then(function(){
+      showToast('✓ Attestato caricato','ok');
+      attestatoTargetRow = null;
+      evt.target.value='';
+      closeCorsoModal();
+      renderAnagrafica();
+    })
+    .catch(function(e){
+      showToast('Errore upload attestato: '+e.message,'err');
+      attestatoTargetRow = null;
+      evt.target.value='';
+    });
+}
 
 // ══════════════════════════════════════════════════════════════════════════
 // AUTO-PROVISIONING FOGLIO DATI
@@ -612,7 +693,7 @@ function createSpreadsheetWithHeader(){
       })
       .then(function(){
         var tmp = SPREADSHEET_ID; SPREADSHEET_ID = newId;
-        return sheetsUpdateValues("'"+SHEET_CORSI+"'!A1:V1", [SHEET_HEADER]).then(function(){ SPREADSHEET_ID = tmp; return newId; });
+        return sheetsUpdateValues("'"+SHEET_CORSI+"'!A1:W1", [SHEET_HEADER]).then(function(){ SPREADSHEET_ID = tmp; return newId; });
       });
   });
 }
@@ -645,18 +726,23 @@ function ensureDurateSheet(){
 // Qui le colonne nuove sono aggiunte IN CODA (M-R), non in mezzo come in Visite Mediche:
 // basta riscrivere l'intestazione, i dati esistenti non si spostano.
 function ensureCorsiSchemaCurrent(){
-  return sheetsGetValues("'"+SHEET_CORSI+"'!A1:V1").then(function(rows){
+  return sheetsGetValues("'"+SHEET_CORSI+"'!A1:W1").then(function(rows){
     var header = (rows && rows[0]) || [];
-    if(header[2]==='Codice SAP') return; // già aggiornato
-    if(header[9]!=='Corso' && header[9]!=='Responsabile'){
-      // Intestazione non riconosciuta (foglio nuovo/vuoto): scrive direttamente lo schema attuale
-      return sheetsUpdateValues("'"+SHEET_CORSI+"'!A1:V1", [SHEET_HEADER]);
+    if(header[2]!=='Codice SAP'){
+      if(header[9]!=='Corso' && header[9]!=='Responsabile'){
+        // Intestazione non riconosciuta (foglio nuovo/vuoto): scrive direttamente lo schema attuale
+        return sheetsUpdateValues("'"+SHEET_CORSI+"'!A1:W1", [SHEET_HEADER]);
+      }
+      // Schema precedente rilevato (senza Codice SAP/Contratto/Sesso/Note): inserisce le colonne
+      // mancanti nei punti giusti — i dati esistenti si spostano da soli, nessuna riscrittura a mano.
+      return sheetsInsertColumns(SHEET_CORSI, 2, 3)   // C,D,E: Codice SAP, Contratto, Sesso (prima di Cognome)
+        .then(function(){ return sheetsInsertColumns(SHEET_CORSI, 10, 1); }) // K: Note (dopo Email)
+        .then(function(){ return sheetsUpdateValues("'"+SHEET_CORSI+"'!A1:W1", [SHEET_HEADER]); });
     }
-    // Schema precedente rilevato (senza Codice SAP/Contratto/Sesso/Note): inserisce le colonne
-    // mancanti nei punti giusti — i dati esistenti si spostano da soli, nessuna riscrittura a mano.
-    return sheetsInsertColumns(SHEET_CORSI, 2, 3)   // C,D,E: Codice SAP, Contratto, Sesso (prima di Cognome)
-      .then(function(){ return sheetsInsertColumns(SHEET_CORSI, 10, 1); }) // K: Note (dopo Email)
-      .then(function(){ return sheetsUpdateValues("'"+SHEET_CORSI+"'!A1:V1", [SHEET_HEADER]); });
+    if(header[22]!=='Attestato (link)'){
+      // Colonna aggiunta in coda (W): basta riscrivere l'header, nessuno spostamento dati.
+      return sheetsUpdateValues("'"+SHEET_CORSI+"'!A1:W1", [SHEET_HEADER]);
+    }
   });
 }
 
@@ -709,14 +795,14 @@ function loadDurate(){
 
 function loadCorsiData(){
   return Promise.all([
-    sheetsGetValues("'"+SHEET_CORSI+"'!A2:V"),
+    sheetsGetValues("'"+SHEET_CORSI+"'!A2:W"),
     loadDurate()
   ]).then(function(results){
     var rows = results[0];
     listaCorsiDistinct = [];
     var seen={};
     allCorsi = rows.map(function(row,i){
-      row = row.concat(new Array(22).fill(''));
+      row = row.concat(new Array(23).fill(''));
       var corso = row[COL.CORSO-1]||'';
       if(corso && !seen[corso.toLowerCase()]){ seen[corso.toLowerCase()]=true; listaCorsiDistinct.push(corso); }
       var dataInizio = parseDataIt(row[COL.DATA_INIZIO-1]);
@@ -745,6 +831,7 @@ function loadCorsiData(){
         dataPrevista: parseDataIt(row[COL.DATA_PREVISTA-1]),
         sede: row[COL.SEDE-1]||'',
         mailInviata: String(row[COL.MAIL_INVIATA-1]).toUpperCase()==='TRUE',
+        attestato: row[COL.ATTESTATO-1]||'',
         dataScadenza: dataScadenza,
         stato: calcolaStato(dataScadenza)
       };
@@ -1038,6 +1125,8 @@ function renderAnagrafica(){
         h+='<div class="corso-row"><span class="cnome">'+esc(c.corso)+'</span>';
         h+='<span class="cdate">'+fmtDataIt(c.dataInizio)+' → '+ (fmtDataIt(c.dataScadenza)||'—') +'</span>';
         h+='<span class="badge '+badgeClass[c.stato]+'">'+c.stato+'</span>';
+        if(c.attestato) h+='<a href="'+esc(c.attestato)+'" target="_blank" class="icon-btn" title="Apri attestato">📄</a>';
+        else if(canEdit()) h+='<button class="icon-btn" onclick="triggerUploadAttestato('+c.rowIndex+')" title="Carica attestato">📎</button>';
         if(canEdit()){
           h+='<button class="icon-btn" onclick="openCorsoModal('+c.rowIndex+')">✎</button>';
           h+='<button class="icon-btn del" onclick="deleteCorsoRow('+c.rowIndex+')">✕</button>';
@@ -1133,11 +1222,30 @@ function openCorsoModal(rowIndex, dipKeyPerNuovo){
   editingCorsoDipKey = dipKeyPerNuovo || null;
   var c = rowIndex ? allCorsi.find(function(x){return x.rowIndex===rowIndex;}) : null;
   document.getElementById('corsoModalTitle').textContent = c ? 'Modifica corso' : 'Nuovo corso';
-  document.getElementById('mCorsoNome').value = c ? c.corso : '';
+
+  // Tendina corsi: catalogo fisso + eventuali corsi già usati/aggiunti in Corsi/Durate, senza duplicati
+  var elenco = CATALOGO_CORSI.slice();
+  listaCorsiDistinct.forEach(function(x){ if(elenco.indexOf(x)===-1) elenco.push(x); });
+  Object.keys(durateMap).forEach(function(k){
+    var nomeReale = listaCorsiDistinct.find(function(x){return x.toLowerCase()===k;}) || k;
+    if(elenco.map(function(e){return e.toLowerCase();}).indexOf(k)===-1) elenco.push(nomeReale);
+  });
+  var sel=document.getElementById('mCorsoNome');
+  sel.innerHTML = elenco.map(function(x){ return '<option value="'+esc(x)+'">'+esc(x)+'</option>'; }).join('');
+  sel.value = c ? c.corso : elenco[0];
+
   document.getElementById('mCorsoData').value = c ? fmtDataIt(c.dataInizio) : '';
   document.getElementById('mCorsoDurata').value = c && c.durataOverride ? c.durataOverride : '';
-  var dl = document.getElementById('listaCorsi');
-  dl.innerHTML = listaCorsiDistinct.map(function(x){ return '<option value="'+esc(x)+'">'; }).join('');
+
+  var attRow=document.getElementById('mAttestatoRow');
+  if(c){
+    attRow.style.display='block';
+    document.getElementById('mAttestatoStatus').innerHTML = c.attestato
+      ? '<a href="'+esc(c.attestato)+'" target="_blank" style="color:var(--blue)">📄 Apri attestato caricato</a> · <button class="icon-btn" onclick="triggerUploadAttestato('+c.rowIndex+')" type="button">📎 Sostituisci</button>'
+      : '<button class="icon-btn" onclick="triggerUploadAttestato('+c.rowIndex+')" type="button">📎 Carica attestato</button>';
+  } else {
+    attRow.style.display='none'; // per un corso non ancora salvato, l'upload si fa dopo il salvataggio
+  }
   document.getElementById('corsoModal').style.display='flex';
 }
 function closeCorsoModal(){ document.getElementById('corsoModal').style.display='none'; }
