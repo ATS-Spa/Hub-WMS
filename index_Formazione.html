@@ -666,6 +666,31 @@ function handleAttestatoFile(evt){
       evt.target.value='';
     });
 }
+function estraiFileIdDaLink(link){
+  var m = (link||'').match(/\/d\/([a-zA-Z0-9_-]+)/);
+  return m ? m[1] : null;
+}
+function driveTrashFile(fileId){
+  return fetch('https://www.googleapis.com/drive/v3/files/'+fileId,{
+    method:'PATCH', headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'}, body: JSON.stringify({trashed:true})
+  }).then(function(r){ if(!r.ok) return r.text().then(function(t){throw new Error(t);}); return r.json(); });
+}
+function removeAttestato(rowIndex){
+  var c = allCorsi.find(function(x){ return x.rowIndex===rowIndex; });
+  if(!c || !c.attestato) return;
+  if(!confirm('Rimuovere l\'attestato di '+c.nominativo+' per il corso "'+c.corso+'"? Il file su Drive verrà spostato nel cestino.')) return;
+
+  var fileId = estraiFileIdDaLink(c.attestato);
+  var p = fileId ? driveTrashFile(fileId) : Promise.resolve();
+  p.then(function(){ return sheetsUpdateValues("'"+SHEET_CORSI+"'!W"+rowIndex, [['']]); })
+    .then(function(){
+      showToast('✓ Attestato rimosso','ok');
+      var eraApertoQuiIlModale = document.getElementById('corsoModal').style.display==='flex' && editingCorsoRow===rowIndex;
+      renderAnagrafica();
+      if(eraApertoQuiIlModale) openCorsoModal(rowIndex);
+    })
+    .catch(function(e){ showToast('Errore rimozione: '+e.message,'err'); });
+}
 
 // ══════════════════════════════════════════════════════════════════════════
 // AUTO-PROVISIONING FOGLIO DATI
@@ -1186,7 +1211,10 @@ function renderAnagrafica(){
         h+='<div class="corso-row"><span class="cnome">'+esc(c.corso)+'</span>';
         h+='<span class="cdate">'+fmtDataIt(c.dataInizio)+' → '+ (fmtDataIt(c.dataScadenza)||'—') +'</span>';
         h+='<span class="badge '+badgeClass[c.stato]+'">'+c.stato+'</span>';
-        if(c.attestato) h+='<a href="'+esc(c.attestato)+'" target="_blank" class="icon-btn" title="Apri attestato">📄</a>';
+        if(c.attestato){
+          h+='<a href="'+esc(c.attestato)+'" target="_blank" class="icon-btn" title="Apri attestato">📄</a>';
+          if(canEdit()) h+='<button class="icon-btn del" onclick="removeAttestato('+c.rowIndex+')" title="Rimuovi attestato">🗑️</button>';
+        }
         else if(canEdit()) h+='<button class="icon-btn" onclick="triggerUploadAttestato('+c.rowIndex+')" title="Carica attestato">📎</button>';
         if(canEdit()){
           h+='<button class="icon-btn" onclick="openCorsoModal('+c.rowIndex+')">✎</button>';
@@ -1300,7 +1328,7 @@ function openCorsoModal(rowIndex, dipKeyPerNuovo){
   if(c){
     attRow.style.display='block';
     document.getElementById('mAttestatoStatus').innerHTML = c.attestato
-      ? '<a href="'+esc(c.attestato)+'" target="_blank" style="color:var(--blue)">📄 Apri attestato caricato</a> · <button class="icon-btn" onclick="triggerUploadAttestato('+c.rowIndex+')" type="button">📎 Sostituisci</button>'
+      ? '<a href="'+esc(c.attestato)+'" target="_blank" style="color:var(--blue)">📄 Apri attestato caricato</a> · <button class="icon-btn" onclick="triggerUploadAttestato('+c.rowIndex+')" type="button">📎 Sostituisci</button> · <button class="icon-btn del" onclick="removeAttestato('+c.rowIndex+')" type="button">🗑️ Rimuovi</button>'
       : '<button class="icon-btn" onclick="triggerUploadAttestato('+c.rowIndex+')" type="button">📎 Carica attestato</button>';
   } else {
     attRow.style.display='none'; // per un corso non ancora salvato, l'upload si fa dopo il salvataggio
