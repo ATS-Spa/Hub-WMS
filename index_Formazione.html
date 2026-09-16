@@ -238,7 +238,7 @@ tbody tr:hover{background:var(--card)}
 <div class="overlay" id="corsoModal">
   <div class="modal">
     <h3 id="corsoModalTitle">Nuovo corso</h3>
-    <div class="modal-row"><label>Corso</label><select id="mCorsoNome"></select></div>
+    <div class="modal-row"><label>Corso</label><select id="mCorsoNome" onchange="handleCorsoSelectChange()"></select></div>
     <div class="modal-row" id="mAttestatoRow" style="display:none"><label>Attestato</label><div id="mAttestatoStatus" style="font-size:12px;color:var(--subtle)"></div></div>
     <div class="modal-row"><label>Data inizio (gg/mm/aaaa)</label><input id="mCorsoData" placeholder="gg/mm/aaaa"></div>
     <div class="modal-row"><label>Durata override (anni) — lascia vuoto per usare la tabella Corsi/Durate</label><input id="mCorsoDurata" type="number" min="1" placeholder=""></div>
@@ -1231,7 +1231,8 @@ function openCorsoModal(rowIndex, dipKeyPerNuovo){
     if(elenco.map(function(e){return e.toLowerCase();}).indexOf(k)===-1) elenco.push(nomeReale);
   });
   var sel=document.getElementById('mCorsoNome');
-  sel.innerHTML = elenco.map(function(x){ return '<option value="'+esc(x)+'">'+esc(x)+'</option>'; }).join('');
+  sel.innerHTML = elenco.map(function(x){ return '<option value="'+esc(x)+'">'+esc(x)+'</option>'; }).join('')
+    + '<option value="__NEW__">➕ Nuovo corso…</option>';
   sel.value = c ? c.corso : elenco[0];
 
   document.getElementById('mCorsoData').value = c ? fmtDataIt(c.dataInizio) : '';
@@ -1249,6 +1250,25 @@ function openCorsoModal(rowIndex, dipKeyPerNuovo){
   document.getElementById('corsoModal').style.display='flex';
 }
 function closeCorsoModal(){ document.getElementById('corsoModal').style.display='none'; }
+function handleCorsoSelectChange(){
+  var sel=document.getElementById('mCorsoNome');
+  if(sel.value!=='__NEW__') return;
+  var nome=prompt('Nome del nuovo corso:');
+  if(!nome || !nome.trim()){
+    sel.value = sel.options.length>1 ? sel.options[0].value : ''; // annulla, torna al primo
+    return;
+  }
+  nome=nome.trim();
+  // Evita duplicati (case-insensitive) sulla tendina già aperta
+  var esiste = Array.prototype.some.call(sel.options, function(o){ return o.value.toLowerCase()===nome.toLowerCase(); });
+  if(!esiste){
+    var opt=document.createElement('option');
+    opt.value=nome; opt.textContent=nome;
+    sel.insertBefore(opt, sel.querySelector('option[value="__NEW__"]'));
+  }
+  sel.value=nome;
+  showToast('"'+nome+'" userà la durata di default ('+durateDefault+' anni) finché non aggiungi un\'eccezione in Corsi e Durate','ok');
+}
 
 function saveCorsoModal(){
   var corso=document.getElementById('mCorsoNome').value.trim();
