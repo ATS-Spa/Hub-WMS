@@ -23,6 +23,7 @@
   --c-X:#10b981;--c-F:#3b82f6;--c-hF:#60a5fa;--c-M:#ef4444;
   --c-HP:#a855f7;--c-H104:#f59e0b;--c-104:#fb923c;--c-CP:#ec4899;
   --c-HPE:#14b8a6;--c-PE:#06b6d4;--c-SW:#84cc16;--c-Lutto:#94a3b8;--c-TFS:#38bdf8;--c-PLT:#fbbf24;
+  --c-R:#78716c;--c-HPVM:#d946ef;
   --ferie-color:#f472b6;
 }
 /* ── TEMA DIM (misto) ── */
@@ -93,6 +94,7 @@ body.theme-salvia{
   --c-X:#2e6e2e;--c-F:#2d6e8a;--c-hF:#4a8eaa;--c-M:#8a2e2e;
   --c-HP:#5a3e8a;--c-H104:#8a5c0a;--c-104:#8a4a10;--c-CP:#8a2858;
   --c-HPE:#2a6e50;--c-PE:#1a6878;--c-SW:#3a6a1a;--c-Lutto:#4a5e48;--c-TFS:#1e5888;--c-PLT:#8a5c0a;
+  --c-R:#4a4038;--c-HPVM:#8a2e8a;
   --ferie-color:#8a2858;
 }
 body.theme-salvia .snav{background:#ddebd6;border-bottom:1px solid #aac4a2;}
@@ -188,6 +190,7 @@ body.theme-avorio{
   --c-X:#2d7a3a;--c-F:#3b6fa0;--c-hF:#5a8fbe;--c-M:#b53030;
   --c-HP:#6b4fa0;--c-H104:#b5620a;--c-104:#b55a10;--c-CP:#a03060;
   --c-HPE:#2a7d5f;--c-PE:#1a7a8a;--c-SW:#4a7a1a;--c-Lutto:#7a6a55;--c-TFS:#2060a0;--c-PLT:#b5620a;
+  --c-R:#7a6a55;--c-HPVM:#a030a0;
   --ferie-color:#a03060;
 }
 body.theme-avorio .snav{background:#e5dfd3;border-bottom:1px solid #c9bfaf;}
@@ -409,6 +412,7 @@ td.tot{text-align:center;min-width:50px;font-family:var(--ffm);font-size:12px;fo
 .s-X{color:var(--c-X)}.s-F{color:var(--c-F)}.s-hF{color:var(--c-hF)}.s-M{color:var(--c-M)}
 .s-HP{color:var(--c-HP)}.s-H104{color:var(--c-H104)}.s-104{color:var(--c-104)}.s-CP{color:var(--c-CP)}
 .s-HPE{color:var(--c-HPE)}.s-PE{color:var(--c-PE)}.s-SW{color:var(--c-SW)}.s-Lutto{color:var(--c-Lutto)}.s-TFS{color:var(--c-TFS)}
+.s-R{color:var(--c-R)}.s-HPVM{color:var(--c-HPVM)}
 .ca0{left:0;min-width:24px;max-width:24px;width:24px;padding:4px 3px!important;text-align:center}
 .ca1{left:24px;min-width:150px;max-width:150px;width:150px}
 .ca2{left:174px;min-width:46px;max-width:46px;width:46px;border-right:2px solid var(--border)!important}
@@ -1112,6 +1116,7 @@ body.theme-rovere{
   --c-X:#4a6e3a;--c-F:#5a6e9a;--c-hF:#7a8eba;--c-M:#8a3a2a;
   --c-HP:#6a4a7a;--c-H104:#8a6a1a;--c-104:#8a5a2a;--c-CP:#8a3a5a;
   --c-HPE:#5a7a5a;--c-PE:#3a6a7a;--c-SW:#5a7a2a;--c-Lutto:#6a5a40;--c-TFS:#3a5a8a;--c-PLT:#8a6a1a;
+  --c-R:#6a5a40;--c-HPVM:#8a4a8a;
   --ferie-color:#8a3a5a;
 }
 body.theme-rovere .snav{background:#e0d4c0;border-bottom:1px solid #bfad95;}
@@ -2597,6 +2602,8 @@ var SIGLE = [
   {code:'Lutto',label:'Lutto',            cls:'s-Lutto',color:'var(--c-Lutto)',bg:'rgba(148,163,184,.12)',border:'rgba(148,163,184,.35)'},
   {code:'TFS',  label:'Trasferta F.Sede', cls:'s-TFS',  color:'var(--c-TFS)',  bg:'rgba(56,189,248,.12)', border:'rgba(56,189,248,.35)'},
   {code:'PLT',  label:'Pallet (Cottimo)',  cls:'s-PLT',  color:'var(--c-PLT)',   bg:'rgba(251,191,36,.12)', border:'rgba(251,191,36,.35)', cottimo:true},
+  {code:'R',    label:'Riposo',            cls:'s-R',    color:'var(--c-R)',     bg:'rgba(120,113,108,.12)', border:'rgba(120,113,108,.35)'},
+  {code:'HPVM', label:'Perm.Visita Med.',  cls:'s-HPVM', color:'var(--c-HPVM)',  bg:'rgba(217,70,239,.12)',  border:'rgba(217,70,239,.35)', hasQty:true},
 ];
 var SM={};SIGLE.forEach(function(s){SM[s.code]=s;});
 
@@ -2605,7 +2612,7 @@ var COOP_SIGLE_CODES = ['X','F','PLT'];
 var ATS_EXCL_CODES = ['1/2F','PLT']; // PLT solo Coop
 // Le sigle ATS escludono 1/2F (rimossa dall'array SIGLE)
 
-var SIGLE_NO_ORARIO=['F','M','CP','104','PE','Lutto'];
+var SIGLE_NO_ORARIO=['F','M','CP','104','PE','Lutto','R'];
 var SIGLE_COTTIMO=['PLT']; // sigle a cottimo: IN=quantità, OUT=ore
 
 // ═══════════════════════════════════════════════════════════
@@ -3263,16 +3270,15 @@ function renderSection(sec, emps, data, opts){
       var ph=getPausaDip(emp,di);
       if(sg==='X'||sg==='SW'||sg==='TFS'){
         return ing&&usc2?calcOreGiorno(ing,usc2,ph):null;
-      } else if(sg==='HP'||sg==='H104'){
+      } else if(sg==='HP'||sg==='H104'||sg==='HPVM'){
         // Usa orari reali o default
         var i2=ing||wmsConfig.ingresso||'08:00';
         var u2=usc2||wmsConfig.uscita||'18:00';
         var sigRaw=(emp.sigla||[])[di]||'HP';
         var qty2=parseFloat(sigRaw.match(/^[\d.]*/)[0])||1;
         var o2=calcOreGiorno(i2,u2,ph);
-        var eff=Math.max(0,(o2.ord+o2.str)-qty2);
-        console.log('[WMS] HP oreGiorno di='+di,'sig='+sigRaw,'qty='+qty2,'ing='+i2,'usc='+u2,'ph='+ph,'o2=',o2,'eff='+eff);
-        return{ord:eff,str:0,eff:eff};
+        var restante2=Math.max(0,o2.eff-qty2);
+        return{ord:Math.min(8,restante2),str:Math.max(0,restante2-8),eff:restante2};
       }
       return null;
     });
@@ -4182,10 +4188,18 @@ function spCalcLive(){renderCommesseGrid();
   // ordinarie — stessa identica formula di calcTots() usata nei report
   // mensili. Prima qui non veniva considerato: il pannello mostrava sempre
   // le ore piene della giornata anche con un permesso già impostato.
+  // Per i tipi a quantità (HP/H104) le ore di permesso vanno sottratte dalle
+  // ore EFFETTIVE, poi ord/str si ricalcolano sul residuo — stessa identica
+  // formula corretta di calcTots() usata nei report mensili. Prima si
+  // sottraeva solo da ord, lasciando str invariato: con 10h effettive e 3h
+  // di permesso usciva "7 ord + 2 str" (9h totali, sbagliato) invece di
+  // "7 ord + 0 str" (7h, le uniche realmente residue).
   var ord=o.ord, str=o.str;
-  if(sig==='HP'||sig==='H104'){
+  if(sig==='HP'||sig==='H104'||sig==='HPVM'){
     var qty=parseFloat(document.getElementById('spQtyV').value)||1;
-    ord=Math.max(0,(o.ord+o.str)-qty);
+    var restante=Math.max(0,o.eff-qty);
+    ord=Math.min(8,restante);
+    str=Math.max(0,restante-8);
   }
   document.getElementById('spCalcOrd').textContent=fmtOre(ord)+'h';
   document.getElementById('spCalcStr').textContent=(str>0?fmtOre(str)+'h':'—');
@@ -4909,9 +4923,9 @@ function parsePausaVal(v){
 function fmtOre(h){if(!h)return '';var i=Math.floor(h),f=h-i;return i+(f===0.5?'.5':f>0?'.'+Math.round(f*10):'');}
 
 // Sigle che indicano presenza giornaliera (anche parziale)
-var PRESENCE_CODES=['X','HP','H104','104','HPE','PE','CP','SW','TFS','Lutto','PLT'];
+var PRESENCE_CODES=['X','HP','H104','104','HPE','PE','CP','SW','TFS','Lutto','PLT','HPVM'];
 function calcTots(sig,ingresso,uscita,pause,dates,month,year){
-  var r={X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,PLT:0,PLT_ore:0,ord:0,str:0,fest:0,week:0,P:0};
+  var r={X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,PLT:0,PLT_ore:0,R:0,HPVM:0,ord:0,str:0,fest:0,week:0,P:0};
   (sig||[]).forEach(function(v,di){
     if(!v)return;
     var sg=xSig(v);
@@ -4936,16 +4950,23 @@ function calcTots(sig,ingresso,uscita,pause,dates,month,year){
         else if(isWe){r.week+=o.ord+o.str;}
         else{r.ord+=o.ord;r.str+=o.str;}
       }
-    } else if(sg==='HP'||sg==='H104'){
+    } else if(sg==='HP'||sg==='H104'||sg==='HPVM'){
       var ing2=(ingresso||[])[di]||'',usc3=(uscita||[])[di]||'';
       var ps2=(pause||[])[di];var ph2=parsePausaVal(ps2!==null&&ps2!==undefined?ps2:null);if(ph2===null)ph2=getPausaDefaultGlobal();
       if(!ing2)ing2=wmsConfig.ingresso||'08:00';
       if(!usc3)usc3=wmsConfig.uscita||'18:00';
       if(ing2&&usc3){
         var o2=calcOreGiorno(ing2,usc3,ph2);
-        var oreResidueOrd=Math.max(0,(o2.ord+o2.str)-qty);
-        if(isWe){r.week+=oreResidueOrd;}
-        else{r.ord+=oreResidueOrd;if(o2.str>0)r.str+=o2.str;}
+        // Ricalcola ord/str sul residuo DOPO il permesso, non sul totale
+        // pre-permesso: prima si sottraeva qty da (ord+str) ma si lasciava
+        // str invariato, dando un totale che non tornava (es. 10h effettive
+        // - 3h permesso = 7h reali, tutte ordinarie, ma usciva 7 ord + 2 str
+        // = 9h invece di 7h).
+        var restante2=Math.max(0,o2.eff-qty);
+        var oreResidueOrd=Math.min(8,restante2);
+        var oreResidueStr=Math.max(0,restante2-8);
+        if(isWe){r.week+=restante2;}
+        else{r.ord+=oreResidueOrd;if(oreResidueStr>0)r.str+=oreResidueStr;}
       }
     }
     // Conta come presenza giornaliera (P) se la sigla indica presenza
@@ -5165,7 +5186,7 @@ function delCommessa(ci){
 // ═══════════════════════════════════════════════════════════
 //  DISTRIBUZIONE ORE COMMESSE NEL PICKER
 // ═══════════════════════════════════════════════════════════
-var SIGLE_COMMESSE=['X','HP','TFS','H104','CP'];
+var SIGLE_COMMESSE=['X','HP','TFS','H104','CP','HPVM'];
 
 function calcOreDisponibili(sigla, ing, usc, pausa, qty){
   // Ore base dal turno
@@ -5174,7 +5195,7 @@ function calcOreDisponibili(sigla, ing, usc, pausa, qty){
   var eff=o.eff||0;
   var sg=xSig(sigla||'');
   // Sottrai ore permesso/104
-  if(sg==='HP'||sg==='H104'){
+  if(sg==='HP'||sg==='H104'||sg==='HPVM'){
     var qtyH=parseFloat((String(sigla||'').match(/^[\d.]*/)||['1'])[0])||1;
     eff=Math.max(0,eff-qtyH);
   }
@@ -7854,6 +7875,8 @@ var SIGLE_GANTT = [
   {code:'Lutto',label:'Lutto',           color:'var(--c-Lutto)'},
   {code:'TFS',  label:'Trasferta F.Sede',color:'var(--c-TFS)'},
   {code:'PLT',  label:'Pallet (Cottimo)',color:'var(--c-PLT)'},
+  {code:'HPVM', label:'Perm.Visita Med.',color:'var(--c-HPVM)'},
+  {code:'R',    label:'Riposo',          color:'var(--c-R)'},
   {code:'X',    label:'Presenza',        color:'var(--c-X)'},
 ];
 
