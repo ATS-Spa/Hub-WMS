@@ -8337,7 +8337,8 @@ var RICH_TIPI = [
   {code:'H104', label:'Ore 104',   color:'var(--c-H104)',hasQty:true},
   {code:'CP',   label:'Cong.Par.', color:'var(--c-CP)'},
   {code:'HPE',  label:'Perm.Esami',color:'var(--c-HPE)', hasQty:true},
-  {code:'PE',   label:'P.Esami',   color:'var(--c-PE)'}
+  {code:'PE',   label:'P.Esami',   color:'var(--c-PE)'},
+  {code:'HPVM', label:'Vis.Medica',color:'var(--c-HPVM)',hasQty:true}
 ];
 
 // ── Residuo ferie/permessi per il modulo Richieste ──────────────────────────
@@ -9002,7 +9003,7 @@ function moMailSend(){
 function richMailtoRichiesta(req){
   if(!req.responsabile_email) return;
   var destinatari = [req.responsabile_email].concat((req.responsabile_email_extra||[]).map(richNotificaEmailPer));
-  var tipoLabel = {F:'Ferie',HP:'Ore Permesso',104:'Giornata 104',H104:'Ore 104',CP:'Congedo Parentale',HPE:'Ore Permesso Esami',PE:'Permesso Esami'};
+  var tipoLabel = {F:'Ferie',HP:'Ore Permesso',104:'Giornata 104',H104:'Ore 104',CP:'Congedo Parentale',HPE:'Ore Permesso Esami',PE:'Permesso Esami',HPVM:'Permesso Visita Medica'};
   var label = tipoLabel[req.tipo_code] || req.tipo_code || req.tipo;
   var dalIT = fmtDateIT(req.data_dal), alIT = fmtDateIT(req.data_al);
   var periodo = req.data_dal===req.data_al ? dalIT : dalIT+' → '+alIT;
@@ -9033,7 +9034,7 @@ function richMailtoEsito(req){
   var destinatari = [req.dipendente_email].concat(req.dipendente_email_lavoro?[req.dipendente_email_lavoro]:[]).concat(req.dipendente_email_extra||[]);
   // Dedup case-insensitive
   var seen={};destinatari=destinatari.filter(function(e){var k=e.toLowerCase();if(seen[k])return false;seen[k]=true;return true;});
-  var tipoLabel = {F:'Ferie',HP:'Ore Permesso',104:'Giornata 104',H104:'Ore 104',CP:'Congedo Parentale',HPE:'Ore Permesso Esami',PE:'Permesso Esami'};
+  var tipoLabel = {F:'Ferie',HP:'Ore Permesso',104:'Giornata 104',H104:'Ore 104',CP:'Congedo Parentale',HPE:'Ore Permesso Esami',PE:'Permesso Esami',HPVM:'Permesso Visita Medica'};
   var label = tipoLabel[req.tipo_code] || req.tipo_code || req.tipo;
   var dalIT = fmtDateIT(req.data_dal), alIT = fmtDateIT(req.data_al);
   var periodo = req.data_dal===req.data_al ? dalIT : dalIT+' → '+alIT;
