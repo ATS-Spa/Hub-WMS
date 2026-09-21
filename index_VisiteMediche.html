@@ -853,6 +853,9 @@ function renderDashboard(){
     h+='<div class="fg"><span class="fl">Data prevista</span><select class="fc" id="fPrevista" onchange="dashApplyFilter()"><option value="">Tutte</option>';
     datePreviste.forEach(function(d){ h+='<option value="'+esc(d)+'">'+esc(d)+'</option>'; });
     h+='</select></div>';
+    if(canConfermareVisita()) h+='<div class="fg"><button class="btn ghost" onclick="dashSelectAllFiltered()">☑ Seleziona tutti i filtrati</button></div>';
+    if(canConfermareVisita()) h+='<div class="fg"><button class="btn ghost" onclick="dashClearSelection()">☐ Deseleziona tutti</button></div>';
+    if(canConfermareVisita()) h+='<div class="fg"><span id="confirmSelCount" style="font-size:12px;color:var(--muted);align-self:center;padding-bottom:6px">0 selezionati</span></div>';
     if(canConfermareVisita()) h+='<div class="fg"><button class="btn ghost" onclick="inviaMailComunicazione()">✉️ Invia mail di comunicazione</button></div>';
     if(canConfermareVisita()) h+='<div class="fg"><button class="btn ghost" id="btnTogglePanel" onclick="dashTogglePanel()">🗂 Conferma visite effettuate</button></div>';
     h+='<div class="fg"><button class="btn ghost" onclick="exportDashboardExcel()">⬇️ Esporta Excel</button></div>';
@@ -860,13 +863,10 @@ function renderDashboard(){
 
     if(canConfermareVisita()){
       h+='<div id="bulkConfirmPanel" style="display:none;background:var(--card);border:1px solid var(--border);border-radius:12px;padding:14px 16px;margin-bottom:14px">';
-      h+='<div style="font-size:12px;color:var(--muted);margin-bottom:12px">Filtra per Data prevista qui sopra, seleziona chi si è presentato: la data effettiva si precompila da sola da quella prevista, modificala solo se serve.</div>';
+      h+='<div style="font-size:12px;color:var(--muted);margin-bottom:12px">La selezione (checkbox a sinistra di ogni riga, o i pulsanti "Seleziona tutti i filtrati" qui sopra) vale sia per la conferma massiva sia per "Invia mail di comunicazione". Imposta la data effettiva (precompilata da quella prevista) e conferma.</div>';
       h+='<div class="filters" style="margin-bottom:0">';
-      h+='<div class="fg"><button class="btn ghost" onclick="dashSelectAllFiltered()">Seleziona tutti i filtrati</button></div>';
-      h+='<div class="fg"><button class="btn ghost" onclick="dashClearSelection()">Deseleziona tutti</button></div>';
       h+='<div class="fg"><span class="fl">Data effettiva visita</span><input class="fc" id="confirmData" placeholder="gg/mm/aaaa"></div>';
       h+='<button class="btn" onclick="confermaVisiteMassivo()">✓ Conferma effettuate</button>';
-      h+='<span id="confirmSelCount" style="font-size:12px;color:var(--muted);align-self:center">0 selezionati</span>';
       h+='</div></div>';
     }
     h+='</div>'; // chiude #dashFiltersWrap
@@ -989,7 +989,8 @@ function inviaMailComunicazione(){
   if(!dashFilPrevista){ showToast('Seleziona prima una Data prevista dal filtro qui sopra','err'); return; }
 
   // Se hai selezionato manualmente delle checkbox, usa SOLO quelle (per questa data).
-  // Altrimenti prende tutti quelli con quella data prevista, per non escludere nessuno per errore.
+  // Altrimenti prende tutti quelli visibili nella tabella con quella data prevista — rispettando
+  // anche i filtri Filiale/Stato eventualmente impostati, non solo la Data prevista.
   var idSelezionati = Object.keys(confirmSelected);
   var persone;
   if(idSelezionati.length){
@@ -997,9 +998,7 @@ function inviaMailComunicazione(){
       .map(function(id){ return allPersone.find(function(x){ return String(x.rowIndex)===String(id); }); })
       .filter(function(p){ return p && filialeVisibile(p.filiale) && p.dataPrevista && fmtDataIt(p.dataPrevista)===dashFilPrevista; });
   } else {
-    persone = allPersone.filter(function(p){
-      return filialeVisibile(p.filiale) && p.dataPrevista && fmtDataIt(p.dataPrevista)===dashFilPrevista;
-    });
+    persone = dashFilteredList().filter(function(p){ return p.dataPrevista; });
   }
   if(!persone.length){ showToast('Nessun dipendente trovato per questa data (controlla la selezione)','err'); return; }
 
