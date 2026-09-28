@@ -4407,7 +4407,7 @@ function startAutoRefresh(){
     if(coopFileId&&coopData&&!cBusy){
       var cGen0=cEditGen;
       var y=parseInt(document.getElementById('cYear').value),m=parseInt(document.getElementById('cMonth').value);
-      sheetsRead(coopFileId,coopData.sheetName+'!A1:AQ300').catch(function(){return sheetsRead(coopFileId,coopData.sheetName+'!A1:AF200');}).then(function(vals){
+      sheetsRead(coopFileId,coopData.sheetName+'!A1:AQ300').catch(function(){return sheetsRead(coopFileId,coopData.sheetName+'!A1:AQ200');}).then(function(vals){
         return parseSheetValues(vals,y,m,coopFileId,coopData.sheetName,'coop');
       }).then(function(d){
         if(cBusy||cGen0!==cEditGen)return; // modifiche locali durante la lettura: non applicare
