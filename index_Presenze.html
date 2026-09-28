@@ -3612,30 +3612,71 @@ function cDelEmp(i){
   });
 }
 
+// ── Salvataggio differenziale / multi-utente ──
+// emp._base contiene l'ultimo stato noto su Sheets. Si scrivono solo le celle
+// in cui il valore locale differisce dalla baseline, così un client con dati
+// vecchi non sovrascrive le modifiche fatte da altri utenti.
+var BASE_FIELDS=['sigla','ingresso','uscita','pausa'];
+function baseNorm(v){return v===null||v===undefined?'':String(v);}
+function snapBase(emp){
+  var b={};
+  BASE_FIELDS.forEach(function(f){b[f]=(emp[f]||[]).map(baseNorm);});
+  emp._base=b;
+}
+// Costruisce gli update per un dipendente: solo celle modificate (o tutte se manca la baseline)
+function buildEmpDiff(emp,sheetName,DST,nd,sent){
+  var out=[];var b=emp._base;var rowOf={sigla:'n',ingresso:'i',uscita:'u',pausa:'p'};
+  BASE_FIELDS.forEach(function(f){
+    var rk=emp.sheetRows[rowOf[f]];if(rk===undefined)return;
+    for(var di=0;di<nd;di++){
+      var v=baseNorm((emp[f]||[])[di]);
+      if(b&&b[f]&&baseNorm(b[f][di])===v)continue;
+      out.push({range:sheetName+'!'+colToLetter(DST+di)+(rk+1),values:[[v]]});
+      sent.push({emp:emp,f:f,di:di,v:v});
+    }
+  });
+  return out;
+}
+function commitSent(sent){
+  sent.forEach(function(x){
+    if(!x.emp._base)snapBase(x.emp);
+    var arr=x.emp._base[x.f];while(arr.length<=x.di)arr.push('');
+    arr[x.di]=x.v;
+  });
+}
+// Refresh: aggiorna solo le celle NON modificate localmente; la baseline prende il valore remoto
+function mergeRemoteEmp(ex,ne){
+  if(!ex._base){ex.sigla=ne.sigla;ex.ingresso=ne.ingresso;ex.uscita=ne.uscita;snapBase(ex);return;}
+  ['sigla','ingresso','uscita'].forEach(function(f){
+    var rem=ne[f]||[];if(!ex[f])ex[f]=[];var bf=ex._base[f];
+    for(var di=0;di<rem.length;di++){
+      if(baseNorm(ex[f][di])===baseNorm(bf[di]))ex[f][di]=rem[di];
+      bf[di]=baseNorm(rem[di]);
+    }
+  });
+}
+var aBusy=false, aEditGen=0;
+var cBusy=false, cEditGen=0;
+
 var cST=null;
 function cSave(){
+  cEditGen++;cBusy=true;
   clearTimeout(cST);cST=setTimeout(function(){
-    if(!coopData)return;
-    toast('⏳ Salvo Coop su Sheets…','warn');
-    var byFile={};var DST=coopData.dayStart||3;var nd=coopData.dates.length;
+    var myGen=cEditGen;
+    if(!coopData){cBusy=false;return;}
+    var byFile={};var DST=coopData.dayStart||3;var nd=coopData.dates.length;var sent=[];
     coopEmps.forEach(function(emp){
       if(!emp.sheetRows||emp._manual)return;
       var fid=emp.sheetRows.fileId||coopFileId;if(!fid)return;
-      if(!byFile[fid])byFile[fid]=[];
-      for(var di=0;di<nd;di++){
-        var col=DST+di;var colL=colToLetter(col);
-        var sv=(emp.sigla||[])[di]||'';var iv=(emp.ingresso||[])[di]||'';var uv=(emp.uscita||[])[di]||'';
-        var pv=(emp.pausa||[])[di];var pvStr=pv!==null&&pv!==undefined?String(pv):'';
-        if(emp.sheetRows.n!==undefined)byFile[fid].push({range:coopData.sheetName+'!'+colL+(emp.sheetRows.n+1),values:[[sv]]});
-        if(emp.sheetRows.i!==undefined)byFile[fid].push({range:coopData.sheetName+'!'+colL+(emp.sheetRows.i+1),values:[[iv]]});
-        if(emp.sheetRows.u!==undefined)byFile[fid].push({range:coopData.sheetName+'!'+colL+(emp.sheetRows.u+1),values:[[uv]]});
-        if(emp.sheetRows.p!==undefined)byFile[fid].push({range:coopData.sheetName+'!'+colL+(emp.sheetRows.p+1),values:[[pvStr]]});
-      }
+      var ups=buildEmpDiff(emp,coopData.sheetName,DST,nd,sent);
+      if(ups.length)byFile[fid]=(byFile[fid]||[]).concat(ups);
     });
-    var fids=Object.keys(byFile);if(!fids.length){toast('—');return;}
+    var fids=Object.keys(byFile);if(!fids.length){if(myGen===cEditGen)cBusy=false;return;}
+    toast('⏳ Salvo Coop su Sheets…','warn');
     Promise.all(fids.map(function(fid){return sheetsBatchUpdate(fid,byFile[fid]);}))
-    .then(function(){toast('✓ Coop salvato');lastRefreshTimeCoop=new Date();})
-    .catch(function(e){toast('✗ '+e.message,'err');});
+    .then(function(){commitSent(sent);toast('✓ Coop salvato');lastRefreshTimeCoop=new Date();})
+    .catch(function(e){toast('✗ '+e.message,'err');})
+    .then(function(){if(myGen===cEditGen)cBusy=false;});
   },700);
 }
 
@@ -3953,27 +3994,22 @@ function aDel(i){
 var aST=null;
 function aSave(){
   if(!atsData)return;
+  aEditGen++;aBusy=true;
   clearTimeout(aST);aST=setTimeout(function(){
-    toast('⏳ Salvo Dipendenti su Sheets…','warn');
-    var byFile={};var DST=atsData.dayStart||3;var nd=atsData.dates.length;
+    var myGen=aEditGen;
+    var byFile={};var DST=atsData.dayStart||3;var nd=atsData.dates.length;var sent=[];
     atsEmps.forEach(function(emp){
       if(!emp.sheetRows||emp._manual)return;
       var fid=emp.sheetRows.fileId||atsFileId;if(!fid)return;
-      if(!byFile[fid])byFile[fid]=[];
-      for(var di=0;di<nd;di++){
-        var col=DST+di;var colL=colToLetter(col);
-        var sv=(emp.sigla||[])[di]||'';var iv=(emp.ingresso||[])[di]||'';var uv=(emp.uscita||[])[di]||'';
-        var pv=(emp.pausa||[])[di];var pvStr=pv!==null&&pv!==undefined?String(pv):'';
-        if(emp.sheetRows.n!==undefined)byFile[fid].push({range:atsData.sheetName+'!'+colL+(emp.sheetRows.n+1),values:[[sv]]});
-        if(emp.sheetRows.i!==undefined)byFile[fid].push({range:atsData.sheetName+'!'+colL+(emp.sheetRows.i+1),values:[[iv]]});
-        if(emp.sheetRows.u!==undefined)byFile[fid].push({range:atsData.sheetName+'!'+colL+(emp.sheetRows.u+1),values:[[uv]]});
-        if(emp.sheetRows.p!==undefined)byFile[fid].push({range:atsData.sheetName+'!'+colL+(emp.sheetRows.p+1),values:[[pvStr]]});
-      }
+      var ups=buildEmpDiff(emp,atsData.sheetName,DST,nd,sent);
+      if(ups.length)byFile[fid]=(byFile[fid]||[]).concat(ups);
     });
-    var fids=Object.keys(byFile);if(!fids.length){toast('—');return;}
+    var fids=Object.keys(byFile);if(!fids.length){if(myGen===aEditGen)aBusy=false;return;}
+    toast('⏳ Salvo Dipendenti su Sheets…','warn');
     Promise.all(fids.map(function(fid){return sheetsBatchUpdate(fid,byFile[fid]);}))
-    .then(function(){toast('✓ Dipendenti salvato');lastRefreshTimeAts=new Date();})
-    .catch(function(e){toast('✗ '+e.message,'err');});
+    .then(function(){commitSent(sent);toast('✓ Dipendenti salvato');lastRefreshTimeAts=new Date();})
+    .catch(function(e){toast('✗ '+e.message,'err');})
+    .then(function(){if(myGen===aEditGen)aBusy=false;});
   },800);
 }
 
@@ -4337,11 +4373,13 @@ function startAutoRefresh(){
   clearInterval(autoRefreshTimer);
   if(autoRefreshInterval<=0)return;
   autoRefreshTimer=setInterval(function(){
-    if(atsFileId&&atsData){
+    if(atsFileId&&atsData&&!aBusy){
+      var aGen0=aEditGen;
       var y=parseInt(document.getElementById('aYear').value),m=parseInt(document.getElementById('aMonth').value);
       sheetsRead(atsFileId,atsData.sheetName+'!A1:AF200').then(function(vals){
         return parseSheetValues(vals,y,m,atsFileId,atsData.sheetName,'ats');
       }).then(function(d){
+        if(aBusy||aGen0!==aEditGen)return; // modifiche locali durante la lettura: non applicare
         d.employees.forEach(function(ne){
           var neSap=String(ne.sap||ne.id||'').trim();
           var neNome=(ne.nome||'').trim().toLowerCase();
@@ -4361,16 +4399,18 @@ function startAutoRefresh(){
             return eNome&&neNome&&eNome===neNome;
           });
           if(!ex)return;
-          ex.sigla=ne.sigla;ex.ingresso=ne.ingresso;ex.uscita=ne.uscita;
+          mergeRemoteEmp(ex,ne);
         });
         atsRender();lastRefreshTimeAts=new Date();updateRefreshBadges();
       }).catch(function(){});
     }
-    if(coopFileId&&coopData){
+    if(coopFileId&&coopData&&!cBusy){
+      var cGen0=cEditGen;
       var y=parseInt(document.getElementById('cYear').value),m=parseInt(document.getElementById('cMonth').value);
       sheetsRead(coopFileId,coopData.sheetName+'!A1:AQ300').catch(function(){return sheetsRead(coopFileId,coopData.sheetName+'!A1:AF200');}).then(function(vals){
         return parseSheetValues(vals,y,m,coopFileId,coopData.sheetName,'coop');
       }).then(function(d){
+        if(cBusy||cGen0!==cEditGen)return; // modifiche locali durante la lettura: non applicare
         d.employees.forEach(function(ne){
           var neSap=String(ne.sap||ne.id||'').trim();
           var neNome=(ne.nom2||ne.nome||'').trim().toLowerCase();
@@ -4390,7 +4430,7 @@ function startAutoRefresh(){
             return eNome&&neNome&&eNome===neNome;
           });
           if(!ex)return;
-          ex.sigla=ne.sigla;ex.ingresso=ne.ingresso;ex.uscita=ne.uscita;
+          mergeRemoteEmp(ex,ne);
         });
         coopRender();lastRefreshTimeCoop=new Date();updateRefreshBadges();
       }).catch(function(){});
@@ -4504,6 +4544,7 @@ function parseSheetValues(values,year,month,fileId,sheetName,secType){
         confCol:confCol,
         sheetRows:{n:r,i:hasI?r+1:undefined,u:hasI&&hasU?r+2:(!hasI&&hasU?r+1:undefined),p:pRowIdx,fileId:fileId,sheetName:sheetName}
       };
+      snapBase(emp); // baseline = valori attualmente su Sheets (per salvataggio differenziale)
       emps.push(emp);
       r+=rowsUsed;
       while(r<values.length&&!(values[r]||[]).some(function(c){return c!==null&&c!==''&&c!==undefined;}))r++;
