@@ -319,6 +319,27 @@ body{background:var(--bg);color:var(--text);font-family:var(--ff);font-size:14px
 .snb.on.ats{color:var(--teal);border-bottom-color:var(--teal)}
 .snb.on.perm{color:var(--amber);border-bottom-color:var(--amber)}
 .sndot.ferie{background:var(--ferie-color)}
+.sndot.anag{background:var(--purple)}
+.snb.on.anag{color:var(--purple);border-bottom-color:var(--purple)}
+.sec-chip.anag{background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.25);color:var(--purple)}
+/* Anagrafica View (sola lettura) */
+.anagv-wrap{flex:1;overflow:auto;min-height:0}
+.anagv-wrap .anag-table td a{color:var(--blue);text-decoration:none}
+.anagv-wrap .anag-table td a:hover{text-decoration:underline}
+.anagv-wrap .anag-table td.mono{font-family:var(--ffm)}
+/* Autocomplete Nuovo Dipendente */
+.ae-sugg{position:absolute;left:0;right:0;top:100%;margin-top:2px;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:200px;overflow:auto;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.35);display:none}
+.ae-sugg.show{display:block}
+.ae-sugg-item{padding:7px 12px;cursor:pointer;font-size:12px;border-bottom:1px solid rgba(36,48,72,.3)}
+.ae-sugg-item:last-child{border-bottom:none}
+.ae-sugg-item.act,.ae-sugg-item:hover{background:var(--card)}
+.ae-sugg-name{color:var(--text);font-weight:600}
+.ae-sugg-meta{color:var(--muted);font-family:var(--ffm);font-size:10px;margin-top:2px}
+.ae-sugg-warn{color:var(--amber);font-size:10px;margin-left:6px}
+/* Riepilogo Richieste */
+.rich-summary{display:flex;align-items:center;gap:8px;flex-wrap:wrap;flex-shrink:0}
+.rich-sum-chip{font-family:var(--ffc);font-size:11px;font-weight:700;padding:4px 10px;border-radius:20px;border:1px solid var(--border);background:var(--card);color:var(--muted)}
+.rich-sum-chip b{font-size:13px;margin-left:4px}
 .snb.on.ferie{color:var(--ferie-color);border-bottom-color:var(--ferie-color)}
 .snb.on.file{color:var(--cyan);border-bottom-color:var(--cyan)}
 .sndot{width:7px;height:7px;border-radius:50%}
@@ -1767,6 +1788,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
     <button class="snb ats" id="snAts" onclick="switchSec('ats')"><span class="sndot ats"></span>Dipendenti</button>
     <button class="snb file" id="snFile" onclick="switchSec('file')" style="display:none"><span class="sndot file"></span>File Import</button>
     <button class="snb ferie" id="snFerie" onclick="switchSec('ferie')" style="display:none"><span class="sndot ferie"></span>Piano Ferie</button>
+    <button class="snb anag" id="snAnag" onclick="switchSec('anag')" style="display:none"><span class="sndot anag"></span>Anagrafica</button>
     <button class="snb perm" id="snPerm" onclick="switchSec('perm')" style="display:none"><span class="sndot perm"></span>Permessi</button>
     <button class="snb rich" id="snRich" onclick="switchSec('rich')" style="display:none"><span class="sndot" style="background:var(--amber)"></span>Richieste<span id="snRichBadge" style="display:none;margin-left:5px;background:var(--amber);color:#000;border-radius:8px;font-size:9px;font-weight:700;padding:1px 5px">0</span></button>
   </nav>
@@ -2052,6 +2074,20 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
     <div class="perm-panel" id="permPanel">
       <div class="state"><div class="spinner"></div><div class="state-title">Caricamento permessi…</div></div>
     </div>
+  </div>
+
+  <!-- ══ ANAGRAFICA DIPENDENTI (sola lettura) ══ -->
+  <div class="sec" id="secAnag">
+    <div class="filters">
+      <div class="fg"><div class="fl">Cerca</div>
+        <input id="anagVSearch" class="fc" style="min-width:240px" type="text" placeholder="Nome, email, SAP…" autocomplete="off" oninput="anagViewRender()"></div>
+      <div class="fg"><div class="fl">Responsabile</div>
+        <select id="anagVResp" class="fc" style="min-width:160px" onchange="anagViewRender()"><option value="">— Tutti —</option></select></div>
+      <div class="fg"><div class="fl">Plant</div>
+        <select id="anagVPlant" class="fc" style="min-width:95px" onchange="anagViewRender()"><option value="">— Tutti —</option></select></div>
+      <div class="finfo" id="anagVCount"></div>
+    </div>
+    <div class="anagv-wrap" id="anagVContent"></div>
   </div>
 
   <!-- ══ RICHIESTE FERIE ══ -->
@@ -2498,7 +2534,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
   <div class="mt" id="aeTitle">➕ Nuovo Dipendente</div>
   <div class="ms">Aggiunge al registro del mese correntemente selezionato</div>
   <div style="display:flex;flex-direction:column;gap:10px">
-    <div class="fg"><div class="fl">Nominativo *</div><input class="mi" id="aeNome" type="text" placeholder="Cognome Nome" autocomplete="off"></div>
+    <div class="fg" style="position:relative"><div class="fl">Nominativo *</div><input class="mi" id="aeNome" type="text" placeholder="Cognome Nome" autocomplete="off" oninput="aeSuggRender()" onkeydown="aeSuggKey(event)" onblur="setTimeout(aeSuggHide,150)"><div class="ae-sugg" id="aeSugg"></div></div>
     <div style="display:flex;gap:10px">
       <div class="fg" style="flex:1"><div class="fl">Matricola / SAP</div><input class="mi" id="aeId" type="text" placeholder="001" autocomplete="off"></div>
       <div class="fg" style="flex:1"><div class="fl">Responsabile</div><input class="mi" id="aeResp" type="text" placeholder="Cognome resp." autocomplete="off"></div>
@@ -2538,6 +2574,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
       <label class="sc-item" style="width:fit-content"><input type="checkbox" id="puSecFile"> Accesso File Import</label>
       <label class="sc-item" style="width:fit-content"><input type="checkbox" id="puSecFerie"> Piano Ferie</label>
       <label class="sc-item" style="width:fit-content"><input type="checkbox" id="puSecRich"> Richieste</label>
+      <label class="sc-item" style="width:fit-content"><input type="checkbox" id="puSecAnag"> Anagrafica (sola lettura, contiene email)</label>
       <label class="sc-item" style="width:fit-content"><input type="checkbox" id="puIsAdmin" onchange="puToggleEmailNotifiche()"> Admin (può modificare le presenze)</label>
     </div>
     <div class="fg" id="puEmailNotificheWrap" style="display:none">
@@ -2958,12 +2995,13 @@ function applyPerm(){
   }
 
   if(isSuperUser){
-    userTags=['*'];userSecs=['coop','ats','file','ferie','rich'];
+    userTags=['*'];userSecs=['coop','ats','file','ferie','rich','anag'];
     document.getElementById('permBadge').textContent='SUPER';
     document.getElementById('permBadge').className='pbadge is-super';
     document.getElementById('snPerm').style.display='';
     document.getElementById('snFile').style.display='';
     document.getElementById('snFerie').style.display='';
+    var snAnagS=document.getElementById('snAnag');if(snAnagS)snAnagS.style.display='';
     var tsrS=document.getElementById('togSaldoResiduo');if(tsrS)tsrS.style.display='';
     renderPermPanel();
     document.getElementById('appShell').style.display='flex';
@@ -2973,7 +3011,7 @@ function applyPerm(){
     return;
   }
   if(isAdminUser){
-    userTags=['*'];userSecs=['coop','ats','file','ferie','rich'];isReadOnly=false;
+    userTags=['*'];userSecs=['coop','ats','file','ferie','rich','anag'];isReadOnly=false;
     document.getElementById('permBadge').textContent='ADMIN';
     document.getElementById('permBadge').className='pbadge is-admin';
     document.getElementById('snFerie').style.display='';
@@ -3007,6 +3045,7 @@ function applyPerm(){
   // dedicato nel pannello permessi): solo chi ha il flag 'rich' vede la tab e
   // può raggiungere il wizard di autoregistrazione — non più aperta a chiunque.
   var snRichEl=document.getElementById('snRich');if(snRichEl)snRichEl.style.display=userSecs.indexOf('rich')!==-1?'':'none';
+  var snAnagEl=document.getElementById('snAnag');if(snAnagEl)snAnagEl.style.display=userSecs.indexOf('anag')!==-1?'':'none';
   if(!userSecs.length){
     document.getElementById('appShell').style.display='none';
     document.getElementById('accessDenied').style.display='flex';
@@ -3092,6 +3131,8 @@ function atsOnFilesChange(){}
 // ═══════════════════════════════════════════════════════════
 var curSec='coop';
 function switchSec(s){
+  // Anagrafica contiene email: raggiungibile solo col flag (anche da restore UI state)
+  if(s==='anag'&&userSecs.indexOf('anag')===-1)return;
   curSec=s;
   // Inizializza filtri Piano Ferie al primo accesso
   if(s==='ferie'){
@@ -3104,7 +3145,10 @@ function switchSec(s){
   if(s==='rich'){
     richRender();
   }
-  ['coop','ats','file','perm','ferie','rich'].forEach(function(x){
+  if(s==='anag'){
+    anagViewRender();
+  }
+  ['coop','ats','file','perm','ferie','rich','anag'].forEach(function(x){
     var nb=document.getElementById('sn'+x.charAt(0).toUpperCase()+x.slice(1));
     var sc=document.getElementById('sec'+x.charAt(0).toUpperCase()+x.slice(1));
     if(nb)nb.className='snb'+(s===x?' on '+x:'');
@@ -3542,6 +3586,7 @@ function openAddCoopEmp(){
   document.getElementById('aeResp').value='';document.getElementById('aePlant').value='';
   document.getElementById('aeErr').classList.remove('show');
   document.getElementById('aeTitle').textContent='➕ Nuovo Dipendente Coop';
+  aeAutoMode=false;aeSuggHide();
   mOpen('moAddEmp');
   document.getElementById('aeAddConfirmBtn').onclick=coopAeConfirm;
   setTimeout(function(){document.getElementById('aeNome').focus();},120);
@@ -3919,10 +3964,105 @@ function openAddEmp(){
   document.getElementById('aeResp').value='';document.getElementById('aePlant').value='';
   document.getElementById('aeErr').classList.remove('show');
   document.getElementById('aeTitle').textContent='➕ Nuovo Dipendente';
+  aeAutoMode=true;aeSuggHide();
   mOpen('moAddEmp');
   document.getElementById('aeAddConfirmBtn').onclick=aeConfirm;
   setTimeout(function(){document.getElementById('aeNome').focus();},120);
 }
+// ═══════════════════════════════════════════════════════════
+//  AUTOCOMPLETE "Nuovo Dipendente" (solo ATS) — fonte: permConfig.dipendenti
+// ═══════════════════════════════════════════════════════════
+var aeAutoMode=false, aeSuggList=[], aeSuggIdx=-1;
+function anagDipList(){
+  return ((permConfig&&permConfig.dipendenti)||[]).filter(function(d){return !d._esempio&&(d.nome||d.sap);});
+}
+function aeSuggHide(){
+  var b=document.getElementById('aeSugg');if(b){b.classList.remove('show');b.innerHTML='';}
+  aeSuggList=[];aeSuggIdx=-1;
+}
+function aeSuggRender(){
+  if(!aeAutoMode){aeSuggHide();return;}
+  var q=(document.getElementById('aeNome').value||'').trim().toLowerCase();
+  if(q.length<2){aeSuggHide();return;}
+  var toks=q.split(/\s+/);
+  aeSuggList=anagDipList().filter(function(d){
+    var hay=((d.nome||'')+' '+(d.sap||'')).toLowerCase();
+    return toks.every(function(t){return hay.indexOf(t)!==-1;});
+  }).sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'');}).slice(0,10);
+  aeSuggIdx=-1;
+  var box=document.getElementById('aeSugg');
+  if(!aeSuggList.length){aeSuggHide();return;}
+  var present={};
+  (atsEmps||[]).forEach(function(e){var k=String(e.sap||e.id||'').trim();if(k)present[k]=true;});
+  box.innerHTML=aeSuggList.map(function(d,i){
+    var sap=String(d.sap||'').trim();
+    return '<div class="ae-sugg-item" data-i="'+i+'" onmousedown="event.preventDefault();aeSuggPick('+i+')">'+
+      '<div class="ae-sugg-name">'+esc(d.nome||'—')+(sap&&present[sap]?'<span class="ae-sugg-warn">⚠ già nel mese</span>':'')+'</div>'+
+      '<div class="ae-sugg-meta">'+(sap?'#'+esc(sap):'')+(d.plant?' · '+esc(d.plant):'')+(d.responsabile_nome?' · → '+esc(d.responsabile_nome):'')+'</div></div>';
+  }).join('');
+  box.classList.add('show');
+}
+function aeSuggPick(i){
+  var d=aeSuggList[i];if(!d)return;
+  document.getElementById('aeNome').value=d.nome||'';
+  document.getElementById('aeId').value=d.sap||'';
+  document.getElementById('aeResp').value=d.responsabile_nome||'';
+  document.getElementById('aePlant').value=d.plant||'';
+  document.getElementById('aeErr').classList.remove('show');
+  aeSuggHide();
+}
+function aeSuggKey(ev){
+  var box=document.getElementById('aeSugg');
+  if(!box||!box.classList.contains('show')||!aeSuggList.length)return;
+  if(ev.key==='ArrowDown'||ev.key==='ArrowUp'){
+    ev.preventDefault();
+    aeSuggIdx=ev.key==='ArrowDown'?Math.min(aeSuggIdx+1,aeSuggList.length-1):Math.max(aeSuggIdx-1,0);
+    Array.prototype.forEach.call(box.children,function(el,i){el.classList.toggle('act',i===aeSuggIdx);if(i===aeSuggIdx)el.scrollIntoView({block:'nearest'});});
+  } else if(ev.key==='Enter'&&aeSuggIdx>=0){
+    ev.preventDefault();ev.stopPropagation();aeSuggPick(aeSuggIdx);
+  } else if(ev.key==='Escape'){
+    ev.stopPropagation();aeSuggHide();
+  }
+}
+
+// ═══════════════════════════════════════════════════════════
+//  ANAGRAFICA VIEW (sola lettura) — fonte: permConfig.dipendenti
+// ═══════════════════════════════════════════════════════════
+function anagViewFillSelect(id,vals){
+  var sel=document.getElementById(id);if(!sel)return;
+  var cur=sel.value;
+  sel.innerHTML='<option value="">— Tutti —</option>'+vals.map(function(v){return '<option value="'+esc(v)+'">'+esc(v)+'</option>';}).join('');
+  if(vals.indexOf(cur)!==-1)sel.value=cur;
+}
+function anagViewRender(){
+  var box=document.getElementById('anagVContent');if(!box)return;
+  if(!permConfig){box.innerHTML='<div class="state"><div class="spinner"></div><div class="state-title">Caricamento anagrafica…</div></div>';return;}
+  var all=anagDipList();
+  var uniq=function(arr){var o={};arr.forEach(function(v){v=String(v||'').trim();if(v)o[v]=true;});return Object.keys(o).sort(function(a,b){return a.localeCompare(b);});};
+  anagViewFillSelect('anagVResp',uniq(all.map(function(d){return d.responsabile_nome;})));
+  anagViewFillSelect('anagVPlant',uniq(all.map(function(d){return d.plant;})));
+  var q=(document.getElementById('anagVSearch').value||'').trim().toLowerCase();
+  var fr=document.getElementById('anagVResp').value, fp=document.getElementById('anagVPlant').value;
+  var toks=q?q.split(/\s+/):[];
+  var list=all.filter(function(d){
+    if(fr&&String(d.responsabile_nome||'').trim()!==fr)return false;
+    if(fp&&String(d.plant||'').trim()!==fp)return false;
+    if(!toks.length)return true;
+    var hay=[d.nome,d.email_google,d.email_lavoro,d.sap,d.plant,d.responsabile_nome].join(' ').toLowerCase();
+    return toks.every(function(t){return hay.indexOf(t)!==-1;});
+  }).sort(function(a,b){return (a.nome||'').localeCompare(b.nome||'');});
+  document.getElementById('anagVCount').textContent=list.length+' / '+all.length+' dipendenti';
+  if(!list.length){box.innerHTML='<div class="state"><div class="state-ico">🔍</div><div class="state-title">Nessun dipendente trovato</div></div>';return;}
+  var mail=function(v){v=String(v||'').trim();return v?'<a href="mailto:'+esc(v)+'">'+esc(v)+'</a>':'<span style="color:var(--muted)">—</span>';};
+  var txt=function(v){v=String(v||'').trim();return v?esc(v):'<span style="color:var(--muted)">—</span>';};
+  var h='<div class="anag-panel"><table class="anag-table"><thead><tr><th>Nominativo</th><th>Email Google</th><th>Email aziendale</th><th>Ext SAP</th><th>Plant</th><th>Responsabile</th></tr></thead><tbody>';
+  list.forEach(function(d){
+    h+='<tr><td>'+txt(d.nome)+'</td><td>'+mail(d.email_google)+'</td><td>'+mail(d.email_lavoro)+'</td><td class="mono">'+txt(d.sap)+'</td><td>'+txt(d.plant)+'</td><td>'+txt(d.responsabile_nome)+'</td></tr>';
+  });
+  h+='</tbody></table></div>';
+  box.innerHTML=h;
+}
+
 function aeConfirm(){
   var n=document.getElementById('aeNome').value.trim();
   if(!n){document.getElementById('aeErr').classList.add('show');return;}
@@ -5480,8 +5620,8 @@ function openPermUser(email){
   document.getElementById('puTitle').textContent=email?'Modifica Utente':'Nuovo Utente';
   document.getElementById('puEmail').value=email||'';document.getElementById('puEmail').disabled=!!email;
   document.getElementById('puErr').classList.remove('show');
-  if(email&&permConfig.users&&permConfig.users[email]){var u=permConfig.users[email];document.getElementById('puTags').value=(u.tags||[]).join('\n');document.getElementById('puSecCoop').checked=(u.sections||[]).indexOf('coop')!==-1;document.getElementById('puSecAts').checked=(u.sections||[]).indexOf('ats')!==-1;document.getElementById('puSecFile').checked=(u.sections||[]).indexOf('file')!==-1||u.is_admin||false;document.getElementById('puSecFerie').checked=(u.sections||[]).indexOf('ferie')!==-1||u.is_admin||false;document.getElementById('puSecRich').checked=(u.sections||[]).indexOf('rich')!==-1||u.is_admin||false;document.getElementById('puIsAdmin').checked=u.is_admin||false;document.getElementById('puEmailNotifiche').value=u.email_notifiche||'';}
-  else{document.getElementById('puTags').value='';document.getElementById('puSecCoop').checked=true;document.getElementById('puSecAts').checked=true;document.getElementById('puSecFile').checked=false;document.getElementById('puSecFerie').checked=false;document.getElementById('puSecRich').checked=false;document.getElementById('puIsAdmin').checked=false;document.getElementById('puEmailNotifiche').value='';}
+  if(email&&permConfig.users&&permConfig.users[email]){var u=permConfig.users[email];document.getElementById('puTags').value=(u.tags||[]).join('\n');document.getElementById('puSecCoop').checked=(u.sections||[]).indexOf('coop')!==-1;document.getElementById('puSecAts').checked=(u.sections||[]).indexOf('ats')!==-1;document.getElementById('puSecFile').checked=(u.sections||[]).indexOf('file')!==-1||u.is_admin||false;document.getElementById('puSecFerie').checked=(u.sections||[]).indexOf('ferie')!==-1||u.is_admin||false;document.getElementById('puSecRich').checked=(u.sections||[]).indexOf('rich')!==-1||u.is_admin||false;document.getElementById('puSecAnag').checked=(u.sections||[]).indexOf('anag')!==-1;document.getElementById('puIsAdmin').checked=u.is_admin||false;document.getElementById('puEmailNotifiche').value=u.email_notifiche||'';}
+  else{document.getElementById('puTags').value='';document.getElementById('puSecCoop').checked=true;document.getElementById('puSecAts').checked=true;document.getElementById('puSecFile').checked=false;document.getElementById('puSecFerie').checked=false;document.getElementById('puSecRich').checked=false;document.getElementById('puSecAnag').checked=false;document.getElementById('puIsAdmin').checked=false;document.getElementById('puEmailNotifiche').value='';}
   puToggleEmailNotifiche();
   mOpen('moPermUser');setTimeout(function(){if(!email)document.getElementById('puEmail').focus();},120);
 }
@@ -5499,6 +5639,7 @@ function permUserConfirm(){
   if(document.getElementById('puSecFile').checked)secs.push('file');
   if(document.getElementById('puSecFerie').checked)secs.push('ferie');
   if(document.getElementById('puSecRich').checked)secs.push('rich');
+  if(document.getElementById('puSecAnag').checked)secs.push('anag');
   if(!permConfig.users)permConfig.users={};
   permConfig.users[email]={tags:tags,sections:secs};
   if(document.getElementById('puIsAdmin').checked){
@@ -8368,6 +8509,7 @@ var richData = null;          // { richieste: [...] }
 var currentDipendente = null; // profilo utente loggato come dipendente
 var currentRespProfile = null;// profilo utente loggato come responsabile
 var richFilterTab = 'tutte';
+var richFilterDip = '';
 var richFormTipo = 'F';
 
 // Tipi richiedibili con label breve
@@ -8783,9 +8925,8 @@ function richRender(){
   });
   h += '</div></div>';
 
-  // Filtra richieste
-  var lista = richData.richieste.filter(function(r){
-    if(richFilterTab!=='tutte' && r.stato!==richFilterTab) return false;
+  // Filtra richieste: 1) visibilità utente
+  var scope = richData.richieste.filter(function(r){
     if(isSup||isAdm) return true;
     // Vede le proprie (se dipendente) + quelle per cui è responsabile
     // principale O co-approvatore (richIsForMe già copre entrambi i casi).
@@ -8795,6 +8936,32 @@ function richRender(){
     // necessariamente registrato come Responsabile: veniva quindi filtrato
     // fuori a monte, anche se richIsForMe() lo avrebbe correttamente incluso.
     return (r.dipendente_email||'').toLowerCase()===em || richIsForMe(r);
+  });
+
+  // 2) filtro dipendente (opzioni ricavate solo dalle richieste visibili)
+  var dipOpts = {};
+  scope.forEach(function(r){var k=richDipKey(r);if(k&&!dipOpts[k])dipOpts[k]=r.dipendente_nome||r.dipendente_email||k;});
+  if(richFilterDip && !dipOpts[richFilterDip]) richFilterDip='';
+  var scopeDip = richFilterDip ? scope.filter(function(r){return richDipKey(r)===richFilterDip;}) : scope;
+
+  // 3) riepilogo stati (segue visibilità + dipendente, non il tab stato)
+  var cnt = {in_attesa:0, approvata:0, rifiutata:0};
+  scopeDip.forEach(function(r){if(cnt.hasOwnProperty(r.stato))cnt[r.stato]++;});
+  var dipKeys = Object.keys(dipOpts).sort(function(a,b){return String(dipOpts[a]).localeCompare(String(dipOpts[b]));});
+  h += '<div class="rich-summary">';
+  if(dipKeys.length>1 || richFilterDip){
+    h += '<select class="fc" style="min-width:200px" onchange="richSetDip(this.value)"><option value="">— Tutti i dipendenti —</option>'+
+      dipKeys.map(function(k){return '<option value="'+esc(k)+'"'+(k===richFilterDip?' selected':'')+'>'+esc(dipOpts[k])+'</option>';}).join('')+'</select>';
+  }
+  h += '<span class="rich-sum-chip">Totale<b>'+scopeDip.length+'</b></span>'+
+       '<span class="rich-sum-chip" style="color:var(--amber)">⏳ In attesa<b>'+cnt.in_attesa+'</b></span>'+
+       '<span class="rich-sum-chip" style="color:var(--green)">✅ Approvate<b>'+cnt.approvata+'</b></span>'+
+       '<span class="rich-sum-chip" style="color:var(--red)">❌ Rifiutate<b>'+cnt.rifiutata+'</b></span>';
+  h += '</div>';
+
+  // 4) filtro stato (tab)
+  var lista = scopeDip.filter(function(r){
+    return richFilterTab==='tutte' || r.stato===richFilterTab;
   }).slice().reverse(); // più recenti prima
 
   if(!lista.length){
@@ -9183,6 +9350,13 @@ function richInvia(){
 
 function richSetFilter(f){
   richFilterTab=f;
+  richRender();
+}
+function richDipKey(r){
+  return String(r.dipendente_sap||'').trim()||(r.dipendente_email||'').toLowerCase().trim()||(r.dipendente_nome||'').toLowerCase().trim();
+}
+function richSetDip(v){
+  richFilterDip=v||'';
   richRender();
 }
 
