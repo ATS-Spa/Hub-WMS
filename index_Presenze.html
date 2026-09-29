@@ -327,6 +327,20 @@ body{background:var(--bg);color:var(--text);font-family:var(--ff);font-size:14px
 .anagv-wrap .anag-table td a{color:var(--blue);text-decoration:none}
 .anagv-wrap .anag-table td a:hover{text-decoration:underline}
 .anagv-wrap .anag-table td.mono{font-family:var(--ffm)}
+/* Anagrafica View — smartphone: tabella → card */
+@media(max-width:768px){
+  #secAnag .filters{align-items:stretch}
+  #secAnag .filter-body .finfo{display:block;padding-top:4px}
+  .anagv-wrap .anag-panel{margin:10px 12px;background:none;border:none;overflow:visible;border-radius:0}
+  .anagv-wrap .anag-table thead{display:none}
+  .anagv-wrap .anag-table,.anagv-wrap .anag-table tbody{display:block;width:100%}
+  .anagv-wrap .anag-table tr{display:block;background:var(--surface);border:1px solid var(--border);border-radius:10px;padding:8px 12px;margin-bottom:10px}
+  .anagv-wrap .anag-table tr:hover td{background:none}
+  .anagv-wrap .anag-table td{display:flex;justify-content:space-between;align-items:baseline;gap:12px;padding:5px 0;border:none;font-size:12px;text-align:right;overflow-wrap:anywhere;min-width:0}
+  .anagv-wrap .anag-table td::before{content:attr(data-label);color:var(--muted);font-family:var(--ffc);font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;text-align:left;flex-shrink:0}
+  .anagv-wrap .anag-table td.anag-name{font-size:14px;font-weight:700;text-align:left;padding:2px 0 8px;margin-bottom:4px;border-bottom:1px solid var(--border)}
+  .anagv-wrap .anag-table td.anag-name::before{display:none}
+}
 /* Autocomplete Nuovo Dipendente */
 .ae-sugg{position:absolute;left:0;right:0;top:100%;margin-top:2px;background:var(--surface);border:1px solid var(--border);border-radius:6px;max-height:200px;overflow:auto;z-index:50;box-shadow:0 8px 24px rgba(0,0,0,.35);display:none}
 .ae-sugg.show{display:block}
@@ -4057,7 +4071,7 @@ function anagViewRender(){
   var txt=function(v){v=String(v||'').trim();return v?esc(v):'<span style="color:var(--muted)">—</span>';};
   var h='<div class="anag-panel"><table class="anag-table"><thead><tr><th>Nominativo</th><th>Email Google</th><th>Email aziendale</th><th>Ext SAP</th><th>Plant</th><th>Responsabile</th></tr></thead><tbody>';
   list.forEach(function(d){
-    h+='<tr><td>'+txt(d.nome)+'</td><td>'+mail(d.email_google)+'</td><td>'+mail(d.email_lavoro)+'</td><td class="mono">'+txt(d.sap)+'</td><td>'+txt(d.plant)+'</td><td>'+txt(d.responsabile_nome)+'</td></tr>';
+    h+='<tr><td class="anag-name" data-label="Nominativo">'+txt(d.nome)+'</td><td data-label="Email Google">'+mail(d.email_google)+'</td><td data-label="Email aziendale">'+mail(d.email_lavoro)+'</td><td class="mono" data-label="Ext SAP">'+txt(d.sap)+'</td><td data-label="Plant">'+txt(d.plant)+'</td><td data-label="Responsabile">'+txt(d.responsabile_nome)+'</td></tr>';
   });
   h+='</tbody></table></div>';
   box.innerHTML=h;
