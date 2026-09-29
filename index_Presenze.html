@@ -2325,7 +2325,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
     <div class="fg" style="flex:1"><div class="fl">Data</div><input class="mi" id="bulkDate" type="date"></div>
   </div>
   <div class="sgrid" id="bulkGrid"></div>
-  <div class="qty-row" id="bulkQty" style="display:none"><label>Quantità:</label><input class="mi" id="bulkQtyV" type="number" min="0.5" max="8" step="0.5" value="1" style="width:75px"></div>
+  <div class="qty-row" id="bulkQty" style="display:none"><label>Quantità:</label><input class="mi" id="bulkQtyV" type="number" min="0.5" max="8" step="0.5" value="0.5" style="width:75px"></div>
   <div id="bulkOrariWrap" style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
     <div style="display:flex;gap:10px">
       <div class="fg" style="flex:1"><div class="fl">Ingresso</div><input class="mi" id="bulkIng" type="time" value="08:00" oninput="bulkCalcLive()"></div>
@@ -2410,7 +2410,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
   </div>
   <div style="font-size:11px;color:var(--muted);margin-bottom:2px;font-family:var(--ffc);font-weight:700;letter-spacing:.5px">SIGLA</div>
   <div class="sgrid" id="massGrid"></div>
-  <div class="qty-row" id="massQty" style="display:none"><label>Quantità (ore):</label><input class="mi" id="massQtyV" type="number" min="0.5" max="8" step="0.5" value="1" style="width:75px" oninput="massUpdateInfo()"></div>
+  <div class="qty-row" id="massQty" style="display:none"><label>Quantità (ore):</label><input class="mi" id="massQtyV" type="number" min="0.5" max="8" step="0.5" value="0.5" style="width:75px" oninput="massUpdateInfo()"></div>
   <div id="massOrariWrap" style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
     <div style="display:flex;gap:10px">
       <div class="fg" style="flex:1"><div class="fl">Ingresso</div><input class="mi" id="massIng" type="time" value="08:00" oninput="massCalcLive()"></div>
@@ -2455,7 +2455,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
   <div class="mt" id="spTitle">Imposta Presenza</div>
   <div class="ms" id="spSub"></div>
   <div class="sgrid" id="spGrid"></div>
-  <div class="qty-row" id="spQty" style="display:none"><label>Quantità:</label><input class="mi" id="spQtyV" type="number" min="0.5" max="8" step="0.5" value="0.5" style="width:75px;flex-shrink:0" oninput="spCalcLive()"><div id="spHpNote" style="display:none;flex:1;color:var(--red);font-size:10.5px;line-height:1.45"><b>N.B.</b> Ritardo in ingresso: 0,5 HP a partire dal 15° minuto (es. ingresso 8:15 su turno 8:00 → 0,5 HP).<br>In Ingresso/Uscita inserire <b>sempre l'orario del turno</b> (8:00–18:00), non quello effettivo (8:15–18:00).</div></div>
+  <div class="qty-row" id="spQty" style="display:none"><label>Quantità:</label><input class="mi" id="spQtyV" type="number" min="0.5" max="8" step="0.5" value="0.5" style="width:75px;flex-shrink:0" oninput="spCalcLive()"><div id="spHpNote" style="display:none;flex:1;color:var(--red);font-size:10.5px;line-height:1.45"><b>N.B.</b> Ritardo in ingresso: 0,5 HP a partire dal 15° minuto (es. ingresso 8:15 su turno 8:00 → 0,5 HP).<br>In Ingresso/Uscita inserire <b>sempre l'orario del turno</b> (8:00–18:00), non quello effettivo (8:15–18:00). Eventualmente Indicarlo nelle note.</div></div>
   <div id="spOrariWrap" style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
     <!-- Campi standard Ingresso/Uscita -->
     <div id="spStdOrari" style="display:flex;flex-direction:column;gap:10px">
@@ -4390,7 +4390,7 @@ function spCalcLive(){renderCommesseGrid();
   // "7 ord + 0 str" (7h, le uniche realmente residue).
   var ord=o.ord, str=o.str;
   if(sig==='HP'||sig==='H104'||sig==='HPVM'){
-    var qty=parseFloat(document.getElementById('spQtyV').value)||1;
+    var qty=parseFloat(document.getElementById('spQtyV').value)||0.5;
     var restante=Math.max(0,o.eff-qty);
     ord=Math.min(8,restante);
     str=Math.max(0,restante-8);
@@ -4411,7 +4411,7 @@ function spConfirm(){
   });
   if(!emp.pausa||emp.pausa.length<nd)emp.pausa=(emp.pausa||[]).concat(Array(nd).fill(null)).slice(0,nd);
   var fv=spSigla;
-  if(spSigla&&SM[spSigla]&&SM[spSigla].hasQty){var qty=parseFloat(document.getElementById('spQtyV').value)||1;fv=qty+spSigla;}
+  if(spSigla&&SM[spSigla]&&SM[spSigla].hasQty){var qty=parseFloat(document.getElementById('spQtyV').value)||0.5;fv=qty+spSigla;}
   var vecchiaSigla=(emp.sigla||[])[spDi]||'';
   emp.sigla[spDi]=fv;
   // Aggiorna ganttSigleMap per aggiornamento immediato del Gantt
@@ -5899,7 +5899,7 @@ function bulkConfirm(){
   var showOr=SIGLE_NO_ORARIO.indexOf(bulkSigla)===-1;
   var qty=document.getElementById('bulkQtyV').value;
   var sigCode=bulkSigla;
-  if(SM[sigCode]&&SM[sigCode].hasQty&&qty&&parseFloat(qty)!==1) sigCode=sigCode+'('+qty+')';
+  if(SM[sigCode]&&SM[sigCode].hasQty&&qty&&parseFloat(qty)!==1) sigCode=parseFloat(qty)+sigCode; // stesso formato di popup e massivo (es. 0.5HP)
 
   var commVals=SIGLE_COMMESSE.indexOf(xSig(bulkSigla))!==-1?getBulkCommVals():null;
   var saveComm=document.getElementById('bulkCommSave').checked;
@@ -6184,7 +6184,7 @@ function massConfirm(){
   var hasPausa=document.getElementById('massPausa').checked;
   var pausaH=hasPausa?parseFloat(document.getElementById('massPausaDur').value)||1:0;
   var showOr=massSigla!==''&&SIGLE_NO_ORARIO.indexOf(massSigla)===-1&&SIGLE_COTTIMO.indexOf(massSigla)===-1;
-  var qty=parseFloat(document.getElementById('massQtyV').value)||1;
+  var qty=parseFloat(document.getElementById('massQtyV').value)||0.5;
   var fv=massSigla;
   if(massSigla&&SM[massSigla]&&SM[massSigla].hasQty&&qty!==1)fv=qty+massSigla;
   var massNota=(document.getElementById('massNota').value||''  ).trim();
@@ -9025,7 +9025,7 @@ function richBuildSidebar(profile){
       '</div>'+
       '<div id="richQtyWrap" style="display:none">'+
         '<div class="fl">Ore</div>'+
-        '<input class="mi" id="richQty" type="number" min="0.5" max="8" step="0.5" value="1" style="width:90px" oninput="richCheckResiduoWarn()">'+
+        '<input class="mi" id="richQty" type="number" min="0.5" max="8" step="0.5" value="0.5" style="width:90px" oninput="richCheckResiduoWarn()">'+
       '</div>'+
       '<div class="rich-date-row">'+
         '<div><div class="fl">Dal</div><input class="mi fc" id="richDal" type="date" oninput="richCalcGiorni()"></div>'+
@@ -9185,7 +9185,7 @@ function richCheckResiduoWarn(){
     if(gg>res.ferie){el.innerHTML='⚠️ Superi il residuo ferie: '+res.ferie+' gg disponibili, '+gg+' richiesti';el.style.color='var(--red)';}
     else{el.innerHTML='✓ '+(res.ferie-gg)+' gg residui dopo questa richiesta';el.style.color='var(--muted)';}
   } else if(richFormTipo==='HP'){
-    var qty=parseFloat((document.getElementById('richQty')||{}).value)||1;
+    var qty=parseFloat((document.getElementById('richQty')||{}).value)||0.5;
     var oreTot=round1(qty*gg);
     if(oreTot>res.permessi){el.innerHTML='⚠️ Superi il residuo permessi: '+res.permessi+'h disponibili, '+oreTot+'h richieste';el.style.color='var(--red)';}
     else{el.innerHTML='✓ '+round1(res.permessi-oreTot)+'h residue dopo questa richiesta';el.style.color='var(--muted)';}
@@ -9286,7 +9286,7 @@ function richInvia(){
   var dal = (document.getElementById('richDal')||{}).value;
   var al  = (document.getElementById('richAl')||{}).value;
   var note = (document.getElementById('richNote')||{}).value||'';
-  var qty  = parseFloat((document.getElementById('richQty')||{}).value)||1;
+  var qty  = parseFloat((document.getElementById('richQty')||{}).value)||0.5;
 
   if(!dal||!al){toast('Seleziona le date','warn');return;}
 
