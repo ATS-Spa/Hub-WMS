@@ -2455,7 +2455,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
   <div class="mt" id="spTitle">Imposta Presenza</div>
   <div class="ms" id="spSub"></div>
   <div class="sgrid" id="spGrid"></div>
-  <div class="qty-row" id="spQty" style="display:none"><label>Quantità:</label><input class="mi" id="spQtyV" type="number" min="0.5" max="8" step="0.5" value="1" style="width:75px" oninput="spCalcLive()"></div>
+  <div class="qty-row" id="spQty" style="display:none"><label>Quantità:</label><input class="mi" id="spQtyV" type="number" min="0.5" max="8" step="0.5" value="0.5" style="width:75px;flex-shrink:0" oninput="spCalcLive()"><div id="spHpNote" style="display:none;flex:1;color:var(--red);font-size:10.5px;line-height:1.45"><b>N.B.</b> Ritardo in ingresso: 0,5 HP a partire dal 15° minuto (es. ingresso 8:15 su turno 8:00 → 0,5 HP).<br>In Ingresso/Uscita inserire <b>sempre l'orario del turno</b> (8:00–18:00), non quello effettivo (8:15–18:00).</div></div>
   <div id="spOrariWrap" style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
     <!-- Campi standard Ingresso/Uscita -->
     <div id="spStdOrari" style="display:flex;flex-direction:column;gap:10px">
@@ -4284,7 +4284,7 @@ function openPickerGeneric(mode,ri,di){
   // Pre-compila la quantità già impostata (es. "1HP" → 1), altrimenti riaprendo
   // un giorno con permesso già messo il campo mostrava sempre il default.
   var csQtyMatch=/^([\d.]+)/.exec(cs);
-  document.getElementById('spQtyV').value=csQtyMatch?csQtyMatch[1]:'1';
+  document.getElementById('spQtyV').value=csQtyMatch?csQtyMatch[1]:'0.5';
   var curPs=getPausaDip(emp,di);
   var nome=mode==='ats'?(emp.nome||''):(emp.nom2||emp.nome||'');
   document.getElementById('spTitle').textContent='Presenza · '+nome;
@@ -4308,6 +4308,7 @@ function openPickerGeneric(mode,ri,di){
       g.querySelectorAll('.sopt').forEach(function(x){x.classList.remove('sel');x.style.borderColor='';});
       el.classList.add('sel');el.style.borderColor=s.border;spSigla=s.code;
       document.getElementById('spQty').style.display=s.hasQty?'flex':'none';
+      document.getElementById('spHpNote').style.display=s.code==='HP'?'':'none';
       var isCottimo=SIGLE_COTTIMO.indexOf(s.code)!==-1;
       var showOr=SIGLE_NO_ORARIO.indexOf(s.code)===-1&&!isCottimo;
       document.getElementById('spOrariWrap').style.display=showOr||isCottimo?'':'none';
