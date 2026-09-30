@@ -2325,7 +2325,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
     <div class="fg" style="flex:1"><div class="fl">Data</div><input class="mi" id="bulkDate" type="date"></div>
   </div>
   <div class="sgrid" id="bulkGrid"></div>
-  <div class="qty-row" id="bulkQty" style="display:none"><label>Quantità:</label><input class="mi" id="bulkQtyV" type="number" min="0.5" max="8" step="0.5" value="0.5" style="width:75px"></div>
+  <div class="qty-row" id="bulkQty" style="display:none"><label>Quantità:</label><input class="mi" id="bulkQtyV" type="number" min="0.5" max="8" step="0.5" value="0.5" style="width:75px" oninput="updateBulkCommTot()"></div>
   <div id="bulkOrariWrap" style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
     <div style="display:flex;gap:10px">
       <div class="fg" style="flex:1"><div class="fl">Ingresso</div><input class="mi" id="bulkIng" type="time" value="08:00" oninput="bulkCalcLive()"></div>
@@ -2410,7 +2410,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
   </div>
   <div style="font-size:11px;color:var(--muted);margin-bottom:2px;font-family:var(--ffc);font-weight:700;letter-spacing:.5px">SIGLA</div>
   <div class="sgrid" id="massGrid"></div>
-  <div class="qty-row" id="massQty" style="display:none"><label>Quantità (ore):</label><input class="mi" id="massQtyV" type="number" min="0.5" max="8" step="0.5" value="0.5" style="width:75px" oninput="massUpdateInfo()"></div>
+  <div class="qty-row" id="massQty" style="display:none"><label>Quantità (ore):</label><input class="mi" id="massQtyV" type="number" min="0.5" max="8" step="0.5" value="0.5" style="width:75px" oninput="massUpdateInfo();updateMassCommTot()"></div>
   <div id="massOrariWrap" style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
     <div style="display:flex;gap:10px">
       <div class="fg" style="flex:1"><div class="fl">Ingresso</div><input class="mi" id="massIng" type="time" value="08:00" oninput="massCalcLive()"></div>
@@ -4376,7 +4376,12 @@ function spOrariWarnUpd(){
   });
   w.style.display=bad?'':'none';
 }
-function spCalcLive(){renderCommesseGrid();spOrariWarnUpd();
+function spCalcLive(){
+  // Griglia già a video → solo ricalcolo (prima veniva ricostruita a ogni input
+  // e si perdevano le modifiche non ancora confermate)
+  var _cg=document.getElementById('spCommesseGrid'),_cw=document.getElementById('spCommesseWrap');
+  if(_cg&&_cg.children.length&&_cw&&_cw.style.display!=='none')updateCommTot();else renderCommesseGrid();
+  spOrariWarnUpd();
 
   var emps=spMode==='ats'?atsEmps:coopEmps;
   var sig=spSigla!==null?spSigla:xSig((emps[spIdx]?((emps[spIdx].sigla||[])[spDi]||''):''));
@@ -5407,10 +5412,18 @@ function calcOreDisponibili(sigla, ing, usc, pausa, qty){
   var sg=xSig(sigla||'');
   // Sottrai ore permesso/104
   if(sg==='HP'||sg==='H104'||sg==='HPVM'){
-    var qtyH=parseFloat((String(sigla||'').match(/^[\d.]*/)||['1'])[0])||1;
+    // qty esplicita (campo Quantità) ha priorità; altrimenti prefisso sigla ("3HP" → 3)
+    var qtyH=(qty!=null&&qty>0)?qty:(parseFloat((String(sigla||'').match(/^[\d.]*/)||['1'])[0])||1);
     eff=Math.max(0,eff-qtyH);
   }
   return Math.round(eff*10)/10;
+}
+
+function _commQty(sg,inpId){
+  var b=xSig(sg||'');
+  if(!(SM[b]&&SM[b].hasQty))return null;
+  var el=document.getElementById(inpId);
+  return el?(parseFloat(el.value)||null):null;
 }
 
 function getCommDisp(){
@@ -5420,7 +5433,7 @@ function getCommDisp(){
   var ing=document.getElementById('spIng').value;
   var usc=document.getElementById('spUsc').value;
   var pausa=document.getElementById('spPausa').checked?parseFloat(document.getElementById('spPausaDur').value)||1:0;
-  return calcOreDisponibili(sg,ing,usc,pausa,null);
+  return calcOreDisponibili(sg,ing,usc,pausa,_commQty(sg,'spQtyV'));
 }
 
 function renderCommesseGrid(){
@@ -5436,6 +5449,16 @@ function renderCommesseGrid(){
   if(!commesse.length){wrap.style.display='none';return;}
   var disp=getCommDisp();
   var existing=(emp.commesse&&emp.commesse[spDi])||{};
+  // Riapertura: se la ripartizione salvata copriva tutte le ore disponibili del
+  // giorno, la commessa con più ore torna "resto" → si riadatta se cambiano
+  // orari/pausa/permessi invece di restare fissa sul vecchio valore.
+  if(Object.keys(existing).length){
+    existing=Object.assign({},existing); // copia: i dati salvati non si toccano
+    var _savedDisp=calcOreDisponibili((emp.sigla||[])[spDi]||'',(emp.ingresso||[])[spDi]||'',(emp.uscita||[])[spDi]||'',getPausaDip(emp,spDi),null);
+    var _keys=Object.keys(existing),_sum=0,_maxK=null;
+    _keys.forEach(function(k){var v=parseFloat(existing[k])||0;_sum+=v;if(_maxK===null||v>(parseFloat(existing[_maxK])||0))_maxK=k;});
+    if(_savedDisp>0&&_maxK!==null&&Math.abs(_sum-_savedDisp)<=0.1*_keys.length)existing[_maxK]=0;
+  }
   if(!Object.keys(existing).length){var _def=wmsConfig.bulkCommesse||{};if(Object.keys(_def).length)existing=_def;}
   grid.innerHTML='';
   commesse.forEach(function(c){
@@ -5781,7 +5804,7 @@ function getBulkCommDisp(){
   var ing=document.getElementById('bulkIng').value;
   var usc=document.getElementById('bulkUsc').value;
   var pausa=document.getElementById('bulkPausa').checked?parseFloat(document.getElementById('bulkPausaDur').value)||1:0;
-  return calcOreDisponibili(sigla,ing,usc,pausa,null);
+  return calcOreDisponibili(sigla,ing,usc,pausa,_commQty(sigla,'bulkQtyV'));
 }
 
 function renderBulkCommesse(){
@@ -6087,7 +6110,7 @@ function getMassCommDisp(){
   var ing=document.getElementById('massIng').value;
   var usc=document.getElementById('massUsc').value;
   var pausa=document.getElementById('massPausa').checked?parseFloat(document.getElementById('massPausaDur').value)||1:0;
-  return calcOreDisponibili(sigla,ing,usc,pausa,null);
+  return calcOreDisponibili(sigla,ing,usc,pausa,_commQty(sigla,'massQtyV'));
 }
 
 function renderMassCommesse(){
