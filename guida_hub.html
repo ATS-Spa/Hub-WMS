@@ -691,6 +691,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
       <tr><td><span class="sig" style="color:#84cc16;background:rgba(132,204,22,.12)">SW</span></td><td>Smartworking</td><td><span class="tag teal">ATS</span></td></tr>
       <tr><td><span class="sig" style="color:var(--subtle);background:rgba(148,163,184,.12)">Lutto</span></td><td>Lutto</td><td><span class="tag teal">ATS</span></td></tr>
       <tr><td><span class="sig" style="color:#38bdf8;background:rgba(56,189,248,.12)">TFS</span></td><td>Trasferta Fuori Sede</td><td><span class="tag teal">ATS</span></td></tr>
+      <tr><td><span class="sig" style="color:var(--red);background:rgba(239,68,68,.12)">RNG</span></td><td>Ritardi Non Giustificati: totale mensile in ore:minuti (es. <code>01:35</code>). Non si seleziona dalla griglia sigle: si compila col campo <strong>Ritardo (min)</strong></td><td><span class="tag blue">Coop</span> <span class="tag teal">ATS</span></td></tr>
     </tbody>
   </table>
 
@@ -771,7 +772,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
         <span class="step-num">4</span>
         <div>
           <div class="step-title">Statistiche riepilogative</div>
-          <div class="step-body">Dopo il caricamento, sotto la barra filtri appare una riga di statistiche con il totale presenze, assenze e altre sigle per il mese visualizzato.</div>
+          <div class="step-body">Dopo il caricamento, sotto la barra filtri appare una riga di statistiche con il totale presenze, assenze e altre sigle per il mese visualizzato. Se ci sono ritardi compare anche la voce <strong style="color:var(--red)">RNG (h)</strong>, con il totale in ore:minuti dei dipendenti visualizzati.</div>
         </div>
       </div>
       <div class="step-detail">
@@ -801,7 +802,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
         </div>
         <div class="infobox tip">
           <span class="ib-icon">💡</span>
-          <div class="ib-body"><strong>ORD/STR</strong> mostra, per ogni dipendente ATS, le righe con ore ordinarie e straordinarie. <strong>Totali</strong> aggiunge colonne riepilogative a destra. <strong>Sigle</strong> mostra/nasconde la legenda in cima alla tabella.</div>
+          <div class="ib-body"><strong>ORD/STR</strong> mostra, per ogni dipendente ATS, le righe con ore ordinarie e straordinarie. <strong>Totali</strong> aggiunge colonne riepilogative a destra, compresa la colonna <strong style="color:var(--red)">RNG</strong> con i ritardi del mese in ore:minuti (passando il mouse vedi i minuti totali). <strong>Sigle</strong> mostra/nasconde la legenda in cima alla tabella.</div>
         </div>
       </div>
     </div>
@@ -924,6 +925,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
           <div class="mm-orari">
             <div class="fm-group"><div class="fm-label">Ingresso</div><input class="fm-input" value="08:00" style="width:80px"></div>
             <div class="fm-group"><div class="fm-label">Uscita</div><input class="fm-input" value="18:00" style="width:80px"></div>
+            <div class="fm-group"><div class="fm-label" style="color:var(--red)">Ritardo (min)</div><input class="fm-input" value="10" style="width:70px;border-color:var(--red);color:var(--red)"></div>
             <div style="display:flex;align-items:center;gap:6px;font-size:11px;color:var(--subtle)">
               <input type="checkbox" checked style="accent-color:var(--teal)"> Pausa pranzo
               <select class="fm-input" style="width:80px;padding:3px 6px"><option>1 ora</option></select>
@@ -959,7 +961,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
         <div class="infobox info">
           <span class="ib-icon">📝</span>
           <div class="ib-body">
-            L'orario <strong>realmente</strong> osservato (es. il dipendente è entrato alle 8:30 o è uscito alle 17:15) <strong>non va messo in Ingresso/Uscita</strong>: va scritto nel campo <strong>Nota</strong> (pulsante 📝 in basso nel modale). Esempio: <em>"uscito alle 17:15"</em> oppure <em>"entrato alle 8:30"</em>. Le celle con una nota mostrano un piccolo triangolo ambra nell'angolo, cliccabile per rileggerla o modificarla.
+            L'orario <strong>realmente</strong> osservato <strong>non va messo in Ingresso/Uscita</strong>. Se il dipendente è <strong>entrato in ritardo</strong> senza giustificazione (es. alle 8:10 invece delle 8:00), inserisci i minuti nel campo <strong style="color:var(--red)">Ritardo (min)</strong> (es. <code>10</code>) e lascia Ingresso all'orario del turno. Le altre variazioni (es. <em>"uscito alle 17:15"</em>) vanno scritte nel campo <strong>Nota</strong> (pulsante 📝 in basso nel modale). Le celle con una nota mostrano un piccolo triangolo ambra nell'angolo, cliccabile per rileggerla o modificarla.
           </div>
         </div>
       </div>
@@ -1002,6 +1004,48 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
         <div>
           <div class="step-title">Commessa predefinita nel picker singolo</div>
           <div class="step-body">Se la sigla selezionata prevede la distribuzione ore commesse (es. <strong style="color:var(--green)">X</strong>), compare la sezione <strong>Distribuzione Ore Commesse</strong>. In fondo trovi il checkbox <strong>Ricorda come predefinita</strong>: spuntandolo, la ripartizione viene salvata in config e pre-caricata automaticamente la prossima volta che apri il picker — sia per il singolo dipendente che per "Presenza a Tutti".</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div class="infobox info">
+          <span class="ib-icon">🧮</span>
+          <div class="ib-body"><strong>Ore disponibili per commessa:</strong> sono le ore effettive del giorno meno le ore di permesso indicate in <strong>Quantità</strong>. Esempio: 07:30–17:30 con 1h di pausa = 9h; con <strong style="color:var(--purple)">HP</strong> da 3 ore restano <strong>6h</strong> da ripartire.</div>
+        </div>
+        <div class="infobox tip">
+          <span class="ib-icon">🔄</span>
+          <div class="ib-body"><strong>Modifiche successive:</strong> se riapri una cella già impostata e cambi orari, pausa o permesso, la ripartizione si aggiorna da sola. La commessa con più ore torna su <strong>resto</strong> e assorbe la differenza, le altre restano fisse. Vale solo se la ripartizione salvata copriva tutte le ore del giorno.</div>
+        </div>
+      </div>
+    </div>
+
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num">7</span>
+        <div>
+          <div class="step-title">Ritardi non giustificati (RNG)</div>
+          <div class="step-body">Nel pannello, accanto a Ingresso e Uscita, c'è il campo <strong style="color:var(--red)">Ritardo (min)</strong>. Si compila solo in caso di ritardo, indicando i minuti; se è vuoto non c'è ritardo. È disponibile solo per le sigle con orario (X, SW, TFS, HP…): impostando F, M, PLT o ✕ Cancella il ritardo del giorno viene azzerato.</div>
+        </div>
+      </div>
+      <div class="step-detail">
+        <div style="display:flex;gap:2px;margin:10px 0;font-family:var(--ffc);font-size:12px;font-weight:700;text-align:center">
+          <div style="width:40px;padding:4px 0;color:var(--muted)">21<br><span style="font-size:9px">mar</span></div>
+          <div style="width:40px;padding:4px 0;color:var(--red);background:rgba(239,68,68,.2);border-bottom:2px solid var(--red)">22<br><span style="font-size:9px">mer</span></div>
+          <div style="width:40px;padding:4px 0;color:var(--muted)">23<br><span style="font-size:9px">gio</span></div>
+          <div style="width:52px;padding:4px 0;color:var(--red)">RNG</div>
+        </div>
+        <div style="display:flex;gap:2px;font-family:var(--ffc);font-size:12px;font-weight:700;text-align:center">
+          <div style="width:40px;padding:4px 0;color:var(--green)">X</div>
+          <div style="width:40px;padding:4px 0;color:var(--green);background:rgba(239,68,68,.08);box-shadow:inset 1.5px 0 0 rgba(239,68,68,.55),inset -1.5px 0 0 rgba(239,68,68,.55)">X</div>
+          <div style="width:40px;padding:4px 0;color:var(--green)">X</div>
+          <div style="width:52px;padding:4px 0;color:var(--red);font-family:var(--ffm)">00:10</div>
+        </div>
+        <div class="infobox info">
+          <span class="ib-icon">🟥</span>
+          <div class="ib-body">Il giorno con ritardo viene evidenziato in <strong style="color:var(--red)">rosso</strong> sulla colonna di quel dipendente (intestazione, SIG, IN, OUT, ORD, STR), come l'evidenza del giorno odierno. Passando il mouse sulla sigla compare <em>"Ritardo X min"</em>.</div>
+        </div>
+        <div class="infobox warn">
+          <span class="ib-icon">⏱️</span>
+          <div class="ib-body">Il ritardo <strong>non scala</strong> le ore ORD/STR, che restano calcolate sull'orario del turno. I minuti vengono sommati a parte nella colonna <strong style="color:var(--red)">RNG</strong> in formato ore:minuti (es. 95 min → <code>01:35</code>). I ritardi sono salvati nel tab <code>&lt;Mese&gt;_ATS_Ritardi</code> / <code>&lt;Mese&gt;_Coop_Ritardi</code> del file del mese, creato in automatico al primo inserimento.</div>
         </div>
       </div>
     </div>
@@ -1171,7 +1215,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
         </div>
         <div class="infobox tip">
           <span class="ib-icon">💡</span>
-          <div class="ib-body">Il file Excel mantiene la formattazione a colori delle sigle. È compatibile con Microsoft Excel e Google Sheets.</div>
+          <div class="ib-body">Il file Excel mantiene la formattazione a colori delle sigle. È compatibile con Microsoft Excel e Google Sheets. Nei fogli <strong>Report</strong> (ATS e Coop) c'è la colonna <strong style="color:var(--red)">RNG</strong> con i ritardi del mese come durata in formato <code>[h]:mm</code>, quindi sommabile. La colonna è descritta anche nel foglio <strong>Legenda</strong>.</div>
         </div>
       </div>
     </div>
