@@ -441,6 +441,11 @@ th.dh.holiday .dn{color:var(--red);font-weight:800}
 th.dh.holiday .dw{color:rgba(239,68,68,.7)}
 td.dc.holiday{background:rgba(239,68,68,.07);}
 td.dc.today{background:rgba(20,184,166,.06);box-shadow:inset 1.5px 0 0 rgba(20,184,166,.4),inset -1.5px 0 0 rgba(20,184,166,.4)}
+/* Ritardo non giustificato: evidenza colonna del giorno per il dipendente */
+tr.emp-hdr td.dh.rng{background:rgba(239,68,68,.2);border-bottom:2px solid var(--red)}
+tr.emp-hdr td.dh.rng .dn{color:var(--red);font-weight:800}
+tr.emp-hdr td.dh.rng .dw{color:rgba(239,68,68,.85)}
+td.dc.rng{background:rgba(239,68,68,.08);box-shadow:inset 1.5px 0 0 rgba(239,68,68,.55),inset -1.5px 0 0 rgba(239,68,68,.55)}
 td.dc{text-align:center;min-width:38px;max-width:38px;padding:4px 2px;font-family:var(--ffc);font-size:13px;font-weight:700}
 td.dc.we{background:rgba(36,48,72,.28)}td.dc.emp{color:rgba(36,48,72,.7)}
 td.tot{text-align:center;min-width:50px;font-family:var(--ffm);font-size:12px;font-weight:600;background:rgba(36,48,72,.18);padding:5px 8px}
@@ -2451,7 +2456,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
 </div></div>
 
 
-<div id="moSigla" class="mo hide"><div class="mc" style="width:460px;max-height:85vh;overflow-y:auto">
+<div id="moSigla" class="mo hide"><div class="mc" style="width:540px;max-width:96vw;max-height:85vh;overflow-y:auto">
   <div class="mt" id="spTitle">Imposta Presenza</div>
   <div class="ms" id="spSub"></div>
   <div class="sgrid" id="spGrid"></div>
@@ -2463,6 +2468,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
       <div style="display:flex;gap:10px">
         <div class="fg" style="flex:1"><div class="fl">Ingresso</div><input class="mi" id="spIng" type="time" value="08:00" oninput="spCalcLive()"></div>
         <div class="fg" style="flex:1"><div class="fl">Uscita</div><input class="mi" id="spUsc" type="time" value="18:00" oninput="spCalcLive()"></div>
+        <div class="fg" style="width:115px;flex-shrink:0"><div class="fl" style="color:var(--red)">Ritardo (min)</div><input class="mi" id="spRit" type="number" min="0" max="480" step="1" placeholder="0" oninput="spRitUpd()"></div>
       </div>
       <div style="display:flex;align-items:center;gap:12px;background:var(--card);border:1px solid var(--border);border-radius:7px;padding:10px 14px">
         <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-size:13px;flex:1">
@@ -3269,9 +3275,11 @@ function renderSection(sec, emps, data, opts){
   var _td=new Date(),_todayDay=(_td.getFullYear()===y&&_td.getMonth()+1===m)?_td.getDate():-1;
 
   var T={X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,R:0,HPVM:0,ord:0,str:0,fest:0,week:0,P:0};
+  var T_rngMin=0;
   emps.forEach(function(e){
     var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
     Object.keys(T).forEach(function(k){T[k]+=(t[k]||0);});
+    T_rngMin+=rngTotMin(e);
   });
   var sb=document.getElementById(opts.statsId);sb.style.display='flex';
   var statDefs=[
@@ -3283,7 +3291,8 @@ function renderSection(sec, emps, data, opts){
     {l:'TFS',v:T.TFS,c:'var(--c-TFS)'},
     {l:'Riposo',v:T.R,c:'var(--c-R)'},{l:'HPVM',v:T.HPVM,c:'var(--c-HPVM)'},
     {l:'H.Ord.',v:fmtOre(T.ord),c:'var(--green)'},{l:'H.Str.',v:fmtOre(T.str),c:'var(--amber)'},
-    {l:'H.Dom',v:fmtOre(T.week),c:'var(--purple)'},{l:'H.Fest.',v:fmtOre(T.fest),c:'var(--red)'}
+    {l:'H.Dom',v:fmtOre(T.week),c:'var(--purple)'},{l:'H.Fest.',v:fmtOre(T.fest),c:'var(--red)'},
+    {l:'RNG (h)',v:fmtRng(T_rngMin),c:'var(--red)'}
   ];
   sb.innerHTML=statDefs.filter(function(d){return d.v!==0&&d.v!=='0'&&d.v!=='';})
     .map(function(d){return '<div class="stat" style="border-top:2px solid '+d.c+'"><div class="sl">'+d.l+'</div><div class="sv" style="color:'+d.c+'">'+d.v+'</div></div>';}).join('');
@@ -3297,11 +3306,12 @@ function renderSection(sec, emps, data, opts){
     {l:'SW',c:'var(--c-SW)',k:'SW'},{l:'Lut',c:'var(--c-Lutto)',k:'Lutto'},{l:'TFS',c:'var(--c-TFS)',k:'TFS'},
     {l:'R',c:'var(--c-R)',k:'R'},{l:'HPVM',c:'var(--c-HPVM)',k:'HPVM'},
     {l:'ORD',c:'var(--green)',k:'ord'},{l:'STR',c:'var(--amber)',k:'str'},
-    {l:'DOM',c:'var(--purple)',k:'week'},{l:'FEST',c:'var(--red)',k:'fest'}
+    {l:'DOM',c:'var(--purple)',k:'week'},{l:'FEST',c:'var(--red)',k:'fest'},
+    {l:'RNG',c:'var(--red)',k:'rng'}
   ];
   var SIGLA_TO_TOT={X:'X',F:'F','1/2F':'F',M:'M',HP:'HP',H104:'H104','104':'104',CP:'CP',HPE:'HPE',PE:'PE',SW:'SW',Lutto:'Lutto',TFS:'TFS',R:'R',HPVM:'HPVM'};
   var activeSiglaCodes=isAts?SIGLE.filter(function(s){return ATS_EXCL_CODES.indexOf(s.code)===-1;}).map(function(s){return s.code;}):COOP_SIGLE_CODES;
-  var activeTotKeys=['ord','str','week','fest','P'];
+  var activeTotKeys=['ord','str','week','fest','P','rng'];
   activeSiglaCodes.forEach(function(code){var k=SIGLA_TO_TOT[code];if(k&&activeTotKeys.indexOf(k)===-1)activeTotKeys.push(k);});
   var totHdrs=ALL_TOT_HDRS.filter(function(th){return activeTotKeys.indexOf(th.k)!==-1;});
   var NCOLS_TOT=totHdrs.length;
@@ -3323,6 +3333,9 @@ function renderSection(sec, emps, data, opts){
   emps.forEach(function(emp,ei){
     var ri=allEmps.indexOf(emp);
     var tots=calcTots(emp.sigla||[],emp.ingresso,emp.uscita,emp.pausa,dates,m,y);
+    var _rngTot=rngTotMin(emp);
+    tots.rng=fmtRng(_rngTot);
+    var rngCls=dates.map(function(d,di){return rngMin(emp,di)?' rng':'';});
     var empId=(isAts?'emp_':'cemp_')+ri;
 
     var oreGiorno=dates.map(function(d,di){
@@ -3352,8 +3365,8 @@ function renderSection(sec, emps, data, opts){
     h+='<td class="sf ca0 eh-num">#</td>';
     h+='<td class="sf ca1 eh-nome">Dipendente</td>';
     h+='<td class="sf ca2 eh-nome">T</td>';
-    dates.forEach(function(d){var w=d.weekday===0||d.weekday===6;var hol=isHoliday(d.day,m,y);
-      h+='<td class="dh'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+'"><div class="dn">'+d.day+'</div><div class="dw">'+GGS[d.weekday]+'</div></td>';});
+    dates.forEach(function(d,di){var w=d.weekday===0||d.weekday===6;var hol=isHoliday(d.day,m,y);
+      h+='<td class="dh'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+rngCls[di]+'"><div class="dn">'+d.day+'</div><div class="dw">'+GGS[d.weekday]+'</div></td>';});
     totHdrs.forEach(function(th){h+='<td class="'+totClass+'" style="background:var(--surface);text-align:center;font-family:var(--ffc);font-size:10px;font-weight:700;color:'+th.c+';border-right:1px solid rgba(36,48,72,.3)">'+th.l+'</td>';});
     if(!isAts)h+='<td class="conf-th" style="font-size:10px">✓</td>';
     if(adminMode)h+='<td style="background:var(--surface)"></td>';
@@ -3374,18 +3387,20 @@ function renderSection(sec, emps, data, opts){
       var v=(emp.sigla||[])[di]||'';var w=d.weekday===0||d.weekday===6;var hol=isHoliday(d.day,m,y);
       var sg=xSig(v);var sc=SM[sg]||null;
       var hasNote=!!(emp.notes&&emp.notes[di]);
-      var cl='dc'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+(sc?' '+sc.cls:(!v?' emp':''))+(adminMode?' editable':'')+(hasNote?' has-note':'');
+      var cl='dc'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+(sc?' '+sc.cls:(!v?' emp':''))+(adminMode?' editable':'')+(hasNote?' has-note':'')+rngCls[di];
       var cellTxt=esc(v||(!w?'·':''));
+      var rngTtl=rngCls[di]?' title="Ritardo '+rngMin(emp,di)+' min"':'';
       if(adminMode){
-        h+='<td class="'+cl+'" onclick="'+opts.openPickerFn+'('+ri+','+di+',this)">'+cellTxt+'</td>';
+        h+='<td class="'+cl+'"'+rngTtl+' onclick="'+opts.openPickerFn+'('+ri+','+di+',this)">'+cellTxt+'</td>';
       } else {
-        h+='<td class="'+cl+'" onclick="openNota(\''+opts.mode+'\','+ri+','+di+')">'+cellTxt+'</td>';
+        h+='<td class="'+cl+'"'+rngTtl+' onclick="openNota(\''+opts.mode+'\','+ri+','+di+')">'+cellTxt+'</td>';
       }
     });
     totHdrs.forEach(function(th){
       var val=th.k==='ord'||th.k==='str'?fmtOre(tots[th.k]):tots[th.k];
       var disp=(val===0||val===''||val==='0')?'—':val;
-      h+='<td class="tot '+totTdClass+'" style="color:'+th.c+';font-size:'+(th.k==='ord'||th.k==='str'?'13':'12')+'px" rowspan="3">'+disp+'</td>';
+      var ttl=th.k==='rng'&&_rngTot?' title="'+_rngTot+' min"':'';
+      h+='<td class="tot '+totTdClass+'" style="color:'+th.c+';font-size:'+(th.k==='ord'||th.k==='str'?'13':'12')+'px" rowspan="3"'+ttl+'>'+disp+'</td>';
     });
     if(!isAts)h+='<td rowspan="3" style="text-align:center;vertical-align:middle;padding:4px"><input type="checkbox" class="conf-cb" '+(isConfirmed?'checked':'')+' onchange="toggleConferma('+ri+',this)"></td>';
     if(adminMode)h+='<td rowspan="3" style="padding:2px 3px;text-align:center"><button class="bdel" onclick="'+opts.delFn+'('+ri+')" title="Rimuovi">🗑</button></td>';
@@ -3394,7 +3409,7 @@ function renderSection(sec, emps, data, opts){
     h+='<tr>';
     h+='<td class="sf ca2" style="font-size:11px;color:var(--green);font-family:var(--ffc);font-weight:700">IN</td>';
     dates.forEach(function(d,di){var v=(emp.ingresso||[])[di]||'';var w=d.weekday===0||d.weekday===6;var hol=isHoliday(d.day,m,y);
-      h+='<td class="dc'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+(v?' ':' emp')+(adminMode&&!w?' editable':'')+'"'
+      h+='<td class="dc'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+rngCls[di]+(v?' ':' emp')+(adminMode&&!w?' editable':'')+'"'
         +(adminMode&&!w?' onclick="'+opts.editOrFn+'(this,'+ri+',\'ingresso\','+di+')"':'')
         +(v?' style="color:var(--green)"':'')+'>'+(v||(!w?'·':''))+'</td>';});
     h+='</tr>';
@@ -3402,7 +3417,7 @@ function renderSection(sec, emps, data, opts){
     h+='<tr>';
     h+='<td class="sf ca2" style="font-size:11px;color:var(--red);font-family:var(--ffc);font-weight:700">OUT</td>';
     dates.forEach(function(d,di){var v=(emp.uscita||[])[di]||'';var w=d.weekday===0||d.weekday===6;var hol=isHoliday(d.day,m,y);
-      h+='<td class="dc'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+(v?' ':' emp')+(adminMode&&!w?' editable':'')+'"'
+      h+='<td class="dc'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+rngCls[di]+(v?' ':' emp')+(adminMode&&!w?' editable':'')+'"'
         +(adminMode&&!w?' onclick="'+opts.editOrFn+'(this,'+ri+',\'uscita\','+di+')"':'')
         +(v?' style="color:var(--red)"':'')+'>'+(v||(!w?'·':''))+'</td>';});
     h+='</tr>';
@@ -3412,7 +3427,7 @@ function renderSection(sec, emps, data, opts){
     h+='<td class="sf ca1" style="font-size:10px;color:var(--green);font-family:var(--ffc);font-weight:700;padding-left:6px">Ore Ord.</td>';
     h+='<td class="sf ca2" style="font-size:11px;color:var(--green);font-family:var(--ffc);font-weight:700">ORD</td>';
     dates.forEach(function(d,di){var w=d.weekday===0||d.weekday===6;var og=oreGiorno[di];var v=og&&og.ord>0?fmtOre(og.ord):'';
-      h+='<td class="dc'+(w?' we':'')+(d.day===_todayDay?' today':'')+(v?' ':' emp')+'" style="font-size:11px;'+(v?'color:var(--green)':'')+'">'+( v||(!w?'·':''))+'</td>';});
+      h+='<td class="dc'+(w?' we':'')+(d.day===_todayDay?' today':'')+rngCls[di]+(v?' ':' emp')+'" style="font-size:11px;'+(v?'color:var(--green)':'')+'">'+( v||(!w?'·':''))+'</td>';});
     h+='<td colspan="'+NCOLS_TOT+'" style="background:rgba(36,48,72,.1)">'+(fmtOre(tots.ord)?'<span style="font-family:var(--ffm);font-size:11px;color:var(--green);padding:0 8px">'+fmtOre(tots.ord)+'h tot.</span>':'')+'</td>';
     if(adminMode)h+='<td></td>';
     h+='</tr>';
@@ -3422,7 +3437,7 @@ function renderSection(sec, emps, data, opts){
     h+='<td class="sf ca1" style="font-size:10px;color:var(--amber);font-family:var(--ffc);font-weight:700;padding-left:6px">Ore Str.</td>';
     h+='<td class="sf ca2" style="font-size:11px;color:var(--amber);font-family:var(--ffc);font-weight:700">STR</td>';
     dates.forEach(function(d,di){var w=d.weekday===0||d.weekday===6;var og=oreGiorno[di];var v=og&&og.str>0?fmtOre(og.str):'';
-      h+='<td class="dc'+(w?' we':'')+(d.day===_todayDay?' today':'')+(v?' ':' emp')+'" style="font-size:11px;'+(v?'color:var(--amber)':'')+'">'+( v||(!w?'·':''))+'</td>';});
+      h+='<td class="dc'+(w?' we':'')+(d.day===_todayDay?' today':'')+rngCls[di]+(v?' ':' emp')+'" style="font-size:11px;'+(v?'color:var(--amber)':'')+'">'+( v||(!w?'·':''))+'</td>';});
     h+='<td colspan="'+NCOLS_TOT+'" style="background:rgba(36,48,72,.1)">'+(fmtOre(tots.str)?'<span style="font-family:var(--ffm);font-size:11px;color:var(--amber);padding:0 8px">'+fmtOre(tots.str)+'h tot.</span>':'')+'</td>';
     if(adminMode)h+='<td></td>';
     h+='</tr>';
@@ -3563,6 +3578,7 @@ function coopLoad(){
     // (con più responsabili i dipendenti provengono da spreadsheet diversi)
     loadNotesForEmpsMulti(coopEmps,merged.sheetName,merged.dayStart||3,merged.nd||merged.dates.length,_coopFileForComm)
     .then(function(){return loadCommesseForEmpsMulti(coopEmps,'coop',y,m,_coopFileForComm);})
+    .then(function(){return loadRitardiForEmpsMulti(coopEmps,'coop',y,m,_coopFileForComm);})
     .then(function(){coopRender();});
     ['cRef','cExp','cPrt','cBulkBtn','cMassBtn'].forEach(function(id){document.getElementById(id).disabled=false;});
     document.getElementById('cInfo').textContent=MESI[m-1]+' '+y+' · '+merged.employees.length+' dip.'+(files.length>1?' ('+files.length+' file)':'');
@@ -3810,12 +3826,12 @@ function coopExport(){
   XLSX.utils.book_append_sheet(wb,coopSheet,mName+'_Coop');
   // Report con sole sigle attive in Coop
   var COOP_REP=[
-    {l:'P',k:'P'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},{l:'PLT',k:'PLT'},{l:'PLT.ORE',k:'PLT_ore'},{l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'DOM',k:'week'},{l:'H.FEST',k:'fest'}
+    {l:'P',k:'P'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},{l:'PLT',k:'PLT'},{l:'PLT.ORE',k:'PLT_ore'},{l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'DOM',k:'week'},{l:'H.FEST',k:'fest'},{l:'RNG',k:'rng'}
   ];
   var repHdr=['Ext SAP','Nominativo','Resp.','Plant'].concat(COOP_REP.map(function(c){return c.l;}));
   var repRows=[repHdr];
   coopEmps.forEach(function(e){
-    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
+    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);t.rng=rngXlsCell(rngTotMin(e));
     var row=[e.sap||e.id||'',e.nom2||e.nome||'',e.resp||'',e.plant||''];
     COOP_REP.forEach(function(c){row.push(c.k==='ord'||c.k==='str'||c.k==='fest'?fmtOre(t[c.k])||0:t[c.k]||0);});
     repRows.push(row);
@@ -3827,7 +3843,7 @@ function coopExport(){
   var repHdrC=['Ext SAP','Nominativo','Resp.','Plant','Confermato'].concat(COOP_REP_C.map(function(c){return c.l;}));
   var repRowsC=[repHdrC];
   coopEmps.forEach(function(e){
-    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
+    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);t.rng=rngXlsCell(rngTotMin(e));
     var row=[e.sap||e.id||'',e.nom2||e.nome||'',e.resp||'',e.plant||'',e.confermato?'SI':''];
     COOP_REP_C.forEach(function(c){
       if(c.k.indexOf('__comm_')===0){
@@ -3943,6 +3959,7 @@ function atsLoad(){
     // (con più responsabili i dipendenti provengono da spreadsheet diversi)
     loadNotesForEmpsMulti(atsEmps,merged.sheetName,merged.dayStart||3,merged.nd||merged.dates.length,_atsFileForComm)
     .then(function(){return loadCommesseForEmpsMulti(atsEmps,'ats',y,m,_atsFileForComm);})
+    .then(function(){return loadRitardiForEmpsMulti(atsEmps,'ats',y,m,_atsFileForComm);})
     .then(function(){atsRender();});
     ['aRef','aExp','aPrt','aBulkBtn','aMassBtn'].forEach(function(id){document.getElementById(id).disabled=false;});
     document.getElementById('aInfo').textContent=MESI[m-1]+' '+y+' · '+merged.employees.length+' dip.'+(files.length>1?' ('+files.length+' file)':'');
@@ -4189,12 +4206,12 @@ function atsExport(){
     {l:'P',k:'P'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},
     {l:'H104',k:'H104'},{l:'104',k:'104'},{l:'CP',k:'CP'},{l:'HPE',k:'HPE'},{l:'PE',k:'PE'},
     {l:'SW',k:'SW'},{l:'Lutto',k:'Lutto'},{l:'TFS',k:'TFS'},{l:'R',k:'R'},{l:'HPVM',k:'HPVM'},
-    {l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'WEEK',k:'week'},{l:'H.FEST',k:'fest'}
+    {l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'WEEK',k:'week'},{l:'H.FEST',k:'fest'},{l:'RNG',k:'rng'}
   ];
   var atsRepHdr=['Ext SAP','Nominativo','Resp.','Plant'].concat(ATS_REP.map(function(c){return c.l;}));
   var repRows=[atsRepHdr];
   atsEmps.forEach(function(e){
-    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
+    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);t.rng=rngXlsCell(rngTotMin(e));
     var row=[e.id||'',e.nome,e.resp||'',e.plant||''];
     ATS_REP.forEach(function(c){row.push(c.k==='ord'||c.k==='str'||c.k==='fest'?fmtOre(t[c.k])||0:t[c.k]||0);});
     repRows.push(row);
@@ -4208,7 +4225,7 @@ function atsExport(){
   var atsRepHdr2=['Ext SAP','Nominativo','Resp.','Plant'].concat(ATS_REP.map(function(c){return c.l;}));
   var repRows2=[atsRepHdr2];
   atsEmps.forEach(function(e){
-    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
+    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);t.rng=rngXlsCell(rngTotMin(e));
     var row=[e.id||'',e.nome,e.resp||'',e.plant||''];
     ATS_REP.forEach(function(c){
       if(c.k.indexOf('__comm_')===0){
@@ -4292,6 +4309,9 @@ function openPickerGeneric(mode,ri,di){
   document.getElementById('spSub').textContent=GGS[dt.weekday].toUpperCase()+' '+dt.day+'/'+('0'+m).slice(-2)+'/'+y;
   document.getElementById('spIng').value=(emp.ingresso||[])[di]||wmsConfig.ingresso||'08:00';
   document.getElementById('spUsc').value=(emp.uscita||[])[di]||wmsConfig.uscita||'18:00';
+  var _rit=parseInt((emp.ritardo||[])[di])||0;
+  document.getElementById('spRit').value=_rit>0?_rit:'';
+  spRitUpd();
   spOrariWarnUpd();
   document.getElementById('spPausa').checked=curPs>0;
   document.getElementById('spPausaDur').value=curPs>0?String(curPs):'1';
@@ -4349,6 +4369,92 @@ function openPickerGeneric(mode,ri,di){
   notaBtn.style.borderColor=hasNote?'rgba(245,158,11,.6)':'rgba(245,158,11,.35)';
   var spcs=document.getElementById('spCommSave');if(spcs)spcs.checked=false;
   mOpen('moSigla');
+}
+// ═══ RITARDI NON GIUSTIFICATI (RNG) ═══
+// emp.ritardo[di] = minuti di ritardo. Salvati nel tab "<Mese>_ATS_Ritardi" /
+// "<Mese>_Coop_Ritardi" (stessa logica del tab _Commesse): la struttura a 5 righe
+// del foglio principale resta invariata. Le ore ORD/STR NON vengono toccate
+// (restano calcolate sull'orario del turno); il ritardo è contato solo in RNG.
+function rngMin(emp,di){
+  var v=parseInt((emp.ritardo||[])[di])||0;
+  if(v<=0)return 0;
+  var sg=xSig((emp.sigla||[])[di]||'');
+  if(!sg||SIGLE_NO_ORARIO.indexOf(sg)!==-1||SIGLE_COTTIMO.indexOf(sg)!==-1)return 0;
+  return v;
+}
+function rngTotMin(emp){
+  var t=0;(emp.ritardo||[]).forEach(function(v,di){t+=rngMin(emp,di);});return t;
+}
+function rngOre(min){return min?Math.round(min/60*100)/100:0;}
+// Formato ore:minuti (95 min → "01:35")
+function fmtRng(min){if(!min)return '';var h=Math.floor(min/60),mm=min%60;return ('0'+h).slice(-2)+':'+('0'+mm).slice(-2);}
+// Cella Excel come durata vera (sommabile), visualizzata [h]:mm
+function rngXlsCell(min){return min?{t:'n',v:min/1440,z:'[h]:mm'}:'';}
+function spRitUpd(){
+  var el=document.getElementById('spRit');if(!el)return;
+  var v=parseInt(el.value)||0;
+  el.style.borderColor=v>0?'var(--red)':'';
+  el.style.color=v>0?'var(--red)':'';
+}
+function saveRitardoToSheet(mode, emp, di, fileId, y, m){
+  if(!fileId||!emp)return Promise.resolve();
+  var data=mode==='ats'?atsData:coopData;
+  var d=(data&&data.dates||[])[di];if(!d)return Promise.resolve();
+  var nome=emp.nom2||emp.nome||'';
+  var sap=emp.sap||emp.id||'';
+  var min=parseInt((emp.ritardo||[])[di])||0;
+  var tabName=(MESI[m-1]||m)+'_'+(mode==='ats'?'ATS':'Coop')+'_Ritardi';
+  var hdr=['Nominativo','Ext SAP','Giorno','Minuti'];
+  var row=[nome,sap,d.day,min>0?min:''];
+  return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties')
+  .then(function(meta){
+    var sh=(meta.sheets||[]).find(function(s){return s.properties.title===tabName;});
+    if(!sh){
+      if(!(min>0))return; // niente da cancellare
+      return createSheetTab(fileId,tabName).then(function(){
+        return sheetsBatchUpdate(fileId,[{range:tabName+'!A1',values:[hdr]},{range:tabName+'!A2',values:[row]}]);
+      });
+    }
+    return sheetsRead(fileId,tabName+'!A:C').then(function(rows){
+      var targetRow=null;
+      (rows||[]).forEach(function(r,ri){
+        if(ri===0)return;
+        if(String(r[0]||'').trim()===nome&&String(r[2]||'').trim()===String(d.day))targetRow=ri+1;
+      });
+      if(targetRow)return sheetsBatchUpdate(fileId,[{range:tabName+'!A'+targetRow,values:[min>0?row:['','','','']]}]);
+      if(!(min>0))return;
+      return sheetsAppend(fileId,tabName,row);
+    });
+  }).catch(function(e){console.warn('[WMS] ritardi sheet error:',e.message);toast('✗ Errore salvataggio ritardo: '+e.message,'err');});
+}
+function loadRitardiForEmps(emps, fileId, mode, y, m){
+  if(!fileId||!emps.length)return Promise.resolve();
+  var tabName=(MESI[m-1]||m)+'_'+(mode==='ats'?'ATS':'Coop')+'_Ritardi';
+  return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties')
+  .then(function(meta){
+    if(!(meta.sheets||[]).some(function(s){return s.properties.title===tabName;}))return;
+    return sheetsRead(fileId,tabName+'!A1:D2000').then(function(rows){
+      if(!rows||rows.length<2)return;
+      var nd=new Date(y,m,0).getDate();
+      var byName={};
+      emps.forEach(function(e){var k=(e.nom2||e.nome||'').trim().toLowerCase();(byName[k]=byName[k]||[]).push(e);});
+      for(var ri=1;ri<rows.length;ri++){
+        var r=rows[ri]||[];
+        var nome=String(r[0]||'').trim().toLowerCase();
+        var di=(parseInt(r[2])||0)-1;
+        var min=parseInt(r[3])||0;
+        if(!nome||di<0||di>=nd||min<=0)continue;
+        (byName[nome]||[]).forEach(function(emp){
+          if(!emp.ritardo)emp.ritardo=Array(nd).fill(null);
+          emp.ritardo[di]=min;
+        });
+      }
+    });
+  }).catch(function(e){console.warn('[WMS] loadRitardi error:',e.message);});
+}
+function loadRitardiForEmpsMulti(emps, mode, y, m, fallbackFileId){
+  var groups=groupEmpsByFileId(emps,fallbackFileId);
+  return Promise.all(groups.map(function(g){return loadRitardiForEmps(g.emps,g.fileId,mode,y,m);}));
 }
 function spOpenNota(){
   mClose('moSigla');
@@ -4495,6 +4601,14 @@ function spConfirm(){
     // l'eventuale riga residua sul foglio _Commesse per questo giorno.
     if(fid3&&sname2)deleteCommessaRow(spMode,fid2,spDi,fid3,sname2,y2,m2);
   }
+  // Ritardo non giustificato: valido solo per sigle con orario standard
+  var _ritOk=!!spSigla&&SIGLE_NO_ORARIO.indexOf(spSigla)===-1&&SIGLE_COTTIMO.indexOf(spSigla)===-1;
+  var _ritNew=_ritOk?(parseInt(document.getElementById('spRit').value)||0):0;
+  if(_ritNew<0)_ritNew=0;
+  var _ritOld=parseInt((emp.ritardo||[])[spDi])||0;
+  if(!emp.ritardo||emp.ritardo.length<nd)emp.ritardo=(emp.ritardo||[]).concat(Array(nd).fill(null)).slice(0,nd);
+  emp.ritardo[spDi]=_ritNew>0?_ritNew:null;
+  if(fid3&&_ritNew!==_ritOld)saveRitardoToSheet(spMode,emp,spDi,fid3,y2,m2);
   mClose('moSigla');
   if(spMode==='ats'){
     // Aggiorna residuo ferie/permessi
