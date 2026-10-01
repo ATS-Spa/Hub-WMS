@@ -3540,7 +3540,7 @@ function coopLoad(){
     var isXlsx=/\.xlsx$/i.test(f.name);
     return (isXlsx
       ? downloadFile(f.id).then(function(b){return parseSheetBlob(b,y,m,f.id,sheetName,'coop');})
-      : sheetsRead(f.id,sheetName+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,y,m,f.id,sheetName,'coop');}));
+      : sheetsRead(f.id,sheetName+'!A1:AQ1000').then(function(vals){return parseSheetValues(vals,y,m,f.id,sheetName,'coop');}));
   }
   runThrottled(files, coopFileWorker, {onProgress:function(done,total,failedCount){
     var el=document.getElementById('cLoadProgress');
@@ -3625,48 +3625,86 @@ function openAddCoopEmp(){
 function coopAeConfirm(){
   var n=document.getElementById('aeNome').value.trim();
   if(!n){document.getElementById('aeErr').classList.add('show');return;}
+  if(!coopData){toast('✗ Carica prima il mese Coop','err');return;}
   var y=parseInt(document.getElementById('cYear').value),m=parseInt(document.getElementById('cMonth').value);
   var nd=getDates(y,m).length;
-  var empSap=document.getElementById('aeId').value.trim()||('C-'+(coopEmps.length+1).toString().padStart(3,'0'));
+  var empSap=document.getElementById('aeId').value.trim()||genLocalEmpCode('C-',coopEmps);
   var empResp=document.getElementById('aeResp').value.trim();
   var empPlant=document.getElementById('aePlant').value.trim()||document.getElementById('cPlant').value||'';
-  var newEmp={
-    nom2:n,nome:n,sap:empSap,resp:empResp,plant:empPlant,
-    sigla:Array(nd).fill(''),ingresso:Array(nd).fill(''),uscita:Array(nd).fill(''),pausa:Array(nd).fill(null),
-    _manual:true
-  };
-
   var targetResp=empResp||document.getElementById('cResp').value||'';
   var targetPlant=empPlant||document.getElementById('cPlant').value||'';
   var matchFiles=findAllFiles(targetResp,targetPlant,y,m);
   var fid=matchFiles.length===1?matchFiles[0].id:(coopFileId||null);
-  var sname=coopData?coopData.sheetName:(MESI[m-1]+'_Coop');
-
-  if(fid&&sname&&coopData){
-    var nextRow=2+(coopEmps.length)*5;
-    var rowN=nextRow,rowI=nextRow+1,rowU=nextRow+2,rowP=nextRow+3;
-    newEmp._manual=false;
-    newEmp.sheetRows={n:rowN,i:rowI,u:rowU,p:rowP,fileId:fid,sheetName:sname};
-    coopEmps.push(newEmp);
-    mClose('moAddEmp');coopRender();
-    toast('⏳ Salvo su Drive…','warn');
-    var makeRow=function(tipo){
-      var r=[empSap,n,tipo];for(var i=0;i<nd;i++)r.push('');return r;
-    };
-    sheetsBatchUpdate(fid,[
-      {range:sname+'!A'+(rowN+1),values:[makeRow('Sigla')]},
-      {range:sname+'!A'+(rowI+1),values:[makeRow('Ingresso')]},
-      {range:sname+'!A'+(rowU+1),values:[makeRow('Uscita')]},
-      {range:sname+'!A'+(rowP+1),values:[makeRow('Pausa')]},
-      {range:sname+'!A'+(rowP+2),values:[['']]}
-    ]).then(function(){toast('✓ '+n+' aggiunto su Drive');})
-    .catch(function(e){toast('✗ Errore Drive: '+e.message,'err');});
-  }else{
-    newEmp._manual=true;
-    coopEmps.push(newEmp);
-    mClose('moAddEmp');coopRender();
-    toast('✓ Aggiunto (solo locale – nessun file Drive trovato)');
+  var sname=coopData.sheetName||(MESI[m-1]+'_Coop');
+  if(!fid){
+    toast('✗ '+(matchFiles.length>1?'Più file corrispondono: indica Responsabile e Plant del dipendente':'Nessun file trovato per Responsabile/Plant indicati'),'err');
+    return; // niente più aggiunta "solo locale": sparirebbe al primo aggiornamento
   }
+  var btn=document.getElementById('aeAddConfirmBtn');btn.disabled=true;
+  toast('⏳ Salvo su Drive…','warn');
+  appendEmpBlockToSheet(fid,sname,empSap,n,empPlant,nd).then(function(rows){
+    var newEmp={
+      nom2:n,nome:n,sap:empSap,resp:empResp,plant:empPlant,
+      sigla:Array(nd).fill(''),ingresso:Array(nd).fill(''),uscita:Array(nd).fill(''),pausa:Array(nd).fill(null),
+      notes:Array(nd).fill(''),_manual:false,sheetRows:rows
+    };
+    snapBase(newEmp);
+    coopEmps.push(newEmp);
+    mClose('moAddEmp');coopRender();
+    toast('✓ '+n+' aggiunto su Drive (riga '+(rows.n+1)+')');
+  }).catch(function(e){toast('✗ Dipendente NON aggiunto: '+e.message,'err');})
+  .then(function(){btn.disabled=false;});
+}
+
+// ═══ AGGIUNTA DIPENDENTE: accoda in fondo al foglio reale ═══
+// Prima la riga di destinazione era calcolata come 2+(n° dipendenti in memoria)*5.
+// Era sbagliata quando nel foglio ci sono righe che il tool non conta (blocchi
+// di dipendenti eliminati, file non caricato per intero, più file in vista,
+// file diverso da quello visualizzato, altro utente che ha appena aggiunto):
+// in quei casi il nuovo blocco veniva scritto SOPRA un dipendente esistente.
+// Ora si legge il foglio di destinazione e si scrive dopo l'ultima riga piena.
+function genLocalEmpCode(prefix,list){
+  var used={};(list||[]).forEach(function(e){used[String(e.sap||e.id||'').trim()]=1;});
+  var n=(list||[]).length+1,code;
+  do{code=prefix+String(n).padStart(3,'0');n++;}while(used[code]);
+  return code;
+}
+function appendEmpBlockToSheet(fid,sname,sap,nome,plant,nd){
+  return sheetsRead(fid,sname+'!A1:G3000').then(function(vals){
+    vals=vals||[];
+    var DST=3,TIPO=2;
+    for(var ri=0;ri<Math.min(vals.length,5);ri++){
+      var rr=vals[ri]||[];
+      for(var ci=0;ci<rr.length-2;ci++){
+        if(String(rr[ci]).trim()==='1'&&String(rr[ci+1]).trim()==='2'&&String(rr[ci+2]).trim()==='3'){DST=ci;break;}
+      }
+    }
+    for(var r2=0;r2<Math.min(vals.length,10);r2++){
+      var found=false;
+      for(var cc=2;cc<=4;cc++){
+        if(String((vals[r2]||[])[cc]||'').trim().toLowerCase().indexOf('sigla')!==-1){TIPO=cc;found=true;break;}
+      }
+      if(found)break;
+    }
+    if(DST<=TIPO)DST=TIPO+1;
+    var nomeL=nome.trim().toLowerCase(),last=-1;
+    vals.forEach(function(r,i){
+      r=r||[];
+      if(String(r[TIPO]||'').trim().toLowerCase().indexOf('sigla')!==-1&&String(r[1]||'').trim().toLowerCase()===nomeL)
+        throw new Error('"'+nome+'" è già presente nel foglio');
+      for(var c=0;c<=TIPO;c++){if(String(r[c]==null?'':r[c]).trim()!==''){last=i;break;}}
+    });
+    var start=last<=1?2:last+2; // una riga vuota di separazione come gli altri blocchi
+    var makeRow=function(tipo){
+      var r=Array(DST+nd).fill('');r[0]=sap;r[1]=nome;if(TIPO>2)r[2]=plant||'';r[TIPO]=tipo;return r;
+    };
+    return sheetsBatchUpdate(fid,[
+      {range:sname+'!A'+(start+1),values:[makeRow('Sigla')]},
+      {range:sname+'!A'+(start+2),values:[makeRow('Ingresso')]},
+      {range:sname+'!A'+(start+3),values:[makeRow('Uscita')]},
+      {range:sname+'!A'+(start+4),values:[makeRow('Pausa')]}
+    ]).then(function(){return{n:start,i:start+1,u:start+2,p:start+3,fileId:fid,sheetName:sname};});
+  });
 }
 
 // ── FIX 3: cDelEmp usa il fileId salvato dentro sheetRows ──
@@ -3926,7 +3964,7 @@ function atsLoad(){
     var isXlsx=/\.xlsx$/i.test(f.name);
     return (isXlsx
       ? downloadFile(f.id).then(function(b){return parseSheetBlob(b,y,m,f.id,sheetName,'ats');})
-      : sheetsRead(f.id,sheetName+'!A1:AQ200').then(function(vals){return parseSheetValues(vals,y,m,f.id,sheetName,'ats');}));
+      : sheetsRead(f.id,sheetName+'!A1:AQ1000').then(function(vals){return parseSheetValues(vals,y,m,f.id,sheetName,'ats');}));
   }
   runThrottled(files, atsFileWorker, {onProgress:function(done,total,failedCount){
     var el=document.getElementById('aLoadProgress');
@@ -4099,50 +4137,36 @@ function anagViewRender(){
 function aeConfirm(){
   var n=document.getElementById('aeNome').value.trim();
   if(!n){document.getElementById('aeErr').classList.add('show');return;}
+  if(!atsData){toast('✗ Carica prima il mese ATS','err');return;}
   var y=parseInt(document.getElementById('aYear').value),m=parseInt(document.getElementById('aMonth').value);
   var nd=getDates(y,m).length;
-  var empId=document.getElementById('aeId').value.trim()||('ATS-'+(atsEmps.length+1).toString().padStart(3,'0'));
+  var empId=document.getElementById('aeId').value.trim()||genLocalEmpCode('ATS-',atsEmps);
   var empResp=document.getElementById('aeResp').value.trim();
   var empPlant=document.getElementById('aePlant').value.trim()||document.getElementById('aPlant').value||'';
-  var newEmp={
-    nome:n,id:empId,resp:empResp,plant:empPlant,
-    sigla:Array(nd).fill(''),ingresso:Array(nd).fill(''),uscita:Array(nd).fill(''),pausa:Array(nd).fill(null),
-    _manual:true
-  };
-
   // Cerca il file corretto: rispetta responsabile inserito (o quello del filtro), stesso mese/anno
   var targetResp=empResp||document.getElementById('aResp').value||'';
   var targetPlant=empPlant||document.getElementById('aPlant').value||'';
   var matchFiles=findAllFiles(targetResp,targetPlant,y,m);
   var fid=matchFiles.length===1?matchFiles[0].id:(atsFileId||null);
-  var sname=atsData?atsData.sheetName:(MESI[m-1]+'_ATS');
-
-  if(fid&&sname&&atsData){
-    var DST=atsData.dayStart||3;
-    var nextRow=2+(atsEmps.length)*5;
-    var rowN=nextRow, rowI=nextRow+1, rowU=nextRow+2, rowP=nextRow+3;
-    newEmp._manual=false;
-    newEmp.sheetRows={n:rowN,i:rowI,u:rowU,p:rowP,fileId:fid,sheetName:sname};
-    atsEmps.push(newEmp);
-    mClose('moAddEmp');atsRender();
-    toast('⏳ Salvo su Drive…','warn');
-    var makeRow=function(tipo){
-      var r=[empId,n,tipo];for(var i=0;i<nd;i++)r.push('');return r;
-    };
-    sheetsBatchUpdate(fid,[
-      {range:sname+'!A'+(rowN+1),values:[makeRow('Sigla')]},
-      {range:sname+'!A'+(rowI+1),values:[makeRow('Ingresso')]},
-      {range:sname+'!A'+(rowU+1),values:[makeRow('Uscita')]},
-      {range:sname+'!A'+(rowP+1),values:[makeRow('Pausa')]},
-      {range:sname+'!A'+(rowP+2),values:[['']]}
-    ]).then(function(){toast('✓ '+n+' aggiunto su Drive');})
-    .catch(function(e){toast('✗ Errore Drive: '+e.message,'err');});
-  }else{
-    newEmp._manual=true;
-    atsEmps.push(newEmp);
-    mClose('moAddEmp');atsRender();
-    toast('✓ Aggiunto (solo locale – nessun file Drive trovato)');
+  var sname=atsData.sheetName||(MESI[m-1]+'_ATS');
+  if(!fid){
+    toast('✗ '+(matchFiles.length>1?'Più file corrispondono: indica Responsabile e Plant del dipendente':'Nessun file trovato per Responsabile/Plant indicati'),'err');
+    return;
   }
+  var btn=document.getElementById('aeAddConfirmBtn');btn.disabled=true;
+  toast('⏳ Salvo su Drive…','warn');
+  appendEmpBlockToSheet(fid,sname,empId,n,empPlant,nd).then(function(rows){
+    var newEmp={
+      nome:n,id:empId,resp:empResp,plant:empPlant,
+      sigla:Array(nd).fill(''),ingresso:Array(nd).fill(''),uscita:Array(nd).fill(''),pausa:Array(nd).fill(null),
+      notes:Array(nd).fill(''),_manual:false,sheetRows:rows
+    };
+    snapBase(newEmp);
+    atsEmps.push(newEmp);
+    mClose('moAddEmp');atsRender();
+    toast('✓ '+n+' aggiunto su Drive (riga '+(rows.n+1)+')');
+  }).catch(function(e){toast('✗ Dipendente NON aggiunto: '+e.message,'err');})
+  .then(function(){btn.disabled=false;});
 }
 
 // ── FIX 3: aDel usa il fileId salvato dentro sheetRows ──
@@ -4663,7 +4687,7 @@ function startAutoRefresh(){
     if(atsFileId&&atsData&&!aBusy){
       var aGen0=aEditGen;
       var y=parseInt(document.getElementById('aYear').value),m=parseInt(document.getElementById('aMonth').value);
-      sheetsRead(atsFileId,atsData.sheetName+'!A1:AQ200').then(function(vals){
+      sheetsRead(atsFileId,atsData.sheetName+'!A1:AQ1000').then(function(vals){
         return parseSheetValues(vals,y,m,atsFileId,atsData.sheetName,'ats');
       }).then(function(d){
         if(aBusy||aGen0!==aEditGen)return; // modifiche locali durante la lettura: non applicare
@@ -4694,7 +4718,7 @@ function startAutoRefresh(){
     if(coopFileId&&coopData&&!cBusy){
       var cGen0=cEditGen;
       var y=parseInt(document.getElementById('cYear').value),m=parseInt(document.getElementById('cMonth').value);
-      sheetsRead(coopFileId,coopData.sheetName+'!A1:AQ300').catch(function(){return sheetsRead(coopFileId,coopData.sheetName+'!A1:AQ200');}).then(function(vals){
+      sheetsRead(coopFileId,coopData.sheetName+'!A1:AQ1000').catch(function(){return sheetsRead(coopFileId,coopData.sheetName+'!A1:AQ1000');}).then(function(vals){
         return parseSheetValues(vals,y,m,coopFileId,coopData.sheetName,'coop');
       }).then(function(d){
         if(cBusy||cGen0!==cEditGen)return; // modifiche locali durante la lettura: non applicare
@@ -6446,7 +6470,7 @@ function massivoFerieRange(dip,d1,d2,fv,ing,usc,showOr,pausaH,qty,nota){
         return massivoCreateAndWrite(dip,y,m,fname,d1,d2,fv,ing,usc,showOr,pausaH).then(function(n){totSet+=n;});
       }
       var sname=MESI[m-1]+'_ATS';
-      return sheetsRead(existing.id,sname+'!A1:AQ300').then(function(vals){
+      return sheetsRead(existing.id,sname+'!A1:AQ1000').then(function(vals){
         return parseSheetValues(vals,y,m,existing.id,sname,'ats');
       }).then(function(data){
         var emp=data.employees.find(function(e){return String(e.id||e.sap||'').trim()===String(dip.sap).trim();});
@@ -6685,7 +6709,7 @@ async function generaAnnoStart(){
     var emps=[];
     try{
       var sname=MESI[item.templateMonth-1]+'_ATS';
-      var vals=await sheetsRead(item.templateFileId,sname+'!A1:AQ300');
+      var vals=await sheetsRead(item.templateFileId,sname+'!A1:AQ1000');
       var pd=await parseSheetValues(vals,item.anno,item.templateMonth,item.templateFileId,sname,'ats');
       emps=pd.employees.map(function(e){return{sap:e.id||e.sap||'',nome:e.nome,plant:e.plant||item.plant};});
       genLog('  ✓ Template ATS letto: '+emps.length+' dipendenti','var(--green)');
@@ -6696,7 +6720,7 @@ async function generaAnnoStart(){
     var coopEmps=[];
     try{
       var snameCoop=MESI[item.templateMonth-1]+'_Coop';
-      var valsCoop=await sheetsRead(item.templateFileId,snameCoop+'!A1:AQ300');
+      var valsCoop=await sheetsRead(item.templateFileId,snameCoop+'!A1:AQ1000');
       var pdCoop=await parseSheetValues(valsCoop,item.anno,item.templateMonth,item.templateFileId,snameCoop,'coop');
       coopEmps=pdCoop.employees.map(function(e){return{sap:e.id||e.sap||'',nome:e.nome,plant:e.plant||item.plant};});
       genLog('  ✓ Template Coop letto: '+coopEmps.length+' dipendenti','var(--green)');
@@ -6847,14 +6871,11 @@ function sheetsBatchUpdate(spreadsheetId,data){
 function sheetsDeleteEmpRows(fileId,sheetName,sheetRows,nd){
   var data=[];
   var emptyRow=Array(nd+5).fill('');
-  [sheetRows.n, sheetRows.i, sheetRows.u].forEach(function(rowIdx){
+  [sheetRows.n, sheetRows.i, sheetRows.u, sheetRows.p].forEach(function(rowIdx){
     if(rowIdx!==undefined){
       data.push({range:sheetName+'!A'+(rowIdx+1),values:[emptyRow]});
     }
   });
-  if(sheetRows.u!==undefined){
-    data.push({range:sheetName+'!A'+(sheetRows.u+2),values:[['']]});
-  }
   if(!data.length)return Promise.resolve();
   return sheetsBatchUpdate(fileId,data);
 }
@@ -7326,7 +7347,7 @@ function runThrottled(items, worker, opts){
 // ferieLoad sia al secondo tentativo automatico sui file falliti).
 function ferieFileWorker(f){
   var p=parseFileName(f.name);var sname=MESI[p.month-1]+'_ATS';var isXlsx=/\.xlsx$/i.test(f.name);
-  return (isXlsx?downloadFile(f.id).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');}):sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
+  return (isXlsx?downloadFile(f.id).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');}):sheetsRead(f.id,sname+'!A1:AQ1000').then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
   .then(function(d){
     d.employees.forEach(function(e){
       var sap=String(e.id||e.sap||'').trim();var nome=String(e.nome||'').trim();if(!nome)return;
@@ -7455,7 +7476,7 @@ function ferieRicalcola(){
   var resetSaps={};
   runThrottled(files, function(f){
     var p=parseFileName(f.name);var sname=MESI[p.month-1]+'_ATS';var isXlsx=/\.xlsx$/i.test(f.name);
-    return (isXlsx?downloadFile(f.id).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');}):sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
+    return (isXlsx?downloadFile(f.id).then(function(b){return parseSheetBlob(b,p.year,p.month,f.id,sname,'ats');}):sheetsRead(f.id,sname+'!A1:AQ1000').then(function(vals){return parseSheetValues(vals,p.year,p.month,f.id,sname,'ats');}))
     .then(function(d){
       d.employees.forEach(function(emp){
         var sap=emp.id||emp.sap||'';
@@ -7911,7 +7932,7 @@ function ganttMonthClick(sap,mese,year){
     var existing=allFiles.find(function(f){var n=f.name.replace(/\.xlsx$/i,'');return n.toLowerCase()===fname.toLowerCase();});
     if(existing){
       var sname=MESI[mese-1]+'_ATS';
-      sheetsRead(existing.id,sname+'!A1:AQ300').then(function(vals){
+      sheetsRead(existing.id,sname+'!A1:AQ1000').then(function(vals){
         return parseSheetValues(vals,year,mese,existing.id,sname,'ats');
       }).then(function(d){
         // Carica note per il dipendente
@@ -8074,7 +8095,7 @@ function ganttCellClick(sap,mese,giorno){
     var isXlsx=/\.xlsx$/i.test(f.name||'');
     (isXlsx
       ?downloadFile(f.id).then(function(b){return parseSheetBlob(b,year,mese,f.id,sname,'ats');})
-      :sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,year,mese,f.id,sname,'ats');})
+      :sheetsRead(f.id,sname+'!A1:AQ1000').then(function(vals){return parseSheetValues(vals,year,mese,f.id,sname,'ats');})
     ).then(function(d){
       var found=d.employees.find(function(e){return String(e.id||e.sap||'').trim()===String(sap).trim();});
       if(!found){tryNext(idx+1);return;}
@@ -8121,7 +8142,7 @@ function ganttCellCreateFile(dip,year,mese,giorno,di){
     loadAllFiles();
     var sname2=mName+'_ATS';
     setTimeout(function(){
-      sheetsRead(ssId,sname2+'!A1:AQ300').then(function(vals){
+      sheetsRead(ssId,sname2+'!A1:AQ1000').then(function(vals){
         return parseSheetValues(vals,year,mese,ssId,sname2,'ats');
       }).then(function(d){
         atsData=d;atsEmps=d.employees;atsFileId=ssId;
@@ -9727,7 +9748,7 @@ function richScriviSuDrive(req){
       var f=fnames[idx];
       return ((/\.xlsx$/i.test(f.name))
         ? downloadFile(f.id).then(function(b){return parseSheetBlob(b,info.year,info.month,f.id,sname,'ats');})
-        : sheetsRead(f.id,sname+'!A1:AQ300').then(function(vals){return parseSheetValues(vals,info.year,info.month,f.id,sname,'ats');}))
+        : sheetsRead(f.id,sname+'!A1:AQ1000').then(function(vals){return parseSheetValues(vals,info.year,info.month,f.id,sname,'ats');}))
       .then(function(d){
         var emp = d.employees.find(function(e){
           return (sap&&String(e.id||e.sap||'').trim()===String(sap).trim()) ||
