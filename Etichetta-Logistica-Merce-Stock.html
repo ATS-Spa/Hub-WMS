@@ -98,7 +98,7 @@
   }
 
   .et-vert {
-    font-size: 7pt;
+    font-size: calc(7pt + 1px);
     font-weight: bold;
     writing-mode: vertical-rl;
     transform: rotate(180deg);
@@ -128,23 +128,23 @@
   }
 
   /* Testi */
-  .lbl  { font-size:9pt; font-weight:bold; display:block; line-height:1.2; }
-  .val-lg  { font-size:20pt; font-weight:bold; line-height:1; display:block; }
-  .val-md  { font-size:16pt; font-weight:bold; line-height:1; display:block; }
-  .val-sm  { font-size:12pt; font-weight:bold; line-height:1.2; word-break:break-all; display:block; }
+  .lbl  { font-size:calc(9pt + 1px); font-weight:bold; display:block; line-height:1.2; }
+  .val-lg  { font-size:calc(20pt + 1px); font-weight:bold; line-height:1; display:block; }
+  .val-md  { font-size:calc(16pt + 1px); font-weight:bold; line-height:1; display:block; }
+  .val-sm  { font-size:calc(12pt + 1px); font-weight:bold; line-height:1.2; word-break:break-all; display:block; }
 
   /* Barcode + WMS (sezione centrale senza QR laterale) */
-  .art-label { font-weight:bold; font-size:9pt; margin:0 0 0.5mm; }
+  .art-label { font-weight:bold; font-size:calc(9pt + 1px); margin:0 0 0.5mm; }
   .barcode-svg { width:76mm; height:26px; margin:0 auto 0.5mm; display:block; }
-  .wms { text-align:center; font-size:10.5pt; font-weight:bold; margin-bottom:0.5mm; }
+  .wms { text-align:center; font-size:calc(10.5pt + 1px); font-weight:bold; margin-bottom:0.5mm; }
 
   /* PO row */
   .po-row { display:flex; justify-content:space-between; align-items:flex-start; margin:0.8mm 0; }
   .po-col { flex:1; min-width:0; }
   .po-col:first-child .po-value { white-space:nowrap; } /* PO lunghi su una riga sola */
   .po-col.right { flex:0 0 auto; text-align:right; }   /* Posizione larga quanto il contenuto */
-  .po-label { font-size:9pt; font-weight:bold; }
-  .po-value { font-size:18pt; font-weight:bold; line-height:1; display:block; }
+  .po-label { font-size:calc(9pt + 1px); font-weight:bold; }
+  .po-value { font-size:calc(18pt + 1px); font-weight:bold; line-height:1; display:block; }
 
   /* Ubicazione sotto SN */
   .ubicazione { margin-top:0.5mm; }
@@ -322,7 +322,7 @@ function creaEtichetta10x10(CodiceBP, PartNumber, SerialNumber, ArticoloWMS, PO,
 
     <!-- RIGA 3: Articolo verticale a sinistra + barcode + WMS -->
     <div style="display:flex; align-items:center; gap:1mm;">
-      <span style="font-size:7pt; font-weight:bold; writing-mode:vertical-rl; transform:rotate(180deg); letter-spacing:0.3px; white-space:nowrap; flex-shrink:0;">Articolo</span>
+      <span style="font-size:calc(7pt + 1px); font-weight:bold; writing-mode:vertical-rl; transform:rotate(180deg); letter-spacing:0.3px; white-space:nowrap; flex-shrink:0;">Articolo</span>
       <div style="flex:1;">
         <svg class="barcode-svg" id="${bcId}" style="width:100%;"></svg>
         <div class="wms">${ArticoloWMS}</div>
