@@ -7180,7 +7180,12 @@ function loadFerieResiduo(year){
       if(!files.length){ferieFileId=null;ferieData={anno:year,dipendenti:[]};return ferieData;}
       ferieFileId=files[0].id;
       return fetch('https://www.googleapis.com/drive/v3/files/'+ferieFileId+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}})
-        .then(function(r){return r.json();}).then(function(d){ferieData=d;return d;});
+        .then(function(r){return r.json();}).then(function(d){
+          ferieData=d;
+          // modifiche locali non ancora salvate: restano visibili dopo il ricaricamento
+          _ferieOps.forEach(function(op){if(!op.year||op.year===year)applyFerieOp(ferieData,op);});
+          return d;
+        });
     });
 }
 
@@ -7196,33 +7201,121 @@ function riportoAnnoPrec(sap){
   return{ferie:Math.max(0,pBase.ferie-pFerieGodute),permessi:Math.max(0,pBase.permessi-pPermGodute)};
 }
 
-function saveFerieResiduo(){
-  if(!ferieData)return Promise.resolve();
-  var fname=ferieResiduoFname(ferieData.anno);
-  var json=JSON.stringify(ferieData,null,2);
-  var blob=new Blob([json],{type:'application/json'});
+// ═══ RESIDUO FERIE/PERMESSI: salvataggio a operazioni (multi-utente) ═══
+// Prima saveFerieResiduo() riscriveva TUTTO il file residuo_ats_<anno>.json con la
+// copia in memoria del browser, caricata magari ore prima: se nel frattempo un altro
+// utente aveva cancellato/inserito un permesso, il suo aggiornamento veniva
+// sovrascritto (es. un HP annullato "ricompariva" e il residuo restava scalato).
+// Ora ogni modifica è un'operazione idempotente accodata in _ferieOps; al
+// salvataggio si rilegge il file fresco, si riapplicano le operazioni e si scrive.
+var _ferieOps=[];
+function _ferieFetchRaw(year){
+  return listFiles('"'+FOLDER_ID_JSON+'" in parents and name="'+ferieResiduoFname(year)+'" and trashed=false')
+    .then(function(files){
+      if(!files.length)return{id:null,data:{anno:year,dipendenti:[]}};
+      return fetch('https://www.googleapis.com/drive/v3/files/'+files[0].id+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}})
+        .then(function(r){if(!r.ok)throw new Error('Lettura residuo fallita: '+r.status);return r.json();})
+        .then(function(d){if(!d.dipendenti)d.dipendenti=[];return{id:files[0].id,data:d};});
+    });
+}
+function _ferieWriteRaw(year,fileId,data){
+  var fname=ferieResiduoFname(year);
+  var blob=new Blob([JSON.stringify(data,null,2)],{type:'application/json'});
   var bnd='ferie_'+Date.now(),enc=new TextEncoder();
-  var meta=ferieFileId?JSON.stringify({name:fname}):JSON.stringify({name:fname,parents:[FOLDER_ID_JSON]});
+  var meta=fileId?JSON.stringify({name:fname}):JSON.stringify({name:fname,parents:[FOLDER_ID_JSON]});
   var pre='--'+bnd+'\r\nContent-Type: application/json; charset=UTF-8\r\n\r\n'+meta+'\r\n--'+bnd+'\r\nContent-Type: application/json\r\n\r\n';
   var post='\r\n--'+bnd+'--';
-  var method=ferieFileId?'PATCH':'POST';
-  var url=ferieFileId?'https://www.googleapis.com/upload/drive/v3/files/'+ferieFileId+'?uploadType=multipart':'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
+  var url=fileId?'https://www.googleapis.com/upload/drive/v3/files/'+fileId+'?uploadType=multipart':'https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart';
   return blob.arrayBuffer().then(function(buf){
     var ab=enc.encode(pre),bb=new Uint8Array(buf),cb=enc.encode(post);
     var body=new Uint8Array(ab.length+bb.length+cb.length);body.set(ab);body.set(bb,ab.length);body.set(cb,ab.length+bb.length);
-    return fetch(url,{method:method,headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'multipart/related; boundary='+bnd},body:body});
-  }).then(function(r){return r.json();}).then(function(d){if(d.id)ferieFileId=d.id;});
+    return fetch(url,{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'multipart/related; boundary='+bnd},body:body});
+  }).then(function(r){if(!r.ok)throw new Error('Salvataggio residuo fallito: '+r.status);return r.json();})
+    .then(function(d){return d.id||fileId;});
+}
+// Applica un'operazione a un oggetto residuo (in memoria o appena riletto da Drive)
+function applyFerieOp(data,op){
+  var dip=getFerieDipIn(data,op.sap,op.nome,op.resp,op.plant);
+  if(!dip)return;
+  if(!dip.ferie_godute)dip.ferie_godute=[];
+  if(!dip.permessi_goduti)dip.permessi_goduti=[];
+  if(op.type==='day'){
+    // Stato del giorno = quello indicato, indipendentemente da cosa c'era prima:
+    // toglie sempre F e HP di quella data, poi aggiunge quello nuovo (niente doppioni)
+    dip.ferie_godute=dip.ferie_godute.filter(function(g){return g.data!==op.date;});
+    dip.permessi_goduti=dip.permessi_goduti.filter(function(g){return g.data!==op.date;});
+    if(op.code==='F')dip.ferie_godute.push({data:op.date});
+    else if(op.code==='HP')dip.permessi_goduti.push({data:op.date,ore:op.ore});
+  } else if(op.type==='reset'){
+    dip.ferie_godute=[];dip.permessi_goduti=[];
+  } else if(op.type==='saldo'){
+    if(!dip.saldo_log)dip.saldo_log=[];
+    var log=Object.assign({},op.log,{
+      ferie_prima:dip.saldo_iniziale?dip.saldo_iniziale.ferie:null,
+      perm_prima:dip.saldo_iniziale?dip.saldo_iniziale.permessi:null
+    });
+    dip.saldo_log.push(log);
+    dip.saldo_iniziale={ferie:op.ferie,permessi:op.permessi};
+  }
+}
+// Applica subito in memoria (per la UI) e accoda per il salvataggio
+function ferieQueueOp(op){
+  if(!ferieData)return;
+  applyFerieOp(ferieData,op);
+  _ferieOps.push(op);
+}
+var _ferieSaveChain=Promise.resolve();
+function saveFerieResiduo(){
+  if(!ferieData)return Promise.resolve();
+  // salvataggi in sequenza: due save ravvicinati dallo stesso browser non si pestano
+  _ferieSaveChain=_ferieSaveChain.catch(function(){}).then(function(){
+    if(!ferieData||!_ferieOps.length)return;
+    var year=ferieData.anno;
+    var ops=_ferieOps.filter(function(o){return !o.year||o.year===year;});
+    var scartate=_ferieOps.length-ops.length;
+    _ferieOps=[];
+    if(scartate)console.warn('[WMS] residuo: '+scartate+' operazioni di un altro anno ignorate');
+    if(!ops.length)return;
+    return _ferieFetchRaw(year).then(function(fresh){
+      ops.forEach(function(op){applyFerieOp(fresh.data,op);});
+      return _ferieWriteRaw(year,fresh.id,fresh.data).then(function(id){
+        ferieFileId=id;
+        if(ferieData&&ferieData.anno===year)ferieData=fresh.data; // allinea la memoria allo stato reale
+      });
+    }).catch(function(e){
+      _ferieOps=ops.concat(_ferieOps); // non perdere le modifiche: ritenta al prossimo salvataggio
+      throw e;
+    });
+  });
+  return _ferieSaveChain;
+}
+// Commit diretto su un anno qualsiasi, senza toccare ferieData se è di un altro anno
+// (usato dall'approvazione delle Richieste)
+function ferieCommitOps(year,ops){
+  if(!ops.length)return Promise.resolve();
+  if(ferieData&&ferieData.anno===year){
+    ops.forEach(ferieQueueOp);
+    return saveFerieResiduo();
+  }
+  return _ferieFetchRaw(year).then(function(fresh){
+    ops.forEach(function(op){applyFerieOp(fresh.data,op);});
+    return _ferieWriteRaw(year,fresh.id,fresh.data);
+  });
 }
 
 function getFerieDip(sap,nome,resp,plant){
-  if(!ferieData)return null;
-  var found=ferieData.dipendenti.find(function(d){return String(d.sap||'').trim()===String(sap||'').trim();});
+  return getFerieDipIn(ferieData,sap,nome,resp,plant);
+}
+function getFerieDipIn(data,sap,nome,resp,plant){
+  if(!data)return null;
+  if(!data.dipendenti)data.dipendenti=[];
+  var found=data.dipendenti.find(function(d){return String(d.sap||'').trim()===String(sap||'').trim();});
   if(!found){
     var contratto=getContratto(sap);
     var riporto=riportoAnnoPrec(sap);
     found={sap:sap,nome:nome,resp:resp,plant:plant,ferie_godute:[],permessi_goduti:[],
       saldo_iniziale:{ferie:round1(contratto.ferie_giorni+riporto.ferie),permessi:round1(contratto.permessi_ore+riporto.permessi)}};
-    ferieData.dipendenti.push(found);
+    data.dipendenti.push(found);
   } else if(!found.saldo_iniziale){
     // Record pre-esistente senza saldo_iniziale (migrazione soft): lo inizializza ora, stessa logica
     var contratto2=getContratto(sap);
@@ -7249,19 +7342,9 @@ function calcResiduo(sap){
 function setSaldoIniziale(sap,nome,resp,plant,ferie,permessi,note){
   if(!isAdminUser){toast('Solo admin/superadmin','warn');return false;}
   if(!ferieData){toast('Carica prima il Piano Ferie','warn');return false;}
-  var dip=getFerieDip(sap,nome,resp,plant);
-  if(!dip)return false;
-  if(!dip.saldo_log)dip.saldo_log=[];
-  dip.saldo_log.push({
-    data:new Date().toISOString(),
-    by:(typeof uEmail!=='undefined'?uEmail:''),
-    ferie_prima:dip.saldo_iniziale?dip.saldo_iniziale.ferie:null,
-    perm_prima:dip.saldo_iniziale?dip.saldo_iniziale.permessi:null,
-    ferie_dopo:ferie,
-    perm_dopo:permessi,
-    note:note||''
-  });
-  dip.saldo_iniziale={ferie:round1(ferie),permessi:round1(permessi)};
+  ferieQueueOp({type:'saldo',year:ferieData.anno,sap:sap,nome:nome,resp:resp,plant:plant,
+    ferie:round1(ferie),permessi:round1(permessi),
+    log:{data:new Date().toISOString(),by:(typeof uEmail!=='undefined'?uEmail:''),ferie_dopo:ferie,perm_dopo:permessi,note:note||''}});
   return true;
 }
 
@@ -7277,17 +7360,16 @@ function updateFerieResiduo(emp,di,nuovaSigla,vecchiaSigla,anno,mese,forceMode){
   }
   if(!dayOfMonth)return;
   var dateStr=anno+'-'+('0'+mese).slice(-2)+'-'+('0'+dayOfMonth).slice(-2);
-  var nuovaCodice=xSig(nuovaSigla||'');var vecchiaCodice=xSig(vecchiaSigla||'');
-  var dip=getFerieDip(emp.sap,emp.nome,emp.resp,emp.plant);if(!dip)return;
-  if(vecchiaCodice==='F')dip.ferie_godute=dip.ferie_godute.filter(function(g){return g.data!==dateStr;});
-  else if(vecchiaCodice==='HP')dip.permessi_goduti=dip.permessi_goduti.filter(function(g){return g.data!==dateStr;});
+  var nuovaCodice=xSig(nuovaSigla||'');
+  var code='',ore=0;
   if(nuovaCodice==='F'){
     var wd=new Date(anno,mese-1,dayOfMonth).getDay();
-    if(wd!==0&&wd!==6&&!isHoliday(dayOfMonth,mese,anno))dip.ferie_godute.push({data:dateStr});
+    if(wd!==0&&wd!==6&&!isHoliday(dayOfMonth,mese,anno))code='F';
   } else if(nuovaCodice==='HP'){
-    var qtyH=parseFloat((String(nuovaSigla||'').match(/^[\d.]*/)||['1'])[0])||1;
-    dip.permessi_goduti.push({data:dateStr,ore:qtyH});
+    code='HP';ore=parseFloat((String(nuovaSigla||'').match(/^[\d.]*/)||['1'])[0])||1;
   }
+  // vecchiaSigla non serve più: l'operazione azzera sempre la data e scrive lo stato nuovo
+  ferieQueueOp({type:'day',year:anno,sap:emp.sap,nome:emp.nome,resp:emp.resp,plant:emp.plant,date:dateStr,code:code,ore:ore});
   // NON salva qui - il chiamante chiama saveFerieResiduo() una sola volta alla fine
 }
 
@@ -7480,14 +7562,14 @@ function ferieRicalcola(){
     .then(function(d){
       d.employees.forEach(function(emp){
         var sap=emp.id||emp.sap||'';
-        if(!resetSaps[sap]){resetSaps[sap]=true;var dip=getFerieDip(sap,emp.nome,d.globalResp||p.resp,emp.plant||p.plant);dip.ferie_godute=[];dip.permessi_goduti=[];}
-        var dip=getFerieDip(sap,emp.nome,d.globalResp||p.resp,emp.plant||p.plant);
+        var who={sap:sap,nome:emp.nome,resp:d.globalResp||p.resp,plant:emp.plant||p.plant,year:year};
+        if(!resetSaps[sap]){resetSaps[sap]=true;ferieQueueOp(Object.assign({type:'reset'},who));}
         (emp.sigla||[]).forEach(function(sig,di){
           if(!sig)return;var code=xSig(sig);var date=d.dates&&d.dates[di];if(!date)return;
           var wd=new Date(p.year,p.month-1,date.day).getDay();
           var dateStr=p.year+'-'+('0'+p.month).slice(-2)+'-'+('0'+date.day).slice(-2);
-          if(code==='F'&&wd!==0&&wd!==6&&!isHoliday(date.day,p.month,p.year)){if(!dip.ferie_godute.find(function(g){return g.data===dateStr;}))dip.ferie_godute.push({data:dateStr});}
-          else if(code==='HP'){if(!dip.permessi_goduti.find(function(g){return g.data===dateStr;})){var qtyH=parseFloat((String(sig).match(/^[\d.]*/)||['1'])[0])||1;dip.permessi_goduti.push({data:dateStr,ore:qtyH});}}
+          if(code==='F'&&wd!==0&&wd!==6&&!isHoliday(date.day,p.month,p.year))ferieQueueOp(Object.assign({type:'day',date:dateStr,code:'F',ore:0},who));
+          else if(code==='HP')ferieQueueOp(Object.assign({type:'day',date:dateStr,code:'HP',ore:parseFloat((String(sig).match(/^[\d.]*/)||['1'])[0])||1},who));
         });
       });
     });
@@ -9778,28 +9860,21 @@ function richScriviSuDrive(req){
     // Aggiorna ferieResiduo se è F o HP
     var code = req.tipo_code||'F';
     if(code==='F'||code==='HP'){
-      var anno=d1.getFullYear();
-      var doUpdate=function(){
-        if(!ferieData||ferieYear!==anno){ferieYear=anno;}
-        var dipR=getFerieDip(sap,nome,respNome,plant);
-        if(!dipR)return;
-        var cur2=new Date(d1);
-        while(cur2<=d2){
-          var wd2=cur2.getDay(),m2=cur2.getMonth()+1,day2=cur2.getDate(),y2=cur2.getFullYear();
-          if(wd2!==0&&wd2!==6&&!isHoliday(day2,m2,y2)){
-            var dateStr=y2+'-'+('0'+m2).slice(-2)+'-'+('0'+day2).slice(-2);
-            if(code==='F') dipR.ferie_godute.push({data:dateStr});
-            else if(code==='HP'){var qty=parseFloat(String(req.tipo).match(/^[\d.]*/)[0])||1;dipR.permessi_goduti.push({data:dateStr,ore:qty});}
-          }
-          cur2.setDate(cur2.getDate()+1);
+      // Raggruppa per anno (una richiesta a cavallo d'anno scrive su due file residuo)
+      var opsByYear={};
+      var cur2=new Date(d1);
+      var qtyR=code==='HP'?(parseFloat((String(req.tipo).match(/^[\d.]*/)||['1'])[0])||1):0;
+      while(cur2<=d2){
+        var wd2=cur2.getDay(),m2=cur2.getMonth()+1,day2=cur2.getDate(),y2=cur2.getFullYear();
+        if(wd2!==0&&wd2!==6&&!isHoliday(day2,m2,y2)){
+          var dateStr=y2+'-'+('0'+m2).slice(-2)+'-'+('0'+day2).slice(-2);
+          (opsByYear[y2]=opsByYear[y2]||[]).push({type:'day',year:y2,sap:sap,nome:nome,resp:respNome,plant:plant,date:dateStr,code:code,ore:qtyR});
         }
-        saveFerieResiduo().catch(function(){});
-      };
-      if(!ferieData){
-        loadFerieResiduo(anno).then(doUpdate).catch(doUpdate);
-      } else {
-        doUpdate();
+        cur2.setDate(cur2.getDate()+1);
       }
+      Object.keys(opsByYear).reduce(function(pr,y){
+        return pr.then(function(){return ferieCommitOps(parseInt(y),opsByYear[y]);});
+      },Promise.resolve()).catch(function(e){toast('⚠ Residuo non aggiornato: '+e.message+' — premi Ricalcola nel Piano Ferie','warn');});
     }
     loadAllFiles();
     // Avvisa se per uno o più mesi non è stato possibile scrivere sul foglio
