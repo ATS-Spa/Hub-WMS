@@ -169,6 +169,8 @@
   .dr-item.app-visite.active   { border-color: rgba(239,68,68,.3); }
   .dr-item.app-visite.active .dr-item-name  { color: var(--red); }
   .dr-item.app-formazione.active   { border-color: rgba(20,184,166,.3); }
+  .dr-item.app-easyloader.active   { border-color: rgba(59,130,246,.3); }
+  .dr-item.app-easyloader.active .dr-item-name  { color: var(--blue); }
   .dr-item.app-formazione.active .dr-item-name  { color: var(--teal); }
 
   .dr-item-icon { font-size: 17px; flex-shrink: 0; width: 22px; text-align: center; }
@@ -654,6 +656,14 @@
       </div>
     </div>
 
+    <div class="dr-item app-easyloader" id="nav-easyloader" onclick="openApp('easyloader')">
+      <span class="dr-item-icon">📦</span>
+      <div class="dr-item-info">
+        <span class="dr-item-name">Easyloader</span>
+        <span class="dr-item-desc">Ingressi, ACK, RMA e giacenze FLM</span>
+      </div>
+    </div>
+
     <div class="dr-sect" id="sectAdmin" style="display:none">Admin</div>
     <div class="dr-item" id="nav-admin" style="display:none" onclick="openAdminPanel()">
       <span class="dr-item-icon">👥</span>
@@ -749,6 +759,12 @@
         <div class="card-desc">Corsi dipendenti, scadenze e durate per tipo di corso.</div>
         <div class="card-arrow">→</div>
       </div>
+      <div class="app-card card-easyloader" onclick="openApp('easyloader')">
+        <div class="card-icon">📦</div>
+        <div class="card-title">Easyloader</div>
+        <div class="card-desc">Ingressi, uscite ACK/RMA, balancing e giacenze dell'hub FLM.</div>
+        <div class="card-arrow">→</div>
+      </div>
     </div>
   </div>
 
@@ -785,6 +801,7 @@
   <iframe class="app-frame" id="frame-chart"   src="" data-src="index_Chart_Studio.html"               title="Chart Studio"></iframe>
   <iframe class="app-frame" id="frame-visite"  src="" data-src="index_VisiteMediche.html"              title="Visite Mediche"></iframe>
   <iframe class="app-frame" id="frame-formazione" src="" data-src="index_Formazione.html"              title="Formazione"></iframe>
+  <iframe class="app-frame" id="frame-easyloader" src="" data-src="index_Easyloader.html"             title="Easyloader"></iframe>
 
 </main>
 
@@ -805,7 +822,7 @@
   var tcl;
 
   // Moduli disponibili e loro chiavi
-  var ALL_MODULI = ['presenze','spedizioni','grn','stock','ats','tickets','guida','chart','visite','formazione'];
+  var ALL_MODULI = ['presenze','spedizioni','grn','stock','ats','tickets','guida','chart','visite','formazione','easyloader'];
 
   // Config default
   var DEFAULT_HUB_CONFIG = {
@@ -1066,6 +1083,7 @@
     chart:      document.getElementById('frame-chart'),
     visite:     document.getElementById('frame-visite'),
     formazione: document.getElementById('frame-formazione'),
+    easyloader: document.getElementById('frame-easyloader'),
   };
   // Iframe reali (per lazy-load src)
   const iframes = {
@@ -1079,6 +1097,7 @@
     chart:      document.getElementById('frame-chart'),
     visite:     document.getElementById('frame-visite'),
     formazione: document.getElementById('frame-formazione'),
+    easyloader: document.getElementById('frame-easyloader'),
   };
   const navItems = {
     home:       document.getElementById('nav-home'),
@@ -1092,6 +1111,7 @@
     chart:      document.getElementById('nav-chart'),
     visite:     document.getElementById('nav-visite'),
     formazione: document.getElementById('nav-formazione'),
+    easyloader: document.getElementById('nav-easyloader'),
   };
   let currentApp = null;
   let drawerOpen = false;
@@ -1150,6 +1170,7 @@
       chart:      'Caricamento Chart Studio...',
       visite:     'Caricamento Visite Mediche...',
       formazione: 'Caricamento Formazione...',
+      easyloader: 'Caricamento Easyloader...',
     };
     document.getElementById('loader-text').textContent = labels[app] || 'Caricamento...';
 
@@ -1269,7 +1290,8 @@
 <script>
   var MODULI_LABELS = {
     presenze:'Presenze', spedizioni:'Spedizioni AWB', grn:'GRN Manager',
-    stock:'Etichetta Stock', ats:'Etichetta ATS', tickets:'Ticket Manager', guida:'Guida'
+    stock:'Etichetta Stock', ats:'Etichetta ATS', tickets:'Ticket Manager', guida:'Guida',
+    easyloader:'Easyloader'
   };
   var _addUModuli = [];
 
