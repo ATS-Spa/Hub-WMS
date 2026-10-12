@@ -3,11 +3,12 @@
 <head>
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
-<title>Easyloader</title>
+<title>ATS - Fastweb FLM</title>
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
 <script src="https://accounts.google.com/gsi/client" async defer></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jspdf/2.5.1/jspdf.umd.min.js" defer></script>
 <style>
 :root{
   --bg:#0b0f18;--surface:#131929;--card:#1a2236;--border:#243048;
@@ -59,6 +60,10 @@ button{font-family:var(--ff-sans)}
 .card-t{font-family:var(--ff-cond);font-size:18px;font-weight:700;letter-spacing:.5px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px 12px}
 .grid .wide{grid-column:span 2}
+.hdr{display:flex;flex-wrap:wrap;gap:10px 12px;align-items:flex-start}
+.hdr .fg{width:150px}
+.hdr .fg.mid{width:210px}
+.hdr .fg.auto{width:auto}
 .fg{display:flex;flex-direction:column;gap:4px;min-width:0}
 .fl{font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)}
 .fc{background:var(--card);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:13px;outline:none;width:100%;font-family:var(--ff-sans)}
@@ -104,6 +109,9 @@ a.mail{color:var(--blue);font-size:11.5px;text-decoration:none}
 .edit-cell{background:transparent;border:1px solid transparent;border-radius:5px;color:var(--text);font:inherit;padding:3px 6px;width:100%}
 .edit-cell:focus{border-color:var(--blue);background:var(--card);outline:none}
 .edit-cell.dirty{border-color:var(--amber)}
+.edit-cell.mono{font-family:var(--ff-mono);font-size:12px}
+td.mono,td.nw{white-space:nowrap}
+.fc:disabled{opacity:.5;cursor:not-allowed}
 .subtabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
 .subtab{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;color:var(--subtle);cursor:pointer}
 .subtab.active{border-color:var(--blue);color:var(--blue)}
@@ -116,6 +124,18 @@ a.mail{color:var(--blue);font-size:11.5px;text-decoration:none}
 .modal h3{font-family:var(--ff-cond);font-size:20px;margin-bottom:10px}
 .modal p{font-size:13px;color:var(--subtle);line-height:1.6;white-space:pre-line}
 .modal .row{justify-content:flex-end;margin-top:18px}
+.ack-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-bottom:14px}
+.ack-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.ack-card.sel{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)}
+.ack-card .t{font-family:var(--ff-cond);font-size:20px;font-weight:700;letter-spacing:.5px}
+.ack-nums{display:flex;gap:6px;flex-wrap:wrap}
+.ack-nums span{font-size:11px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:2px 8px;color:var(--subtle)}
+.ack-nums b{color:var(--text)}
+.scan-big{font-size:20px;padding:12px 14px;font-family:var(--ff-mono)}
+.fb{font-size:15px;font-weight:600;min-height:22px;margin-top:6px}
+.fb.ok{color:var(--green)} .fb.err{color:var(--red)} .fb.warn{color:var(--amber)}
+tr.r-ok td{background:rgba(16,185,129,.07)}
+tr.r-off td{opacity:.5}
 .progress{font-family:var(--ff-mono);font-size:12px;color:var(--subtle);margin-top:10px;white-space:pre-line}
 </style>
 </head>
@@ -124,7 +144,7 @@ a.mail{color:var(--blue);font-size:11.5px;text-decoration:none}
 <!-- LOGIN -->
 <div class="fullscreen show" id="loginScreen">
   <div class="login-card">
-    <div class="login-logo">EASY<span>LOADER</span></div>
+    <div class="login-logo">ATS <span>· FASTWEB FLM</span></div>
     <div class="login-sub">ATS · Hub FLM · ingressi, uscite, giacenze</div>
     <button class="btn" id="btnLogin" onclick="Auth.signIn()">Accedi con Google</button>
     <div class="login-err" id="loginErr"></div>
@@ -144,7 +164,7 @@ a.mail{color:var(--blue);font-size:11.5px;text-decoration:none}
 <!-- APP -->
 <div id="appShell">
   <div class="topbar">
-    <div class="topbar-logo">EASY<span>LOADER</span></div>
+    <div class="topbar-logo">ATS <span>· FASTWEB FLM</span></div>
     <div class="topbar-right">
       <span class="sync" id="syncInfo"></span>
       <button class="btn ghost sm" onclick="App.reload()" title="Ricarica i dati dal database">↻ Aggiorna</button>
@@ -162,18 +182,18 @@ a.mail{color:var(--blue);font-size:11.5px;text-decoration:none}
       <div class="card">
         <div class="card-h"><div class="card-t">Testata ingresso</div><div class="spacer"></div>
           <button class="btn ghost sm" onclick="Ingresso.nuovo()">Nuovo ingresso</button></div>
-        <div class="grid">
+        <div class="hdr">
           <div class="fg"><span class="fl">Tipo *</span>
             <select class="fc" id="inTipo" onchange="Ingresso.onTestata()">
               <option value="">— seleziona —</option><option>FAULTY</option><option>GOOD</option><option>REUSE</option><option>NEW</option><option>BALANCING</option><option>RESO</option><option>SCRAP</option>
             </select></div>
           <div class="fg"><span class="fl">Data ingresso *</span><input class="fc" type="date" id="inData" onchange="Ingresso.onTestata()"></div>
-          <div class="fg wide"><span class="fl">Mittente *</span><input class="fc" id="inMittente" list="dlControparti" onchange="Ingresso.onTestata()" placeholder="proposto dal 1° FR"></div>
-          <div class="fg wide"><span class="fl">AWB</span><input class="fc mono" id="inAwb" onchange="Ingresso.onAwb()" placeholder="proposto dal 1° FR"></div>
+          <div class="fg mid"><span class="fl">Mittente *</span><input class="fc" id="inMittente" list="dlControparti" onchange="Ingresso.onTestata()" placeholder="proposto dal 1° FR"></div>
+          <div class="fg mid"><span class="fl">AWB</span><input class="fc mono" id="inAwb" onchange="Ingresso.onAwb()" placeholder="proposto dal 1° FR"></div>
           <div class="fg"><span class="fl">Vettore *</span><input class="fc" id="inVettore" list="dlVettori" onchange="Ingresso.onTestata()"><span class="hint" id="hVettore"></span></div>
           <div class="fg"><span class="fl">DDT mittente</span><input class="fc mono" id="inDdt" onchange="Ingresso.onTestata()"></div>
           <div class="fg"><span class="fl">PO / MRN</span><input class="fc mono" id="inPo" onchange="Ingresso.onTestata()"></div>
-          <div class="fg"><span class="fl">Balancing</span>
+          <div class="fg auto"><span class="fl">Balancing</span>
             <label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:7px 0"><input type="checkbox" id="inBal" onchange="Ingresso.onTestata()"> ci sono balancing</label></div>
         </div>
       </div>
@@ -184,7 +204,7 @@ a.mail{color:var(--blue);font-size:11.5px;text-decoration:none}
           <div class="fg"><span class="fl" id="lblFr">FR</span><input class="fc mono" id="scFr" autocomplete="off" placeholder="si compila dal seriale"><span class="hint" id="hFr"></span></div>
           <div class="fg"><span class="fl">Barcode seriale</span><input class="fc mono" id="scBc" autocomplete="off" placeholder="spara qui il seriale"><span class="hint" id="hBc"></span></div>
           <div class="fg" id="wrapUbi"><span class="fl">Ubicazione (NEW/REUSE)</span><input class="fc mono" id="scUbi" list="dlUbicazioni" autocomplete="off"></div>
-          <button class="btn" onclick="Ingresso.aggiungi()">Aggiungi</button>
+          <button class="btn" id="btnAgg" onclick="Ingresso.aggiungi()">Aggiungi</button>
         </div>
       </div>
 
@@ -228,6 +248,23 @@ a.mail{color:var(--blue);font-size:11.5px;text-decoration:none}
       <div class="hint" id="gHint" style="margin-top:6px"></div>
     </div>
 
+    <!-- ACK -->
+    <div class="view" id="view-ack">
+      <div class="card">
+        <div class="row">
+          <div class="fg" style="width:160px"><span class="fl">Giorno di uscita</span><input class="fc" type="date" id="ackData" onchange="Ack.onData()"></div>
+          <div class="fg" style="width:220px"><span class="fl">Riparatore fuori calendario</span><select class="fc" id="ackExtra"></select></div>
+          <button class="btn ghost sm" onclick="Ack.aggiungiExtra()">+ Aggiungi</button>
+          <div class="spacer"></div>
+          <button class="btn ghost sm" onclick="Ack.ricaricaVlt()" title="Rilegge subito il foglio VLT">↻ VLT</button>
+          <button class="btn ghost sm" onclick="Ack.export()" title="Riscrive il foglio EXPORT_FR_DA_CHIUDERE letto dallo script VLT">Aggiorna export FR da chiudere</button>
+        </div>
+        <div class="hint" id="ackInfo" style="margin-top:8px"></div>
+      </div>
+      <div class="ack-grid" id="ackCards"></div>
+      <div id="ackDet"></div>
+    </div>
+
     <!-- ADMIN -->
     <div class="view" id="view-admin">
       <div class="subtabs" id="admTabs"></div>
@@ -248,6 +285,7 @@ a.mail{color:var(--blue);font-size:11.5px;text-decoration:none}
 <datalist id="dlControparti"></datalist>
 <datalist id="dlVettori"></datalist>
 <datalist id="dlUbicazioni"></datalist>
+<datalist id="dlMisure"></datalist>
 
 <div class="modal-bg" id="modal"><div class="modal">
   <h3 id="mTitle"></h3><p id="mBody"></p><div class="progress" id="mProg"></div>
@@ -325,6 +363,23 @@ L.pickFr = function (list, closed) {
   var row = list[0] || null;   // sempre l'FR più recente (numero più alto)
   return { row: row, nAttivi: act.length, chiuso: !!(row && closed[row.stato]), n: list.length };
 };
+// date: accetta 2026-10-12, 12/10/2026, 12/10/2026 08:10:16 → 2026-10-12
+L.normDate = function (d) {
+  d = L.s(d); var m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(d); if (m) return m[1] + '-' + L.pad(m[2], 2) + '-' + L.pad(m[3], 2);
+  m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(d); if (m) return m[3] + '-' + L.pad(m[2], 2) + '-' + L.pad(m[1], 2);
+  return d;
+};
+L.itDate = function (d) { d = L.normDate(d); var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d); return m ? m[3] + '/' + m[2] + '/' + m[1] : d; };
+// numero DDT dal formato in PARAMETRI: {N} | {N:05}_{ANNO} SPARE
+L.fmtDdt = function (f, n, anno) {
+  return L.s(f || '{N}').replace(/\{N(?::0*(\d+))?\}/, function (m, w) { return w ? L.pad(n, parseInt(w, 10)) : String(n); }).replace(/\{ANNO\}/g, anno);
+};
+// misura collo 120X80X100 → [120,80,100]
+L.misura = function (m) { var x = /^\s*(\d+(?:[.,]\d+)?)\s*[xX*]\s*(\d+(?:[.,]\d+)?)\s*[xX*]\s*(\d+(?:[.,]\d+)?)\s*$/.exec(L.s(m)); return x ? [x[1], x[2], x[3]].map(function (v) { return v.replace(',', '.'); }) : null; };
+// CERCA BAN del file ACK: note che iniziano con BAN o RMA
+L.isBan = function (note) { var n = L.up(note); return n.indexOf('BAN') === 0 || n.indexOf('RMA') === 0; };
+// FR digitato/sparato → numero pulito
+L.frKey = function (x) { return L.s(x).replace(/^FR\s*/i, '').replace(/^0+(?=\d)/, ''); };
 if (typeof module !== 'undefined') module.exports = L;
 </script>
 
@@ -339,6 +394,7 @@ var CFG = {
   VLT_ID: '1KxP-nGn6AbenWhZXi1EAPRxSKeCRdEoESH4UzMqqjdk',
   VLT_SHEET: 'Foglio1',
   HUAWEI_ID: '1oorvMVY8DIfBfVl2Bdi4EmL7C3swNgijOdP9sOEFskQ',
+  ASSETS: 'https://ats-spa.github.io/Hub-WMS/',   // loghi del DDT: stessa repository dell'Hub
   HUAWEI_RANGE: "'CERCA FR HUAWEI ASSOCIATO'!F2:I",   // F = seriale, I = FR (come la funzione con nome del prototipo)
   SUPER_USERS: ['daniele.izzo.ats@gmail.com'],
   VLT_REFRESH_HOUR: 8          // dopo questa ora la cache VLT del giorno prima viene ricaricata
@@ -515,7 +571,7 @@ var DB = {
 // ───────────────────────── APP ─────────────────────────
 var TABS = [
   { k: 'ingresso', label: 'Ingresso' },
-  { k: 'ack', label: 'ACK', soon: true }, { k: 'rma', label: 'RMA', soon: true }, { k: 'balancing', label: 'Balancing', soon: true },
+  { k: 'ack', label: 'ACK' }, { k: 'rma', label: 'RMA', soon: true }, { k: 'balancing', label: 'Balancing', soon: true },
   { k: 'juniper', label: 'Juniper', soon: true }, { k: 'giacenze', label: 'Giacenze' }, { k: 'vlt', label: 'VLT', soon: true },
   { k: 'storico', label: 'Storico', soon: true }, { k: 'admin', label: 'Admin', admin: true }
 ];
@@ -564,7 +620,7 @@ var App = {
       b.onclick = function () { App.go(t.k); }; tb.appendChild(b);
     });
     App.fillLists(); App.syncInfo();
-    Ingresso.init(); Giacenze.init(); if (App.isAdmin) Admin.init();
+    Ingresso.init(); Giacenze.init(); Ack.init(); if (App.isAdmin) Admin.init();
     App.go(lsG('tab') || 'ingresso');
   },
   go: function (k) {
@@ -577,7 +633,8 @@ var App = {
     $('view-' + t.k).classList.add('active');
     if (t.k === 'giacenze') Giacenze.render();
     if (t.k === 'admin') Admin.render();
-    if (t.k === 'ingresso') setTimeout(function () { $('scBc').focus(); }, 50);
+    if (t.k === 'ingresso') setTimeout(function () { if ($('inTipo').value) $('scBc').focus(); else $('inTipo').focus(); }, 50);
+    if (t.k === 'ack') Ack.show();
   },
   setTheme: function (th) { document.body.className = th || ''; lsS('theme', th); },
   syncInfo: function () { $('syncInfo').textContent = 'VLT ' + (DB.vlt ? new Date(DB.vlt.ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—') + ' · Huawei ' + Object.keys(DB.huaweiFr).length + ' seriali · giacenza ' + DB.t.UNITA.rows.length; },
@@ -594,7 +651,8 @@ var App = {
     try {
       await DB.loadTables(DB.SMALL.concat(['UNITA'])); await DB.loadVlt(true);
       try { await DB.loadHuawei(true); } catch (e) { toast('File Huawei non leggibile: ' + e.message, 'ko'); }
-      App.fillLists(); App.syncInfo(); Ingresso.ricalcola(); Ingresso.renderOggi(); if (App.tab === 'giacenze') Giacenze.render(); if (App.tab === 'admin') Admin.render();
+      if (Ack.loaded) { await Ack.flush(); await Ack.load(); }
+      App.fillLists(); App.syncInfo(); Ingresso.ricalcola(); Ingresso.renderOggi(); if (App.tab === 'giacenze') Giacenze.render(); if (App.tab === 'admin') Admin.render(); if (App.tab === 'ack') Ack.render();
       Modal.close(); toast('Dati aggiornati', 'ok');
     } catch (e) { Modal.close(); toast('Errore aggiornamento: ' + e.message, 'ko'); }
   },
@@ -622,7 +680,7 @@ var Ingresso = {
       else if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); clearTimeout(tB); Ingresso.anteprima('fr'); bc.focus(); bc.select(); }
     });
     ub.addEventListener('keydown', function (e) { nextOn(e, function () { Ingresso.aggiungi(); }); });
-    Ingresso.ricalcola(); Ingresso.renderOggi();
+    Ingresso.lockScan(); Ingresso.ricalcola(); Ingresso.renderOggi();
   },
   T: function () {
     return { tipo: $('inTipo').value, data: $('inData').value, mittente: L.s($('inMittente').value), awb: L.s($('inAwb').value), vettore: L.up($('inVettore').value),
@@ -631,6 +689,7 @@ var Ingresso = {
   setTestata: function (t) {
     $('inTipo').value = t.tipo || ''; $('inData').value = t.data || L.isoToday(); $('inMittente').value = t.mittente || ''; $('inAwb').value = t.awb || '';
     $('inVettore').value = t.vettore || ''; $('inDdt').value = t.ddt || ''; $('inPo').value = t.po || ''; $('inBal').checked = !!t.bal;
+    if ($('scBc')) Ingresso.lockScan();
   },
   nuovo: function (silent) {
     if (!silent && Ingresso.rows.length && !confirm('Ci sono ' + Ingresso.rows.length + ' pezzi non caricati. Scartarli?')) return;
@@ -638,9 +697,20 @@ var Ingresso = {
   },
   save: function () { lsS('draft_' + Auth.email, Ingresso.rows.length ? { testata: Ingresso.T(), rows: Ingresso.rows } : null); },
   needUbi: function () { var t = $('inTipo').value; return t === 'NEW' || t === 'REUSE'; },
-  onTestata: function () { $('wrapUbi').style.visibility = Ingresso.needUbi() ? 'visible' : 'hidden'; $('lblFr').textContent = $('inBal').checked ? 'FR / RMA balancing' : 'FR'; Ingresso.ricalcola(); },
+  // senza Tipo non si legge nulla
+  lockScan: function () {
+    var ok = !!$('inTipo').value;
+    ['scFr', 'scBc', 'scUbi'].forEach(function (id) { $(id).disabled = !ok; });
+    $('btnAgg').disabled = !ok;
+    $('scBc').placeholder = ok ? 'spara qui il seriale' : 'seleziona prima il Tipo';
+    $('scFr').placeholder = ok ? 'si compila dal seriale' : 'seleziona prima il Tipo';
+    $('inTipo').classList.toggle('err', !ok);
+    return ok;
+  },
+  onTestata: function () { var prima = $('scBc').disabled; Ingresso.lockScan(); if (prima && !$('scBc').disabled) setTimeout(function () { $('scBc').focus(); }, 30); $('wrapUbi').style.visibility = Ingresso.needUbi() ? 'visible' : 'hidden'; $('lblFr').textContent = $('inBal').checked ? 'FR / RMA balancing' : 'FR'; Ingresso.ricalcola(); },
   onAwb: function () { var v = L.vettoreDaAwb($('inAwb').value, DB.t.VETTORI.rows); if (v) $('inVettore').value = v; Ingresso.ricalcola(); },
   aggiungi: function () {
+    if (!$('inTipo').value) { toast('Seleziona prima il Tipo', 'ko'); Ingresso.lockScan(); $('inTipo').focus(); return; }
     var frAuto = $('scFr').dataset.auto === '1', bcAuto = $('scBc').dataset.auto === '1';
     var fr = frAuto ? '' : L.s($('scFr').value).replace(/^FR/i, '').replace(/^0+(?=\d)/, ''), bc = bcAuto ? '' : L.s($('scBc').value), ub = L.s($('scUbi').value);
     if (frAuto && bcAuto) { fr = L.s($('scFr').value); }
@@ -797,11 +867,11 @@ var Ingresso = {
       var cls = c.err ? 'r-err' : (c.warn ? 'r-warn' : '');
       var m = c.msgs.map(function (x) { return '<div class="msg ' + x[0] + '">' + esc(x[1]) + '</div>'; }).join('');
       var mail = c.mail ? '<a class="mail" href="' + Ingresso.mailLink(c, T) + '">✉ scrivi mail</a>' : '';
-      function ed(f, val, w) { return '<input class="edit-cell mono' + (Ingresso.rows[i].man[f] !== undefined ? ' dirty' : '') + '" size="' + Math.max(8, L.s(val).length + 1) + '" style="width:auto" value="' + esc(val) + '" onchange="Ingresso.edit(' + i + ',\'' + f + '\',this.value)">'; }
+      function ed(f, val, min) { return '<input class="edit-cell mono' + (Ingresso.rows[i].man[f] !== undefined ? ' dirty' : '') + '" style="width:calc(' + Math.max(min || 8, Math.min(60, L.s(val).length + 1)) + 'ch + 16px)" oninput="this.style.width=\'calc(\'+Math.max(' + (min || 8) + ',Math.min(60,this.value.length+1))+\'ch + 16px)\'" value="' + esc(val) + '" onchange="Ingresso.edit(' + i + ',\'' + f + '\',this.value)">'; }
       return '<tr class="' + cls + '"><td>' + (i + 1) + '</td><td class="mono">' + esc(c.fr) + '</td><td class="mono">' + esc(c.rma) + '</td>' +
-        '<td>' + ed('ser', c.ser, 150) + '</td><td>' + ed('pn', c.pn, 100) + '</td><td>' + ed('mnft', c.mnft, 80) + '</td>' +
+        '<td class="nw">' + ed('ser', c.ser, 12) + '</td><td class="nw">' + ed('pn', c.pn, 8) + '</td><td class="nw">' + ed('mnft', c.mnft, 6) + '</td>' +
         '<td>' + esc(c.rip) + '</td><td style="font-size:11.5px;color:var(--subtle)">' + esc(c.statoVlt) + '</td>' +
-        '<td>' + ed('nota', c.nota, 180) + '</td><td>' + esc(c.tipo === 'NEW' || c.tipo === 'REUSE' ? c.ubicazione : c.destinazione) + '</td>' +
+        '<td>' + ed('nota', c.nota, 10) + '</td><td>' + esc(c.tipo === 'NEW' || c.tipo === 'REUSE' ? c.ubicazione : c.destinazione) + '</td>' +
         '<td><div class="msgs">' + m + mail + '</div></td><td><button class="ico-btn" title="Elimina" onclick="Ingresso.del(' + i + ')">✕</button></td></tr>';
     }).join('');
     var nErr = C.filter(function (c) { return c.err; }).length, nWarn = C.filter(function (c) { return c.warn && !c.err; }).length;
@@ -830,6 +900,7 @@ var Ingresso = {
     try {
       await Ingresso.scrivi(T, C);
       Modal.close(); toast(C.length + ' pezzi caricati', 'ok');
+      Export.scrivi().catch(function (e) { toast('Export FR da chiudere non aggiornato: ' + e.message, 'ko'); });
       Ingresso.rows = []; Ingresso.save(); Ingresso.setTestata({ data: L.isoToday() }); Ingresso.ricalcola(); Ingresso.renderOggi(); App.syncInfo();
     } catch (e) {
       Modal.open('Errore durante il caricamento', e.message + '\n\nI pezzi letti sono ancora qui: controlla in "Ingressi di oggi" cosa è stato scritto prima di riprovare.');
@@ -858,7 +929,7 @@ var Ingresso = {
     uObjs.forEach(function (o, i) { o.id_unita = 'U' + L.pad(uBase + rU + i - 1, 7); o._r = rU + i; });
     Modal.progress('3/5 movimenti');
     var mObjs = C.map(function (c, i) {
-      return { data_ora: T.data, direzione: 'IN', causale: 'INGRESSO', id_unita: uObjs[i].id_unita, seriale: c.ser, pn: c.pn, mnft: c.mnft, tipo: c.tipo, fr: c.fr, rma: c.rma,
+      return { data_ora: T.data, data_registrazione_vlt: L.isoToday(), posizione_note: uObjs[i].ubicazione, direzione: 'IN', causale: 'INGRESSO', id_unita: uObjs[i].id_unita, seriale: c.ser, pn: c.pn, mnft: c.mnft, tipo: c.tipo, fr: c.fr, rma: c.rma,
         po_mrn: T.po, controparte: T.mittente, awb: T.awb, vettore: T.vettore, ddt: T.ddt, id_ricezione: idR, riparatore: c.rip, ubicazione_a: uObjs[i].ubicazione,
         operatore: me, operatore_sigla: sigla, note: c.nota, origine: 'APP' };
     });
@@ -989,6 +1060,591 @@ var Admin = {
       await API.append(DB.id, 'LOG', logs);
       Admin.dirty = {}; Admin.render(); App.fillLists(); toast('Salvato', 'ok');
     } catch (e) { toast('Errore salvataggio: ' + e.message, 'ko'); }
+  }
+};
+
+// ───────────────────────── EXPORT FR DA CHIUDERE (letto dallo script esterno VLT) ─────────────────────────
+var Export = {
+  righe: function () {
+    var st = {}; L.s(DB.param('vlt_stati_fr_da_chiudere', '')).split(';').forEach(function (x) { if (L.s(x)) st[L.s(x)] = 1; });
+    return DB.t.UNITA.rows.filter(function (u) { return u.tipo === 'FAULTY' && u.stato !== 'USCITO' && u.fr && DB.vltMap[u.fr] && st[DB.vltMap[u.fr].stato]; })
+      .map(function (u) {
+        var v = DB.vltMap[u.fr], nota = L.s(u.note).split(' | fonte:')[0];
+        if (/^fonte/i.test(nota)) nota = '';
+        return [u.fr, u.seriale, u.pn, nota, v.stato, v.riparatore || u.riparatore];
+      });
+  },
+  scrivi: async function () {
+    var rows = Export.righe(), sh = API.q('EXPORT_FR_DA_CHIUDERE');
+    await API.call(API.S + DB.id + '/values/' + encodeURIComponent(sh + '!A2:F') + ':clear', { method: 'POST', body: '{}' });
+    if (rows.length) await API.batchUpdate(DB.id, [{ range: sh + '!A2:F' + (rows.length + 1), values: rows }]);
+    return rows.length;
+  }
+};
+
+// ───────────────────────── DRIVE (PDF DDT nella cartella STORICO DDT) ─────────────────────────
+var Drive = {
+  _f: null,
+  folder: async function () {
+    var id = L.s(DB.param('drive_cartella_ddt', '')); if (id) return id;
+    if (Drive._f) return Drive._f;
+    var q = "'" + CFG.FOLDER_ID + "' in parents and name='STORICO DDT' and mimeType='application/vnd.google-apps.folder' and trashed=false";
+    var js = await API.call('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id)&q=' + encodeURIComponent(q));
+    var f = (js.files || [])[0];
+    if (!f) f = await API.call('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id', { method: 'POST', body: JSON.stringify({ name: 'STORICO DDT', mimeType: 'application/vnd.google-apps.folder', parents: [CFG.FOLDER_ID] }) });
+    Drive._f = f.id; return f.id;
+  },
+  upload: async function (name, blob) {
+    var folder = await Drive.folder();
+    var go = function () {
+      var fd = new FormData();
+      fd.append('metadata', new Blob([JSON.stringify({ name: name, parents: [folder], mimeType: 'application/pdf' })], { type: 'application/json' }));
+      fd.append('file', blob);
+      return fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,webViewLink', { method: 'POST', headers: { Authorization: 'Bearer ' + Auth.token }, body: fd });
+    };
+    var res = await go(); if (res.status === 401) { await Auth.refresh(); res = await go(); }
+    var js = await res.json(); if (!res.ok) throw new Error((js.error && js.error.message) || ('HTTP ' + res.status));
+    return js.webViewLink || ('https://drive.google.com/file/d/' + js.id + '/view');
+  }
+};
+
+// ───────────────────────── ACK ─────────────────────────
+var Ack = {
+  loaded: false, cur: null, q: [], qA: [], colli: {}, busy: false, extra: {},
+  init: function () {
+    $('ackData').value = L.isoToday();
+    Ack.extra = lsG('ack_extra') || {};
+    $('ackExtra').innerHTML = '<option value="">— scegli —</option>' + DB.t.RIPARATORI.rows.filter(function (r) { return L.up(r.attivo) !== 'NO'; })
+      .map(function (r) { return '<option>' + esc(r.codice) + '</option>'; }).join('');
+    $('dlMisure').innerHTML = L.s(DB.param('misure_colli_standard', '')).split(';').filter(Boolean).map(function (m) { return '<option value="' + esc(m) + '">'; }).join('');
+    window.addEventListener('beforeunload', function (e) { if (Ack.q.length || Ack.qA.length) { Ack.flush(); e.preventDefault(); e.returnValue = ''; } });
+  },
+  // loghi del DDT dalla repository dell'Hub: ATS a sinistra, Fastweb/Vodafone a destra (immagine → canvas → PNG, funziona anche con l'.ico)
+  LOGHI: { sx: 'ATS-LogoNoSfondp.png', dx: 'Fastweb_-_Vodafone_logo.ico' }, _loghi: null, _lg: null,
+  loghi: function () {
+    if (Ack._loghi) return Ack._loghi;
+    function uno(file) {
+      return new Promise(function (res) {
+        var im = new Image(), t = setTimeout(function () { res(null); }, 6000);
+        im.crossOrigin = 'anonymous';
+        im.onload = function () {
+          clearTimeout(t);
+          try { var c = document.createElement('canvas'); c.width = im.naturalWidth || im.width; c.height = im.naturalHeight || im.height; c.getContext('2d').drawImage(im, 0, 0); res({ url: c.toDataURL('image/png'), w: c.width, h: c.height }); }
+          catch (e) { console.warn('Logo non utilizzabile: ' + file, e); res(null); }
+        };
+        im.onerror = function () { clearTimeout(t); console.warn('Logo non trovato: ' + CFG.ASSETS + file); res(null); };
+        im.src = CFG.ASSETS + file;
+      });
+    }
+    Ack._loghi = Promise.all([uno(Ack.LOGHI.sx), uno(Ack.LOGHI.dx)]).then(function (r) { Ack._lg = { sx: r[0], dx: r[1] }; if (!r[0] || !r[1]) Ack._loghi = null; return Ack._lg; });
+    return Ack._loghi;
+  },
+  load: async function () { Ack.loghi(); await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_RIGHE', 'SPEDIZIONI_COLLI', 'DDT_REGISTRO', 'ANOMALIE']); Ack.loaded = true; },
+  show: async function () {
+    if (!Ack.loaded) {
+      $('ackCards').innerHTML = '<div class="card empty">Carico le spedizioni…</div>';
+      try { await Ack.load(); } catch (e) { $('ackCards').innerHTML = '<div class="card empty">Errore: ' + esc(e.message) + '</div>'; return; }
+    }
+    Ack.render();
+  },
+  onData: function () { Ack.cur = null; Ack.render(); },
+  aggiungiExtra: function () {
+    var c = $('ackExtra').value, d = $('ackData').value; if (!c) return;
+    Ack.extra[d] = Ack.extra[d] || []; if (Ack.extra[d].indexOf(c) < 0) Ack.extra[d].push(c);
+    lsS('ack_extra', Ack.extra); Ack.render();
+  },
+  ricaricaVlt: async function () {
+    Modal.open('VLT', 'Rileggo il foglio VLT…', []);
+    try { await DB.loadVlt(true); App.syncInfo(); Modal.close(); toast('VLT aggiornato', 'ok'); Ack.render(); } catch (e) { Modal.open('Errore VLT', e.message); }
+  },
+  export: async function () {
+    Modal.open('Export FR da chiudere', 'Riscrivo il foglio…', []);
+    try { var n = await Export.scrivi(); Modal.close(); toast('EXPORT_FR_DA_CHIUDERE: ' + n + ' FR', 'ok'); } catch (e) { Modal.open('Errore export', e.message); }
+  },
+
+  // ─ dati
+  cfg: function () {
+    return { statoAck: L.s(DB.param('vlt_stato_ack', 'Repairer Ack Received')), statoAs: L.s(DB.param('ack_stato_as', 'Failed Material Received and Verify')),
+      blocca: L.up(DB.param('ack_blocca_se_mancanti', 'SI')) !== 'NO' };
+  },
+  rip: function (cod) { return DB.t.RIPARATORI.rows.find(function (r) { return L.up(r.codice) === L.up(cod); }) || { codice: cod }; },
+  byId: function (id) { return DB.t.SPEDIZIONI.rows.find(function (s) { return s.id_spedizione === id; }); },
+  sped: function (d, cod) { return DB.t.SPEDIZIONI.rows.find(function (s) { return s.tipo === 'ACK' && L.normDate(s.data) === d && L.up(s.destinatario) === L.up(cod) && s.stato !== 'ANNULLATA'; }); },
+  righe: function (id) { return DB.t.SPEDIZIONI_RIGHE.rows.filter(function (r) { return r.id_spedizione === id; }); },
+  colliDb: function (id) { return DB.t.SPEDIZIONI_COLLI.rows.filter(function (c) { return c.id_spedizione === id; }).sort(function (a, b) { return (+a.n_collo) - (+b.n_collo); }); },
+  spareFalse: function (id) { return DB.t.ANOMALIE.rows.filter(function (a) { return a.tipo === 'SPARE_FALSE' && a.id_spedizione === id && a.stato === 'APERTA'; }); },
+  calRow: function (d, cod) { return DB.t.CALENDARIO_USCITE.rows.find(function (c) { return L.normDate(c.data) === d && L.up(App.aliasRip(c.riparatore)) === L.up(cod); }); },
+  giro: function (d) {
+    var list = [];
+    function add(c) { c = App.aliasRip(c); if (c && !list.some(function (x) { return L.up(x) === L.up(c); })) list.push(c); }
+    DB.t.CALENDARIO_USCITE.rows.forEach(function (c) { if (L.normDate(c.data) === d && L.up(c.stato) !== 'ANNULLATA') add(c.riparatore); });
+    DB.t.SPEDIZIONI.rows.forEach(function (s) { if (s.tipo === 'ACK' && L.normDate(s.data) === d && s.stato !== 'ANNULLATA') add(s.destinatario); });
+    (Ack.extra[d] || []).forEach(add);
+    return list;
+  },
+  idxU: function () {
+    var byFr = {}, bySer = {}, byId = {};
+    DB.t.UNITA.rows.forEach(function (u) {
+      byId[u.id_unita] = u;
+      if (u.stato !== 'IN_GIACENZA' && u.stato !== 'IN_LAVORAZIONE') return;
+      if (u.fr) byFr[u.fr] = u; var s = L.up(u.seriale); if (s) { bySer[s] = u; bySer[L.up(L.afterSpace(s))] = bySer[L.up(L.afterSpace(s))] || u; }
+    });
+    return { fr: byFr, ser: bySer, id: byId };
+  },
+  // FR attesi dal VLT: stato ACK (+ AS se il riparatore lo prevede), BAN segnalati ed esclusi
+  attesi: function (cod, ix) {
+    var c = Ack.cfg(), rp = Ack.rip(cod), as = L.up(rp.ack_include_as) === 'SI'; ix = ix || Ack.idxU();
+    if (!DB.vlt) return [];
+    return DB.vlt.rows.filter(function (v) { return (v.stato === c.statoAck || (as && v.stato === c.statoAs)) && L.up(App.aliasRip(v.riparatore)) === L.up(cod); })
+      .map(function (v) { return { v: v, flag: L.isBan(v.note) ? 'BAN' : (v.stato === c.statoAs ? 'AS' : ''), u: ix.fr[v.fr_id] || null }; });
+  },
+  conta: function (R) {
+    var n = { tot: 0, sp: 0, da: 0, man: 0, rim: 0, ban: 0, as: 0 };
+    R.forEach(function (r) {
+      if (r.esito === 'ESCLUSO_BAN') { n.ban++; return; }
+      if (r.esito === 'RIMOSSO') { n.rim++; return; }
+      n.tot++; if (r.flag_vlt === 'AS') n.as++;
+      if (r.esito === 'SPUNTATO') n.sp++; else if (r.esito === 'MANCANTE') n.man++; else n.da++;
+    });
+    return n;
+  },
+
+  // ─ scritture di base
+  pushRow: function (t, o, r) { var x = {}; t.header.forEach(function (h) { x[h] = o[h] === undefined || o[h] === null ? '' : String(o[h]); }); x._r = r; t.rows.push(x); return x; },
+  setS: function (s, obj) {
+    var t = DB.t.SPEDIZIONI, upd = [];
+    obj.modificato_il = L.nowStamp(); obj.modificato_da = Auth.email;
+    Object.keys(obj).forEach(function (h) { if (h in t.idx) { s[h] = L.s(obj[h]); upd.push({ range: t.cell(h, s._r), values: [[s[h]]] }); } });
+    return upd;
+  },
+  creaSped: async function (d, cod, extra) {
+    var rp = Ack.rip(cod), t = DB.t.SPEDIZIONI, now = L.nowStamp();
+    var o = Object.assign({ tipo: 'ACK', data: d, destinatario: rp.codice || cod, destinazione_estesa: [rp.ragione_sociale, rp.indirizzo].filter(Boolean).join(' - '), stato: 'BOZZA', n_pezzi: 0, rev: 1, creato_il: now, creato_da: Auth.email }, extra || {});
+    var r = await API.append(DB.id, 'SPEDIZIONI', [t.toRow(o)]);
+    o.id_spedizione = 'S' + L.pad(r - 1, 6);
+    await API.batchUpdate(DB.id, [{ range: t.cell('id_spedizione', r), values: [[o.id_spedizione]] }]);
+    return Ack.pushRow(t, o, r);
+  },
+  // aggiunge alla spedizione gli FR attesi non ancora in lista
+  sincLista: async function (s) {
+    var ex = {}; Ack.righe(s.id_spedizione).forEach(function (r) { ex[r.fr] = 1; });
+    var add = Ack.attesi(s.destinatario).filter(function (a) { return !ex[a.v.fr_id]; });
+    if (!add.length) return 0;
+    var t = DB.t.SPEDIZIONI_RIGHE;
+    var objs = add.map(function (a) {
+      return { id_spedizione: s.id_spedizione, id_unita: a.u ? a.u.id_unita : '', seriale: a.u ? a.u.seriale : a.v.f_mat_serial_no, pn: a.u ? a.u.pn : a.v.f_mat_tmpn, fr: a.v.fr_id, rma: a.u ? a.u.rma : '',
+        esito: a.flag === 'BAN' ? 'ESCLUSO_BAN' : 'DA_SPUNTARE', flag_vlt: a.flag, note: a.u ? '' : 'non in giacenza' };
+    });
+    var r = await API.append(DB.id, 'SPEDIZIONI_RIGHE', objs.map(function (o) { return t.toRow(o); }));
+    objs.forEach(function (o, i) { o.id_riga = 'SR' + L.pad(r + i - 1, 6); });
+    await API.batchUpdate(DB.id, [{ range: t.cell('id_riga', r) + ':' + t.col('id_riga') + (r + objs.length - 1), values: objs.map(function (o) { return [o.id_riga]; }) }]);
+    objs.forEach(function (o, i) { Ack.pushRow(t, o, r + i); });
+    return objs.length;
+  },
+
+  // ─ coda scritture della spunta (una chiamata ogni pochi secondi, non una per lettura)
+  qPush: function (upd) { Ack.q = Ack.q.concat(upd); clearTimeout(Ack._qt); Ack._qt = setTimeout(Ack.flush, 2500); Ack.qInfo(); },
+  qInfo: function () { var e = $('ackSave'); if (e) e.textContent = (Ack.q.length || Ack.qA.length) ? '● salvataggio in corso…' : '✓ spunta salvata'; },
+  flush: function () {
+    if (Ack._fl) return Ack._fl.then(function () { if (Ack.q.length || Ack.qA.length) return Ack.flush(); });
+    clearTimeout(Ack._qt);
+    Ack._fl = (async function () {
+      await null;   // il corpo parte dopo l'assegnazione di Ack._fl
+      try {
+        while (Ack.q.length || Ack.qA.length) {
+          var u = Ack.q.splice(0);
+          if (u.length) { try { await API.batchUpdate(DB.id, u); } catch (e) { Ack.q = u.concat(Ack.q); throw e; } }
+          var a = Ack.qA.splice(0);
+          if (a.length) {
+            var tA = DB.t.ANOMALIE, r;
+            try { r = await API.append(DB.id, 'ANOMALIE', a.map(function (x) { return tA.toRow(x); })); } catch (e) { Ack.qA = a.concat(Ack.qA); throw e; }
+            a.forEach(function (x, i) { x._r = r + i; x.id_anomalia = 'A' + L.pad(r + i - 1, 6); });
+            Ack.q.push({ range: tA.cell('id_anomalia', r) + ':' + tA.col('id_anomalia') + (r + a.length - 1), values: a.map(function (x) { return [x.id_anomalia]; }) });
+            a.filter(function (x) { return x._annulla; }).forEach(function (x) { Ack.q.push({ range: tA.cell('stato', x._r), values: [['RISOLTA']] }); });
+          }
+        }
+      } catch (e) { toast('Spunta non ancora salvata, riprovo: ' + e.message, 'ko'); Ack._qt = setTimeout(Ack.flush, 5000); }
+      finally { Ack._fl = null; Ack.qInfo(); }
+    })();
+    return Ack._fl;
+  },
+  setR: function (r, esito) {
+    var t = DB.t.SPEDIZIONI_RIGHE;
+    r.esito = esito; r.spuntato_da = esito === 'SPUNTATO' ? Auth.email : ''; r.spuntato_il = esito === 'SPUNTATO' ? L.nowStamp() : '';
+    Ack.qPush(['esito', 'spuntato_da', 'spuntato_il'].map(function (h) { return { range: t.cell(h, r._r), values: [[r[h]]] }; }));
+  },
+
+  // ─ azioni
+  avvia: async function (cod) {
+    var d = $('ackData').value;
+    Modal.open('ACK ' + cod, 'Rileggo VLT e preparo la lista del giorno…', []);
+    try {
+      await Ack.flush(); await DB.loadVlt(true); App.syncInfo();
+      await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_RIGHE']);
+      var s = Ack.sped(d, cod) || await Ack.creaSped(d, cod);
+      if (s.stato === 'BOZZA' || s.stato === 'IN_SPUNTA') {
+        var n = await Ack.sincLista(s);
+        var upd = s.stato === 'BOZZA' ? Ack.setS(s, { stato: 'IN_SPUNTA' }) : [];
+        var cal = Ack.calRow(d, cod), tc = DB.t.CALENDARIO_USCITE;
+        if (cal && cal.stato !== 'CHIUSA') { cal.stato = 'IN_CORSO'; cal.id_spedizione = s.id_spedizione; upd.push({ range: tc.cell('stato', cal._r), values: [['IN_CORSO']] }, { range: tc.cell('id_spedizione', cal._r), values: [[s.id_spedizione]] }); }
+        if (upd.length) await API.batchUpdate(DB.id, upd);
+        if (n) await API.append(DB.id, 'LOG', [App.log('ACK_LISTA', 'SPEDIZIONI', s.id_spedizione, { riparatore: cod, fr_aggiunti: n })]);
+      }
+      Modal.close(); Ack.apri(s.id_spedizione);
+    } catch (e) { Modal.open('Errore avvio ACK', e.message); }
+  },
+  apri: function (id) {
+    if (Ack.cur !== id) Ack._fb = null;
+    Ack.cur = id; var s = Ack.byId(id);
+    if (s && !Ack.colli[id]) {
+      var db = Ack.colliDb(id);
+      Ack.colli[id] = lsG('colli_' + id) || (db.length ? db.map(function (c) { return { tipo: c.tipo_collo, misura: [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X'), peso: c.peso_kg }; }) : [{ tipo: 'PLT', misura: '', peso: '' }]);
+    }
+    Ack.render();
+    setTimeout(function () { var e = $('ackScan'); if (e) e.focus(); var d = $('ackDet'); if (d && d.scrollIntoView) d.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
+  },
+  fb: function (txt, cls) { Ack._fb = [txt, cls || '']; var e = $('ackFb'); if (e) { e.textContent = txt; e.className = 'fb ' + (cls || ''); } },
+  scan: function () {
+    var s = Ack.byId(Ack.cur); var raw = L.s($('ackScan').value); $('ackScan').value = '';
+    if (!s || s.stato !== 'IN_SPUNTA' || !raw) return;
+    var R = Ack.righe(s.id_spedizione), k = L.frKey(raw), ser = L.up(L.estraiSeriale(raw, Ingresso.regole()));
+    var r = R.find(function (x) { return x.fr === k; }) || R.find(function (x) { var xs = L.up(x.seriale); return xs && (xs === ser || xs === L.up(raw) || L.up(L.afterSpace(xs)) === ser); });
+    if (r) {
+      if (r.esito === 'ESCLUSO_BAN') { Ack.fb('⚠ FR ' + r.fr + ' è BAN: NON va spedito, mettilo da parte', 'err'); }
+      else if (r.esito === 'SPUNTATO') { Ack.fb('FR ' + r.fr + ' già spuntato', 'warn'); }
+      else { Ack.setR(r, 'SPUNTATO'); Ack.fb('✓ FR ' + r.fr + ' · ' + r.seriale + (r.flag_vlt === 'AS' ? ' · AS' : ''), 'ok'); }
+    } else {
+      // SPARE FALSE: letto ma non nella lista ACK del giorno
+      var ix = Ack.idxU(), u = ix.fr[k] || ix.ser[ser] || ix.ser[L.up(raw)] || null;
+      var fr = u ? u.fr : (DB.vltMap[k] ? k : ''), v = fr ? DB.vltMap[fr] : null;
+      var gia = Ack.spareFalse(s.id_spedizione).some(function (a) { return (fr && a.fr === fr) || (u && a.id_unita === u.id_unita) || L.up(a.seriale) === L.up(raw); });
+      if (gia) { Ack.fb('SPARE FALSE già segnalato: ' + (fr ? 'FR ' + fr : raw), 'warn'); }
+      else {
+        var desc = 'SPARE FALSE in ACK ' + s.destinatario + ': ' + (v ? 'stato VLT "' + v.stato + '"' + (v.riparatore ? ', riparatore ' + v.riparatore : '') : (fr ? 'FR non in VLT' : 'non trovato in giacenza né in VLT'));
+        var o = { data: L.nowStamp(), tipo: 'SPARE_FALSE', id_unita: u ? u.id_unita : '', seriale: u ? u.seriale : (v ? v.f_mat_serial_no : raw), fr: fr, id_spedizione: s.id_spedizione, descrizione: desc, stato: 'APERTA', aperta_da: Auth.email, rev: 1 };
+        var x = Ack.pushRow(DB.t.ANOMALIE, o, null); Ack.qA.push(x); Ack.qPush([]);
+        Ack.fb('✗ SPARE FALSE · ' + (fr ? 'FR ' + fr : raw) + (v ? ' · ' + v.stato : '') + ' — non spedire', 'err');
+      }
+    }
+    Ack.renderDet(); Ack.renderCards();
+  },
+  rimuovi: function (id, ripristina) {
+    var r = DB.t.SPEDIZIONI_RIGHE.rows.find(function (x) { return x.id_riga === id; }); if (!r) return;
+    Ack.setR(r, ripristina ? 'DA_SPUNTARE' : 'RIMOSSO'); Ack.renderDet(); Ack.renderCards();
+  },
+  annullaSf: function (i) {
+    var a = Ack.spareFalse(Ack.cur)[i]; if (!a) return;
+    a.stato = 'RISOLTA';
+    if (a._r) Ack.qPush([{ range: DB.t.ANOMALIE.cell('stato', a._r), values: [['RISOLTA']] }, { range: DB.t.ANOMALIE.cell('nota_risoluzione', a._r), values: [['letto per errore in spunta ACK']] }]);
+    else a._annulla = true;
+    Ack.renderDet(); Ack.renderCards();
+  },
+  aggiornaLista: async function () {
+    var s = Ack.byId(Ack.cur); if (!s) return;
+    Modal.open('Aggiorna lista', 'Rileggo VLT…', []);
+    try { await Ack.flush(); await DB.loadVlt(true); App.syncInfo(); var n = await Ack.sincLista(s); Modal.close(); toast(n ? n + ' FR aggiunti alla lista' : 'Nessun FR nuovo', 'ok'); Ack.render(); }
+    catch (e) { Modal.open('Errore', e.message); }
+  },
+  // colli
+  collo: function (i, f, v) { var c = Ack.colli[Ack.cur]; if (f === 'del') c.splice(i, 1); else if (f === 'add') c.push({ tipo: (c[c.length - 1] || {}).tipo || 'PLT', misura: '', peso: '' }); else c[i][f] = L.s(v).toUpperCase(); lsS('colli_' + Ack.cur, c); Ack.renderDet(); },
+  validaColli: function (c) {
+    var e = [];
+    if (!c.length) e.push('inserisci almeno un collo');
+    c.forEach(function (x, i) { if (!L.misura(x.misura)) e.push('collo ' + (i + 1) + ': misura non valida (es. 120X80X100)'); if (!(parseFloat(String(x.peso).replace(',', '.')) > 0)) e.push('collo ' + (i + 1) + ': peso mancante'); });
+    return e;
+  },
+  chiudi: async function () {
+    var s = Ack.byId(Ack.cur); if (!s || s.stato !== 'IN_SPUNTA') return;
+    await Ack.flush();
+    var R = Ack.righe(s.id_spedizione), c = Ack.cfg();
+    var manc = R.filter(function (r) { return r.esito === 'DA_SPUNTARE' || r.esito === 'MANCANTE'; });
+    if (manc.length) {
+      manc.forEach(function (r) { if (r.esito !== 'MANCANTE') Ack.setR(r, 'MANCANTE'); }); await Ack.flush(); Ack.render();
+      var lista = manc.slice(0, 25).map(function (r) { return 'FR ' + r.fr + ' · ' + r.seriale; }).join('\n') + (manc.length > 25 ? '\n…' : '');
+      if (c.blocca) { Modal.open(manc.length + ' FR mancanti: ACK bloccato', lista + '\n\nTrovali e spuntali, oppure premi "Rimuovi" sulla riga: restano in giacenza e ripartono con l\'ACK successivo.'); return; }
+      if (!(await Modal.confirm(manc.length + ' FR mancanti', lista + '\n\nProcedo comunque? I mancanti restano in giacenza.'))) return;
+    }
+    var sp = R.filter(function (r) { return r.esito === 'SPUNTATO'; });
+    if (!sp.length) { Modal.open('Niente da spedire', 'Nessun pezzo spuntato.'); return; }
+    var col = Ack.colli[s.id_spedizione] || [], err = Ack.validaColli(col);
+    if (err.length) { Modal.open('Colli e peso', err.join('\n')); return; }
+    var peso = col.reduce(function (a, x) { return a + parseFloat(String(x.peso).replace(',', '.')); }, 0);
+    var sf = Ack.spareFalse(s.id_spedizione).length;
+    if (!(await Modal.confirm('Chiudi spunta ' + s.destinatario, sp.length + ' pezzi · ' + col.length + ' colli · ' + Math.round(peso * 100) / 100 + ' kg' + (sf ? '\n' + sf + ' SPARE FALSE segnalati (non spediti)' : '') + (s.awb ? '\n\nAWB presente: genero subito DDT e uscita.' : '\n\nIl DDT si genera da solo quando il Service Desk inserisce l\'AWB.')))) return;
+    Modal.open('Chiusura spunta', 'Salvo colli e peso…', []);
+    try {
+      var tC = DB.t.SPEDIZIONI_COLLI;
+      var objs = col.map(function (x, i) { var m = L.misura(x.misura); return { id_spedizione: s.id_spedizione, n_collo: i + 1, tipo_collo: x.tipo || 'PLT', lunghezza_cm: m[0], larghezza_cm: m[1], altezza_cm: m[2], peso_kg: String(x.peso).replace(',', '.') }; });
+      var r = await API.append(DB.id, 'SPEDIZIONI_COLLI', objs.map(function (o) { return tC.toRow(o); }));
+      objs.forEach(function (o, i) { o.id_collo = 'C' + L.pad(r + i - 1, 6); });
+      var upd = [{ range: tC.cell('id_collo', r) + ':' + tC.col('id_collo') + (r + objs.length - 1), values: objs.map(function (o) { return [o.id_collo]; }) }];
+      objs.forEach(function (o, i) { Ack.pushRow(tC, o, r + i); });
+      upd = upd.concat(Ack.setS(s, { stato: 'PRONTA', n_pezzi: sp.length, n_colli: col.length, peso_tot_kg: Math.round(peso * 100) / 100 }));
+      await API.batchUpdate(DB.id, upd);
+      await API.append(DB.id, 'LOG', [App.log('ACK_CHIUSA_SPUNTA', 'SPEDIZIONI', s.id_spedizione, { pezzi: sp.length, colli: col.length, peso: peso, spare_false: sf })]);
+      lsS('colli_' + s.id_spedizione, null); delete Ack.colli[s.id_spedizione];
+      try { await Export.scrivi(); } catch (e) { toast('Export FR da chiudere non aggiornato: ' + e.message, 'ko'); }
+      Modal.close(); Ack.render();
+      if (L.s(s.awb)) await Ack.emetti(s.id_spedizione); else toast('Spunta chiusa: in attesa dell\'AWB', 'ok');
+    } catch (e) { Modal.open('Errore chiusura', e.message); }
+  },
+  riapri: async function () {
+    var s = Ack.byId(Ack.cur); if (!s || s.stato !== 'PRONTA' || s.n_ddt) return;
+    if (!(await Modal.confirm('Riapri spunta', 'La spedizione torna in spunta; colli e peso andranno reinseriti/confermati.'))) return;
+    try {
+      var cl = Ack.colliDb(s.id_spedizione), tC = DB.t.SPEDIZIONI_COLLI;
+      Ack.colli[s.id_spedizione] = cl.map(function (c) { return { tipo: c.tipo_collo, misura: [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X'), peso: c.peso_kg }; });
+      if (cl.length) await API.call(API.S + DB.id + '/values:batchClear', { method: 'POST', body: JSON.stringify({ ranges: cl.map(function (c) { return API.q('SPEDIZIONI_COLLI') + '!A' + c._r + ':' + L.colLetter(tC.header.length - 1) + c._r; }) }) });
+      tC.rows = tC.rows.filter(function (c) { return c.id_spedizione !== s.id_spedizione; });
+      await API.batchUpdate(DB.id, Ack.setS(s, { stato: 'IN_SPUNTA', n_colli: '', peso_tot_kg: '' }));
+      await API.append(DB.id, 'LOG', [App.log('ACK_RIAPERTA', 'SPEDIZIONI', s.id_spedizione, {})]);
+      Ack.render();
+    } catch (e) { Modal.open('Errore', e.message); }
+  },
+  salvaAwb: async function (cod) {
+    var d = $('ackData').value, k = Ack.key(cod);
+    var awb = L.up($('awb_' + k).value).replace(/\s+/g, ''), vet = L.up($('vet_' + k).value) || L.vettoreDaAwb(awb, DB.t.VETTORI.rows);
+    try {
+      await DB.loadTables(['SPEDIZIONI']);
+      var s = Ack.sped(d, cod);
+      if (s && s.n_ddt) { toast('DDT già emesso: AWB non modificabile', 'ko'); Ack.render(); return; }
+      if (!s) s = await Ack.creaSped(d, cod, { awb: awb, vettore: vet });
+      else await API.batchUpdate(DB.id, Ack.setS(s, { awb: awb, vettore: vet }));
+      await API.append(DB.id, 'LOG', [App.log('ACK_AWB', 'SPEDIZIONI', s.id_spedizione, { awb: awb, vettore: vet })]);
+      toast('AWB salvato', 'ok'); Ack.render();
+      if (awb && s.stato === 'PRONTA') await Ack.emetti(s.id_spedizione);
+    } catch (e) { Modal.open('Errore AWB', e.message); }
+  },
+  key: function (cod) { return L.s(cod).replace(/[^A-Za-z0-9]/g, '_'); },
+
+  // DDT + uscita: parte da sola quando la spunta è chiusa e c'è l'AWB
+  emetti: async function (id) {
+    if (Ack.busy) return; Ack.busy = true;
+    Modal.open('DDT e uscita', 'Non chiudere la pagina.', []);
+    try {
+      await Ack.flush();
+      await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_RIGHE', 'SPEDIZIONI_COLLI', 'PARAMETRI']);
+      var s = Ack.byId(id);
+      if (!s) throw new Error('Spedizione ' + id + ' non trovata');
+      if (s.n_ddt) throw new Error('DDT già emesso (' + s.n_ddt + ')');
+      if (s.stato !== 'PRONTA') throw new Error('La spunta non è chiusa (stato ' + s.stato + ')');
+      if (!L.s(s.awb)) throw new Error('Manca l\'AWB');
+      var R = Ack.righe(id).filter(function (r) { return r.esito === 'SPUNTATO'; });
+      var now = L.nowStamp(), me = Auth.email, oggi = L.isoToday(), anno = oggi.slice(0, 4), sigla = App.me.sigla || '';
+      // 1. numero DDT: riga nel registro (append atomico) → progressivo = base + righe ACK dell'anno che la precedono
+      Modal.progress('1/6 numero DDT');
+      var heads = await API.batchGet(DB.id, ['DDT_REGISTRO', 'MOVIMENTI', 'LOG'].map(function (n) { return API.q(n) + '!1:1'; }));
+      var tD = new Table('DDT_REGISTRO', heads[0][0] || []), tM = new Table('MOVIMENTI', heads[1][0] || []), tL = new Table('LOG', heads[2][0] || []);
+      var rD = await API.append(DB.id, 'DDT_REGISTRO', [tD.toRow({ serie: 'ACK', anno: anno, data: oggi, id_spedizione: id, destinatario: s.destinatario, n_righe: R.length, stato: 'EMESSO', operatore: me, creato_il: now })]);
+      var reg = (await API.batchGet(DB.id, [API.q('DDT_REGISTRO') + '!A1:' + L.colLetter(tD.header.length - 1) + rD]))[0];
+      var prima = new Table('DDT_REGISTRO', reg[0] || [], reg.slice(1)).rows.filter(function (x) { return x._r < rD && x.serie === 'ACK' && L.s(x.anno) === anno; }).length;
+      var p0 = L.s(DB.param('ddt_ack_anno', '')) === anno ? (parseInt(DB.param('ddt_ack_prossimo', '1'), 10) || 1) : 1;
+      var prog = p0 + prima, nDdt = L.fmtDdt(DB.param('ddt_ack_formato', '{N}'), prog, anno);
+      await API.batchUpdate(DB.id, [{ range: tD.cell('n_ddt', rD), values: [[nDdt]] }, { range: tD.cell('progressivo', rD), values: [[String(prog)]] }]);
+      // 2. movimenti OUT
+      Modal.progress('2/6 movimenti OUT (' + R.length + ')');
+      var ix = Ack.idxU(), rp = Ack.rip(s.destinatario), mnft = rp.mnft_default || rp.codice || s.destinatario;
+      var mObjs = R.map(function (r) {
+        var u = ix.id[r.id_unita] || null, v = DB.vltMap[r.fr];
+        return { data_ora: oggi, direzione: 'OUT', causale: 'ACK', id_unita: r.id_unita, seriale: r.seriale, pn: r.pn, mnft: mnft, tipo: 'FAULTY', fr: r.fr, rma: r.rma, controparte: s.destinatario,
+          awb: s.awb, vettore: s.vettore, ddt: nDdt, id_spedizione: id, riparatore: v ? v.riparatore : (u ? u.riparatore : ''), ubicazione_da: u ? u.ubicazione : '',
+          operatore: me, operatore_sigla: sigla, note: r.flag_vlt, origine: 'APP' };
+      });
+      var rM = await API.append(DB.id, 'MOVIMENTI', mObjs.map(function (o) { return tM.toRow(o); }));
+      var oBase = parseInt(DB.param('mov_out_id_base', ''), 10);
+      if (isNaN(oBase)) {
+        oBase = (parseInt(DB.param('id_out_prossimo', '0'), 10) || 0) - rM;
+        await API.append(DB.id, 'PARAMETRI', [DB.t.PARAMETRI.toRow({ chiave: 'mov_out_id_base', valore: String(oBase), descrizione: 'ID uscita = OUT + (mov_out_id_base + riga in MOVIMENTI). Impostato automaticamente alla prima uscita dall\'app.' })]);
+        DB.t.PARAMETRI.rows.push({ chiave: 'mov_out_id_base', valore: String(oBase) });
+      }
+      mObjs.forEach(function (o, i) { o.id_mov = 'OUT' + (oBase + rM + i); });
+      // 3. giacenza, spedizione, calendario
+      Modal.progress('3/6 giacenza');
+      var tU = DB.t.UNITA, upd = [{ range: tM.cell('id_mov', rM) + ':' + tM.col('id_mov') + (rM + R.length - 1), values: mObjs.map(function (o) { return [o.id_mov]; }) }];
+      R.forEach(function (r) {
+        var u = ix.id[r.id_unita]; if (!u || !u._r) return;
+        var ch = { stato: 'USCITO', id_spedizione: id, data_out: oggi, modificato_il: now, modificato_da: me, rev: (parseInt(u.rev, 10) || 1) + 1 };
+        Object.keys(ch).forEach(function (h) { if (h in tU.idx) { u[h] = String(ch[h]); upd.push({ range: tU.cell(h, u._r), values: [[u[h]]] }); } });
+      });
+      upd = upd.concat(Ack.setS(s, { stato: 'SPEDITA', n_ddt: nDdt, data_ddt: oggi, n_pezzi: R.length, rev: (parseInt(s.rev, 10) || 1) + 1 }));
+      var cal = Ack.calRow(L.normDate(s.data), s.destinatario), tc = DB.t.CALENDARIO_USCITE;
+      if (cal) { cal.stato = 'CHIUSA'; cal.id_spedizione = id; upd.push({ range: tc.cell('stato', cal._r), values: [['CHIUSA']] }, { range: tc.cell('id_spedizione', cal._r), values: [[id]] }); }
+      await API.batchUpdate(DB.id, upd);
+      // 4. PDF su Drive
+      Modal.progress('4/6 PDF DDT');
+      var link = '';
+      try {
+        await Ack.loghi(); var pdf = Ack.pdf(id);
+        link = await Drive.upload('DDT ACK ' + nDdt + ' ' + s.destinatario + ' ' + oggi + '.pdf', pdf.output('blob'));
+        await API.batchUpdate(DB.id, Ack.setS(s, { link_pdf: link }).concat([{ range: tD.cell('link_pdf', rD), values: [[link]] }]));
+      } catch (e) { toast('PDF non salvato su Drive (' + e.message + '): usa "Stampa DDT"', 'ko'); }
+      // 5. export per lo script VLT
+      Modal.progress('5/6 export FR da chiudere');
+      try { await Export.scrivi(); } catch (e) { toast('Export FR da chiudere non aggiornato: ' + e.message, 'ko'); }
+      // 6. log
+      Modal.progress('6/6 log');
+      await API.append(DB.id, 'LOG', [tL.toRow({ data_ora: now, utente: me, azione: 'ACK_USCITA', foglio: 'SPEDIZIONI', id_record: id, dettaglio: JSON.stringify({ riparatore: s.destinatario, ddt: nDdt, awb: s.awb, pezzi: R.length, mov: mObjs[0] ? mObjs[0].id_mov + '…' + mObjs[mObjs.length - 1].id_mov : '' }) })]);
+      DB.t.DDT_REGISTRO = null; Ack.loaded = false; await Ack.load();
+      Modal.open('ACK ' + s.destinatario + ' spedito', 'DDT ' + nDdt + ' · ' + R.length + ' pezzi · AWB ' + s.awb + (link ? '\nPDF salvato in STORICO DDT.' : ''),
+        [{ label: 'Chiudi', cls: 'ghost' }, { label: 'Stampa DDT', fn: function () { Ack.stampa(id); } }]);
+      App.syncInfo(); Ack.render();
+    } catch (e) { Modal.open('DDT non emesso', e.message + '\n\nRiprova con "Genera DDT": se il numero era già stato preso, la riga resta nel registro.'); }
+    finally { Ack.busy = false; }
+  },
+
+  // ─ DDT PDF (layout del modello DDT RIP)
+  pdf: function (id) {
+    var J = window.jspdf && window.jspdf.jsPDF; if (!J) throw new Error('libreria PDF non caricata');
+    var s = Ack.byId(id), rp = Ack.rip(s.destinatario), R = Ack.righe(id).filter(function (r) { return r.esito === 'SPUNTATO'; }), C = Ack.colliDb(id);
+    var d = new J({ unit: 'mm', format: 'a4' }), M = 12, W = 210 - 2 * M, y = 14;
+    function box(x, yy, w, h, lab, txt) {
+      d.setDrawColor(120); d.rect(x, yy, w, h); d.setFont('helvetica', 'bold'); d.setFontSize(7.5); d.text(lab, x + 2, yy + 4);
+      d.setFont('helvetica', 'normal'); d.setFontSize(9.5); d.text(d.splitTextToSize(L.s(txt), w - 4), x + 2, yy + 9);
+    }
+    // loghi: ATS a sinistra, Fastweb/Vodafone a destra (riquadro 55 × 18 mm, proporzioni mantenute)
+    var lg = Ack._lg || {};
+    function logo(im, destra) {
+      if (!im) return; var h = 18, w = h * im.w / im.h; if (w > 55) { w = 55; h = w * im.h / im.w; }
+      try { d.addImage(im.url, 'PNG', destra ? 210 - M - w : M, 8 + (18 - h) / 2, w, h); } catch (e) { }
+    }
+    logo(lg.sx, false); logo(lg.dx, true);
+    if (lg.sx || lg.dx) y = 34;
+    d.setFont('helvetica', 'bold'); d.setFontSize(15); d.text('DOCUMENTO DI TRASPORTO', M, y);
+    d.setFontSize(11); d.text('N. ' + s.n_ddt + '   del ' + L.itDate(s.data_ddt || L.isoToday()), 210 - M, y, { align: 'right' });
+    y += 5;
+    box(M, y, W / 2 - 1, 20, 'CESSIONARIO', DB.param('ddt_cessionario', ''));
+    box(M + W / 2 + 1, y, W / 2 - 1, 20, 'MITTENTE', DB.param('ddt_mittente', ''));
+    y += 22;
+    box(M, y, W / 2 - 1, 20, 'DESTINATARIO', rp.ragione_sociale || s.destinatario);
+    box(M + W / 2 + 1, y, W / 2 - 1, 20, 'DESTINAZIONE', rp.indirizzo || '');
+    y += 22;
+    var peso = C.reduce(function (a, c) { return a + (parseFloat(c.peso_kg) || 0); }, 0);
+    var cw = W / 5;
+    box(M, y, cw - 1, 14, 'DESCRIZIONE MERCE', DB.param('ddt_descrizione_merce', 'MATERIALE PER TLC'));
+    box(M + cw, y, cw - 1, 14, 'VETTORE', s.vettore);
+    box(M + 2 * cw, y, cw - 1, 14, 'AWB', s.awb);
+    box(M + 3 * cw, y, cw - 1, 14, 'COLLI', String(C.length || s.n_colli || ''));
+    box(M + 4 * cw, y, cw, 14, 'PESO KG', String(Math.round((peso || parseFloat(s.peso_tot_kg) || 0) * 100) / 100));
+    y += 18;
+    if (C.length) {
+      d.setFont('helvetica', 'normal'); d.setFontSize(8);
+      d.text(d.splitTextToSize('Colli: ' + C.map(function (c, i) { return (i + 1) + ') ' + c.tipo_collo + ' ' + c.lunghezza_cm + 'x' + c.larghezza_cm + 'x' + c.altezza_cm + ' cm ' + c.peso_kg + ' kg'; }).join('  '), W), M, y);
+      y += 4 + 3.5 * Math.ceil(C.length / 4);
+    }
+    var cols = [{ h: '#', w: 10 }, { h: 'FR', w: 26 }, { h: 'S/N', w: 70 }, { h: 'P/N', w: 50 }, { h: 'NOTE', w: W - 156 }];
+    function head() {
+      d.setFillColor(230); d.rect(M, y, W, 7, 'F'); d.setFont('helvetica', 'bold'); d.setFontSize(9);
+      var x = M; cols.forEach(function (c) { d.text(c.h, x + 1.5, y + 5); x += c.w; }); y += 7; d.setFont('helvetica', 'normal');
+    }
+    head();
+    R.forEach(function (r, i) {
+      if (y > 268) { d.addPage(); y = 14; head(); }
+      var vals = [String(i + 1), r.fr, r.seriale, r.pn, r.flag_vlt], x = M;
+      d.setFontSize(8.5);
+      cols.forEach(function (c, j) { d.text(d.splitTextToSize(L.s(vals[j]), c.w - 2)[0] || '', x + 1.5, y + 4.6); x += c.w; });
+      d.setDrawColor(210); d.line(M, y + 6.5, M + W, y + 6.5); y += 6.5;
+    });
+    y += 4; if (y > 262) { d.addPage(); y = 20; }
+    d.setFont('helvetica', 'bold'); d.setFontSize(9); d.text('Totale pezzi: ' + R.length, M, y);
+    y += 14; d.setFont('helvetica', 'normal'); d.setFontSize(8.5);
+    ['Firma mittente', 'Firma vettore', 'Firma destinatario'].forEach(function (t, i) { var x = M + i * (W / 3); d.line(x + 4, y, x + W / 3 - 4, y); d.text(t, x + 4, y + 4); });
+    var n = d.getNumberOfPages();
+    for (var p = 1; p <= n; p++) { d.setPage(p); d.setFontSize(7.5); d.text('DDT ' + s.n_ddt + ' · pag. ' + p + '/' + n, 210 - M, 290, { align: 'right' }); }
+    return d;
+  },
+  stampa: async function (id) {
+    await Ack.loghi();
+    try { var url = Ack.pdf(id).output('bloburl'); var w = window.open(url, '_blank'); if (!w) toast('Popup bloccato: consenti i popup per stampare', 'ko'); }
+    catch (e) { Modal.open('Stampa DDT', e.message); }
+  },
+  mail: function (id) {
+    var s = Ack.byId(id); if (!s) return '#';
+    var to = DB.param('mail_sd', ''), cc = DB.param('mail_cc', ''), sf = Ack.spareFalse(id), n = Ack.conta(Ack.righe(id));
+    var subj = 'ACK ' + s.destinatario + ' del ' + L.itDate(s.data) + (s.n_ddt ? ' - DDT ' + s.n_ddt : '') + (s.awb ? ' - AWB ' + s.awb : '');
+    var body = 'Ciao Ragazzi,\n\nACK ' + s.destinatario + ': ' + (n.sp || s.n_pezzi) + ' pezzi' + (s.n_colli ? ', ' + s.n_colli + ' colli, ' + s.peso_tot_kg + ' kg' : '') + (s.n_ddt ? ', DDT ' + s.n_ddt : '') + (s.awb ? ', AWB ' + s.awb + ' ' + s.vettore : '') + '.\n' +
+      (n.rim ? '\nFR attesi non spediti (restano in giacenza): ' + n.rim + '\n' : '') +
+      (sf.length ? '\nSPARE FALSE (letti ma non in stato ACK su VLT), da sbloccare:\n' + sf.map(function (a) { var v = DB.vltMap[a.fr]; return 'FR ' + (a.fr || '-') + ' · ' + a.seriale + (v ? ' · ' + v.stato : ''); }).join('\n') + '\n' : '') +
+      (s.link_pdf ? '\nDDT: ' + s.link_pdf + '\n' : '') + '\nGrazie';
+    return 'mailto:' + to + '?subject=' + encodeURIComponent(subj) + (cc ? '&cc=' + encodeURIComponent(cc) : '') + '&body=' + encodeURIComponent(body);
+  },
+  mailInviata: function (id) { var s = Ack.byId(id); if (s && s._r) API.batchUpdate(DB.id, Ack.setS(s, { mail_sd_inviata: L.nowStamp() })).catch(function () { }); },
+
+  // ─ vista
+  render: function () { if (!Ack.loaded) return; Ack.renderCards(); Ack.renderDet(); },
+  renderCards: function () {
+    var d = $('ackData').value || L.isoToday(), giro = Ack.giro(d), ix = Ack.idxU();
+    $('ackInfo').textContent = 'VLT aggiornato ' + (DB.vlt ? new Date(DB.vlt.ts).toLocaleString('it-IT') : '—') + ' · ' + giro.length + ' riparatori il ' + L.itDate(d) + ' · lista ACK = FR in stato "' + Ack.cfg().statoAck + '" (+ AS dove abilitato), BAN esclusi';
+    if (!giro.length) { $('ackCards').innerHTML = '<div class="card empty" style="grid-column:1/-1">Nessun riparatore in calendario per il ' + esc(L.itDate(d)) + '. Aggiungilo da "Riparatore fuori calendario" o compila il calendario in Admin.</div>'; return; }
+    var PILL = { BOZZA: 'p-blue', IN_SPUNTA: 'p-amber', PRONTA: 'p-violet', SPEDITA: 'p-green' };
+    $('ackCards').innerHTML = giro.map(function (cod) {
+      var s = Ack.sped(d, cod), rp = Ack.rip(cod), k = Ack.key(cod), st = s ? s.stato : 'DA AVVIARE', nums, btn = '';
+      if (s && s.stato !== 'BOZZA') {
+        var n = Ack.conta(Ack.righe(s.id_spedizione)), sf = Ack.spareFalse(s.id_spedizione).length;
+        nums = '<span>attesi <b>' + n.tot + '</b></span><span>spuntati <b>' + n.sp + '</b></span>' + (n.da ? '<span>da spuntare <b>' + n.da + '</b></span>' : '') + (n.man ? '<span style="color:var(--red)">mancanti <b>' + n.man + '</b></span>' : '') +
+          (n.rim ? '<span>rimossi <b>' + n.rim + '</b></span>' : '') + (n.as ? '<span>AS <b>' + n.as + '</b></span>' : '') + (n.ban ? '<span>BAN <b>' + n.ban + '</b></span>' : '') + (sf ? '<span style="color:var(--red)">spare false <b>' + sf + '</b></span>' : '');
+      } else {
+        var a = Ack.attesi(cod, ix), nb = a.filter(function (x) { return x.flag === 'BAN'; }).length, na = a.filter(function (x) { return x.flag === 'AS'; }).length;
+        nums = '<span>attesi da VLT <b>' + (a.length - nb) + '</b></span>' + (na ? '<span>AS <b>' + na + '</b></span>' : '') + (nb ? '<span>BAN <b>' + nb + '</b></span>' : '');
+      }
+      if (!s || s.stato === 'BOZZA') btn = '<button class="btn sm" onclick="Ack.avvia(\'' + esc(cod) + '\')">Avvia spunta</button>';
+      else btn = '<button class="btn sm ' + (s.stato === 'IN_SPUNTA' ? '' : 'ghost') + '" onclick="Ack.apri(\'' + s.id_spedizione + '\')">' + (s.stato === 'IN_SPUNTA' ? 'Apri spunta' : 'Dettaglio') + '</button>';
+      if (s && s.stato === 'PRONTA') btn += ' <button class="btn sm green" ' + (L.s(s.awb) ? '' : 'disabled title="Manca l\'AWB"') + ' onclick="Ack.emetti(\'' + s.id_spedizione + '\')">Genera DDT</button>';
+      if (s && s.n_ddt) btn += ' <button class="btn sm" onclick="Ack.stampa(\'' + s.id_spedizione + '\')">Stampa DDT</button>' + (s.link_pdf ? ' <a class="mail" target="_blank" href="' + esc(s.link_pdf) + '">PDF su Drive</a>' : '');
+      if (s && s.stato !== 'BOZZA') btn += ' <a class="mail" href="' + Ack.mail(s.id_spedizione) + '" onclick="Ack.mailInviata(\'' + s.id_spedizione + '\')">✉ mail SD</a>';
+      var lock = s && s.n_ddt ? ' disabled' : '';
+      return '<div class="ack-card' + (s && Ack.cur === s.id_spedizione ? ' sel' : '') + '">' +
+        '<div class="row" style="align-items:center"><span class="t">' + esc(cod) + '</span><div class="spacer"></div><span class="pill ' + (PILL[st] || '') + '">' + esc(st.replace('_', ' ')) + '</span></div>' +
+        '<div class="hint">' + esc(rp.ragione_sociale || '') + (rp.indirizzo ? ' · ' + esc(rp.indirizzo) : '') + (s && s.n_ddt ? ' · <b>DDT ' + esc(s.n_ddt) + '</b>' : '') + '</div>' +
+        '<div class="ack-nums">' + nums + (s && s.n_colli ? '<span>colli <b>' + esc(s.n_colli) + '</b> · <b>' + esc(s.peso_tot_kg) + '</b> kg</span>' : '') + '</div>' +
+        '<div class="row"><div class="fg" style="flex:1;min-width:130px"><span class="fl">AWB (Service Desk)</span><input class="fc mono" id="awb_' + k + '" value="' + esc(s ? s.awb : '') + '"' + lock + ' oninput="var v=L.vettoreDaAwb(this.value,DB.t.VETTORI.rows);if(v)$(\'vet_' + k + '\').value=v"></div>' +
+        '<div class="fg" style="width:110px"><span class="fl">Vettore</span><input class="fc" id="vet_' + k + '" list="dlVettori" value="' + esc(s ? s.vettore : '') + '"' + lock + '></div>' +
+        (lock ? '' : '<button class="btn ghost sm" onclick="Ack.salvaAwb(\'' + esc(cod) + '\')">Salva</button>') + '</div>' +
+        '<div class="row" style="align-items:center">' + btn + '</div></div>';
+    }).join('');
+  },
+  renderDet: function () {
+    var box = $('ackDet'), s = Ack.cur ? Ack.byId(Ack.cur) : null;
+    if (!s || s.stato === 'BOZZA') { box.innerHTML = ''; return; }
+    var R = Ack.righe(s.id_spedizione), n = Ack.conta(R), sf = Ack.spareFalse(s.id_spedizione), edit = s.stato === 'IN_SPUNTA';
+    var ORD = { MANCANTE: 0, DA_SPUNTARE: 1, SPUNTATO: 2, RIMOSSO: 3, ESCLUSO_BAN: 4 };
+    var RR = R.slice().sort(function (a, b) { return (ORD[a.esito] - ORD[b.esito]) || ((parseInt(a.fr, 10) || 0) - (parseInt(b.fr, 10) || 0)); });
+    var html = '<div class="card"><div class="card-h"><div class="card-t">' + (edit ? 'Spunta ' : 'ACK ') + esc(s.destinatario) + ' · ' + esc(L.itDate(s.data)) + '</div><span class="hint">' + esc(s.id_spedizione) + '</span><div class="spacer"></div>' +
+      (edit ? '<span class="hint" id="ackSave"></span><button class="btn ghost sm" onclick="Ack.aggiornaLista()">Aggiorna lista da VLT</button><button class="btn green" onclick="Ack.chiudi()">Chiudi spunta</button>' : '') +
+      (s.stato === 'PRONTA' ? '<button class="btn ghost sm" onclick="Ack.riapri()">Riapri spunta</button>' : '') +
+      '<button class="btn ghost sm" onclick="Ack.cur=null;Ack.render()">Chiudi pannello</button></div>';
+    if (edit) html += '<div class="fg" style="max-width:560px"><span class="fl">Spara FR o seriale</span><input class="fc scan-big" id="ackScan" autocomplete="off" placeholder="FR / seriale" onkeydown="if(event.key===\'Enter\'||event.key===\'Tab\'){event.preventDefault();Ack.scan()}"><div class="fb" id="ackFb"></div></div>';
+    html += '<div class="stats" style="margin-top:10px"><div class="stat"><b>' + n.tot + '</b><span>attesi</span></div><div class="stat"><b style="color:var(--green)">' + n.sp + '</b><span>spuntati</span></div>' +
+      '<div class="stat"><b' + (n.da + n.man ? ' style="color:var(--red)"' : '') + '>' + (n.da + n.man) + '</b><span>mancanti</span></div>' + (n.rim ? '<div class="stat"><b>' + n.rim + '</b><span>rimossi</span></div>' : '') +
+      (n.as ? '<div class="stat"><b>' + n.as + '</b><span>di cui AS</span></div>' : '') + (n.ban ? '<div class="stat"><b style="color:var(--amber)">' + n.ban + '</b><span>BAN esclusi</span></div>' : '') +
+      '<div class="stat"><b' + (sf.length ? ' style="color:var(--red)"' : '') + '>' + sf.length + '</b><span>spare false</span></div></div>';
+    html += '<div class="tbl-wrap" style="max-height:46vh"><table><thead><tr><th>FR</th><th>Seriale</th><th>P/N</th><th>Stato VLT</th><th>Flag</th><th>Esito</th><th>Giacenza</th><th></th></tr></thead><tbody>' +
+      (RR.length ? RR.map(function (r) {
+        var v = DB.vltMap[r.fr], cls = r.esito === 'SPUNTATO' ? 'r-ok' : (r.esito === 'MANCANTE' ? 'r-err' : (r.esito === 'RIMOSSO' || r.esito === 'ESCLUSO_BAN' ? 'r-off' : ''));
+        var es = { DA_SPUNTARE: '<span class="pill">da spuntare</span>', SPUNTATO: '<span class="pill p-green">spuntato</span>', MANCANTE: '<span class="pill p-red">mancante</span>', RIMOSSO: '<span class="pill">rimosso</span>', ESCLUSO_BAN: '<span class="pill p-amber">BAN · non spedire</span>' }[r.esito] || esc(r.esito);
+        var act = !edit ? '' : (r.esito === 'DA_SPUNTARE' || r.esito === 'MANCANTE' ? '<button class="btn ghost sm" onclick="Ack.rimuovi(\'' + r.id_riga + '\')" title="Non spedire: resta in giacenza e riparte con l\'ACK successivo">Rimuovi</button>' : (r.esito === 'RIMOSSO' ? '<button class="btn ghost sm" onclick="Ack.rimuovi(\'' + r.id_riga + '\',1)">Ripristina</button>' : ''));
+        return '<tr class="' + cls + '"><td class="mono">' + esc(r.fr) + '</td><td class="mono">' + esc(r.seriale) + '</td><td class="mono">' + esc(r.pn) + '</td><td style="font-size:11.5px;color:var(--subtle)">' + esc(v ? v.stato : '') + (v && v.note ? ' · ' + esc(v.note) : '') + '</td>' +
+          '<td>' + (r.flag_vlt ? '<span class="pill ' + (r.flag_vlt === 'BAN' ? 'p-amber' : 'p-violet') + '">' + esc(r.flag_vlt) + '</span>' : '') + '</td><td>' + es + '</td><td style="font-size:11.5px">' + (r.id_unita ? esc(r.id_unita) : '<span style="color:var(--amber)">non in giacenza</span>') + '</td><td>' + act + '</td></tr>';
+      }).join('') : '<tr><td colspan="8" class="empty">Nessun FR in stato ACK per questo riparatore</td></tr>') + '</tbody></table></div>';
+    if (sf.length) html += '<div class="card-h" style="margin-top:14px"><div class="card-t" style="font-size:15px;color:var(--red)">SPARE FALSE · letti ma non in lista (non si spediscono, finiscono nell\'export FR da chiudere)</div></div>' +
+      '<div class="tbl-wrap" style="max-height:30vh"><table><thead><tr><th>FR</th><th>Seriale</th><th>Descrizione</th><th>Letto</th><th></th></tr></thead><tbody>' +
+      sf.map(function (a, i) { return '<tr class="r-err"><td class="mono">' + esc(a.fr) + '</td><td class="mono">' + esc(a.seriale) + '</td><td style="font-size:11.5px">' + esc(a.descrizione) + '</td><td class="mono" style="font-size:11px">' + esc(a.data) + '</td><td>' + (edit ? '<button class="ico-btn" title="Letto per errore" onclick="Ack.annullaSf(' + i + ')">✕</button>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+    // colli
+    var col = edit ? (Ack.colli[s.id_spedizione] || []) : Ack.colliDb(s.id_spedizione).map(function (c) { return { tipo: c.tipo_collo, misura: [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X'), peso: c.peso_kg }; });
+    var tot = col.reduce(function (a, c) { return a + (parseFloat(String(c.peso).replace(',', '.')) || 0); }, 0);
+    html += '<div class="card-h" style="margin-top:14px"><div class="card-t" style="font-size:15px">Colli e peso</div><span class="hint">' + col.length + ' colli · ' + Math.round(tot * 100) / 100 + ' kg</span>' + (edit ? '<button class="btn ghost sm" onclick="Ack.collo(0,\'add\')">+ Collo</button>' : '') + '</div>' +
+      '<table style="width:auto"><thead><tr><th>#</th><th>Tipo</th><th>Misura (cm)</th><th>Peso kg</th><th></th></tr></thead><tbody>' +
+      col.map(function (c, i) {
+        if (!edit) return '<tr><td>' + (i + 1) + '</td><td>' + esc(c.tipo) + '</td><td class="mono">' + esc(c.misura) + '</td><td class="mono">' + esc(c.peso) + '</td><td></td></tr>';
+        return '<tr><td>' + (i + 1) + '</td><td><select class="fc" style="width:90px" onchange="Ack.collo(' + i + ',\'tipo\',this.value)"><option' + (c.tipo === 'PLT' ? ' selected' : '') + '>PLT</option><option' + (c.tipo === 'COLLO' ? ' selected' : '') + '>COLLO</option></select></td>' +
+          '<td><input class="fc mono' + (c.misura && !L.misura(c.misura) ? ' err' : '') + '" style="width:150px" list="dlMisure" value="' + esc(c.misura) + '" placeholder="120X80X100" onchange="Ack.collo(' + i + ',\'misura\',this.value)"></td>' +
+          '<td><input class="fc mono" style="width:90px" inputmode="decimal" value="' + esc(c.peso) + '" onchange="Ack.collo(' + i + ',\'peso\',this.value)"></td><td><button class="ico-btn" onclick="Ack.collo(' + i + ',\'del\')">✕</button></td></tr>';
+      }).join('') + '</tbody></table>';
+    if (!edit) html += '<div class="hint" style="margin-top:10px">' + (s.stato === 'PRONTA' ? (L.s(s.awb) ? 'AWB presente: premi "Genera DDT" se il DDT non è partito da solo.' : 'Spunta chiusa: il DDT si genera quando il Service Desk inserisce l\'AWB.') : 'Spedita · DDT ' + esc(s.n_ddt) + ' del ' + esc(L.itDate(s.data_ddt))) + '</div>';
+    html += '</div>';
+    var foc = document.activeElement && document.activeElement.id === 'ackScan';
+    box.innerHTML = html; Ack.qInfo();
+    if (edit && Ack._fb && $('ackFb')) { $('ackFb').textContent = Ack._fb[0]; $('ackFb').className = 'fb ' + Ack._fb[1]; }
+    if (foc && $('ackScan')) $('ackScan').focus();
   }
 };
 
