@@ -136,6 +136,8 @@ td.mono,td.nw{white-space:nowrap}
 .scan-big{font-size:20px;padding:12px 14px;font-family:var(--ff-mono)}
 .fb{font-size:15px;font-weight:600;min-height:22px;margin-top:6px}
 .fb.ok{color:var(--green)} .fb.err{color:var(--red)} .fb.warn{color:var(--amber)}
+tr.r-edit{cursor:pointer}
+tr.r-edit:hover td{background:rgba(59,130,246,.08)}
 tr.r-ok td{background:rgba(16,185,129,.07)}
 tr.r-off td{opacity:.5}
 .progress{font-family:var(--ff-mono);font-size:12px;color:var(--subtle);margin-top:10px;white-space:pre-line}
@@ -486,7 +488,7 @@ var API = {
     var js = await API.call(u); return (js.valueRanges || []).map(function (v) { return v.values || []; });
   },
   append: async function (ss, sheet, rows) {
-    var u = API.S + ss + '/values/' + encodeURIComponent(API.q(sheet) + '!A1') + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS';
+    var u = API.S + ss + '/values/' + encodeURIComponent(API.q(sheet) + '!A1') + ':append?valueInputOption=RAW&insertDataOption=OVERWRITE';
     var js = await API.call(u, { method: 'POST', body: JSON.stringify({ values: rows }) });
     return L.rowFromRange(js.updates && js.updates.updatedRange);
   },
@@ -656,7 +658,8 @@ var App = {
     try {
       await DB.loadTables(DB.SMALL.concat(['UNITA'])); await DB.loadVlt(true);
       try { await DB.loadHuawei(true); } catch (e) { toast('File Huawei non leggibile: ' + e.message, 'ko'); }
-      if (Ack.loaded) { await Ack.flush(); await Ack.load(); }
+      Ingresso._heads = null;
+    if (Ack.loaded) { await Ack.flush(); await Ack.load(); }
       App.fillLists(); App.syncInfo(); Ingresso.ricalcola(); Ingresso.renderOggi(); if (App.tab === 'giacenze') Giacenze.render(); if (App.tab === 'admin') Admin.render(); if (App.tab === 'ack') Ack.render();
       Modal.close(); toast('Dati aggiornati', 'ok');
     } catch (e) { Modal.close(); toast('Errore aggiornamento: ' + e.message, 'ko'); }
@@ -917,37 +920,51 @@ var Ingresso = {
       Export.scrivi().catch(function (e) { toast('Export FR da chiudere non aggiornato: ' + e.message, 'ko'); });
       Ingresso.rows = []; Ingresso.save(); Ingresso.setTestata({ data: L.isoToday() }); Ingresso.ricalcola(); Ingresso.renderOggi(); App.syncInfo();
     } catch (e) {
-      Modal.open('Errore durante il caricamento', e.message + '\n\nI pezzi letti sono ancora qui: controlla in "Ingressi di oggi" cosa è stato scritto prima di riprovare.');
+      var msg = e.message;
+      try { await DB.loadTables(['UNITA']); Ingresso.ricalcola(); Ingresso.renderOggi(); msg += '\n\nHo ricaricato la giacenza: le righe già salvate ora sono rosse ("già in giacenza"), eliminale dalla lista e ricarica solo le altre.'; }
+      catch (e2) { msg += '\n\nConnessione assente: i pezzi letti restano salvati su questo PC. Quando torna la rete premi Aggiorna e controlla "Ingressi di oggi" prima di ricaricare.'; }
+      Modal.open('Errore durante il caricamento', msg);
     }
   },
+  _heads: null,
+  heads: async function () {
+    if (Ingresso._heads) return Ingresso._heads;
+    var N = ['RICEZIONI', 'MOVIMENTI', 'ANOMALIE', 'LOG'];
+    var h = await API.batchGet(DB.id, N.map(function (n) { return API.q(n) + '!1:1'; }));
+    var o = {}; N.forEach(function (n, i) { o[n] = new Table(n, h[i][0] || []); });
+    Ingresso._heads = o; return o;
+  },
+  // scrittura in 2-3 giri: (1) ricezione, giacenza e movimenti in parallelo, (2) ID e riferimenti incrociati + log + anomalie in parallelo
   scrivi: async function (T, C) {
-    var now = L.nowStamp(), me = Auth.email, sigla = App.me.sigla || '';
-    var tU = DB.t.UNITA;
-    // MOVIMENTI e altri fogli: leggo solo le intestazioni
-    var heads = await API.batchGet(DB.id, ['RICEZIONI', 'MOVIMENTI', 'ANOMALIE', 'LOG'].map(function (n) { return API.q(n) + '!1:1'; }));
-    var tR = new Table('RICEZIONI', heads[0][0] || []), tM = new Table('MOVIMENTI', heads[1][0] || []), tA = new Table('ANOMALIE', heads[2][0] || []), tL = new Table('LOG', heads[3][0] || []);
-    var upd = [];
-    Modal.progress('1/5 ricezione');
-    var rR = await API.append(DB.id, 'RICEZIONI', [tR.toRow({ data_arrivo: T.data, mittente: T.mittente, awb: T.awb, vettore: T.vettore, ddt_mittente: T.ddt, po_mrn: T.po, tipo: T.tipo, flag_balancing: T.bal ? 'SI' : 'NO', n_pezzi: C.length, stato: 'CHIUSA', note: '', creato_il: now, creato_da: me })]);
-    var idR = 'R' + L.pad(rR - 1, 6);
-    upd.push({ range: tR.cell('id_ricezione', rR), values: [[idR]] });
-    Modal.progress('2/5 giacenza');
+    var now = L.nowStamp(), me = Auth.email, sigla = App.me.sigla || '', n = C.length;
+    var tU = DB.t.UNITA, H = await Ingresso.heads(), tR = H.RICEZIONI, tM = H.MOVIMENTI, tA = H.ANOMALIE, tL = H.LOG;
     var mag = function (t) { return t === 'NEW' || t === 'REUSE' ? 'HUB_MAGAZZINO' : (t === 'SCRAP' ? 'SCRAP' : 'HUB_GUASTI'); };
+    var rObj = { data_arrivo: T.data, mittente: T.mittente, awb: T.awb, vettore: T.vettore, ddt_mittente: T.ddt, po_mrn: T.po, tipo: T.tipo, flag_balancing: T.bal ? 'SI' : 'NO', n_pezzi: n, stato: 'CHIUSA', note: '', creato_il: now, creato_da: me };
     var uObjs = C.map(function (c) {
       return { seriale: c.ser, barcode_letto: c.bc, pn: c.pn, mnft: c.mnft, tipo: c.tipo, fr: c.fr, rma: c.rma, riparatore: c.rip, magazzino: mag(c.tipo),
         ubicazione: (c.tipo === 'NEW' || c.tipo === 'REUSE') ? c.ubicazione : '', stato: 'IN_GIACENZA', destinazione_prevista: c.destinazione,
-        id_ricezione: idR, data_in: T.data, note: c.nota, rev: 1, creato_il: now, creato_da: me };
+        data_in: T.data, note: c.nota, rev: 1, creato_il: now, creato_da: me };
     });
-    var rU = await API.append(DB.id, 'UNITA', uObjs.map(function (o) { return tU.toRow(o); }));
-    var uBase = parseInt(DB.param('unita_id_base', '0'), 10) || 0;
-    uObjs.forEach(function (o, i) { o.id_unita = 'U' + L.pad(uBase + rU + i - 1, 7); o._r = rU + i; });
-    Modal.progress('3/5 movimenti');
     var mObjs = C.map(function (c, i) {
-      return { data_ora: T.data, data_registrazione_vlt: L.isoToday(), posizione_note: uObjs[i].ubicazione, direzione: 'IN', causale: 'INGRESSO', id_unita: uObjs[i].id_unita, seriale: c.ser, pn: c.pn, mnft: c.mnft, tipo: c.tipo, fr: c.fr, rma: c.rma,
-        po_mrn: T.po, controparte: T.mittente, awb: T.awb, vettore: T.vettore, ddt: T.ddt, id_ricezione: idR, riparatore: c.rip, ubicazione_a: uObjs[i].ubicazione,
+      return { data_ora: T.data, data_registrazione_vlt: L.isoToday(), posizione_note: uObjs[i].ubicazione, direzione: 'IN', causale: 'INGRESSO', seriale: c.ser, pn: c.pn, mnft: c.mnft, tipo: c.tipo, fr: c.fr, rma: c.rma,
+        po_mrn: T.po, controparte: T.mittente, awb: T.awb, vettore: T.vettore, ddt: T.ddt, riparatore: c.rip, ubicazione_a: uObjs[i].ubicazione,
         operatore: me, operatore_sigla: sigla, note: c.nota, origine: 'APP' };
     });
-    var rM = await API.append(DB.id, 'MOVIMENTI', mObjs.map(function (o) { return tM.toRow(o); }));
+    Modal.progress('1/2 ricezione, giacenza e movimenti');
+    var res = await Promise.allSettled([
+      API.append(DB.id, 'RICEZIONI', [tR.toRow(rObj)]),
+      API.append(DB.id, 'UNITA', uObjs.map(function (o) { return tU.toRow(o); })),
+      API.append(DB.id, 'MOVIMENTI', mObjs.map(function (o) { return tM.toRow(o); }))
+    ]);
+    var nomi = ['RICEZIONI', 'UNITA (giacenza)', 'MOVIMENTI'], ko = [], ok = [];
+    res.forEach(function (x, i) { (x.status === 'fulfilled' ? ok : ko).push(nomi[i] + (x.status === 'rejected' ? ' (' + x.reason.message + ')' : '')); });
+    if (ko.length) {
+      await API.append(DB.id, 'LOG', [tL.toRow({ data_ora: now, utente: me, azione: 'ERRORE_INGRESSO', foglio: 'RICEZIONI', id_record: '', dettaglio: JSON.stringify({ scritti: ok, falliti: ko, pezzi: n, seriali: C.map(function (c) { return c.ser; }) }) })]).catch(function () { });
+      throw new Error('Salvataggio incompleto.\nScritti: ' + (ok.join(', ') || 'nessuno') + '\nNON scritti: ' + ko.join(', '));
+    }
+    var rR = res[0].value, rU = res[1].value, rM = res[2].value;
+    var idR = 'R' + L.pad(rR - 1, 6), uBase = parseInt(DB.param('unita_id_base', '0'), 10) || 0;
+    uObjs.forEach(function (o, i) { o.id_unita = 'U' + L.pad(uBase + rU + i - 1, 7); o._r = rU + i; o.id_ricezione = idR; });
     var mBase = parseInt(DB.param('mov_id_base', ''), 10);
     if (isNaN(mBase)) {   // prima scrittura dall'app: allineo la numerazione all'ultimo ID migrato
       mBase = (parseInt(DB.param('id_in_prossimo', '0'), 10) || 0) - rM;
@@ -955,27 +972,73 @@ var Ingresso = {
       await API.append(DB.id, 'PARAMETRI', [tP.toRow({ chiave: 'mov_id_base', valore: String(mBase), descrizione: 'ID movimento = prefisso IN/OUT + (mov_id_base + riga in MOVIMENTI). Impostato automaticamente alla prima scrittura; da aggiornare solo all\'archiviazione annuale.' })]);
       tP.rows.push({ chiave: 'mov_id_base', valore: String(mBase) });
     }
-    mObjs.forEach(function (o, i) { o.id_mov = 'IN' + (mBase + rM + i); });
-    Modal.progress('4/5 numerazione');
-    // colonne ID contigue: una scrittura per blocco
-    var n = C.length;
-    upd.push({ range: tU.cell('id_unita', rU) + ':' + tU.col('id_unita') + (rU + n - 1), values: uObjs.map(function (o) { return [o.id_unita]; }) });
-    upd.push({ range: tU.cell('id_mov_in', rU) + ':' + tU.col('id_mov_in') + (rU + n - 1), values: mObjs.map(function (o) { return [o.id_mov]; }) });
-    upd.push({ range: tM.cell('id_mov', rM) + ':' + tM.col('id_mov') + (rM + n - 1), values: mObjs.map(function (o) { return [o.id_mov]; }) });
-    await API.batchUpdate(DB.id, upd);
-    Modal.progress('5/5 anomalie e log');
+    mObjs.forEach(function (o, i) { o.id_mov = 'IN' + (mBase + rM + i); o.id_unita = uObjs[i].id_unita; o.id_ricezione = idR; uObjs[i].id_mov_in = o.id_mov; });
+    Modal.progress('2/2 numerazione, anomalie e log');
+    function colRange(t, h, r) { return t.cell(h, r) + ':' + t.col(h) + (r + n - 1); }
+    var upd = [{ range: tR.cell('id_ricezione', rR), values: [[idR]] }];
+    ['id_unita', 'id_ricezione', 'id_mov_in'].forEach(function (h) { upd.push({ range: colRange(tU, h, rU), values: uObjs.map(function (o) { return [o[h]]; }) }); });
+    ['id_mov', 'id_unita', 'id_ricezione'].forEach(function (h) { upd.push({ range: colRange(tM, h, rM), values: mObjs.map(function (o) { return [o[h]]; }) }); });
     var anom = [];
-    C.forEach(function (c, i) {
-      if (!c.anomalia) return;
-      anom.push(tA.toRow({ data: now, tipo: /SERIALE/.test(c.anomalia) ? 'SERIALE_ERRATO' : 'TPN_ERRATO', id_unita: uObjs[i].id_unita, seriale: c.ser, fr: c.fr, descrizione: c.anomalia, stato: 'APERTA', aperta_da: me, rev: 1 }));
-    });
-    if (anom.length) {
-      var rA = await API.append(DB.id, 'ANOMALIE', anom);
-      await API.batchUpdate(DB.id, [{ range: tA.cell('id_anomalia', rA) + ':' + tA.col('id_anomalia') + (rA + anom.length - 1), values: anom.map(function (x, i) { return ['A' + L.pad(rA + i - 1, 6)]; }) }]);
-    }
-    await API.append(DB.id, 'LOG', [tL.toRow({ data_ora: now, utente: me, azione: 'CREA', foglio: 'RICEZIONI', id_record: idR, dettaglio: JSON.stringify({ tipo: T.tipo, pezzi: n, mittente: T.mittente, unita: uObjs[0].id_unita + '…' + uObjs[n - 1].id_unita }) })]);
+    C.forEach(function (c, i) { if (c.anomalia) anom.push(tA.toRow({ data: now, tipo: /SERIALE/.test(c.anomalia) ? 'SERIALE_ERRATO' : 'TPN_ERRATO', id_unita: uObjs[i].id_unita, seriale: c.ser, fr: c.fr, descrizione: c.anomalia, stato: 'APERTA', aperta_da: me, rev: 1 })); });
+    await Promise.all([
+      API.batchUpdate(DB.id, upd),
+      API.append(DB.id, 'LOG', [tL.toRow({ data_ora: now, utente: me, azione: 'CREA', foglio: 'RICEZIONI', id_record: idR, dettaglio: JSON.stringify({ tipo: T.tipo, pezzi: n, mittente: T.mittente, unita: uObjs[0].id_unita + '…' + uObjs[n - 1].id_unita }) })]),
+      anom.length ? API.append(DB.id, 'ANOMALIE', anom).then(function (rA) { return API.batchUpdate(DB.id, [{ range: tA.cell('id_anomalia', rA) + ':' + tA.col('id_anomalia') + (rA + anom.length - 1), values: anom.map(function (x, i) { return ['A' + L.pad(rA + i - 1, 6)]; }) }]); }) : null
+    ]);
     // aggiorno la giacenza in memoria
     uObjs.forEach(function (o) { var x = {}; tU.header.forEach(function (h) { x[h] = o[h] === undefined ? '' : String(o[h]); }); x._r = o._r; tU.rows.push(x); });
+  },
+  // ─ modifica di una riga di "Ingressi di oggi" (solo le proprie, solo se ancora in giacenza)
+  EDIT_F: [['tipo', 'Tipo'], ['fr', 'FR'], ['rma', 'RMA'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['mnft', 'MNFT'], ['riparatore', 'Riparatore'], ['ubicazione', 'Ubicazione'], ['destinazione_prevista', 'Destinazione'], ['note', 'Nota']],
+  MOV_DI: { tipo: 'tipo', fr: 'fr', rma: 'rma', seriale: 'seriale', pn: 'pn', mnft: 'mnft', riparatore: 'riparatore', ubicazione: 'ubicazione_a', note: 'note' },
+  puoModificare: function (u) { return u && u.creato_da === Auth.email && u.stato === 'IN_GIACENZA' && L.s(u.creato_il).slice(0, 10) === L.isoToday(); },
+  apriModifica: function (id) {
+    var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; });
+    if (!Ingresso.puoModificare(u)) { toast(u && u.creato_da !== Auth.email ? 'Puoi modificare solo le tue righe' : 'Riga non modificabile (non più in giacenza)', 'ko'); return; }
+    var html = '<div style="font-size:12px;color:var(--subtle);margin-bottom:10px">' + esc(u.id_unita) + ' · ' + esc(u.id_mov_in) + ' · entrato ' + esc(u.data_in) + '</div><div class="grid">' +
+      Ingresso.EDIT_F.map(function (f) {
+        if (f[0] === 'tipo') return '<div class="fg"><span class="fl">' + f[1] + '</span><select class="fc" id="ed_tipo">' + TIPI.map(function (t) { return '<option' + (t === u.tipo ? ' selected' : '') + '>' + t + '</option>'; }).join('') + '</select></div>';
+        return '<div class="fg' + (f[0] === 'note' || f[0] === 'seriale' ? ' wide' : '') + '"><span class="fl">' + f[1] + '</span><input class="fc' + (f[0] === 'note' ? '' : ' mono') + '" id="ed_' + f[0] + '" value="' + esc(u[f[0]]) + '"' + (f[0] === 'ubicazione' ? ' list="dlUbicazioni"' : '') + '></div>';
+      }).join('') + '</div><div class="hint" id="edErr" style="margin-top:8px"></div>';
+    Modal.html('Modifica ingresso · ' + u.seriale, html, [{ label: 'Annulla', cls: 'ghost' }, { label: 'Salva', cls: 'green', keep: true, fn: function () { Ingresso.salvaModifica(id); } }], true);
+  },
+  salvaModifica: async function (id) {
+    var tU = DB.t.UNITA, u = tU.rows.find(function (x) { return x.id_unita === id; });
+    var ch = {};
+    Ingresso.EDIT_F.forEach(function (f) { var v = L.s($('ed_' + f[0]).value); if (f[0] !== 'note' && f[0] !== 'riparatore' && f[0] !== 'ubicazione' && f[0] !== 'destinazione_prevista') v = v.toUpperCase(); if (v !== L.s(u[f[0]])) ch[f[0]] = v; });
+    if (ch.fr) ch.fr = L.frKey(ch.fr);
+    if (!Object.keys(ch).length) { Modal.close(); return; }
+    if ('seriale' in ch) {
+      if (!ch.seriale) { $('edErr').textContent = 'Il seriale non può essere vuoto'; $('edErr').className = 'hint err'; return; }
+      var dup = tU.rows.find(function (x) { return x !== u && (x.stato === 'IN_GIACENZA' || x.stato === 'IN_LAVORAZIONE') && L.up(x.seriale) === ch.seriale; });
+      if (dup) { $('edErr').textContent = 'Seriale già in giacenza (' + dup.id_unita + ')'; $('edErr').className = 'hint err'; return; }
+    }
+    if (ch.fr && !/^\d+$/.test(ch.fr)) { $('edErr').textContent = 'FR deve essere un numero'; $('edErr').className = 'hint err'; return; }
+    Modal.progress('Salvataggio…');
+    try {
+      // controllo concorrenza: rileggo la riga e verifico che nessuno l'abbia cambiata
+      var last = L.colLetter(tU.header.length - 1);
+      var cur = (await API.batchGet(DB.id, [API.q('UNITA') + '!A' + u._r + ':' + last + u._r]))[0][0] || [];
+      if (L.s(cur[tU.idx.id_unita]) !== u.id_unita) throw new Error('la riga non è più al suo posto: premi Aggiorna e riprova');
+      if (L.s(cur[tU.idx.rev]) !== L.s(u.rev)) throw new Error('la riga è stata modificata da un altro utente: premi Aggiorna e riprova');
+      var now = L.nowStamp(), prima = {}, upd = [];
+      if ('tipo' in ch) ch.magazzino = ch.tipo === 'NEW' || ch.tipo === 'REUSE' ? 'HUB_MAGAZZINO' : (ch.tipo === 'SCRAP' ? 'SCRAP' : 'HUB_GUASTI');
+      var all = Object.assign({}, ch, { modificato_il: now, modificato_da: Auth.email, rev: (parseInt(u.rev, 10) || 1) + 1 });
+      Object.keys(all).forEach(function (h) { if (h in tU.idx) { prima[h] = u[h]; upd.push({ range: tU.cell(h, u._r), values: [[String(all[h])]] }); } });
+      // stessa modifica sul movimento di ingresso (riga ricavata dall'ID: IN + mov_id_base + riga)
+      var H = await Ingresso.heads(), tM = H.MOVIMENTI, mBase = parseInt(DB.param('mov_id_base', ''), 10), num = parseInt(L.s(u.id_mov_in).replace(/^IN/, ''), 10), rM = num - mBase;
+      if (!isNaN(rM) && rM > 1) {
+        var mid = (await API.batchGet(DB.id, [tM.cell('id_mov', rM)]))[0];
+        if (mid && mid[0] && L.s(mid[0][0]) === u.id_mov_in) {
+          Object.keys(ch).forEach(function (h) { var mh = Ingresso.MOV_DI[h]; if (mh && (mh in tM.idx)) upd.push({ range: tM.cell(mh, rM), values: [[ch[h]]] }); });
+          if ('ubicazione' in ch && ('posizione_note' in tM.idx)) upd.push({ range: tM.cell('posizione_note', rM), values: [[ch.ubicazione]] });
+        } else rM = null;
+      } else rM = null;
+      await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', [H.LOG.toRow({ data_ora: now, utente: Auth.email, azione: 'MODIFICA', foglio: 'UNITA', id_record: u.id_unita, dettaglio: JSON.stringify({ prima: prima, dopo: ch, movimento: rM ? u.id_mov_in : 'non trovato' }) })])]);
+      Object.keys(all).forEach(function (h) { u[h] = String(all[h]); });
+      Modal.close(); toast('Riga ' + u.id_unita + ' aggiornata' + (rM ? '' : ' (movimento non aggiornato: controlla lo storico)'), rM ? 'ok' : 'ko');
+      Ingresso.renderOggi(); Ingresso.ricalcola();
+    } catch (e) { Modal.progress(''); $('edErr').textContent = 'Non salvato: ' + e.message; $('edErr').className = 'hint err'; }
   },
   renderOggi: function () {
     var tutti = $('oggiTutti').checked, oggi = L.isoToday();
@@ -984,7 +1047,8 @@ var Ingresso = {
     $('oggiStats').innerHTML = '<div class="stat"><b>' + list.length + '</b><span>totale</span></div>' + Object.keys(by).map(function (k) { return '<div class="stat"><b>' + by[k] + '</b><span>' + esc(k) + '</span></div>'; }).join('');
     $('oggiRows').innerHTML = list.length ? list.slice(0, 1000).map(function (u) {
       var op = DB.t.OPERATORI.rows.find(function (o) { return L.s(o.email).toLowerCase() === u.creato_da; });
-      return '<tr><td class="mono">' + esc(u.id_unita) + '</td><td>' + Pill.tipo(u.tipo) + '</td><td class="mono">' + esc(u.fr) + '</td><td class="mono">' + esc(u.rma) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.riparatore) + '</td><td>' + esc(u.note) + '</td><td>' + esc(op ? (op.sigla || op.nome) : u.creato_da) + '</td></tr>';
+      var mia = Ingresso.puoModificare(u);
+      return '<tr' + (mia ? ' class="r-edit" title="Clicca per modificare" onclick="Ingresso.apriModifica(\'' + u.id_unita + '\')"' : ' title="Riga di un altro operatore (o già uscita): sola lettura"') + '><td class="mono">' + esc(u.id_unita) + '</td><td>' + Pill.tipo(u.tipo) + '</td><td class="mono">' + esc(u.fr) + '</td><td class="mono">' + esc(u.rma) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.riparatore) + '</td><td>' + esc(u.note) + '</td><td>' + esc(op ? (op.sigla || op.nome) : u.creato_da) + '</td></tr>';
     }).join('') : '<tr><td colspan="9" class="empty">Nessun ingresso oggi</td></tr>';
   }
 };
