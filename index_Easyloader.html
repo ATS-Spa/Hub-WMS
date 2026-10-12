@@ -58,6 +58,7 @@ button{font-family:var(--ff-sans)}
 .card-h{display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .card-t{font-family:var(--ff-cond);font-size:18px;font-weight:700;letter-spacing:.5px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px 12px}
+.grid .wide{grid-column:span 2}
 .fg{display:flex;flex-direction:column;gap:4px;min-width:0}
 .fl{font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)}
 .fc{background:var(--card);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:13px;outline:none;width:100%;font-family:var(--ff-sans)}
@@ -75,7 +76,8 @@ button{font-family:var(--ff-sans)}
 .btn.green{background:var(--green)} .btn.red{background:var(--red)} .btn.sm{padding:5px 10px;font-size:12px}
 .row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
 .spacer{flex:1}
-.scan-row{display:grid;grid-template-columns:1fr 200px 220px auto;gap:10px;align-items:end}
+.scan-row{display:grid;grid-template-columns:minmax(150px,220px) minmax(320px,1fr) minmax(200px,280px) auto;gap:10px;align-items:start}
+.scan-row .btn{margin-top:19px}
 @media (max-width:900px){.scan-row{grid-template-columns:1fr 1fr}}
 .stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
 .stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 14px;min-width:110px}
@@ -166,8 +168,8 @@ a.mail{color:var(--blue);font-size:11.5px;text-decoration:none}
               <option value="">— seleziona —</option><option>FAULTY</option><option>GOOD</option><option>REUSE</option><option>NEW</option><option>BALANCING</option><option>RESO</option><option>SCRAP</option>
             </select></div>
           <div class="fg"><span class="fl">Data ingresso *</span><input class="fc" type="date" id="inData" onchange="Ingresso.onTestata()"></div>
-          <div class="fg"><span class="fl">Mittente *</span><input class="fc" id="inMittente" list="dlControparti" onchange="Ingresso.onTestata()" placeholder="proposto dal 1° FR"></div>
-          <div class="fg"><span class="fl">AWB</span><input class="fc mono" id="inAwb" onchange="Ingresso.onAwb()" placeholder="proposto dal 1° FR"></div>
+          <div class="fg wide"><span class="fl">Mittente *</span><input class="fc" id="inMittente" list="dlControparti" onchange="Ingresso.onTestata()" placeholder="proposto dal 1° FR"></div>
+          <div class="fg wide"><span class="fl">AWB</span><input class="fc mono" id="inAwb" onchange="Ingresso.onAwb()" placeholder="proposto dal 1° FR"></div>
           <div class="fg"><span class="fl">Vettore *</span><input class="fc" id="inVettore" list="dlVettori" onchange="Ingresso.onTestata()"><span class="hint" id="hVettore"></span></div>
           <div class="fg"><span class="fl">DDT mittente</span><input class="fc mono" id="inDdt" onchange="Ingresso.onTestata()"></div>
           <div class="fg"><span class="fl">PO / MRN</span><input class="fc mono" id="inPo" onchange="Ingresso.onTestata()"></div>
@@ -177,10 +179,10 @@ a.mail{color:var(--blue);font-size:11.5px;text-decoration:none}
       </div>
 
       <div class="card">
-        <div class="card-h"><div class="card-t">Lettura pezzi</div><span class="hint" id="hScan">Spara il seriale e premi Invio: l'FR si cerca da solo. In alternativa scrivi solo l'FR: il seriale arriva da VLT.</span></div>
+        <div class="card-h"><div class="card-t">Lettura pezzi</div><span class="hint" id="hScan">Spara il seriale: l'FR compare da solo. Invio o Tab sul seriale aggiunge la riga. Se scrivi l'FR, il seriale compare da VLT.</span></div>
         <div class="scan-row">
-          <div class="fg"><span class="fl">Barcode seriale</span><input class="fc mono" id="scBc" autocomplete="off"></div>
-          <div class="fg"><span class="fl" id="lblFr">FR (facoltativo)</span><input class="fc mono" id="scFr" autocomplete="off" placeholder="si cerca dal seriale"></div>
+          <div class="fg"><span class="fl" id="lblFr">FR</span><input class="fc mono" id="scFr" autocomplete="off" placeholder="si compila dal seriale"><span class="hint" id="hFr"></span></div>
+          <div class="fg"><span class="fl">Barcode seriale</span><input class="fc mono" id="scBc" autocomplete="off" placeholder="spara qui il seriale"><span class="hint" id="hBc"></span></div>
           <div class="fg" id="wrapUbi"><span class="fl">Ubicazione (NEW/REUSE)</span><input class="fc mono" id="scUbi" list="dlUbicazioni" autocomplete="off"></div>
           <button class="btn" onclick="Ingresso.aggiungi()">Aggiungi</button>
         </div>
@@ -611,8 +613,14 @@ var Ingresso = {
     var fr = $('scFr'), bc = $('scBc'), ub = $('scUbi');
     function nextOn(e, fn) { if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) { e.preventDefault(); fn(); } }
     function avanti() { if (!L.s(bc.value) && !L.s(fr.value)) return; if (Ingresso.needUbi() && !L.s(ub.value)) ub.focus(); else Ingresso.aggiungi(); }
-    bc.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); avanti(); } });
-    fr.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); avanti(); } });
+    var tA, tB;
+    bc.addEventListener('input', function () { clearTimeout(tA); tA = setTimeout(function () { Ingresso.anteprima('bc'); }, 120); });
+    fr.addEventListener('input', function () { clearTimeout(tB); tB = setTimeout(function () { Ingresso.anteprima('fr'); }, 120); });
+    bc.addEventListener('keydown', function (e) { if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) { if (!L.s(bc.value) && !L.s(fr.value)) return; e.preventDefault(); clearTimeout(tA); Ingresso.anteprima('bc'); avanti(); } });
+    fr.addEventListener('keydown', function (e) {
+      if (e.key === 'Enter') { e.preventDefault(); clearTimeout(tB); Ingresso.anteprima('fr'); if (L.s(bc.value)) avanti(); else bc.focus(); }
+      else if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); clearTimeout(tB); Ingresso.anteprima('fr'); bc.focus(); bc.select(); }
+    });
     ub.addEventListener('keydown', function (e) { nextOn(e, function () { Ingresso.aggiungi(); }); });
     Ingresso.ricalcola(); Ingresso.renderOggi();
   },
@@ -630,32 +638,64 @@ var Ingresso = {
   },
   save: function () { lsS('draft_' + Auth.email, Ingresso.rows.length ? { testata: Ingresso.T(), rows: Ingresso.rows } : null); },
   needUbi: function () { var t = $('inTipo').value; return t === 'NEW' || t === 'REUSE'; },
-  onTestata: function () { $('wrapUbi').style.visibility = Ingresso.needUbi() ? 'visible' : 'hidden'; $('lblFr').textContent = $('inBal').checked ? 'FR / RMA balancing' : 'FR (facoltativo)'; Ingresso.ricalcola(); },
+  onTestata: function () { $('wrapUbi').style.visibility = Ingresso.needUbi() ? 'visible' : 'hidden'; $('lblFr').textContent = $('inBal').checked ? 'FR / RMA balancing' : 'FR'; Ingresso.ricalcola(); },
   onAwb: function () { var v = L.vettoreDaAwb($('inAwb').value, DB.t.VETTORI.rows); if (v) $('inVettore').value = v; Ingresso.ricalcola(); },
   aggiungi: function () {
-    var fr = L.s($('scFr').value).replace(/^FR/i, '').replace(/^0+(?=\d)/, ''), bc = L.s($('scBc').value), ub = L.s($('scUbi').value);
+    var frAuto = $('scFr').dataset.auto === '1', bcAuto = $('scBc').dataset.auto === '1';
+    var fr = frAuto ? '' : L.s($('scFr').value).replace(/^FR/i, '').replace(/^0+(?=\d)/, ''), bc = bcAuto ? '' : L.s($('scBc').value), ub = L.s($('scUbi').value);
+    if (frAuto && bcAuto) { fr = L.s($('scFr').value); }
     if (!bc && !fr) { toast('Spara il seriale (oppure scrivi l\'FR)', 'ko'); $('scBc').focus(); return; }
     if (fr && !/^\d+$/.test(fr)) { toast('FR/RMA deve essere un numero', 'ko'); $('scFr').focus(); return; }
     Ingresso.rows.push({ fr: fr, bc: bc, ubi: ub, ser: '', pn: '', man: {} });
-    $('scFr').value = ''; $('scBc').value = ''; if (!Ingresso.needUbi()) $('scUbi').value = '';
-    Ingresso.ricalcola(); Ingresso.save(); $('scBc').focus();
+    $('scFr').value = ''; $('scBc').value = ''; $('scFr').dataset.auto = '0'; $('scBc').dataset.auto = '0'; $('hFr').textContent = ''; $('hBc').textContent = '';
+    if (!Ingresso.needUbi()) $('scUbi').value = '';
+    Ingresso.fitScan(); Ingresso.ricalcola(); Ingresso.save(); $('scBc').focus();
   },
   del: function (i) { Ingresso.rows.splice(i, 1); Ingresso.ricalcola(); Ingresso.save(); },
   edit: function (i, f, v) { var r = Ingresso.rows[i]; r.man[f] = L.s(v); Ingresso.ricalcola(); Ingresso.save(); },
+  // FR dal seriale: per le GOOD prima il file Huawei, poi VLT (FR più recente)
+  trovaFr: function (bc, tipo) {
+    var regole = Ingresso.regole(), ser0 = L.estraiSeriale(bc, regole);
+    var CLOSED = {}; L.s(DB.param('vlt_stati_chiusi', '')).split(';').forEach(function (x) { if (x) CLOSED[x] = 1; });
+    var hf = DB.huaweiFr[L.up(bc)] || DB.huaweiFr[L.up(ser0)] || DB.huaweiFr[L.up(L.afterSpace(bc))];
+    var pick = L.pickFr(DB.vltBySer[L.up(ser0)] || DB.vltBySer[L.up(L.afterSpace(ser0))] || DB.vltBySer[L.up(bc)] || [], CLOSED);
+    if (tipo === 'GOOD' && hf) return { fr: hf, origine: 'HUAWEI', pick: pick };
+    if (pick.row) return { fr: pick.row.fr_id, origine: 'VLT', pick: pick };
+    if (hf) return { fr: hf, origine: 'HUAWEI', pick: pick };
+    return { fr: '', origine: '', pick: pick };
+  },
+  regole: function () { return DB.t.REGOLE_BARCODE.rows.slice().sort(function (a, b) { return (parseInt(a.priorita, 10) || 0) - (parseInt(b.priorita, 10) || 0); }); },
+  // anteprima mentre si scrive: seriale → FR e FR → seriale
+  anteprima: function (da) {
+    var fr = $('scFr'), bc = $('scBc'), T = Ingresso.T();
+    if (da === 'bc') {
+      bc.dataset.auto = '0';
+      if (fr.dataset.auto === '1' || !L.s(fr.value)) {
+        var r = L.s(bc.value) ? Ingresso.trovaFr(L.s(bc.value), T.tipo) : { fr: '' };
+        fr.value = r.fr; fr.dataset.auto = r.fr ? '1' : '0';
+        var v = r.fr ? DB.vltMap[r.fr] : null;
+        $('hFr').textContent = r.fr ? (r.origine === 'HUAWEI' ? 'da file Huawei' : (v ? v.stato : '') + (r.pick && r.pick.n > 1 ? ' · ' + r.pick.n + ' FR, preso il più recente' : '')) : (L.s(bc.value) ? 'non trovato: scrivilo' : '');
+        $('hFr').className = 'hint' + (L.s(bc.value) && !r.fr ? ' warn' : '');
+      }
+    } else {
+      fr.dataset.auto = '0'; $('hFr').textContent = ''; $('hFr').className = 'hint';
+      if (bc.dataset.auto === '1' || !L.s(bc.value)) {
+        var k = L.s(fr.value).replace(/^FR/i, '').replace(/^0+(?=\d)/, ''), vv = DB.vltMap[k];
+        bc.value = vv ? L.s(vv.f_mat_serial_no) : ''; bc.dataset.auto = vv ? '1' : '0';
+        $('hBc').textContent = vv ? 'da VLT · ' + vv.stato : (k ? 'FR non in VLT' : '');
+        $('hBc').className = 'hint' + (k && !vv ? ' warn' : '');
+      }
+    }
+    Ingresso.fitScan();
+  },
+  fitScan: function () { ['scFr', 'scBc'].forEach(function (id) { var e = $(id); e.style.minWidth = Math.min(60, Math.max(12, L.s(e.value).length + 3)) + 'ch'; }); },
   // calcolo riga: replica della logica INPUT DATI del prototipo
   calc: function (r, T, ctx) {
     var regole = DB.t.REGOLE_BARCODE.rows.slice().sort(function (a, b) { return (parseInt(a.priorita, 10) || 0) - (parseInt(b.priorita, 10) || 0); });
-    var CLOSED = {}; L.s(DB.param('vlt_stati_chiusi', '')).split(';').forEach(function (x) { if (x) CLOSED[x] = 1; });
     var frIn = r.fr, frOrig = '', pick = null;
     var ser0 = r.bc ? L.estraiSeriale(r.bc, regole) : '';
-    // lettura dal seriale: l'FR si cerca da solo (VLT per seriale; file Huawei come nella funzione ATS_CERCA_FR_HUAWEI_DDT)
-    if (!frIn && r.bc) {
-      var hf = DB.huaweiFr[L.up(r.bc)] || DB.huaweiFr[L.up(ser0)] || DB.huaweiFr[L.up(L.afterSpace(r.bc))];
-      pick = L.pickFr(DB.vltBySer[L.up(ser0)] || DB.vltBySer[L.up(L.afterSpace(ser0))] || DB.vltBySer[L.up(r.bc)] || [], CLOSED);
-      if (T.tipo === 'GOOD' && hf) { frIn = hf; frOrig = 'HUAWEI'; }
-      else if (pick.row) { frIn = pick.row.fr_id; frOrig = 'VLT'; }
-      else if (hf) { frIn = hf; frOrig = 'HUAWEI'; }
-    }
+    // lettura dal seriale: l'FR si cerca da solo (stessa logica dell'anteprima)
+    if (!frIn && r.bc) { var tf = Ingresso.trovaFr(r.bc, T.tipo); frIn = tf.fr; frOrig = tf.origine; pick = tf.pick; }
     var o = { fr: frIn, rma: '', bc: r.bc, msgs: [], err: false, warn: false, tipo: T.tipo, ubicazione: r.ubi, destinazione: '', statoVlt: '', nota: '', mail: null };
     var v = frIn ? DB.vltMap[frIn] : null;
     // balancing: con il flag attivo, un numero digitato che non è un FR è l'RMA della balancing
@@ -757,7 +797,7 @@ var Ingresso = {
       var cls = c.err ? 'r-err' : (c.warn ? 'r-warn' : '');
       var m = c.msgs.map(function (x) { return '<div class="msg ' + x[0] + '">' + esc(x[1]) + '</div>'; }).join('');
       var mail = c.mail ? '<a class="mail" href="' + Ingresso.mailLink(c, T) + '">✉ scrivi mail</a>' : '';
-      function ed(f, val, w) { return '<input class="edit-cell mono' + (Ingresso.rows[i].man[f] !== undefined ? ' dirty' : '') + '" style="min-width:' + (w || 90) + 'px" value="' + esc(val) + '" onchange="Ingresso.edit(' + i + ',\'' + f + '\',this.value)">'; }
+      function ed(f, val, w) { return '<input class="edit-cell mono' + (Ingresso.rows[i].man[f] !== undefined ? ' dirty' : '') + '" size="' + Math.max(8, L.s(val).length + 1) + '" style="width:auto" value="' + esc(val) + '" onchange="Ingresso.edit(' + i + ',\'' + f + '\',this.value)">'; }
       return '<tr class="' + cls + '"><td>' + (i + 1) + '</td><td class="mono">' + esc(c.fr) + '</td><td class="mono">' + esc(c.rma) + '</td>' +
         '<td>' + ed('ser', c.ser, 150) + '</td><td>' + ed('pn', c.pn, 100) + '</td><td>' + ed('mnft', c.mnft, 80) + '</td>' +
         '<td>' + esc(c.rip) + '</td><td style="font-size:11.5px;color:var(--subtle)">' + esc(c.statoVlt) + '</td>' +
