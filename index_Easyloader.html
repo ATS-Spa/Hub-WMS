@@ -193,10 +193,10 @@ tr.r-off td{opacity:.5}
             </select></div>
           <div class="fg"><span class="fl">Data ingresso *</span><input class="fc" type="date" id="inData" onchange="Ingresso.onTestata()"></div>
           <div class="fg mid"><span class="fl">Mittente *</span><input class="fc" id="inMittente" list="dlControparti" onchange="Ingresso.onTestata()" oninput="Ingresso.fitMitt()" placeholder="proposto dal 1° FR"></div>
-          <div class="fg mid"><span class="fl">AWB</span><input class="fc mono" id="inAwb" onchange="Ingresso.onAwb()" placeholder="proposto dal 1° FR"></div>
+          <div class="fg mid"><span class="fl">AWB *</span><input class="fc mono" id="inAwb" onchange="Ingresso.onAwb()" placeholder="proposto dal 1° FR"></div>
           <div class="fg"><span class="fl">Vettore *</span><input class="fc" id="inVettore" list="dlVettori" onchange="Ingresso.onTestata()"><span class="hint" id="hVettore"></span></div>
-          <div class="fg"><span class="fl">DDT mittente</span><input class="fc mono" id="inDdt" onchange="Ingresso.onTestata()"></div>
-          <div class="fg"><span class="fl">PO / MRN</span><input class="fc mono" id="inPo" onchange="Ingresso.onTestata()"></div>
+          <div class="fg"><span class="fl">DDT mittente *</span><input class="fc mono" id="inDdt" onchange="Ingresso.onTestata()"></div>
+          <div class="fg"><span class="fl" id="lblPo">PO / MRN</span><input class="fc mono" id="inPo" onchange="Ingresso.onTestata()"></div>
           <div class="fg auto"><span class="fl">Balancing</span>
             <label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:7px 0"><input type="checkbox" id="inBal" onchange="Ingresso.onTestata()"> ci sono balancing</label></div>
         </div>
@@ -228,7 +228,7 @@ tr.r-off td{opacity:.5}
           <label style="font-size:12px;color:var(--subtle);display:flex;gap:6px;align-items:center"><input type="checkbox" id="oggiTutti" onchange="Ingresso.renderOggi()"> tutti gli operatori</label></div>
         <div class="stats" id="oggiStats"></div>
         <div class="tbl-wrap" style="max-height:40vh"><table>
-          <thead><tr><th>ID</th><th>Tipo</th><th>FR</th><th>RMA</th><th>Seriale</th><th>P/N</th><th>Riparatore</th><th>Nota</th><th>Operatore</th></tr></thead>
+          <thead><tr><th>ID</th><th>Tipo</th><th>FR</th><th>RMA</th><th>Seriale</th><th>P/N</th><th>Riparatore</th><th>Nota</th><th>Operatore</th><th></th></tr></thead>
           <tbody id="oggiRows"></tbody>
         </table></div>
       </div>
@@ -241,7 +241,7 @@ tr.r-off td{opacity:.5}
           <div class="fg" style="flex:1;min-width:240px"><span class="fl">Cerca (seriale, P/N, FR, RMA, ubicazione, material, nota)</span><input class="fc mono" id="gQ" oninput="Giacenze.debounce()"></div>
           <div class="fg"><span class="fl">Tipo</span><select class="fc" id="gTipo" onchange="Giacenze.render()"><option value="">Tutti</option></select></div>
           <div class="fg"><span class="fl">Magazzino</span><select class="fc" id="gMag" onchange="Giacenze.render()"><option value="">Tutti</option></select></div>
-          <div class="fg"><span class="fl">Stato</span><select class="fc" id="gStato" onchange="Giacenze.render()"><option value="IN_GIACENZA">In giacenza</option><option value="">Tutti</option><option>IN_LAVORAZIONE</option><option>BLOCCATO</option><option>USCITO</option></select></div>
+          <div class="fg"><span class="fl">Stato</span><select class="fc" id="gStato" onchange="Giacenze.render()"><option value="IN_GIACENZA">In giacenza</option><option value="">Tutti</option><option>IN_LAVORAZIONE</option><option>BLOCCATO</option><option>USCITO</option><option>ANNULLATO</option></select></div>
         </div>
       </div>
       <div class="stats" id="gStats"></div>
@@ -269,6 +269,27 @@ tr.r-off td{opacity:.5}
       <div id="ackDet"></div>
     </div>
 
+    <!-- RMA -->
+    <div class="view" id="view-rma">
+      <div class="subtabs" id="rmaTabs">
+        <span class="subtab" id="rmaT-inv" onclick="Rma.apri('inv')">Inventario giornaliero</span>
+        <span class="subtab" id="rmaT-rit" onclick="Rma.apri('rit')">Ritorni in giacenza (VLT)</span>
+        <span class="subtab" style="opacity:.45;cursor:default" title="Prossimo rilascio">Carichi NEW/REUSE · in arrivo</span>
+        <span class="subtab" style="opacity:.45;cursor:default" title="Prossimo rilascio">Uscite e DDT RMA · in arrivo</span>
+      </div>
+      <div class="card">
+        <div class="row">
+          <div class="fg" style="flex:1;min-width:240px"><span class="fl">Cerca (seriale, P/N, FR, RMA, material, destinazione)</span><input class="fc mono" id="rmaQ" oninput="Rma.debounce()"></div>
+          <label class="btn ghost sm" style="cursor:pointer" title="CSV esportato da VLT: Ritorni in giacenza">⬆ Importa CSV ritorni<input type="file" id="rmaFile" accept=".csv,.txt" style="display:none" onchange="Rma.importa(this)"></label>
+          <button class="btn sm" id="rmaSalva" onclick="Rma.salva()" disabled>Salva RMA creati</button>
+        </div>
+        <div class="hint" id="rmaInfo" style="margin-top:8px"></div>
+      </div>
+      <div class="stats" id="rmaStats"></div>
+      <div class="tbl-wrap"><table><thead id="rmaHead"></thead><tbody id="rmaRows"></tbody></table></div>
+      <div class="hint" id="rmaHint" style="margin-top:6px"></div>
+    </div>
+
     <!-- ADMIN -->
     <div class="view" id="view-admin">
       <div class="subtabs" id="admTabs"></div>
@@ -291,6 +312,7 @@ tr.r-off td{opacity:.5}
 <datalist id="dlUbicazioni"></datalist>
 <datalist id="dlMisure"></datalist>
 <datalist id="dlMotivi"></datalist>
+<datalist id="dlMotiviIn"><option value="Letto per errore"><option value="Pezzo duplicato"><option value="Tipo sbagliato: da ricaricare"><option value="Pezzo non arrivato fisicamente"></datalist>
 
 <div class="modal-bg" id="modal"><div class="modal">
   <h3 id="mTitle"></h3><div class="mbody" id="mBody"></div><div class="progress" id="mProg"></div>
@@ -385,6 +407,48 @@ L.misura = function (m) { var x = /^\s*(\d+(?:[.,]\d+)?)\s*[xX*]\s*(\d+(?:[.,]\d
 L.isBan = function (note) { var n = L.up(note); return n.indexOf('BAN') === 0 || n.indexOf('RMA') === 0; };
 // FR digitato/sparato → numero pulito
 L.frKey = function (x) { return L.s(x).replace(/^FR\s*/i, '').replace(/^0+(?=\d)/, ''); };
+// CSV di VLT: separatore riconosciuto dalla prima riga (; , | tab), campi tra virgolette
+L.parseCsv = function (txt) {
+  txt = String(txt || '').replace(/^﻿/, '');
+  var first = txt.split(/\r?\n/)[0] || '', seps = [';', ',', '|', '\t'], sep = ',', best = -1;
+  seps.forEach(function (c) { var n = first.split(c).length; if (n > best) { best = n; sep = c; } });
+  var rows = [], row = [], cur = '', q = false;
+  for (var i = 0; i < txt.length; i++) {
+    var ch = txt[i];
+    if (q) { if (ch === '"') { if (txt[i + 1] === '"') { cur += '"'; i++; } else q = false; } else cur += ch; continue; }
+    if (ch === '"') q = true;
+    else if (ch === sep) { row.push(cur); cur = ''; }
+    else if (ch === '\n' || ch === '\r') { if (ch === '\r' && txt[i + 1] === '\n') i++; row.push(cur); rows.push(row); row = []; cur = ''; }
+    else cur += ch;
+  }
+  if (cur !== '' || row.length) { row.push(cur); rows.push(row); }
+  return rows.filter(function (r) { return r.some(function (x) { return L.s(x) !== ''; }); });
+};
+// WORKDAY(data, n): n giorni lavorativi dopo (sabato e domenica esclusi), come la formula DATA SCAD
+L.workday = function (iso, n) {
+  iso = L.normDate(iso); var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(iso); if (!m) return '';
+  var d = new Date(+m[1], +m[2] - 1, +m[3]), k = 0;
+  while (k < n) { d.setDate(d.getDate() + 1); var g = d.getDay(); if (g !== 0 && g !== 6) k++; }
+  return L.isoToday(d);
+};
+// abbinamento RMA → pezzi GOOD: ogni RMA (dalla più vecchia) prende un pezzo diverso con material richiesto o equivalente,
+// oppure con P/N che inizia col P/N del material (CERCA PN / EQL del riepilogo); a parità, prima la stessa destinazione
+L.abbinaRma = function (rmaList, units, ctx) {
+  var usati = {}, out = {};
+  rmaList.slice().sort(function (a, b) { return (a.data_apertura || '') < (b.data_apertura || '') ? -1 : ((a.data_apertura || '') > (b.data_apertura || '') ? 1 : (+a.id_rma) - (+b.id_rma)); })
+    .forEach(function (r) {
+      var mats = ctx.materiali(r.material), pns = mats.map(ctx.pnDi).filter(Boolean), dest = L.up(ctx.destRma(r));
+      var cand = units.filter(function (u) {
+        if (usati[u.id_unita]) return false;
+        var um = ctx.materialDi(u), up = L.up(u.pn);
+        return (um && mats.indexOf(um) >= 0) || pns.some(function (p) { p = L.up(p); return p && up.indexOf(p) === 0; });
+      });
+      if (!cand.length) return;
+      var u = cand.find(function (x) { return dest && L.up(ctx.destUnita(x)) === dest; }) || cand[0];
+      usati[u.id_unita] = 1; out[u.id_unita] = { rma: r, variazione: !!dest && L.up(ctx.destUnita(u)) !== dest };
+    });
+  return out;
+};
 if (typeof module !== 'undefined') module.exports = L;
 </script>
 
@@ -578,7 +642,7 @@ var DB = {
 // ───────────────────────── APP ─────────────────────────
 var TABS = [
   { k: 'ingresso', label: 'Ingresso' },
-  { k: 'ack', label: 'ACK' }, { k: 'rma', label: 'RMA', soon: true }, { k: 'balancing', label: 'Balancing', soon: true },
+  { k: 'ack', label: 'ACK' }, { k: 'rma', label: 'RMA' }, { k: 'balancing', label: 'Balancing', soon: true },
   { k: 'juniper', label: 'Juniper', soon: true }, { k: 'giacenze', label: 'Giacenze' }, { k: 'vlt', label: 'VLT', soon: true },
   { k: 'storico', label: 'Storico', soon: true }, { k: 'admin', label: 'Admin', admin: true }
 ];
@@ -642,6 +706,7 @@ var App = {
     if (t.k === 'admin') Admin.render();
     if (t.k === 'ingresso') setTimeout(function () { if ($('inTipo').value) $('scBc').focus(); else $('inTipo').focus(); }, 50);
     if (t.k === 'ack') Ack.show();
+    if (t.k === 'rma') Rma.show();
   },
   setTheme: function (th) { document.body.className = th || ''; lsS('theme', th); },
   syncInfo: function () { $('syncInfo').textContent = 'VLT ' + (DB.vlt ? new Date(DB.vlt.ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—') + ' · Huawei ' + Object.keys(DB.huaweiFr).length + ' seriali · giacenza ' + DB.t.UNITA.rows.length; },
@@ -659,8 +724,9 @@ var App = {
       await DB.loadTables(DB.SMALL.concat(['UNITA'])); await DB.loadVlt(true);
       try { await DB.loadHuawei(true); } catch (e) { toast('File Huawei non leggibile: ' + e.message, 'ko'); }
       Ingresso._heads = null;
+    if (Rma.loaded) await DB.loadTables(['RMA_RITORNI']);
     if (Ack.loaded) { await Ack.flush(); await Ack.load(); }
-      App.fillLists(); App.syncInfo(); Ingresso.ricalcola(); Ingresso.renderOggi(); if (App.tab === 'giacenze') Giacenze.render(); if (App.tab === 'admin') Admin.render(); if (App.tab === 'ack') Ack.render();
+      App.fillLists(); App.syncInfo(); Ingresso.ricalcola(); Ingresso.renderOggi(); if (App.tab === 'giacenze') Giacenze.render(); if (App.tab === 'admin') Admin.render(); if (App.tab === 'ack') Ack.render(); if (App.tab === 'rma') Rma.render();
       Modal.close(); toast('Dati aggiornati', 'ok');
     } catch (e) { Modal.close(); toast('Errore aggiornamento: ' + e.message, 'ko'); }
   },
@@ -724,7 +790,7 @@ var Ingresso = {
     $('inTipo').classList.toggle('err', !ok);
     return ok;
   },
-  onTestata: function () { var prima = $('scBc').disabled; Ingresso.lockScan(); if (prima && !$('scBc').disabled) setTimeout(function () { $('scBc').focus(); }, 30); $('wrapUbi').style.visibility = Ingresso.needUbi() ? 'visible' : 'hidden'; $('lblFr').textContent = $('inBal').checked ? 'FR / RMA balancing' : 'FR'; Ingresso.ricalcola(); },
+  onTestata: function () { $('lblPo').textContent = Ingresso.needUbi() ? 'PO / MRN *' : 'PO / MRN'; ['inMittente', 'inAwb', 'inVettore', 'inDdt', 'inPo', 'inData'].forEach(function (id) { if (L.s($(id).value)) $(id).classList.remove('err'); }); var prima = $('scBc').disabled; Ingresso.lockScan(); if (prima && !$('scBc').disabled) setTimeout(function () { $('scBc').focus(); }, 30); $('wrapUbi').style.visibility = Ingresso.needUbi() ? 'visible' : 'hidden'; $('lblFr').textContent = $('inBal').checked ? 'FR / RMA balancing' : 'FR'; Ingresso.ricalcola(); },
   onAwb: function () { var v = L.vettoreDaAwb($('inAwb').value, DB.t.VETTORI.rows); if (v) $('inVettore').value = v; Ingresso.ricalcola(); },
   aggiungi: function () {
     if (!$('inTipo').value) { toast('Seleziona prima il Tipo', 'ko'); Ingresso.lockScan(); $('inTipo').focus(); return; }
@@ -901,13 +967,15 @@ var Ingresso = {
   },
   validaTestata: function (T) {
     var e = [];
-    if (!T.tipo) e.push('Tipo'); if (!T.data) e.push('Data ingresso'); if (!T.mittente) e.push('Mittente'); if (!T.vettore) e.push('Vettore');
+    var F = [['inTipo', T.tipo, 'Tipo'], ['inData', T.data, 'Data ingresso'], ['inMittente', T.mittente, 'Mittente'], ['inAwb', T.awb, 'AWB'], ['inVettore', T.vettore, 'Vettore'], ['inDdt', T.ddt, 'DDT mittente']];
+    if (T.tipo === 'NEW' || T.tipo === 'REUSE') F.push(['inPo', T.po, 'PO / MRN (obbligatorio per ' + T.tipo + ')']);
+    F.forEach(function (f) { var miss = !L.s(f[1]); $(f[0]).classList.toggle('err', miss); if (miss) e.push(f[2]); });
     return e;
   },
   carica: async function () {
     var T = Ingresso.T(), C = Ingresso.computed;
     var miss = Ingresso.validaTestata(T);
-    if (miss.length) { Modal.open('Testata incompleta', 'Compila: ' + miss.join(', ')); return; }
+    if (miss.length) { Modal.open('Testata incompleta', 'Senza questi campi non si carica:\n• ' + miss.join('\n• ')); return; }
     if (C.some(function (c) { return c.err; })) { Modal.open('Righe bloccanti', 'Correggi le righe in rosso prima di caricare.'); return; }
     var nWarn = C.filter(function (c) { return c.warn; }).length;
     var ok = await Modal.confirm('Carica ' + C.length + ' pezzi',
@@ -988,6 +1056,56 @@ var Ingresso = {
     // aggiorno la giacenza in memoria
     uObjs.forEach(function (o) { var x = {}; tU.header.forEach(function (h) { x[h] = o[h] === undefined ? '' : String(o[h]); }); x._r = o._r; tU.rows.push(x); });
   },
+  // riga del movimento di ingresso ricavata dall'ID (IN + mov_id_base + riga), verificata rileggendo la cella
+  rigaMov: async function (u, tM) {
+    var mBase = parseInt(DB.param('mov_id_base', ''), 10), num = parseInt(L.s(u.id_mov_in).replace(/^IN/, ''), 10), rM = num - mBase;
+    if (isNaN(rM) || rM < 2) return null;
+    var mid = (await API.batchGet(DB.id, [tM.cell('id_mov', rM)]))[0];
+    return mid && mid[0] && L.s(mid[0][0]) === u.id_mov_in ? rM : null;
+  },
+  chiediElimina: function (id) {
+    var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; });
+    if (!Ingresso.puoModificare(u)) { toast('Puoi eliminare solo le tue righe di oggi ancora in giacenza', 'ko'); return; }
+    Modal.html('Elimina ingresso · ' + u.seriale,
+      '<div style="font-size:13px;color:var(--subtle);margin-bottom:10px">' + esc(u.id_unita) + ' · ' + esc(u.tipo) + (u.fr ? ' · FR ' + esc(u.fr) : '') + '<br>Il pezzo esce dalla giacenza e il movimento viene segnato come annullato (resta nello storico e nel LOG).</div>' +
+      '<div class="fg"><span class="fl">Motivo *</span><input class="fc" id="mMotivo" autocomplete="off" list="dlMotiviIn" placeholder="es. letto per errore, pezzo duplicato…"></div><div class="hint" id="edErr" style="margin-top:8px"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Elimina', cls: 'red', keep: true, fn: function () { Ingresso.elimina(id); } }]);
+    setTimeout(function () { var e = $('mMotivo'); e.focus(); e.onkeydown = function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); Ingresso.elimina(id); } }; }, 50);
+  },
+  elimina: async function (id) {
+    var motivo = L.s($('mMotivo').value);
+    if (!motivo) { $('mMotivo').classList.add('err'); $('mMotivo').focus(); return; }
+    var tU = DB.t.UNITA, u = tU.rows.find(function (x) { return x.id_unita === id; });
+    Modal.progress('Eliminazione…');
+    try {
+      var last = L.colLetter(tU.header.length - 1);
+      var cur = (await API.batchGet(DB.id, [API.q('UNITA') + '!A' + u._r + ':' + last + u._r]))[0][0] || [];
+      if (L.s(cur[tU.idx.id_unita]) !== u.id_unita) throw new Error('la riga non è più al suo posto: premi Aggiorna e riprova');
+      if (L.s(cur[tU.idx.rev]) !== L.s(u.rev)) throw new Error('la riga è stata modificata da un altro utente: premi Aggiorna e riprova');
+      if (L.s(cur[tU.idx.stato]) !== 'IN_GIACENZA') throw new Error('il pezzo non è più in giacenza (' + cur[tU.idx.stato] + ')');
+      var now = L.nowStamp(), H = await Ingresso.heads(), tM = H.MOVIMENTI, tR = H.RICEZIONI, nota = 'ANNULLATO: ' + motivo;
+      var ch = { stato: 'ANNULLATO', note: [L.s(u.note), nota].filter(Boolean).join(' | '), modificato_il: now, modificato_da: Auth.email, rev: (parseInt(u.rev, 10) || 1) + 1 };
+      var upd = [];
+      Object.keys(ch).forEach(function (h) { if (h in tU.idx) upd.push({ range: tU.cell(h, u._r), values: [[String(ch[h])]] }); });
+      var rM = await Ingresso.rigaMov(u, tM);
+      if (rM) {
+        upd.push({ range: tM.cell('causale', rM), values: [['INGRESSO_ANNULLATO']] });
+        var mn = (await API.batchGet(DB.id, [tM.cell('note', rM)]))[0];
+        upd.push({ range: tM.cell('note', rM), values: [[[mn && mn[0] ? L.s(mn[0][0]) : '', nota].filter(Boolean).join(' | ')]] });
+      }
+      // pezzi della ricezione: uno in meno
+      var rR = parseInt(L.s(u.id_ricezione).replace(/^R/, ''), 10) + 1;
+      if (rR > 1 && ('n_pezzi' in tR.idx)) {
+        var rc = (await API.batchGet(DB.id, [tR.cell('id_ricezione', rR) + ':' + tR.col('n_pezzi') + rR]))[0][0] || [];
+        if (L.s(rc[0]) === u.id_ricezione) upd.push({ range: tR.cell('n_pezzi', rR), values: [[String(Math.max(0, (parseInt(rc[tR.idx.n_pezzi], 10) || 1) - 1))]] });
+      }
+      await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', [H.LOG.toRow({ data_ora: now, utente: Auth.email, azione: 'ANNULLA', foglio: 'UNITA', id_record: u.id_unita, dettaglio: JSON.stringify({ motivo: motivo, riga: { seriale: u.seriale, tipo: u.tipo, fr: u.fr, pn: u.pn, id_mov_in: u.id_mov_in, id_ricezione: u.id_ricezione }, movimento: rM ? 'annullato' : 'non trovato' }) })])]);
+      Object.keys(ch).forEach(function (h) { u[h] = String(ch[h]); });
+      Modal.close(); toast('Ingresso ' + u.id_unita + ' eliminato' + (rM ? '' : ' (movimento non trovato: controlla lo storico)'), rM ? 'ok' : 'ko');
+      Ingresso.renderOggi(); Ingresso.ricalcola(); App.syncInfo();
+      Export.scrivi().catch(function () { });
+    } catch (e) { Modal.progress(''); $('edErr').textContent = 'Non eliminato: ' + e.message; $('edErr').className = 'hint err'; }
+  },
   // ─ modifica di una riga di "Ingressi di oggi" (solo le proprie, solo se ancora in giacenza)
   EDIT_F: [['tipo', 'Tipo'], ['fr', 'FR'], ['rma', 'RMA'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['mnft', 'MNFT'], ['riparatore', 'Riparatore'], ['ubicazione', 'Ubicazione'], ['destinazione_prevista', 'Destinazione'], ['note', 'Nota']],
   MOV_DI: { tipo: 'tipo', fr: 'fr', rma: 'rma', seriale: 'seriale', pn: 'pn', mnft: 'mnft', riparatore: 'riparatore', ubicazione: 'ubicazione_a', note: 'note' },
@@ -1000,7 +1118,7 @@ var Ingresso = {
         if (f[0] === 'tipo') return '<div class="fg"><span class="fl">' + f[1] + '</span><select class="fc" id="ed_tipo">' + TIPI.map(function (t) { return '<option' + (t === u.tipo ? ' selected' : '') + '>' + t + '</option>'; }).join('') + '</select></div>';
         return '<div class="fg' + (f[0] === 'note' || f[0] === 'seriale' ? ' wide' : '') + '"><span class="fl">' + f[1] + '</span><input class="fc' + (f[0] === 'note' ? '' : ' mono') + '" id="ed_' + f[0] + '" value="' + esc(u[f[0]]) + '"' + (f[0] === 'ubicazione' ? ' list="dlUbicazioni"' : '') + '></div>';
       }).join('') + '</div><div class="hint" id="edErr" style="margin-top:8px"></div>';
-    Modal.html('Modifica ingresso · ' + u.seriale, html, [{ label: 'Annulla', cls: 'ghost' }, { label: 'Salva', cls: 'green', keep: true, fn: function () { Ingresso.salvaModifica(id); } }], true);
+    Modal.html('Modifica ingresso · ' + u.seriale, html, [{ label: '🗑 Elimina', cls: 'red', fn: function () { setTimeout(function () { Ingresso.chiediElimina(id); }, 30); } }, { label: 'Annulla', cls: 'ghost' }, { label: 'Salva', cls: 'green', keep: true, fn: function () { Ingresso.salvaModifica(id); } }], true);
   },
   salvaModifica: async function (id) {
     var tU = DB.t.UNITA, u = tU.rows.find(function (x) { return x.id_unita === id; });
@@ -1042,14 +1160,14 @@ var Ingresso = {
   },
   renderOggi: function () {
     var tutti = $('oggiTutti').checked, oggi = L.isoToday();
-    var list = DB.t.UNITA.rows.filter(function (u) { return L.s(u.creato_il).slice(0, 10) === oggi && u.creato_da !== 'MIGRAZIONE' && (tutti || u.creato_da === Auth.email); }).reverse();
+    var list = DB.t.UNITA.rows.filter(function (u) { return L.s(u.creato_il).slice(0, 10) === oggi && u.creato_da !== 'MIGRAZIONE' && u.stato !== 'ANNULLATO' && (tutti || u.creato_da === Auth.email); }).reverse();
     var by = {}; list.forEach(function (u) { by[u.tipo] = (by[u.tipo] || 0) + 1; });
     $('oggiStats').innerHTML = '<div class="stat"><b>' + list.length + '</b><span>totale</span></div>' + Object.keys(by).map(function (k) { return '<div class="stat"><b>' + by[k] + '</b><span>' + esc(k) + '</span></div>'; }).join('');
     $('oggiRows').innerHTML = list.length ? list.slice(0, 1000).map(function (u) {
       var op = DB.t.OPERATORI.rows.find(function (o) { return L.s(o.email).toLowerCase() === u.creato_da; });
       var mia = Ingresso.puoModificare(u);
-      return '<tr' + (mia ? ' class="r-edit" title="Clicca per modificare" onclick="Ingresso.apriModifica(\'' + u.id_unita + '\')"' : ' title="Riga di un altro operatore (o già uscita): sola lettura"') + '><td class="mono">' + esc(u.id_unita) + '</td><td>' + Pill.tipo(u.tipo) + '</td><td class="mono">' + esc(u.fr) + '</td><td class="mono">' + esc(u.rma) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.riparatore) + '</td><td>' + esc(u.note) + '</td><td>' + esc(op ? (op.sigla || op.nome) : u.creato_da) + '</td></tr>';
-    }).join('') : '<tr><td colspan="9" class="empty">Nessun ingresso oggi</td></tr>';
+      return '<tr' + (mia ? ' class="r-edit" title="Clicca per modificare" onclick="Ingresso.apriModifica(\'' + u.id_unita + '\')"' : ' title="Riga di un altro operatore (o già uscita): sola lettura"') + '><td class="mono">' + esc(u.id_unita) + '</td><td>' + Pill.tipo(u.tipo) + '</td><td class="mono">' + esc(u.fr) + '</td><td class="mono">' + esc(u.rma) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.riparatore) + '</td><td>' + esc(u.note) + '</td><td>' + esc(op ? (op.sigla || op.nome) : u.creato_da) + '</td><td>' + (mia ? '<button class="ico-btn" title="Elimina" onclick="event.stopPropagation();Ingresso.chiediElimina(\'' + u.id_unita + '\')">🗑</button>' : '') + '</td></tr>';
+    }).join('') : '<tr><td colspan="10" class="empty">Nessun ingresso oggi</td></tr>';
   }
 };
 App.aliasRip = function (nome) {
@@ -1145,7 +1263,7 @@ var Admin = {
 var Export = {
   righe: function () {
     var st = {}; L.s(DB.param('vlt_stati_fr_da_chiudere', '')).split(';').forEach(function (x) { if (L.s(x)) st[L.s(x)] = 1; });
-    return DB.t.UNITA.rows.filter(function (u) { return u.tipo === 'FAULTY' && u.stato !== 'USCITO' && u.fr && DB.vltMap[u.fr] && st[DB.vltMap[u.fr].stato]; })
+    return DB.t.UNITA.rows.filter(function (u) { return u.tipo === 'FAULTY' && (u.stato === 'IN_GIACENZA' || u.stato === 'IN_LAVORAZIONE') && u.fr && DB.vltMap[u.fr] && st[DB.vltMap[u.fr].stato]; })
       .map(function (u) {
         var v = DB.vltMap[u.fr], nota = L.s(u.note).split(' | fonte:')[0];
         if (/^fonte/i.test(nota)) nota = '';
@@ -1798,6 +1916,166 @@ var Ack = {
     box.innerHTML = html; Ack.qInfo();
     if (edit && Ack._fb && $('ackFb')) { $('ackFb').textContent = Ack._fb[0]; $('ackFb').className = 'fb ' + Ack._fb[1]; }
     if (foc && $('ackScan')) $('ackScan').focus();
+  }
+};
+
+// ───────────────────────── RMA ─────────────────────────
+var Rma = {
+  loaded: false, sez: 'inv', dirty: {}, lk: null, abb: {},
+  RIT_MAP: { 'Id': 'id_rma', 'Richiedente': 'richiedente', 'Data Apertura': 'data_apertura', 'Data Ultima Modifica': 'data_ultima_modifica', 'Material': 'material', 'Equipment': 'equipment',
+    'Seriale': 'seriale_vlt', 'Manufact Part Number': 'mpn', 'Materiale Descrizione': 'descrizione', 'Stato': 'stato_vlt', 'Deposito Origine': 'deposito_origine',
+    'Deposito Destinazione RMA': 'deposito_dest_rma', 'Deposito Destinazione Indirizzo RMA': 'indirizzo_dest_rma', 'Failure Report': 'failure_report', 'Priorita': 'priorita', 'Quantita': 'quantita', 'Note': 'note_vlt' },
+  show: async function () {
+    if (!Rma.loaded) {
+      $('rmaRows').innerHTML = '<tr><td class="empty">Carico ritorni e anagrafiche…</td></tr>';
+      try { await Rma.load(); } catch (e) { $('rmaRows').innerHTML = '<tr><td class="empty">Errore: ' + esc(e.message) + '</td></tr>'; return; }
+    }
+    Rma.render();
+  },
+  load: async function () {
+    await DB.loadTables(['RMA_RITORNI']);
+    var c = await DB.cacheGet('rmalk');
+    if (!c || (Date.now() - c.ts) > 24 * 3600 * 1000) {
+      var art = await DB.loadCols(DB.id, 'ARTICOLI', ['material', 'pn']);
+      var eq = await DB.loadCols(DB.id, 'EQUIVALENTI', ['material', 'material_equivalente']);
+      c = { ts: Date.now(), art: art, eq: eq }; await DB.cacheSet('rmalk', c);
+    }
+    var k = Rma.mk, lk = { pnByMat: {}, matByPn: {}, eq: {} };
+    c.art.forEach(function (a) { var m = k(a.material); if (m && a.pn) { lk.pnByMat[m] = a.pn; if (!lk.matByPn[L.up(a.pn)]) lk.matByPn[L.up(a.pn)] = m; } });
+    c.eq.forEach(function (e) { var m = k(e.material), q = k(e.material_equivalente); if (m && q) (lk.eq[m] = lk.eq[m] || []).push(q); });
+    Rma.lk = lk; Rma.loaded = true;
+  },
+  nota: function (n) { n = L.s(n).split(' | fonte:')[0]; return /^fonte:/i.test(n) ? '' : n; },   // senza le note tecniche della migrazione
+  mk: function (m) { return L.s(m).replace(/\.0$/, '').replace(/^0+/, ''); },   // material senza zeri iniziali
+  apri: function (s) { Rma.sez = s; Rma.render(); },
+  debounce: function () { clearTimeout(Rma._t); Rma._t = setTimeout(Rma.render, 200); },
+  ctx: function () {
+    var lk = Rma.lk, k = Rma.mk;
+    return {
+      materiali: function (m) { m = k(m); var out = [m]; (lk.eq[m] || []).forEach(function (x) { if (out.indexOf(x) < 0) out.push(x); }); return out; },
+      pnDi: function (m) { return lk.pnByMat[m] || ''; },
+      materialDi: function (u) { var v = DB.vltMap[u.fr]; return k(v && v.f_mat_material) || k(u.material) || lk.matByPn[L.up(u.pn)] || ''; },
+      destRma: function (r) { return Rma.destRma(r); },
+      destUnita: function (u) { return u.destinazione_prevista; }
+    };
+  },
+  destRma: function (r) {
+    if (L.s(r.variazione_dest_sd)) return r.variazione_dest_sd;
+    var d = DB.t.DEPOT_VLT.rows.find(function (x) { return x.depot_vlt === r.deposito_dest_rma; });
+    return d ? d.destinazione : r.deposito_dest_rma;
+  },
+  ultimoImport: function () { var m = ''; DB.t.RMA_RITORNI.rows.forEach(function (r) { if (r.importato_il > m) m = r.importato_il; }); return m; },
+  attivi: function () {
+    var ult = Rma.ultimoImport();
+    return DB.t.RMA_RITORNI.rows.filter(function (r) { return r.importato_il === ult && (r.stato === 'DA_EVADERE' || r.stato === 'ASSEGNATA'); });
+  },
+  inventario: function () { return DB.t.UNITA.rows.filter(function (u) { return u.stato === 'IN_GIACENZA' && (u.tipo === 'GOOD' || u.tipo === 'BALANCING'); }); },
+  calcola: function () {
+    var inv = Rma.inventario(), creati = {};
+    inv.forEach(function (u) { var v = Rma.dirty[u.id_unita] !== undefined ? Rma.dirty[u.id_unita] : u.rma; if (v) creati[L.s(v)] = 1; });
+    var rmaList = Rma.attivi().filter(function (r) { return !creati[r.id_rma]; });
+    var liberi = inv.filter(function (u) { return u.tipo === 'GOOD' && !L.s(Rma.dirty[u.id_unita] !== undefined ? Rma.dirty[u.id_unita] : u.rma); });
+    Rma.abb = L.abbinaRma(rmaList, liberi, Rma.ctx());
+    return inv;
+  },
+  // ─ import del CSV "Ritorni in giacenza" esportato da VLT
+  importa: async function (inp) {
+    var f = inp.files && inp.files[0]; inp.value = ''; if (!f) return;
+    var txt = await f.text(), rows = L.parseCsv(txt);
+    if (rows.length < 2) { Modal.open('Import ritorni', 'Il file è vuoto.'); return; }
+    var h = rows[0].map(L.s), idx = {};
+    Object.keys(Rma.RIT_MAP).forEach(function (c) { var i = h.indexOf(c); if (i >= 0) idx[Rma.RIT_MAP[c]] = i; });
+    var manc = ['Id', 'Material', 'Deposito Destinazione RMA'].filter(function (c) { return h.indexOf(c) < 0; });
+    if (manc.length) { Modal.open('Import ritorni', 'Colonne mancanti nel CSV: ' + manc.join(', ') + '\n\nIntestazioni trovate:\n' + h.join(' | ')); return; }
+    function dt(v) { v = L.s(v); var t = /(\d{1,2}:\d{2}(:\d{2})?)/.exec(v); return L.normDate(v) + (t ? ' ' + t[1] : ''); }
+    var now = L.nowStamp(), gg = parseInt(DB.param('rma_giorni_scadenza', '4'), 10) || 4, recs = [];
+    rows.slice(1).forEach(function (r) {
+      var o = {}; Object.keys(idx).forEach(function (k) { o[k] = L.s(r[idx[k]]); });
+      o.id_rma = o.id_rma.replace(/\.0$/, ''); if (!/^\d+$/.test(o.id_rma)) return;
+      o.data_apertura = dt(o.data_apertura); o.data_ultima_modifica = dt(o.data_ultima_modifica);
+      o.data_scadenza = L.workday(o.data_apertura, gg); o.importato_il = now; o.importato_da = Auth.email;
+      recs.push(o);
+    });
+    if (!recs.length) { Modal.open('Import ritorni', 'Nessuna riga con Id numerico nel file.'); return; }
+    Modal.open('Import ritorni', 'Salvo ' + recs.length + ' RMA…', []);
+    try {
+      await DB.loadTables(['RMA_RITORNI']);
+      var t = DB.t.RMA_RITORNI, byId = {}; t.rows.forEach(function (r) { byId[r.id_rma] = r; });
+      var upd = [], nuove = [], last = L.colLetter(t.header.length - 1);
+      recs.forEach(function (o) {
+        var ex = byId[o.id_rma];
+        if (ex) { Object.keys(o).forEach(function (k) { ex[k] = o[k]; }); upd.push({ range: API.q(t.name) + '!A' + ex._r + ':' + last + ex._r, values: [t.toRow(ex)] }); }
+        else { o.stato = 'DA_EVADERE'; o.rev = 1; nuove.push(o); }
+      });
+      if (upd.length) await API.batchUpdate(DB.id, upd);
+      if (nuove.length) { var r0 = await API.append(DB.id, 'RMA_RITORNI', nuove.map(function (o) { return t.toRow(o); })); nuove.forEach(function (o, i) { Ack.pushRow(t, o, r0 + i); }); }
+      await API.append(DB.id, 'LOG', [App.log('IMPORT_RITORNI', 'RMA_RITORNI', f.name, { righe: recs.length, nuove: nuove.length, aggiornate: upd.length })]);
+      Modal.close(); toast('Ritorni importati: ' + nuove.length + ' nuovi, ' + upd.length + ' aggiornati', 'ok'); Rma.render();
+    } catch (e) { Modal.open('Import non riuscito', e.message); }
+  },
+  set: function (id, v) { v = L.frKey(v); var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); if (v === L.s(u.rma)) delete Rma.dirty[id]; else Rma.dirty[id] = v; Rma.render(); },
+  salva: async function () {
+    var ids = Object.keys(Rma.dirty); if (!ids.length) return;
+    var bad = ids.filter(function (id) { return Rma.dirty[id] && !/^\d+$/.test(Rma.dirty[id]); });
+    if (bad.length) { Modal.open('RMA non valido', 'L\'RMA deve essere un numero.'); return; }
+    var tU = DB.t.UNITA, now = L.nowStamp(), upd = [], logs = [];
+    ids.forEach(function (id) {
+      var u = tU.rows.find(function (x) { return x.id_unita === id; }), rev = (parseInt(u.rev, 10) || 1) + 1;
+      [['rma', Rma.dirty[id]], ['modificato_il', now], ['modificato_da', Auth.email], ['rev', rev]].forEach(function (p) { upd.push({ range: tU.cell(p[0], u._r), values: [[String(p[1])]] }); });
+      logs.push(App.log('RMA_CREATO', 'UNITA', id, { prima: u.rma, dopo: Rma.dirty[id], seriale: u.seriale }));
+    });
+    try {
+      await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', logs)]);
+      ids.forEach(function (id) { var u = tU.rows.find(function (x) { return x.id_unita === id; }); u.rma = Rma.dirty[id]; u.modificato_il = now; u.modificato_da = Auth.email; u.rev = String((parseInt(u.rev, 10) || 1) + 1); });
+      Rma.dirty = {}; toast(ids.length + ' RMA salvati', 'ok'); Rma.render();
+    } catch (e) { toast('Errore salvataggio: ' + e.message, 'ko'); }
+  },
+  render: function () {
+    if (!Rma.loaded) return;
+    document.querySelectorAll('#rmaTabs .subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'rmaT-' + Rma.sez); });
+    var inv = Rma.calcola(), q = L.up($('rmaQ').value), oggi = L.isoToday(), ult = Rma.ultimoImport();
+    var nD = Object.keys(Rma.dirty).length;
+    $('rmaSalva').disabled = !nD; $('rmaSalva').textContent = 'Salva RMA creati' + (nD ? ' (' + nD + ')' : '');
+    $('rmaInfo').textContent = ult ? 'Ultimo import ritorni: ' + ult + ' · ' + Rma.attivi().length + ' RMA aperti' : 'Nessun import ritorni: carica il CSV esportato da VLT.';
+    var abb = Rma.abb;
+    if (Rma.sez === 'inv') {
+      var list = inv.filter(function (u) { var a = abb[u.id_unita]; return !q || [u.seriale, u.pn, u.fr, u.rma, u.destinazione_prevista, u.note, a ? a.rma.id_rma : ''].some(function (x) { return L.up(x).indexOf(q) >= 0; }); })
+        .sort(function (a, b) { return ((a.tipo === 'GOOD' ? '0' : '1') + a.data_in).localeCompare((b.tipo === 'GOOD' ? '0' : '1') + b.data_in); });
+      var nG = inv.filter(function (u) { return u.tipo === 'GOOD'; }).length, nB = inv.length - nG;
+      var nCre = inv.filter(function (u) { return L.s(Rma.dirty[u.id_unita] !== undefined ? Rma.dirty[u.id_unita] : u.rma) && u.tipo === 'GOOD'; }).length, nAut = Object.keys(abb).length;
+      var nVar = Object.keys(abb).filter(function (k) { return abb[k].variazione; }).length;
+      $('rmaStats').innerHTML = '<div class="stat"><b>' + inv.length + '</b><span>in inventario</span></div><div class="stat"><b>' + nG + '</b><span>good</span></div><div class="stat"><b>' + nB + '</b><span>balancing</span></div>' +
+        '<div class="stat"><b style="color:var(--green)">' + nAut + '</b><span>rma giacenza</span></div><div class="stat"><b style="color:var(--blue)">' + nCre + '</b><span>rma creato</span></div>' +
+        '<div class="stat"><b style="color:var(--amber)">' + (nG - nAut - nCre) + '</b><span>senza rma</span></div>' + (nVar ? '<div class="stat"><b style="color:var(--violet)">' + nVar + '</b><span>variaz. destino</span></div>' : '');
+      $('rmaHead').innerHTML = '<tr><th>Tipo</th><th>FR</th><th>MNFT</th><th>Seriale</th><th>P/N</th><th>Repair</th><th>Nota</th><th>Material</th><th>Destinazione</th><th>Var. destino</th><th>RMA creato (SD)</th><th>RMA giacenza</th><th>Data open</th><th>Scadenza</th><th>Note SD</th></tr>';
+      var ctx = Rma.ctx();
+      $('rmaRows').innerHTML = list.length ? list.slice(0, 1000).map(function (u) {
+        var a = abb[u.id_unita], r = a ? a.rma : null, d = Rma.dirty[u.id_unita], val = d !== undefined ? d : u.rma, bal = u.tipo === 'BALANCING';
+        var scad = r ? r.data_scadenza : '', late = scad && scad < oggi;
+        var cell = bal ? '<span class="mono">' + esc(u.rma) + '</span>' : '<input class="edit-cell mono' + (d !== undefined ? ' dirty' : '') + '" style="width:11ch" value="' + esc(val) + '" placeholder="—" onchange="Rma.set(\'' + u.id_unita + '\',this.value)">';
+        return '<tr class="' + (a && a.variazione ? 'r-warn' : '') + '"><td>' + Pill.tipo(u.tipo) + '</td><td class="mono">' + esc(u.fr) + '</td><td>' + esc(u.mnft) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.riparatore) + '</td>' +
+          '<td class="nw" style="font-size:11.5px">' + esc(Rma.nota(u.note)) + '</td><td class="mono" style="font-size:11px">' + esc(ctx.materialDi(u)) + '</td><td>' + esc(u.destinazione_prevista) + '</td>' +
+          '<td style="color:var(--violet)">' + (a && a.variazione ? esc(Rma.destRma(r)) : '') + '</td><td>' + cell + '</td>' +
+          '<td class="mono" style="color:var(--green)">' + (r ? esc(r.id_rma) : '') + '</td><td class="mono" style="font-size:11px">' + (r ? esc(r.data_apertura.slice(0, 10)) : '') + '</td>' +
+          '<td class="mono" style="font-size:11px' + (late ? ';color:var(--red)' : '') + '">' + esc(scad) + '</td><td style="font-size:11.5px">' + (r && r.failure_report ? 'RITORNO GIACENZA FR ' + esc(r.failure_report) : esc(r ? r.note_sd : '')) + '</td></tr>';
+      }).join('') : '<tr><td colspan="15" class="empty">Nessun pezzo GOOD/BALANCING in giacenza</td></tr>';
+      $('rmaHint').textContent = 'RMA giacenza = abbinamento automatico ai ritorni VLT (material o equivalente, prima la stessa destinazione; in viola le variazioni di destino). RMA creato = inserito dal Service Desk: ha la precedenza.';
+    } else {
+      var att = Rma.attivi(), byRma = {}; Object.keys(abb).forEach(function (k) { byRma[abb[k].rma.id_rma] = k; });
+      var U = {}; DB.t.UNITA.rows.forEach(function (u) { U[u.id_unita] = u; });
+      var L2 = att.filter(function (r) { return !q || [r.id_rma, r.material, r.descrizione, Rma.destRma(r), r.failure_report, r.mpn].some(function (x) { return L.up(x).indexOf(q) >= 0; }); })
+        .sort(function (a, b) { return (a.data_scadenza || '').localeCompare(b.data_scadenza || ''); });
+      var nOk = att.filter(function (r) { return byRma[r.id_rma]; }).length, nLate = att.filter(function (r) { return r.data_scadenza && r.data_scadenza < oggi; }).length;
+      $('rmaStats').innerHTML = '<div class="stat"><b>' + att.length + '</b><span>rma aperti</span></div><div class="stat"><b style="color:var(--green)">' + nOk + '</b><span>con pezzo</span></div><div class="stat"><b style="color:var(--amber)">' + (att.length - nOk) + '</b><span>senza pezzo</span></div>' + (nLate ? '<div class="stat"><b style="color:var(--red)">' + nLate + '</b><span>scaduti</span></div>' : '');
+      $('rmaHead').innerHTML = '<tr><th>RMA</th><th>Data open</th><th>Scadenza</th><th>Material</th><th>P/N cercato</th><th>Descrizione</th><th>Destinazione</th><th>FR</th><th>Stato VLT</th><th>Pezzo abbinato</th></tr>';
+      $('rmaRows').innerHTML = L2.length ? L2.map(function (r) {
+        var id = byRma[r.id_rma], u = id ? U[id] : null, late = r.data_scadenza && r.data_scadenza < oggi;
+        return '<tr class="' + (u ? '' : 'r-warn') + '"><td class="mono">' + esc(r.id_rma) + '</td><td class="mono" style="font-size:11px">' + esc(r.data_apertura) + '</td><td class="mono" style="font-size:11px' + (late ? ';color:var(--red)' : '') + '">' + esc(r.data_scadenza) + '</td>' +
+          '<td class="mono" style="font-size:11px">' + esc(r.material) + '</td><td class="mono">' + esc(Rma.lk.pnByMat[Rma.mk(r.material)] || '') + '</td><td style="font-size:11.5px">' + esc(r.descrizione) + '</td><td>' + esc(Rma.destRma(r)) + '</td>' +
+          '<td class="mono">' + esc(r.failure_report) + '</td><td style="font-size:11px">' + esc(r.stato_vlt) + '</td><td>' + (u ? '<span class="mono">' + esc(u.seriale) + '</span> <span class="hint">' + esc(u.id_unita) + (abb[id].variazione ? ' · variazione destino' : '') + '</span>' : '<span style="color:var(--amber)">nessun pezzo in giacenza</span>') + '</td></tr>';
+      }).join('') : '<tr><td colspan="10" class="empty">' + (ult ? 'Nessun RMA aperto' : 'Importa il CSV dei ritorni in giacenza esportato da VLT') + '</td></tr>';
+      $('rmaHint').textContent = '';
+    }
   }
 };
 
