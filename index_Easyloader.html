@@ -75,7 +75,7 @@ button{font-family:var(--ff-sans)}
 .btn.green{background:var(--green)} .btn.red{background:var(--red)} .btn.sm{padding:5px 10px;font-size:12px}
 .row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
 .spacer{flex:1}
-.scan-row{display:grid;grid-template-columns:200px 1fr 200px auto;gap:10px;align-items:end}
+.scan-row{display:grid;grid-template-columns:1fr 200px 220px auto;gap:10px;align-items:end}
 @media (max-width:900px){.scan-row{grid-template-columns:1fr 1fr}}
 .stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
 .stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 14px;min-width:110px}
@@ -177,10 +177,10 @@ a.mail{color:var(--blue);font-size:11.5px;text-decoration:none}
       </div>
 
       <div class="card">
-        <div class="card-h"><div class="card-t">Lettura pezzi</div><span class="hint" id="hScan">Spara FR, poi il barcode del seriale (Invio o Tab per passare al campo dopo). Per i Huawei puoi lasciare vuoto l'FR: lo ricava dal seriale.</span></div>
+        <div class="card-h"><div class="card-t">Lettura pezzi</div><span class="hint" id="hScan">Spara il seriale e premi Invio: l'FR si cerca da solo. In alternativa scrivi solo l'FR: il seriale arriva da VLT.</span></div>
         <div class="scan-row">
-          <div class="fg"><span class="fl" id="lblFr">FR / RMA</span><input class="fc mono" id="scFr" autocomplete="off"></div>
           <div class="fg"><span class="fl">Barcode seriale</span><input class="fc mono" id="scBc" autocomplete="off"></div>
+          <div class="fg"><span class="fl" id="lblFr">FR (facoltativo)</span><input class="fc mono" id="scFr" autocomplete="off" placeholder="si cerca dal seriale"></div>
           <div class="fg" id="wrapUbi"><span class="fl">Ubicazione (NEW/REUSE)</span><input class="fc mono" id="scUbi" list="dlUbicazioni" autocomplete="off"></div>
           <button class="btn" onclick="Ingresso.aggiungi()">Aggiungi</button>
         </div>
@@ -231,6 +231,7 @@ a.mail{color:var(--blue);font-size:11.5px;text-decoration:none}
       <div class="subtabs" id="admTabs"></div>
       <div class="card">
         <div class="card-h"><div class="card-t" id="admTitle"></div><span class="hint" id="admHint"></span><div class="spacer"></div>
+          <input class="fc" id="admQ" placeholder="filtra…" style="width:200px" oninput="Admin.render()">
           <button class="btn ghost sm" id="admAdd" onclick="Admin.addRow()">+ Riga</button>
           <button class="btn sm" onclick="Admin.save()">Salva modifiche</button></div>
         <div class="tbl-wrap"><table><thead id="admHead"></thead><tbody id="admRows"></tbody></table></div>
@@ -284,7 +285,7 @@ L.estraiSeriale = function (bc, regole) {
   return bc;
 };
 L.estraiPn = function (bc, seriale, rip, regole) {
-  bc = L.s(bc);
+  bc = L.s(bc); if (!bc) return '';
   // prima le regole del riparatore (come nel prototipo: HUAWEI / SIAE hanno precedenza), poi quelle generiche
   var spec = regole.filter(function (r) { return r.riparatore; });
   var gen = regole.filter(function (r) { return !r.riparatore && (r.pn_da || r.condizione_extra === 'split_spazio'); });
@@ -314,6 +315,13 @@ L.notaControllo = function (seriale, pn, vltSer, vltPn) {
   if (!serOk) return 'INSERIRE SERIALE CORRETTO : ' + seriale;
   if (!pnOk) return 'INSERIRE TPN CORRETTO : ' + pn;
   return '';
+};
+// tra più FR VLT dello stesso seriale (pezzo entrato più volte): si prende sempre il più recente
+L.pickFr = function (list, closed) {
+  list = (list || []).slice().sort(function (a, b) { return (parseInt(b.fr_id, 10) || 0) - (parseInt(a.fr_id, 10) || 0); });
+  var act = list.filter(function (r) { return !closed[r.stato]; });
+  var row = list[0] || null;   // sempre l'FR più recente (numero più alto)
+  return { row: row, nAttivi: act.length, chiuso: !!(row && closed[row.stato]), n: list.length };
 };
 if (typeof module !== 'undefined') module.exports = L;
 </script>
@@ -443,7 +451,7 @@ Table.prototype.cell = function (h, row) { return API.q(this.name) + '!' + this.
 
 var DB = {
   id: null, t: {}, vlt: null, vltMap: {}, vltBySer: {}, artPn: {}, serNoti: {}, huaweiFr: {}, huaweiTs: null,
-  SMALL: ['OPERATORI', 'PARAMETRI', 'RIPARATORI', 'RIPARATORI_ALIAS', 'CONTROPARTI', 'DEPOT_VLT', 'VETTORI', 'REGOLE_BARCODE', 'MAGAZZINI', 'BALANCING'],
+  SMALL: ['OPERATORI', 'PARAMETRI', 'RIPARATORI', 'RIPARATORI_ALIAS', 'CONTROPARTI', 'DEPOT_VLT', 'VETTORI', 'REGOLE_BARCODE', 'MAGAZZINI', 'BALANCING', 'CALENDARIO_USCITE'],
   loadTables: async function (names) {
     var vals = await API.batchGet(DB.id, names.map(function (n) { return API.q(n); }));
     names.forEach(function (n, i) { var v = vals[i]; DB.t[n] = new Table(n, v[0] || [], v.slice(1)); });
@@ -476,7 +484,7 @@ var DB = {
       c = { ts: Date.now(), rows: rows }; await DB.cacheSet('vlt', c);
     }
     DB.vlt = c; DB.vltMap = {}; DB.vltBySer = {};
-    c.rows.forEach(function (r) { if (r.fr_id) DB.vltMap[r.fr_id] = r; var s = L.up(r.f_mat_serial_no); if (s) DB.vltBySer[s] = r; });
+    c.rows.forEach(function (r) { if (r.fr_id) DB.vltMap[r.fr_id] = r; var s = L.up(r.f_mat_serial_no); if (s) (DB.vltBySer[s] = DB.vltBySer[s] || []).push(r); });
   },
   loadHuawei: async function (force) {
     var c = force ? null : await DB.cacheGet('huawei');
@@ -567,7 +575,7 @@ var App = {
     $('view-' + t.k).classList.add('active');
     if (t.k === 'giacenze') Giacenze.render();
     if (t.k === 'admin') Admin.render();
-    if (t.k === 'ingresso') setTimeout(function () { $('scFr').focus(); }, 50);
+    if (t.k === 'ingresso') setTimeout(function () { $('scBc').focus(); }, 50);
   },
   setTheme: function (th) { document.body.className = th || ''; lsS('theme', th); },
   syncInfo: function () { $('syncInfo').textContent = 'VLT ' + (DB.vlt ? new Date(DB.vlt.ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—') + ' · Huawei ' + Object.keys(DB.huaweiFr).length + ' seriali · giacenza ' + DB.t.UNITA.rows.length; },
@@ -602,8 +610,9 @@ var Ingresso = {
     } else Ingresso.nuovo(true);
     var fr = $('scFr'), bc = $('scBc'), ub = $('scUbi');
     function nextOn(e, fn) { if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) { e.preventDefault(); fn(); } }
-    fr.addEventListener('keydown', function (e) { nextOn(e, function () { bc.focus(); }); });
-    bc.addEventListener('keydown', function (e) { nextOn(e, function () { if (!L.s(bc.value)) return; if (Ingresso.needUbi()) ub.focus(); else Ingresso.aggiungi(); }); });
+    function avanti() { if (!L.s(bc.value) && !L.s(fr.value)) return; if (Ingresso.needUbi() && !L.s(ub.value)) ub.focus(); else Ingresso.aggiungi(); }
+    bc.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); avanti(); } });
+    fr.addEventListener('keydown', function (e) { if (e.key === 'Enter') { e.preventDefault(); avanti(); } });
     ub.addEventListener('keydown', function (e) { nextOn(e, function () { Ingresso.aggiungi(); }); });
     Ingresso.ricalcola(); Ingresso.renderOggi();
   },
@@ -621,36 +630,48 @@ var Ingresso = {
   },
   save: function () { lsS('draft_' + Auth.email, Ingresso.rows.length ? { testata: Ingresso.T(), rows: Ingresso.rows } : null); },
   needUbi: function () { var t = $('inTipo').value; return t === 'NEW' || t === 'REUSE'; },
-  onTestata: function () { $('wrapUbi').style.visibility = Ingresso.needUbi() ? 'visible' : 'hidden'; $('lblFr').textContent = $('inBal').checked ? 'FR / RMA balancing' : 'FR'; Ingresso.ricalcola(); },
+  onTestata: function () { $('wrapUbi').style.visibility = Ingresso.needUbi() ? 'visible' : 'hidden'; $('lblFr').textContent = $('inBal').checked ? 'FR / RMA balancing' : 'FR (facoltativo)'; Ingresso.ricalcola(); },
   onAwb: function () { var v = L.vettoreDaAwb($('inAwb').value, DB.t.VETTORI.rows); if (v) $('inVettore').value = v; Ingresso.ricalcola(); },
   aggiungi: function () {
     var fr = L.s($('scFr').value).replace(/^FR/i, '').replace(/^0+(?=\d)/, ''), bc = L.s($('scBc').value), ub = L.s($('scUbi').value);
-    if (!bc) { toast('Manca il barcode del seriale', 'ko'); $('scBc').focus(); return; }
+    if (!bc && !fr) { toast('Spara il seriale (oppure scrivi l\'FR)', 'ko'); $('scBc').focus(); return; }
     if (fr && !/^\d+$/.test(fr)) { toast('FR/RMA deve essere un numero', 'ko'); $('scFr').focus(); return; }
     Ingresso.rows.push({ fr: fr, bc: bc, ubi: ub, ser: '', pn: '', man: {} });
     $('scFr').value = ''; $('scBc').value = ''; if (!Ingresso.needUbi()) $('scUbi').value = '';
-    Ingresso.ricalcola(); Ingresso.save(); $('scFr').focus();
+    Ingresso.ricalcola(); Ingresso.save(); $('scBc').focus();
   },
   del: function (i) { Ingresso.rows.splice(i, 1); Ingresso.ricalcola(); Ingresso.save(); },
   edit: function (i, f, v) { var r = Ingresso.rows[i]; r.man[f] = L.s(v); Ingresso.ricalcola(); Ingresso.save(); },
   // calcolo riga: replica della logica INPUT DATI del prototipo
   calc: function (r, T, ctx) {
     var regole = DB.t.REGOLE_BARCODE.rows.slice().sort(function (a, b) { return (parseInt(a.priorita, 10) || 0) - (parseInt(b.priorita, 10) || 0); });
-    // FR mancante: lo cerco nel foglio Huawei (funzione ATS_CERCA_FR_HUAWEI_DDT del prototipo)
-    var frIn = r.fr, frHuawei = false;
-    if (!frIn) {
-      var hf = DB.huaweiFr[L.up(r.bc)] || DB.huaweiFr[L.up(L.estraiSeriale(r.bc, regole))] || DB.huaweiFr[L.up(L.afterSpace(r.bc))];
-      if (hf) { frIn = hf; frHuawei = true; }
+    var CLOSED = {}; L.s(DB.param('vlt_stati_chiusi', '')).split(';').forEach(function (x) { if (x) CLOSED[x] = 1; });
+    var frIn = r.fr, frOrig = '', pick = null;
+    var ser0 = r.bc ? L.estraiSeriale(r.bc, regole) : '';
+    // lettura dal seriale: l'FR si cerca da solo (VLT per seriale; file Huawei come nella funzione ATS_CERCA_FR_HUAWEI_DDT)
+    if (!frIn && r.bc) {
+      var hf = DB.huaweiFr[L.up(r.bc)] || DB.huaweiFr[L.up(ser0)] || DB.huaweiFr[L.up(L.afterSpace(r.bc))];
+      pick = L.pickFr(DB.vltBySer[L.up(ser0)] || DB.vltBySer[L.up(L.afterSpace(ser0))] || DB.vltBySer[L.up(r.bc)] || [], CLOSED);
+      if (T.tipo === 'GOOD' && hf) { frIn = hf; frOrig = 'HUAWEI'; }
+      else if (pick.row) { frIn = pick.row.fr_id; frOrig = 'VLT'; }
+      else if (hf) { frIn = hf; frOrig = 'HUAWEI'; }
     }
     var o = { fr: frIn, rma: '', bc: r.bc, msgs: [], err: false, warn: false, tipo: T.tipo, ubicazione: r.ubi, destinazione: '', statoVlt: '', nota: '', mail: null };
     var v = frIn ? DB.vltMap[frIn] : null;
-    // balancing: con il flag attivo, un numero non trovato tra gli FR è l'RMA della balancing
-    if ((T.bal || T.tipo === 'BALANCING') && frIn && !v) { o.tipo = 'BALANCING'; o.rma = frIn; o.fr = ''; }
-    o.ser = r.man.ser || L.estraiSeriale(r.bc, regole);
-    if (!v && !o.rma) { var vs = DB.vltBySer[L.up(o.ser)] || DB.vltBySer[L.up(L.afterSpace(o.ser))]; if (vs && !frIn) v = vs; }
+    // balancing: con il flag attivo, un numero digitato che non è un FR è l'RMA della balancing
+    if ((T.bal || T.tipo === 'BALANCING') && r.fr && !v) { o.tipo = 'BALANCING'; o.rma = r.fr; o.fr = ''; }
+    // lettura dall'FR senza barcode: il seriale arriva da VLT
+    o.ser = r.man.ser || (r.bc ? ser0 : (v ? L.s(v.f_mat_serial_no) : ''));
+    if (!r.bc && v) o.msgs.push(['info', 'Seriale preso da VLT (FR inserito senza barcode)']);
+    if (!r.bc && !v && !o.rma) { o.msgs.push(['err', 'FR non trovato in VLT: spara il seriale']); o.err = true; }
+    if (frOrig === 'VLT') {
+      o.msgs.push(['info', 'FR trovato in VLT dal seriale' + (pick.n > 1 ? ' (' + pick.n + ' FR per questo seriale)' : '')]);
+      if (pick.chiuso) { o.msgs.push(['warn', 'L\'FR più recente di questo seriale è chiuso su VLT (' + pick.row.stato + ')']); o.warn = true; }
+    }
+    if (frOrig === 'HUAWEI') o.msgs.push(['info', 'FR ricavato dal file Huawei (seriale → FR)']);
     o.rip = r.man.rip || (v ? v.riparatore : '');
     var sn = DB.serNoti[L.up(o.ser)];
-    o.pn = r.man.pn || L.estraiPn(r.bc, o.ser, o.rip, regole) || (sn && sn.pn) || (v ? v.f_mat_tmpn : '');
+    o.pn = r.man.pn || L.estraiPn(r.bc || o.ser, o.ser, o.rip, regole) || (sn && sn.pn) || (v ? v.f_mat_tmpn : '');   // senza barcode le regole si applicano al seriale VLT
     var rp = DB.t.RIPARATORI.rows.find(function (x) { return L.up(x.codice) === L.up(App.aliasRip(o.rip)); });
     o.mnft = r.man.mnft || DB.artPn[L.up(o.pn)] || (sn && sn.mnft) || (rp && rp.mnft_default) || '';
     if (v) {
@@ -681,10 +702,9 @@ var Ingresso = {
       } else {
         o.nota = r.man.nota || '';
         if (frIn) { o.msgs.push(['warn', 'FR non trovato in VLT']); o.warn = true; }
-        else if (['FAULTY', 'GOOD'].indexOf(o.tipo) >= 0) { o.msgs.push(['err', 'Manca l\'FR']); o.err = true; }
+        else if (['FAULTY', 'GOOD'].indexOf(o.tipo) >= 0) { o.msgs.push(['err', 'FR non trovato (né in VLT né nel file Huawei): inseriscilo']); o.err = true; }
       }
     }
-    if (frHuawei) o.msgs.push(['info', 'FR ricavato dal file Huawei (seriale → FR)']);
     if (L.up(o.nota) === 'SCRAP') o.tipo = 'SCRAP';
     // duplicati
     var key = L.up(o.ser);
@@ -693,7 +713,7 @@ var Ingresso = {
     if (o.fr) { if (ctx.frSeen[o.fr]) { o.msgs.push(['warn', 'FR già letto (riga ' + ctx.frSeen[o.fr] + ')']); o.warn = true; } ctx.frSeen[o.fr] = ctx.n; }
     var g = ctx.giac[key] || ctx.giac[L.up(L.afterSpace(o.ser))];
     if (g) { o.msgs.push(['err', 'Seriale già in giacenza (' + g.id_unita + ', ' + g.tipo + ', entrato ' + g.data_in + ')']); o.err = true; }
-    if (L.s(o.bc) !== L.s(o.ser)) o.msgs.push(['info', 'Seriale estratto dal barcode']);
+    if (o.bc && L.s(o.bc) !== L.s(o.ser)) o.msgs.push(['info', 'Seriale estratto dal barcode']);
     if (!o.pn) { o.msgs.push(['warn', 'P/N non ricavato: inseriscilo']); o.warn = true; }
     return o;
   },
@@ -879,6 +899,10 @@ var Admin = {
     OPERATORI: { title: 'Operatori', hint: 'Email Gmail di accesso per ogni sigla. Ruolo ADMIN = vede questo tab.', cols: ['email', 'nome', 'sigla', 'ruolo', 'attivo'], add: true },
     RIPARATORI: { title: 'Riparatori', hint: 'Dati stampati sul DDT ACK. ack_include_as = SI fa entrare gli AS nell\'ACK del giorno.', cols: ['codice', 'ragione_sociale', 'indirizzo', 'ack_include_as', 'mnft_default', 'attivo', 'note'], add: true },
     RIPARATORI_ALIAS: { title: 'Alias riparatori VLT', hint: 'Nome riparatore come scritto in VLT → codice riparatore.', cols: ['nome_vlt', 'codice_riparatore'], add: true },
+    DEPOT_VLT: { title: 'Depositi VLT', hint: 'Codice deposito VLT → destinazione: usato per mittente e destinazione GOOD.', cols: ['depot_vlt', 'destinazione', 'sigla', 'destinazione_conversione'], add: true },
+    CONTROPARTI: { title: 'Controparti', hint: 'Mittenti e destinazioni (ASP / field) con indirizzo per i DDT RMA.', cols: ['codice', 'indirizzo_completo', 'tipo', 'attivo', 'note'], add: true },
+    CALENDARIO_USCITE: { title: 'Calendario uscite', hint: 'Riparatori in uscita per giorno (una riga per data e riparatore).', cols: ['data', 'riparatore', 'stato', 'id_spedizione', 'note'], add: true },
+    MAGAZZINI: { title: 'Magazzini', hint: 'Aree logiche della giacenza.', cols: ['codice', 'descrizione'], add: true },
     PARAMETRI: { title: 'Parametri', hint: 'Modifica con attenzione: numerazioni DDT, mail, regole.', cols: ['chiave', 'valore', 'descrizione'], add: true },
     VETTORI: { title: 'Vettori', hint: 'Prefisso AWB per il riconoscimento automatico del vettore.', cols: ['vettore', 'prefisso_awb'], add: true },
     REGOLE_BARCODE: { title: 'Regole barcode', hint: 'Estrazione seriale/PN dal barcode, in ordine di priorità.', cols: ['priorita', 'prefisso', 'lunghezza', 'condizione_extra', 'riparatore', 'seriale_da', 'seriale_lung', 'pn_da', 'pn_lung', 'pn_prefisso', 'note'], add: true }
@@ -888,14 +912,16 @@ var Admin = {
   },
   open: function (k) {
     if (Object.keys(Admin.dirty).length && !confirm('Ci sono modifiche non salvate: scartarle?')) return;
-    Admin.sez = k; Admin.dirty = {}; Admin.render();
+    Admin.sez = k; Admin.dirty = {}; $('admQ').value = ''; Admin.render();
   },
   render: function () {
     var c = Admin.CONF[Admin.sez], t = DB.t[Admin.sez];
     document.querySelectorAll('.subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-' + Admin.sez); });
     $('admTitle').textContent = c.title; $('admHint').textContent = c.hint;
     $('admHead').innerHTML = '<tr>' + c.cols.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr>';
+    var q = L.up($('admQ').value);
     $('admRows').innerHTML = t.rows.map(function (r, i) {
+      if (q && !Admin.dirty[i] && !c.cols.some(function (h) { return L.up(r[h]).indexOf(q) >= 0; })) return '';
       return '<tr>' + c.cols.map(function (h) {
         var d = Admin.dirty[i] && Admin.dirty[i][h] !== undefined;
         var v = d ? Admin.dirty[i][h] : r[h];
