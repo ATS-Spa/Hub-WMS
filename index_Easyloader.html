@@ -121,8 +121,10 @@ td.mono,td.nw{white-space:nowrap}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:300}
 .modal-bg.show{display:flex}
 .modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px 24px;max-width:520px;width:92%}
+.modal.wide{max-width:1280px}
+.modal-scroll{max-height:60vh;overflow:auto;margin-top:6px}
 .modal h3{font-family:var(--ff-cond);font-size:20px;margin-bottom:10px}
-.modal p{font-size:13px;color:var(--subtle);line-height:1.6;white-space:pre-line}
+.modal .mbody{font-size:13px;color:var(--subtle);line-height:1.6;white-space:pre-line}
 .modal .row{justify-content:flex-end;margin-top:18px}
 .ack-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-bottom:14px}
 .ack-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px}
@@ -188,7 +190,7 @@ tr.r-off td{opacity:.5}
               <option value="">— seleziona —</option><option>FAULTY</option><option>GOOD</option><option>REUSE</option><option>NEW</option><option>BALANCING</option><option>RESO</option><option>SCRAP</option>
             </select></div>
           <div class="fg"><span class="fl">Data ingresso *</span><input class="fc" type="date" id="inData" onchange="Ingresso.onTestata()"></div>
-          <div class="fg mid"><span class="fl">Mittente *</span><input class="fc" id="inMittente" list="dlControparti" onchange="Ingresso.onTestata()" placeholder="proposto dal 1° FR"></div>
+          <div class="fg mid"><span class="fl">Mittente *</span><input class="fc" id="inMittente" list="dlControparti" onchange="Ingresso.onTestata()" oninput="Ingresso.fitMitt()" placeholder="proposto dal 1° FR"></div>
           <div class="fg mid"><span class="fl">AWB</span><input class="fc mono" id="inAwb" onchange="Ingresso.onAwb()" placeholder="proposto dal 1° FR"></div>
           <div class="fg"><span class="fl">Vettore *</span><input class="fc" id="inVettore" list="dlVettori" onchange="Ingresso.onTestata()"><span class="hint" id="hVettore"></span></div>
           <div class="fg"><span class="fl">DDT mittente</span><input class="fc mono" id="inDdt" onchange="Ingresso.onTestata()"></div>
@@ -286,9 +288,10 @@ tr.r-off td{opacity:.5}
 <datalist id="dlVettori"></datalist>
 <datalist id="dlUbicazioni"></datalist>
 <datalist id="dlMisure"></datalist>
+<datalist id="dlMotivi"></datalist>
 
 <div class="modal-bg" id="modal"><div class="modal">
-  <h3 id="mTitle"></h3><p id="mBody"></p><div class="progress" id="mProg"></div>
+  <h3 id="mTitle"></h3><div class="mbody" id="mBody"></div><div class="progress" id="mProg"></div>
   <div class="row" id="mBtns"></div>
 </div></div>
 <div id="toast"></div>
@@ -411,6 +414,7 @@ function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
 var Modal = {
   open: function (title, body, buttons) {
     $('mTitle').textContent = title; $('mBody').textContent = body || ''; $('mProg').textContent = '';
+    document.querySelector('#modal .modal').classList.remove('wide');
     var b = $('mBtns'); b.innerHTML = '';
     (buttons || [{ label: 'OK' }]).forEach(function (x) {
       var e = document.createElement('button'); e.className = 'btn ' + (x.cls || ''); e.textContent = x.label;
@@ -418,6 +422,7 @@ var Modal = {
     });
     $('modal').classList.add('show');
   },
+  html: function (title, html, buttons, wide) { Modal.open(title, '', buttons); $('mBody').innerHTML = html; document.querySelector('#modal .modal').classList.toggle('wide', !!wide); },
   progress: function (t) { $('mProg').textContent = t; },
   close: function () { $('modal').classList.remove('show'); },
   confirm: function (title, body) { return new Promise(function (res) { Modal.open(title, body, [{ label: 'Annulla', cls: 'ghost', fn: function () { res(false); } }, { label: 'Conferma', cls: 'green', fn: function () { res(true); } }]); }); }
@@ -690,6 +695,7 @@ var Ingresso = {
     $('inTipo').value = t.tipo || ''; $('inData').value = t.data || L.isoToday(); $('inMittente').value = t.mittente || ''; $('inAwb').value = t.awb || '';
     $('inVettore').value = t.vettore || ''; $('inDdt').value = t.ddt || ''; $('inPo').value = t.po || ''; $('inBal').checked = !!t.bal;
     if ($('scBc')) Ingresso.lockScan();
+    Ingresso.fitMitt();
   },
   nuovo: function (silent) {
     if (!silent && Ingresso.rows.length && !confirm('Ci sono ' + Ingresso.rows.length + ' pezzi non caricati. Scartarli?')) return;
@@ -697,6 +703,14 @@ var Ingresso = {
   },
   save: function () { lsS('draft_' + Auth.email, Ingresso.rows.length ? { testata: Ingresso.T(), rows: Ingresso.rows } : null); },
   needUbi: function () { var t = $('inTipo').value; return t === 'NEW' || t === 'REUSE'; },
+  // campo Mittente largo quanto il testo (minimo 210 px, massimo 560 px)
+  fitMitt: function () {
+    var e = $('inMittente'); if (!e) return;
+    var c = Ingresso._cv || (Ingresso._cv = document.createElement('canvas').getContext('2d'));
+    c.font = getComputedStyle(e).font;
+    var w = Math.ceil(c.measureText(e.value || e.placeholder || '').width) + 40;
+    e.parentNode.style.width = Math.min(560, Math.max(210, w)) + 'px';
+  },
   // senza Tipo non si legge nulla
   lockScan: function () {
     var ok = !!$('inTipo').value;
@@ -846,7 +860,7 @@ var Ingresso = {
     var first = Ingresso.computed.find(function (c) { return c.fr && DB.vltMap[c.fr]; });
     if (first) {
       var v1 = DB.vltMap[first.fr];
-      if (!L.s($('inMittente').value)) $('inMittente').value = (T.tipo === 'GOOD') ? App.aliasRip(first.rip) : (first.depDest || '');
+      if (!L.s($('inMittente').value)) { $('inMittente').value = (T.tipo === 'GOOD') ? App.aliasRip(first.rip) : (first.depDest || ''); Ingresso.fitMitt(); }
       if (!L.s($('inAwb').value) && T.tipo !== 'GOOD' && v1.awb_cw) { $('inAwb').value = v1.awb_cw; Ingresso.onAwbSilent(); }
     }
     Ingresso.render();
@@ -1139,7 +1153,57 @@ var Ack = {
     Ack._loghi = Promise.all([uno(Ack.LOGHI.sx), uno(Ack.LOGHI.dx)]).then(function (r) { Ack._lg = { sx: r[0], dx: r[1] }; if (!r[0] || !r[1]) Ack._loghi = null; return Ack._lg; });
     return Ack._loghi;
   },
-  load: async function () { Ack.loghi(); await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_RIGHE', 'SPEDIZIONI_COLLI', 'DDT_REGISTRO', 'ANOMALIE']); Ack.loaded = true; },
+  load: async function () { Ack.loghi(); await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_RIGHE', 'SPEDIZIONI_COLLI', 'DDT_REGISTRO', 'ANOMALIE']); await Ack.ensurePending(); Ack.loaded = true; },
+  // ─ ACK PENDING: FR tolti da un ACK, con il motivo (foglio ACK_PENDING, creato dall'app se non c'è)
+  PEND_H: ['id_pending', 'data', 'riparatore', 'fr', 'seriale', 'pn', 'id_unita', 'id_spedizione', 'motivo', 'stato', 'rimosso_da', 'risolto_il', 'risolto_da', 'id_spedizione_uscita', 'nota_risoluzione'],
+  MOTIVI: ['Pezzo non trovato a scaffale', 'Pezzo danneggiato / da verificare', 'Seriale o TPN non corrispondente', 'Bloccato dal Service Desk', 'In attesa di autorizzazione'],
+  ensurePending: async function () {
+    try { await DB.loadTables(['ACK_PENDING']); if (DB.t.ACK_PENDING.header.length) return; }
+    catch (e) {
+      if (!/parse range|no sheet/i.test(e.message)) throw e;
+      try { await API.call(API.S + DB.id + ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: [{ addSheet: { properties: { title: 'ACK_PENDING' } } }] }) }); }
+      catch (e2) { if (!/already exists|esiste gi/i.test(e2.message)) throw e2; }
+    }
+    await API.batchUpdate(DB.id, [{ range: API.q('ACK_PENDING') + '!A1', values: [Ack.PEND_H] }]);
+    DB.t.ACK_PENDING = new Table('ACK_PENDING', Ack.PEND_H, []);
+  },
+  pending: function (cod, tutti) {
+    return (DB.t.ACK_PENDING ? DB.t.ACK_PENDING.rows : []).filter(function (p) { return L.up(App.aliasRip(p.riparatore)) === L.up(cod) && (tutti || p.stato === 'APERTO'); })
+      .sort(function (a, b) { return a.data < b.data ? 1 : -1; });
+  },
+  pendingDi: function (r) { return (DB.t.ACK_PENDING ? DB.t.ACK_PENDING.rows : []).find(function (p) { return p.id_spedizione === r.id_spedizione && p.fr === r.fr && p.stato === 'APERTO'; }); },
+  setP: function (p, obj) { var t = DB.t.ACK_PENDING, upd = []; Object.keys(obj).forEach(function (h) { p[h] = L.s(obj[h]); if (p._r && (h in t.idx)) upd.push({ range: t.cell(h, p._r), values: [[p[h]]] }); }); return upd; },
+  chiediMotivo: function (r) {
+    var usati = []; (DB.t.ACK_PENDING ? DB.t.ACK_PENDING.rows : []).forEach(function (p) { if (p.motivo && usati.indexOf(p.motivo) < 0) usati.push(p.motivo); });
+    $('dlMotivi').innerHTML = Ack.MOTIVI.concat(usati.filter(function (m) { return Ack.MOTIVI.indexOf(m) < 0; }).slice(0, 30)).map(function (m) { return '<option value="' + esc(m) + '">'; }).join('');
+    return new Promise(function (res) {
+      function ok() { var v = L.s($('mMotivo').value); if (!v) { $('mMotivo').classList.add('err'); $('mMotivo').focus(); return; } Modal.close(); res(v); }
+      Modal.html('Rimuovi FR ' + r.fr + ' dall\'ACK',
+        '<div style="font-size:13px;color:var(--subtle);margin-bottom:10px">' + esc(r.seriale) + ' · ' + esc(r.pn) + '<br>Resta in giacenza e riparte con l\'ACK successivo. Il motivo resta tracciato in ACK Pending del riparatore.</div>' +
+        '<div class="fg"><span class="fl">Motivo *</span><input class="fc" id="mMotivo" list="dlMotivi" autocomplete="off" placeholder="scegli o scrivi il motivo"></div>',
+        [{ label: 'Annulla', cls: 'ghost', fn: function () { res(''); } }, { label: 'Rimuovi', cls: 'red', keep: true, fn: ok }]);
+      setTimeout(function () { var e = $('mMotivo'); e.focus(); e.onkeydown = function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); ok(); } }; }, 50);
+    });
+  },
+  vediPending: function (cod, tutti) {
+    var L0 = Ack.pending(cod, tutti), ST = { APERTO: 'p-amber', RISOLTO: 'p-green', ANNULLATO: '' };
+    var html = '<label style="font-size:12px;color:var(--subtle);display:flex;gap:6px;align-items:center"><input type="checkbox"' + (tutti ? ' checked' : '') + ' onchange="Ack.vediPending(\'' + esc(cod) + '\',this.checked)"> mostra anche risolti e annullati</label>' +
+      '<div class="tbl-wrap modal-scroll"><table><thead><tr><th>Data</th><th>FR</th><th>Seriale</th><th>P/N</th><th>Motivo</th><th>Stato</th><th>Tolto da</th><th>ACK</th><th>Chiusura</th></tr></thead><tbody>' +
+      (L0.length ? L0.map(function (p) {
+        var op = DB.t.OPERATORI.rows.find(function (o) { return L.s(o.email).toLowerCase() === p.rimosso_da; });
+        return '<tr><td class="mono" style="font-size:11px">' + esc(L.s(p.data).slice(0, 16)) + '</td><td class="mono">' + esc(p.fr) + '</td><td class="mono">' + esc(p.seriale) + '</td><td class="mono">' + esc(p.pn) + '</td><td style="min-width:200px">' + esc(p.motivo) + '</td>' +
+          '<td><span class="pill ' + (ST[p.stato] || '') + '">' + esc(p.stato) + '</span></td><td class="nw" style="font-size:11.5px" title="' + esc(p.rimosso_da) + '">' + esc(op ? (op.sigla || op.nome) : L.s(p.rimosso_da).split('@')[0]) + '</td><td class="mono" style="font-size:11px">' + esc(p.id_spedizione) + '</td>' +
+          '<td class="nw" style="font-size:11px">' + (p.stato === 'APERTO' ? '<button class="btn ghost sm" onclick="Ack.risolviPending(\'' + p.id_pending + '\',\'' + esc(cod) + '\')">Segna risolto</button>' : esc([p.risolto_il, p.id_spedizione_uscita, p.nota_risoluzione].filter(Boolean).join(' · '))) + '</td></tr>';
+      }).join('') : '<tr><td colspan="9" class="empty">Nessun FR ' + (tutti ? '' : 'in sospeso ') + 'per ' + esc(cod) + '</td></tr>') + '</tbody></table></div>';
+    Modal.html('ACK Pending · ' + cod, html, [{ label: 'Chiudi', cls: 'ghost' }], true);
+  },
+  risolviPending: async function (id, cod) {
+    var p = DB.t.ACK_PENDING.rows.find(function (x) { return x.id_pending === id; }); if (!p) return;
+    var nota = prompt('Nota di chiusura per FR ' + p.fr + ' (facoltativa):', ''); if (nota === null) return;
+    try { await API.batchUpdate(DB.id, Ack.setP(p, { stato: 'RISOLTO', risolto_il: L.nowStamp(), risolto_da: Auth.email, nota_risoluzione: nota || 'chiuso manualmente' })); toast('FR ' + p.fr + ' segnato risolto', 'ok'); }
+    catch (e) { toast('Errore: ' + e.message, 'ko'); }
+    Ack.vediPending(cod, false); Ack.renderCards();
+  },
   show: async function () {
     if (!Ack.loaded) {
       $('ackCards').innerHTML = '<div class="card empty">Carico le spedizioni…</div>';
@@ -1328,9 +1392,29 @@ var Ack = {
     }
     Ack.renderDet(); Ack.renderCards();
   },
-  rimuovi: function (id, ripristina) {
+  rimuovi: async function (id, ripristina) {
     var r = DB.t.SPEDIZIONI_RIGHE.rows.find(function (x) { return x.id_riga === id; }); if (!r) return;
-    Ack.setR(r, ripristina ? 'DA_SPUNTARE' : 'RIMOSSO'); Ack.renderDet(); Ack.renderCards();
+    var s = Ack.byId(r.id_spedizione), tP = DB.t.ACK_PENDING;
+    if (ripristina) {
+      var p = Ack.pendingDi(r);
+      if (p) Ack.qPush(Ack.setP(p, { stato: 'ANNULLATO', risolto_il: L.nowStamp(), risolto_da: Auth.email, nota_risoluzione: 'rimozione annullata in spunta' }));
+      Ack.setR(r, 'DA_SPUNTARE'); Ack.renderDet(); Ack.renderCards(); return;
+    }
+    var motivo = await Ack.chiediMotivo(r); if (!motivo) return;
+    try {
+      var o = { data: L.nowStamp(), riparatore: s ? s.destinatario : '', fr: r.fr, seriale: r.seriale, pn: r.pn, id_unita: r.id_unita, id_spedizione: r.id_spedizione, motivo: motivo, stato: 'APERTO', rimosso_da: Auth.email };
+      var rr = await API.append(DB.id, 'ACK_PENDING', [tP.toRow(o)]);
+      o.id_pending = 'P' + L.pad(rr - 1, 6);
+      await API.batchUpdate(DB.id, [{ range: tP.cell('id_pending', rr), values: [[o.id_pending]] }]);
+      Ack.pushRow(tP, o, rr);
+    } catch (e) { Modal.open('Rimozione non salvata', e.message); return; }
+    Ack.setR(r, 'RIMOSSO'); Ack.fb('FR ' + r.fr + ' rimosso: ' + motivo, 'warn'); Ack.renderDet(); Ack.renderCards();
+  },
+  // annulla una lettura fatta per errore: la riga torna "da spuntare"
+  annullaSpunta: function (id) {
+    var s = Ack.byId(Ack.cur), r = DB.t.SPEDIZIONI_RIGHE.rows.find(function (x) { return x.id_riga === id; });
+    if (!s || s.stato !== 'IN_SPUNTA' || !r || r.esito !== 'SPUNTATO') return;
+    Ack.setR(r, 'DA_SPUNTARE'); Ack.fb('↺ Spunta annullata: FR ' + r.fr + ' · ' + r.seriale, 'warn'); Ack.renderDet(); Ack.renderCards();
   },
   annullaSf: function (i) {
     var a = Ack.spareFalse(Ack.cur)[i]; if (!a) return;
@@ -1423,7 +1507,7 @@ var Ack = {
     Modal.open('DDT e uscita', 'Non chiudere la pagina.', []);
     try {
       await Ack.flush();
-      await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_RIGHE', 'SPEDIZIONI_COLLI', 'PARAMETRI']);
+      await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_RIGHE', 'SPEDIZIONI_COLLI', 'PARAMETRI', 'ACK_PENDING']);
       var s = Ack.byId(id);
       if (!s) throw new Error('Spedizione ' + id + ' non trovata');
       if (s.n_ddt) throw new Error('DDT già emesso (' + s.n_ddt + ')');
@@ -1461,6 +1545,8 @@ var Ack = {
       // 3. giacenza, spedizione, calendario
       Modal.progress('3/6 giacenza');
       var tU = DB.t.UNITA, upd = [{ range: tM.cell('id_mov', rM) + ':' + tM.col('id_mov') + (rM + R.length - 1), values: mObjs.map(function (o) { return [o.id_mov]; }) }];
+      var frOut = {}; R.forEach(function (r) { frOut[r.fr] = 1; });
+      DB.t.ACK_PENDING.rows.forEach(function (p) { if (p.stato === 'APERTO' && frOut[p.fr]) upd = upd.concat(Ack.setP(p, { stato: 'RISOLTO', risolto_il: now, risolto_da: me, id_spedizione_uscita: id, nota_risoluzione: 'spedito con DDT ' + nDdt })); });
       R.forEach(function (r) {
         var u = ix.id[r.id_unita]; if (!u || !u._r) return;
         var ch = { stato: 'USCITO', id_spedizione: id, data_out: oggi, modificato_il: now, modificato_da: me, rev: (parseInt(u.rev, 10) || 1) + 1 };
@@ -1591,6 +1677,8 @@ var Ack = {
       if (s && s.stato === 'PRONTA') btn += ' <button class="btn sm green" ' + (L.s(s.awb) ? '' : 'disabled title="Manca l\'AWB"') + ' onclick="Ack.emetti(\'' + s.id_spedizione + '\')">Genera DDT</button>';
       if (s && s.n_ddt) btn += ' <button class="btn sm" onclick="Ack.stampa(\'' + s.id_spedizione + '\')">Stampa DDT</button>' + (s.link_pdf ? ' <a class="mail" target="_blank" href="' + esc(s.link_pdf) + '">PDF su Drive</a>' : '');
       if (s && s.stato !== 'BOZZA') btn += ' <a class="mail" href="' + Ack.mail(s.id_spedizione) + '" onclick="Ack.mailInviata(\'' + s.id_spedizione + '\')">✉ mail SD</a>';
+      var np = Ack.pending(cod).length;
+      btn += ' <button class="btn ghost sm"' + (np ? ' style="border-color:var(--amber);color:var(--amber)"' : '') + ' onclick="Ack.vediPending(\'' + esc(cod) + '\')" title="FR tolti dagli ACK di questo riparatore, con il motivo">ACK Pending' + (np ? ' (' + np + ')' : '') + '</button>';
       var lock = s && s.n_ddt ? ' disabled' : '';
       return '<div class="ack-card' + (s && Ack.cur === s.id_spedizione ? ' sel' : '') + '">' +
         '<div class="row" style="align-items:center"><span class="t">' + esc(cod) + '</span><div class="spacer"></div><span class="pill ' + (PILL[st] || '') + '">' + esc(st.replace('_', ' ')) + '</span></div>' +
@@ -1621,9 +1709,10 @@ var Ack = {
       (RR.length ? RR.map(function (r) {
         var v = DB.vltMap[r.fr], cls = r.esito === 'SPUNTATO' ? 'r-ok' : (r.esito === 'MANCANTE' ? 'r-err' : (r.esito === 'RIMOSSO' || r.esito === 'ESCLUSO_BAN' ? 'r-off' : ''));
         var es = { DA_SPUNTARE: '<span class="pill">da spuntare</span>', SPUNTATO: '<span class="pill p-green">spuntato</span>', MANCANTE: '<span class="pill p-red">mancante</span>', RIMOSSO: '<span class="pill">rimosso</span>', ESCLUSO_BAN: '<span class="pill p-amber">BAN · non spedire</span>' }[r.esito] || esc(r.esito);
-        var act = !edit ? '' : (r.esito === 'DA_SPUNTARE' || r.esito === 'MANCANTE' ? '<button class="btn ghost sm" onclick="Ack.rimuovi(\'' + r.id_riga + '\')" title="Non spedire: resta in giacenza e riparte con l\'ACK successivo">Rimuovi</button>' : (r.esito === 'RIMOSSO' ? '<button class="btn ghost sm" onclick="Ack.rimuovi(\'' + r.id_riga + '\',1)">Ripristina</button>' : ''));
+        var act = !edit ? '' : (r.esito === 'DA_SPUNTARE' || r.esito === 'MANCANTE' ? '<button class="btn ghost sm" onclick="Ack.rimuovi(\'' + r.id_riga + '\')" title="Non spedire: resta in giacenza e riparte con l\'ACK successivo">Rimuovi</button>' : (r.esito === 'RIMOSSO' ? '<button class="btn ghost sm" onclick="Ack.rimuovi(\'' + r.id_riga + '\',1)">Ripristina</button>' :
+          (r.esito === 'SPUNTATO' ? '<button class="btn ghost sm" onclick="Ack.annullaSpunta(\'' + r.id_riga + '\')" title="Torna da spuntare">Annulla spunta</button>' : '')));
         return '<tr class="' + cls + '"><td class="mono">' + esc(r.fr) + '</td><td class="mono">' + esc(r.seriale) + '</td><td class="mono">' + esc(r.pn) + '</td><td style="font-size:11.5px;color:var(--subtle)">' + esc(v ? v.stato : '') + (v && v.note ? ' · ' + esc(v.note) : '') + '</td>' +
-          '<td>' + (r.flag_vlt ? '<span class="pill ' + (r.flag_vlt === 'BAN' ? 'p-amber' : 'p-violet') + '">' + esc(r.flag_vlt) + '</span>' : '') + '</td><td>' + es + '</td><td style="font-size:11.5px">' + (r.id_unita ? esc(r.id_unita) : '<span style="color:var(--amber)">non in giacenza</span>') + '</td><td>' + act + '</td></tr>';
+          '<td>' + (r.flag_vlt ? '<span class="pill ' + (r.flag_vlt === 'BAN' ? 'p-amber' : 'p-violet') + '">' + esc(r.flag_vlt) + '</span>' : '') + '</td><td>' + es + (r.esito === 'RIMOSSO' && Ack.pendingDi(r) ? '<div style="font-size:11px;color:var(--amber);margin-top:3px">' + esc(Ack.pendingDi(r).motivo) + '</div>' : '') + '</td><td style="font-size:11.5px">' + (r.id_unita ? esc(r.id_unita) : '<span style="color:var(--amber)">non in giacenza</span>') + '</td><td>' + act + '</td></tr>';
       }).join('') : '<tr><td colspan="8" class="empty">Nessun FR in stato ACK per questo riparatore</td></tr>') + '</tbody></table></div>';
     if (sf.length) html += '<div class="card-h" style="margin-top:14px"><div class="card-t" style="font-size:15px;color:var(--red)">SPARE FALSE · letti ma non in lista (non si spediscono, finiscono nell\'export FR da chiudere)</div></div>' +
       '<div class="tbl-wrap" style="max-height:30vh"><table><thead><tr><th>FR</th><th>Seriale</th><th>Descrizione</th><th>Letto</th><th></th></tr></thead><tbody>' +
