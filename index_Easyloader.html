@@ -1,0 +1,911 @@
+<!DOCTYPE html>
+<html lang="it">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Easyloader</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
+<script src="https://accounts.google.com/gsi/client" async defer></script>
+<style>
+:root{
+  --bg:#0b0f18;--surface:#131929;--card:#1a2236;--border:#243048;
+  --blue:#3b82f6;--green:#10b981;--red:#ef4444;--amber:#f59e0b;--teal:#14b8a6;--violet:#8b5cf6;
+  --text:#e2e8f0;--muted:#64748b;--subtle:#94a3b8;
+  --ff-sans:'IBM Plex Sans',sans-serif;--ff-mono:'IBM Plex Mono',monospace;--ff-cond:'Barlow Condensed',sans-serif;
+}
+body.theme-light{--bg:#f1f5f9;--surface:#ffffff;--card:#f8fafc;--border:#e2e8f0;--text:#1e293b;--muted:#94a3b8;--subtle:#64748b;}
+*{box-sizing:border-box;margin:0;padding:0}
+html,body{height:100%;overflow:hidden}
+body{background:var(--bg);color:var(--text);font-family:var(--ff-sans);font-size:14px}
+button{font-family:var(--ff-sans)}
+
+/* login / blocchi */
+.fullscreen{position:fixed;inset:0;display:none;align-items:center;justify-content:center;background:radial-gradient(ellipse at 30% 40%,rgba(59,130,246,.07) 0%,transparent 60%),var(--bg);z-index:200}
+.fullscreen.show{display:flex}
+.login-card{background:var(--surface);border:1px solid var(--border);border-radius:16px;padding:48px 52px;text-align:center;max-width:440px;width:92%;box-shadow:0 32px 80px rgba(0,0,0,.45)}
+.login-logo{font-family:var(--ff-cond);font-size:34px;font-weight:800;letter-spacing:2px;color:var(--blue)}
+.login-logo span{color:var(--subtle);font-weight:600}
+.login-sub{font-size:11px;color:var(--muted);letter-spacing:1.5px;text-transform:uppercase;margin:6px 0 32px}
+.login-note{font-size:12px;color:var(--subtle);margin-top:20px;line-height:1.6}
+.login-err{font-size:12px;color:var(--red);margin-top:14px;display:none}
+.load-steps{margin-top:22px;text-align:left;font-size:12px;color:var(--subtle);font-family:var(--ff-mono);line-height:1.9}
+.load-steps .ok{color:var(--green)} .load-steps .run{color:var(--amber)} .load-steps .ko{color:var(--red)}
+
+/* shell */
+#appShell{display:none;flex-direction:column;height:100vh;overflow:hidden}
+.topbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px 0 64px;height:52px;display:flex;align-items:center;gap:14px;flex-shrink:0}
+.topbar-logo{font-family:var(--ff-cond);font-size:22px;font-weight:800;letter-spacing:1.5px;color:var(--blue);text-transform:uppercase;white-space:nowrap}
+.topbar-logo span{color:var(--subtle);font-weight:600}
+.topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
+.sync{font-size:11px;color:var(--muted);font-family:var(--ff-mono)}
+.user-badge{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:4px 12px 4px 6px;font-size:12px;color:var(--subtle)}
+.user-av{width:24px;height:24px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px}
+.role-tag{font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:2px 8px;border-radius:10px;background:rgba(59,130,246,.15);color:var(--blue)}
+.tabbar{background:var(--surface);border-bottom:1px solid var(--border);padding:0 20px;display:flex;gap:2px;flex-shrink:0;overflow-x:auto}
+.tab-btn{background:none;border:none;padding:12px 14px;color:var(--muted);font-size:13px;font-weight:500;cursor:pointer;border-bottom:2px solid transparent;white-space:nowrap}
+.tab-btn:hover{color:var(--subtle)}
+.tab-btn.active{color:var(--text);border-bottom-color:var(--blue)}
+.tab-btn.soon{opacity:.45;cursor:default}
+.tab-btn .soon-tag{font-size:9px;margin-left:5px;padding:1px 5px;border-radius:6px;background:var(--card);border:1px solid var(--border)}
+.main{flex:1;min-height:0;overflow:auto;padding:18px 20px}
+.view{display:none}
+.view.active{display:block}
+
+/* elementi */
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px}
+.card-h{display:flex;align-items:center;gap:10px;margin-bottom:12px}
+.card-t{font-family:var(--ff-cond);font-size:18px;font-weight:700;letter-spacing:.5px}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px 12px}
+.fg{display:flex;flex-direction:column;gap:4px;min-width:0}
+.fl{font-size:10px;font-weight:600;letter-spacing:1.2px;text-transform:uppercase;color:var(--muted)}
+.fc{background:var(--card);border:1px solid var(--border);border-radius:7px;padding:7px 10px;color:var(--text);font-size:13px;outline:none;width:100%;font-family:var(--ff-sans)}
+.fc:focus{border-color:var(--blue)}
+.fc.mono{font-family:var(--ff-mono)}
+.fc.warn{border-color:var(--amber)}
+.fc.err{border-color:var(--red)}
+.hint{font-size:11px;color:var(--muted);min-height:14px}
+.hint.warn{color:var(--amber)} .hint.err{color:var(--red)}
+.btn{background:var(--blue);border:none;border-radius:7px;padding:8px 16px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
+.btn:hover{filter:brightness(1.1)}
+.btn:disabled{opacity:.45;cursor:not-allowed;filter:none}
+.btn.ghost{background:none;border:1px solid var(--border);color:var(--subtle)}
+.btn.ghost:hover{border-color:var(--blue);color:var(--blue)}
+.btn.green{background:var(--green)} .btn.red{background:var(--red)} .btn.sm{padding:5px 10px;font-size:12px}
+.row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
+.spacer{flex:1}
+.scan-row{display:grid;grid-template-columns:200px 1fr 200px auto;gap:10px;align-items:end}
+@media (max-width:900px){.scan-row{grid-template-columns:1fr 1fr}}
+.stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 14px;min-width:110px}
+.stat b{font-family:var(--ff-cond);font-size:22px;font-weight:800;display:block}
+.stat span{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)}
+.tbl-wrap{overflow:auto;border:1px solid var(--border);border-radius:10px;max-height:62vh}
+table{width:100%;border-collapse:collapse;font-size:12.5px}
+th{position:sticky;top:0;background:var(--card);text-align:left;padding:8px 10px;font-size:10.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);border-bottom:1px solid var(--border);white-space:nowrap;z-index:1}
+td{padding:6px 10px;border-bottom:1px solid var(--border);vertical-align:top}
+td.mono{font-family:var(--ff-mono);font-size:12px}
+tr.r-err td{background:rgba(239,68,68,.08)}
+tr.r-warn td{background:rgba(245,158,11,.07)}
+.pill{display:inline-block;font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:10px;border:1px solid var(--border);white-space:nowrap}
+.p-blue{color:var(--blue);border-color:rgba(59,130,246,.4)} .p-green{color:var(--green);border-color:rgba(16,185,129,.4)}
+.p-red{color:var(--red);border-color:rgba(239,68,68,.4)} .p-amber{color:var(--amber);border-color:rgba(245,158,11,.4)}
+.p-teal{color:var(--teal);border-color:rgba(20,184,166,.4)} .p-violet{color:var(--violet);border-color:rgba(139,92,246,.4)}
+.msgs{display:flex;flex-direction:column;gap:3px}
+.msg{font-size:11.5px}
+.msg.err{color:var(--red)} .msg.warn{color:var(--amber)} .msg.info{color:var(--subtle)}
+.ico-btn{background:none;border:none;color:var(--muted);cursor:pointer;font-size:14px;padding:2px 4px}
+.ico-btn:hover{color:var(--red)}
+a.mail{color:var(--blue);font-size:11.5px;text-decoration:none}
+.empty{padding:28px;text-align:center;color:var(--muted);font-size:13px}
+.edit-cell{background:transparent;border:1px solid transparent;border-radius:5px;color:var(--text);font:inherit;padding:3px 6px;width:100%}
+.edit-cell:focus{border-color:var(--blue);background:var(--card);outline:none}
+.edit-cell.dirty{border-color:var(--amber)}
+.subtabs{display:flex;gap:6px;margin-bottom:12px;flex-wrap:wrap}
+.subtab{background:var(--card);border:1px solid var(--border);border-radius:20px;padding:5px 14px;font-size:12px;color:var(--subtle);cursor:pointer}
+.subtab.active{border-color:var(--blue);color:var(--blue)}
+#toast{position:fixed;bottom:22px;left:50%;transform:translateX(-50%) translateY(20px);background:var(--card);border:1px solid var(--border);border-radius:10px;padding:10px 18px;font-size:13px;opacity:0;transition:all .25s;z-index:500;pointer-events:none;max-width:80vw}
+#toast.show{opacity:1;transform:translateX(-50%) translateY(0)}
+#toast.ok{border-color:var(--green)} #toast.ko{border-color:var(--red)}
+.modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:300}
+.modal-bg.show{display:flex}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px 24px;max-width:520px;width:92%}
+.modal h3{font-family:var(--ff-cond);font-size:20px;margin-bottom:10px}
+.modal p{font-size:13px;color:var(--subtle);line-height:1.6;white-space:pre-line}
+.modal .row{justify-content:flex-end;margin-top:18px}
+.progress{font-family:var(--ff-mono);font-size:12px;color:var(--subtle);margin-top:10px;white-space:pre-line}
+</style>
+</head>
+<body>
+
+<!-- LOGIN -->
+<div class="fullscreen show" id="loginScreen">
+  <div class="login-card">
+    <div class="login-logo">EASY<span>LOADER</span></div>
+    <div class="login-sub">ATS · Hub FLM · ingressi, uscite, giacenze</div>
+    <button class="btn" id="btnLogin" onclick="Auth.signIn()">Accedi con Google</button>
+    <div class="login-err" id="loginErr"></div>
+    <div class="load-steps" id="loadSteps"></div>
+    <div class="login-note">Usa la Gmail abilitata dall'amministratore.</div>
+  </div>
+</div>
+<div class="fullscreen" id="deniedScreen">
+  <div class="login-card">
+    <div style="font-size:38px">⛔</div>
+    <div class="login-logo" style="color:var(--red);font-size:26px">ACCESSO NON ABILITATO</div>
+    <div class="login-note" id="deniedMsg"></div>
+    <button class="btn ghost" style="margin-top:18px" onclick="Auth.signOut()">Cambia account</button>
+  </div>
+</div>
+
+<!-- APP -->
+<div id="appShell">
+  <div class="topbar">
+    <div class="topbar-logo">EASY<span>LOADER</span></div>
+    <div class="topbar-right">
+      <span class="sync" id="syncInfo"></span>
+      <button class="btn ghost sm" onclick="App.reload()" title="Ricarica i dati dal database">↻ Aggiorna</button>
+      <select class="fc" style="width:auto;padding:5px 8px;font-size:11px" id="themeSel" onchange="App.setTheme(this.value)">
+        <option value="">Scuro</option><option value="theme-light">Chiaro</option>
+      </select>
+      <div class="user-badge"><div class="user-av" id="uAv">?</div><span id="uName"></span><span class="role-tag" id="uRole"></span></div>
+    </div>
+  </div>
+  <div class="tabbar" id="tabbar"></div>
+  <div class="main">
+
+    <!-- INGRESSO -->
+    <div class="view" id="view-ingresso">
+      <div class="card">
+        <div class="card-h"><div class="card-t">Testata ingresso</div><div class="spacer"></div>
+          <button class="btn ghost sm" onclick="Ingresso.nuovo()">Nuovo ingresso</button></div>
+        <div class="grid">
+          <div class="fg"><span class="fl">Tipo *</span>
+            <select class="fc" id="inTipo" onchange="Ingresso.onTestata()">
+              <option value="">— seleziona —</option><option>FAULTY</option><option>GOOD</option><option>REUSE</option><option>NEW</option><option>BALANCING</option><option>RESO</option><option>SCRAP</option>
+            </select></div>
+          <div class="fg"><span class="fl">Data ingresso *</span><input class="fc" type="date" id="inData" onchange="Ingresso.onTestata()"></div>
+          <div class="fg"><span class="fl">Mittente *</span><input class="fc" id="inMittente" list="dlControparti" onchange="Ingresso.onTestata()" placeholder="proposto dal 1° FR"></div>
+          <div class="fg"><span class="fl">AWB</span><input class="fc mono" id="inAwb" onchange="Ingresso.onAwb()" placeholder="proposto dal 1° FR"></div>
+          <div class="fg"><span class="fl">Vettore *</span><input class="fc" id="inVettore" list="dlVettori" onchange="Ingresso.onTestata()"><span class="hint" id="hVettore"></span></div>
+          <div class="fg"><span class="fl">DDT mittente</span><input class="fc mono" id="inDdt" onchange="Ingresso.onTestata()"></div>
+          <div class="fg"><span class="fl">PO / MRN</span><input class="fc mono" id="inPo" onchange="Ingresso.onTestata()"></div>
+          <div class="fg"><span class="fl">Balancing</span>
+            <label style="display:flex;align-items:center;gap:8px;font-size:13px;padding:7px 0"><input type="checkbox" id="inBal" onchange="Ingresso.onTestata()"> ci sono balancing</label></div>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><div class="card-t">Lettura pezzi</div><span class="hint" id="hScan">Spara FR, poi il barcode del seriale. Invio o Tab per passare al campo successivo.</span></div>
+        <div class="scan-row">
+          <div class="fg"><span class="fl" id="lblFr">FR / RMA</span><input class="fc mono" id="scFr" autocomplete="off"></div>
+          <div class="fg"><span class="fl">Barcode seriale</span><input class="fc mono" id="scBc" autocomplete="off"></div>
+          <div class="fg" id="wrapUbi"><span class="fl">Ubicazione (NEW/REUSE)</span><input class="fc mono" id="scUbi" list="dlUbicazioni" autocomplete="off"></div>
+          <button class="btn" onclick="Ingresso.aggiungi()">Aggiungi</button>
+        </div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><div class="card-t">Pezzi letti</div>
+          <div class="stats" style="margin:0 0 0 8px" id="inStats"></div>
+          <div class="spacer"></div>
+          <button class="btn green" id="btnCarica" onclick="Ingresso.carica()">Carica dati</button></div>
+        <div class="tbl-wrap"><table>
+          <thead><tr><th>#</th><th>FR</th><th>RMA</th><th>Seriale</th><th>P/N</th><th>MNFT</th><th>Riparatore</th><th>Stato VLT</th><th>Nota</th><th>Destinazione / Ubicazione</th><th>Controlli</th><th></th></tr></thead>
+          <tbody id="inRows"></tbody>
+        </table></div>
+      </div>
+
+      <div class="card">
+        <div class="card-h"><div class="card-t">Ingressi di oggi</div>
+          <label style="font-size:12px;color:var(--subtle);display:flex;gap:6px;align-items:center"><input type="checkbox" id="oggiTutti" onchange="Ingresso.renderOggi()"> tutti gli operatori</label></div>
+        <div class="stats" id="oggiStats"></div>
+        <div class="tbl-wrap" style="max-height:40vh"><table>
+          <thead><tr><th>ID</th><th>Tipo</th><th>FR</th><th>RMA</th><th>Seriale</th><th>P/N</th><th>Riparatore</th><th>Nota</th><th>Operatore</th></tr></thead>
+          <tbody id="oggiRows"></tbody>
+        </table></div>
+      </div>
+    </div>
+
+    <!-- GIACENZE -->
+    <div class="view" id="view-giacenze">
+      <div class="card">
+        <div class="row">
+          <div class="fg" style="flex:1;min-width:240px"><span class="fl">Cerca (seriale, P/N, FR, RMA, ubicazione, material, nota)</span><input class="fc mono" id="gQ" oninput="Giacenze.debounce()"></div>
+          <div class="fg"><span class="fl">Tipo</span><select class="fc" id="gTipo" onchange="Giacenze.render()"><option value="">Tutti</option></select></div>
+          <div class="fg"><span class="fl">Magazzino</span><select class="fc" id="gMag" onchange="Giacenze.render()"><option value="">Tutti</option></select></div>
+          <div class="fg"><span class="fl">Stato</span><select class="fc" id="gStato" onchange="Giacenze.render()"><option value="IN_GIACENZA">In giacenza</option><option value="">Tutti</option><option>IN_LAVORAZIONE</option><option>BLOCCATO</option><option>USCITO</option></select></div>
+        </div>
+      </div>
+      <div class="stats" id="gStats"></div>
+      <div class="tbl-wrap"><table>
+        <thead><tr><th>ID</th><th>Tipo</th><th>Mag.</th><th>Seriale</th><th>P/N</th><th>MNFT</th><th>FR</th><th>RMA</th><th>Riparatore</th><th>Ubicazione</th><th>Destinazione</th><th>Data in</th><th>Stato</th><th>Nota</th></tr></thead>
+        <tbody id="gRows"></tbody>
+      </table></div>
+      <div class="hint" id="gHint" style="margin-top:6px"></div>
+    </div>
+
+    <!-- ADMIN -->
+    <div class="view" id="view-admin">
+      <div class="subtabs" id="admTabs"></div>
+      <div class="card">
+        <div class="card-h"><div class="card-t" id="admTitle"></div><span class="hint" id="admHint"></span><div class="spacer"></div>
+          <button class="btn ghost sm" id="admAdd" onclick="Admin.addRow()">+ Riga</button>
+          <button class="btn sm" onclick="Admin.save()">Salva modifiche</button></div>
+        <div class="tbl-wrap"><table><thead id="admHead"></thead><tbody id="admRows"></tbody></table></div>
+      </div>
+    </div>
+
+    <!-- IN ARRIVO -->
+    <div class="view" id="view-soon"><div class="card empty" id="soonMsg"></div></div>
+  </div>
+</div>
+
+<datalist id="dlControparti"></datalist>
+<datalist id="dlVettori"></datalist>
+<datalist id="dlUbicazioni"></datalist>
+
+<div class="modal-bg" id="modal"><div class="modal">
+  <h3 id="mTitle"></h3><p id="mBody"></p><div class="progress" id="mProg"></div>
+  <div class="row" id="mBtns"></div>
+</div></div>
+<div id="toast"></div>
+
+<!-- ═════════════════════ LOGICA PURA (testabile) ═════════════════════ -->
+<script id="logic">
+var L = {};
+L.s = function (v) { return v === null || v === undefined ? '' : String(v).trim(); };
+L.up = function (v) { return L.s(v).toUpperCase(); };
+L.pad = function (n, w) { n = String(n); while (n.length < w) n = '0' + n; return n; };
+L.colLetter = function (i) { var s = ''; i++; while (i > 0) { var m = (i - 1) % 26; s = String.fromCharCode(65 + m) + s; i = Math.floor((i - 1) / 26); } return s; };
+L.rowFromRange = function (r) { var m = /![A-Z]+(\d+)/.exec(r || ''); return m ? parseInt(m[1], 10) : null; };
+L.afterSpace = function (x) { x = L.s(x); var i = x.indexOf(' '); return i >= 0 ? x.slice(i + 1).trim() : x; };
+L.beforeSpace = function (x) { x = L.s(x); var i = x.indexOf(' '); return i >= 0 ? x.slice(0, i) : x; };
+L.mid = function (s, start, len) { return s.substr(start - 1, len); };   // come MID() di Sheets (1-based)
+L.isoToday = function (d) { d = d || new Date(); return d.getFullYear() + '-' + L.pad(d.getMonth() + 1, 2) + '-' + L.pad(d.getDate(), 2); };
+L.nowStamp = function () { var d = new Date(); return L.isoToday(d) + ' ' + L.pad(d.getHours(), 2) + ':' + L.pad(d.getMinutes(), 2) + ':' + L.pad(d.getSeconds(), 2); };
+
+// Regole barcode (foglio REGOLE_BARCODE): replica delle formule E4 (seriale) e F4 (P/N) del prototipo
+L.ruleMatch = function (r, bc, rip) {
+  if (r.prefisso && bc.indexOf(r.prefisso) !== 0) return false;
+  if (r.lunghezza && bc.length !== parseInt(r.lunghezza, 10)) return false;
+  if (r.condizione_extra === 'car8=T' && bc.charAt(7) !== 'T') return false;
+  if (r.riparatore && L.up(rip).indexOf(L.up(r.riparatore)) < 0) return false;
+  return true;
+};
+L.estraiSeriale = function (bc, regole) {
+  bc = L.s(bc);
+  for (var i = 0; i < regole.length; i++) {
+    var r = regole[i];
+    if (!r.seriale_da || r.riparatore) continue;
+    if (L.ruleMatch(r, bc, '')) return L.mid(bc, parseInt(r.seriale_da, 10), parseInt(r.seriale_lung || 999, 10)).trim();
+  }
+  return bc;
+};
+L.estraiPn = function (bc, seriale, rip, regole) {
+  bc = L.s(bc);
+  // prima le regole del riparatore (come nel prototipo: HUAWEI / SIAE hanno precedenza), poi quelle generiche
+  var spec = regole.filter(function (r) { return r.riparatore; });
+  var gen = regole.filter(function (r) { return !r.riparatore && (r.pn_da || r.condizione_extra === 'split_spazio'); });
+  var list = spec.concat(gen);
+  for (var i = 0; i < list.length; i++) {
+    var r = list[i];
+    if (!L.ruleMatch(r, bc, rip)) continue;
+    if (r.condizione_extra === 'split_spazio') { if (seriale.indexOf(' ') > 0) return L.beforeSpace(seriale); continue; }
+    if (!r.pn_da) continue;
+    return (r.pn_prefisso || '') + L.mid(bc, parseInt(r.pn_da, 10), parseInt(r.pn_lung || 999, 10)).trim();
+  }
+  return '';
+};
+// vettore dal prefisso AWB (formula C2 del prototipo)
+L.vettoreDaAwb = function (awb, vettori) {
+  awb = L.up(awb); if (!awb) return '';
+  var best = '', bl = 0;
+  vettori.forEach(function (v) { var p = L.up(v.prefisso_awb); if (p && awb.indexOf(p) === 0 && p.length > bl) { best = v.vettore; bl = p.length; } });
+  return best;
+};
+// controllo seriale/TPN contro VLT (formula H4 del prototipo)
+L.notaControllo = function (seriale, pn, vltSer, vltPn) {
+  var s = L.up(seriale), sv = L.up(vltSer);
+  var serOk = !sv || s === sv || L.up(L.afterSpace(seriale)) === sv;
+  var pnOk = !L.s(vltPn) || L.up(pn) === L.up(vltPn);
+  if (!serOk && !pnOk) return 'INSERIRE SERIALE CORRETTO : ' + seriale + ' INSERIRE TPN CORRETTO : ' + pn;
+  if (!serOk) return 'INSERIRE SERIALE CORRETTO : ' + seriale;
+  if (!pnOk) return 'INSERIRE TPN CORRETTO : ' + pn;
+  return '';
+};
+if (typeof module !== 'undefined') module.exports = L;
+</script>
+
+<!-- ═════════════════════ APP ═════════════════════ -->
+<script>
+'use strict';
+var CFG = {
+  CLIENT_ID: '228678047802-mqgcgc264h9g9lrni9lia7e2upur7cu4.apps.googleusercontent.com',
+  SCOPES: 'https://www.googleapis.com/auth/spreadsheets https://www.googleapis.com/auth/drive https://www.googleapis.com/auth/userinfo.email https://www.googleapis.com/auth/userinfo.profile',
+  FOLDER_ID: '1LFGOh_x-SEF_Kf3Uln4UKzpjdrlxApVc',
+  DB_MAIN: 'DB_EASYLOADER',
+  VLT_ID: '1KxP-nGn6AbenWhZXi1EAPRxSKeCRdEoESH4UzMqqjdk',
+  VLT_SHEET: 'Foglio1',
+  SUPER_USERS: ['daniele.izzo.ats@gmail.com'],
+  VLT_REFRESH_HOUR: 8          // dopo questa ora la cache VLT del giorno prima viene ricaricata
+};
+var TIPI = ['FAULTY', 'GOOD', 'REUSE', 'NEW', 'BALANCING', 'RESO', 'SCRAP'];
+
+// ───────────────────────── utilità UI ─────────────────────────
+function $(id) { return document.getElementById(id); }
+function esc(s) { return L.s(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
+function toast(msg, kind) { var t = $('toast'); t.textContent = msg; t.className = 'show ' + (kind || ''); clearTimeout(t._h); t._h = setTimeout(function () { t.className = ''; }, 3800); }
+function lsG(k) { try { return JSON.parse(localStorage.getItem('el_' + k)); } catch (e) { return null; } }
+function lsS(k, v) { try { localStorage.setItem('el_' + k, JSON.stringify(v)); } catch (e) { } }
+function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
+var Modal = {
+  open: function (title, body, buttons) {
+    $('mTitle').textContent = title; $('mBody').textContent = body || ''; $('mProg').textContent = '';
+    var b = $('mBtns'); b.innerHTML = '';
+    (buttons || [{ label: 'OK' }]).forEach(function (x) {
+      var e = document.createElement('button'); e.className = 'btn ' + (x.cls || ''); e.textContent = x.label;
+      e.onclick = function () { if (!x.keep) Modal.close(); if (x.fn) x.fn(); }; b.appendChild(e);
+    });
+    $('modal').classList.add('show');
+  },
+  progress: function (t) { $('mProg').textContent = t; },
+  close: function () { $('modal').classList.remove('show'); },
+  confirm: function (title, body) { return new Promise(function (res) { Modal.open(title, body, [{ label: 'Annulla', cls: 'ghost', fn: function () { res(false); } }, { label: 'Conferma', cls: 'green', fn: function () { res(true); } }]); }); }
+};
+function step(txt, cls) { var d = document.createElement('div'); d.className = cls || 'run'; d.textContent = (cls === 'ok' ? '✓ ' : cls === 'ko' ? '✗ ' : '… ') + txt; $('loadSteps').appendChild(d); return d; }
+function stepDone(d, ok, txt) { d.className = ok ? 'ok' : 'ko'; d.textContent = (ok ? '✓ ' : '✗ ') + (txt || d.textContent.slice(2)); }
+
+// ───────────────────────── AUTH (GIS, client proprio) ─────────────────────────
+var Auth = {
+  token: null, email: '', name: '', tc: null, _resolve: null,
+  init: function () {
+    if (typeof google === 'undefined' || !google.accounts) { setTimeout(Auth.init, 150); return; }
+    Auth.tc = google.accounts.oauth2.initTokenClient({ client_id: CFG.CLIENT_ID, scope: CFG.SCOPES, callback: Auth.onToken,
+      error_callback: function (e) { if (Auth._resolve) { Auth._resolve(false); Auth._resolve = null; } if (!Auth.token && e && e.type !== 'popup_closed') { $('loginErr').textContent = 'Clicca "Accedi con Google" (' + (e.type || 'errore') + ')'; $('loginErr').style.display = 'block'; } } });
+    var hub = window._HUB_USER || null;
+    var sess = lsG('sess');
+    if (sess && sess.email) Auth.tc.requestAccessToken({ prompt: '', login_hint: sess.email });
+    else if (hub && hub.email) Auth.tc.requestAccessToken({ prompt: '', login_hint: hub.email });
+  },
+  signIn: function () { $('loginErr').style.display = 'none'; Auth.tc.requestAccessToken({ prompt: 'select_account' }); },
+  signOut: function () {
+    try { google.accounts.oauth2.revoke(Auth.token, function () { }); } catch (e) { }
+    Auth.token = null; lsS('sess', null); location.reload();
+  },
+  refresh: function () {
+    return new Promise(function (res) { Auth._resolve = res; Auth.tc.requestAccessToken({ prompt: '', login_hint: Auth.email }); });
+  },
+  onToken: function (r) {
+    if (r.error) { if (Auth._resolve) { Auth._resolve(false); Auth._resolve = null; } $('loginErr').textContent = 'Accesso non riuscito: ' + r.error; $('loginErr').style.display = 'block'; return; }
+    var first = !Auth.token;
+    Auth.token = r.access_token;
+    clearTimeout(Auth._t); Auth._t = setTimeout(function () { Auth.refresh(); }, 50 * 60 * 1000);
+    if (Auth._resolve) { Auth._resolve(true); Auth._resolve = null; }
+    if (first) {
+      fetch('https://www.googleapis.com/oauth2/v2/userinfo', { headers: { Authorization: 'Bearer ' + Auth.token } })
+        .then(function (x) { return x.json(); })
+        .then(function (u) { Auth.email = L.s(u.email).toLowerCase(); Auth.name = u.name || u.email; lsS('sess', { email: Auth.email }); App.start(); })
+        .catch(function (e) { $('loginErr').textContent = 'Impossibile leggere il profilo: ' + e; $('loginErr').style.display = 'block'; });
+    }
+  }
+};
+
+// ───────────────────────── Google API (con ritentativi) ─────────────────────────
+var API = {
+  call: async function (url, opt, attempt) {
+    attempt = attempt || 0; opt = opt || {};
+    var headers = Object.assign({ Authorization: 'Bearer ' + Auth.token }, opt.body ? { 'Content-Type': 'application/json' } : {});
+    var res;
+    try { res = await fetch(url, Object.assign({}, opt, { headers: headers })); }
+    catch (e) { if (attempt < 4) { await sleep(800 * Math.pow(2, attempt)); return API.call(url, opt, attempt + 1); } throw e; }
+    if (res.status === 401 && attempt < 1) { await Auth.refresh(); return API.call(url, opt, attempt + 1); }
+    if ((res.status === 429 || res.status >= 500) && attempt < 6) { await sleep(1000 * Math.pow(2, attempt) + Math.random() * 400); return API.call(url, opt, attempt + 1); }
+    var txt = await res.text(); var js = txt ? JSON.parse(txt) : {};
+    if (!res.ok) throw new Error((js.error && js.error.message) || ('HTTP ' + res.status));
+    return js;
+  },
+  S: 'https://sheets.googleapis.com/v4/spreadsheets/',
+  q: function (name) { return "'" + String(name).replace(/'/g, "''") + "'"; },
+  batchGet: async function (ss, ranges) {
+    var u = API.S + ss + '/values:batchGet?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING&' + ranges.map(function (r) { return 'ranges=' + encodeURIComponent(r); }).join('&');
+    var js = await API.call(u); return (js.valueRanges || []).map(function (v) { return v.values || []; });
+  },
+  append: async function (ss, sheet, rows) {
+    var u = API.S + ss + '/values/' + encodeURIComponent(API.q(sheet) + '!A1') + ':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS';
+    var js = await API.call(u, { method: 'POST', body: JSON.stringify({ values: rows }) });
+    return L.rowFromRange(js.updates && js.updates.updatedRange);
+  },
+  batchUpdate: async function (ss, data) {
+    if (!data.length) return;
+    await API.call(API.S + ss + '/values:batchUpdate', { method: 'POST', body: JSON.stringify({ valueInputOption: 'RAW', data: data }) });
+  },
+  findInFolder: async function (folder, name) {
+    var q = "'" + folder + "' in parents and name='" + name + "' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false";
+    var js = await API.call('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id,name,modifiedTime)&q=' + encodeURIComponent(q));
+    return (js.files || [])[0] || null;
+  }
+};
+
+// ───────────────────────── Tabelle del database ─────────────────────────
+function Table(name, header, values) {
+  this.name = name; this.header = header.map(L.s); this.idx = {};
+  var self = this; this.header.forEach(function (h, i) { self.idx[h] = i; });
+  this.rows = (values || []).map(function (v, i) { var o = { _r: i + 2 }; self.header.forEach(function (h, j) { o[h] = v[j] === undefined || v[j] === null ? '' : String(v[j]); }); return o; })
+    .filter(function (o) { return self.header.some(function (h) { return o[h] !== ''; }); });
+}
+Table.prototype.toRow = function (o) { return this.header.map(function (h) { return o[h] === undefined || o[h] === null ? '' : String(o[h]); }); };
+Table.prototype.col = function (h) { if (!(h in this.idx)) throw new Error('Colonna "' + h + '" mancante nel foglio ' + this.name); return L.colLetter(this.idx[h]); };
+Table.prototype.cell = function (h, row) { return API.q(this.name) + '!' + this.col(h) + row; };
+
+var DB = {
+  id: null, t: {}, vlt: null, vltMap: {}, vltBySer: {}, artPn: {}, serNoti: {},
+  SMALL: ['OPERATORI', 'PARAMETRI', 'RIPARATORI', 'RIPARATORI_ALIAS', 'CONTROPARTI', 'DEPOT_VLT', 'VETTORI', 'REGOLE_BARCODE', 'MAGAZZINI', 'BALANCING'],
+  loadTables: async function (names) {
+    var vals = await API.batchGet(DB.id, names.map(function (n) { return API.q(n); }));
+    names.forEach(function (n, i) { var v = vals[i]; DB.t[n] = new Table(n, v[0] || [], v.slice(1)); });
+  },
+  param: function (k, def) { var r = (DB.t.PARAMETRI.rows || []).find(function (x) { return x.chiave === k; }); return r ? r.valore : def; },
+  // colonne selezionate di un foglio grande (per non scaricare tutto)
+  loadCols: async function (ss, sheet, cols) {
+    var h = (await API.batchGet(ss, [API.q(sheet) + '!1:1']))[0][0] || [];
+    var idx = cols.map(function (c) { return h.map(L.s).indexOf(c); });
+    if (idx.some(function (i) { return i < 0; })) throw new Error('Colonne mancanti in ' + sheet + ': ' + cols.filter(function (c, i) { return idx[i] < 0; }).join(', '));
+    var vals = await API.batchGet(ss, idx.map(function (i) { var c = L.colLetter(i); return API.q(sheet) + '!' + c + '2:' + c; }));
+    var n = Math.max.apply(null, vals.map(function (v) { return v.length; }));
+    var out = [];
+    for (var r = 0; r < n; r++) { var o = {}; cols.forEach(function (c, k) { var cell = vals[k][r]; o[c] = cell && cell[0] !== undefined ? String(cell[0]).trim() : ''; }); out.push(o); }
+    return out;
+  },
+  // ─ cache locale (IndexedDB) per dati grandi e lenti a cambiare
+  idb: function () { return new Promise(function (res, rej) { var r = indexedDB.open('easyloader', 1); r.onupgradeneeded = function () { r.result.createObjectStore('kv'); }; r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); }; }); },
+  cacheGet: async function (k) { try { var db = await DB.idb(); return await new Promise(function (res) { var q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = function () { res(q.result || null); }; q.onerror = function () { res(null); }; }); } catch (e) { return null; } },
+  cacheSet: async function (k, v) { try { var db = await DB.idb(); await new Promise(function (res) { var tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = res; tx.onerror = res; }); } catch (e) { } },
+  vltStale: function (ts) {
+    if (!ts) return true; var now = new Date(), d = new Date(ts);
+    var cut = new Date(now.getFullYear(), now.getMonth(), now.getDate(), CFG.VLT_REFRESH_HOUR, 0, 0);
+    return d < cut && now >= cut || (now - d) > 24 * 3600 * 1000;
+  },
+  loadVlt: async function (force) {
+    var c = force ? null : await DB.cacheGet('vlt');
+    if (!c || DB.vltStale(c.ts)) {
+      var rows = await DB.loadCols(CFG.VLT_ID, CFG.VLT_SHEET, ['fr_id', 'depot_origine', 'f_mat_serial_no', 'f_mat_tmpn', 'awb_cw', 'note', 'stato', 'riparatore', 'advanced_swap', 'f_mat_material']);
+      c = { ts: Date.now(), rows: rows }; await DB.cacheSet('vlt', c);
+    }
+    DB.vlt = c; DB.vltMap = {}; DB.vltBySer = {};
+    c.rows.forEach(function (r) { if (r.fr_id) DB.vltMap[r.fr_id] = r; var s = L.up(r.f_mat_serial_no); if (s) DB.vltBySer[s] = r; });
+  },
+  loadLookups: async function (force) {
+    var c = force ? null : await DB.cacheGet('lookups');
+    if (!c || (Date.now() - c.ts) > 24 * 3600 * 1000) {
+      var art = await DB.loadCols(DB.id, 'ARTICOLI', ['pn', 'mnft']);
+      var ser = await DB.loadCols(DB.id, 'SERIALI_NOTI', ['seriale', 'pn', 'mnft']);
+      var ub = await DB.loadCols(DB.id, 'UBICAZIONI', ['codice']);
+      c = { ts: Date.now(), art: art, ser: ser, ub: ub.map(function (x) { return x.codice; }) }; await DB.cacheSet('lookups', c);
+    }
+    DB.artPn = {}; c.art.forEach(function (a) { if (a.pn && a.mnft && !DB.artPn[L.up(a.pn)]) DB.artPn[L.up(a.pn)] = a.mnft; });
+    DB.serNoti = {}; c.ser.forEach(function (s) { if (s.seriale) DB.serNoti[L.up(s.seriale)] = s; });
+    DB.ubicazioni = c.ub;
+  }
+};
+
+// ───────────────────────── APP ─────────────────────────
+var TABS = [
+  { k: 'ingresso', label: 'Ingresso' },
+  { k: 'ack', label: 'ACK', soon: true }, { k: 'rma', label: 'RMA', soon: true }, { k: 'balancing', label: 'Balancing', soon: true },
+  { k: 'juniper', label: 'Juniper', soon: true }, { k: 'giacenze', label: 'Giacenze' }, { k: 'vlt', label: 'VLT', soon: true },
+  { k: 'storico', label: 'Storico', soon: true }, { k: 'admin', label: 'Admin', admin: true }
+];
+var App = {
+  me: null, isAdmin: false, tab: 'ingresso',
+  start: async function () {
+    $('btnLogin').style.display = 'none'; $('loadSteps').innerHTML = '';
+    try {
+      var s1 = step('Cerco il database nella cartella');
+      var f = await API.findInFolder(CFG.FOLDER_ID, CFG.DB_MAIN);
+      if (!f) { stepDone(s1, false, 'File "' + CFG.DB_MAIN + '" non trovato nella cartella (deve essere un Foglio Google con questo nome esatto)'); return; }
+      DB.id = f.id; stepDone(s1, true, 'Database trovato');
+      var s2 = step('Carico configurazione');
+      await DB.loadTables(DB.SMALL); stepDone(s2, true);
+      // accesso
+      var me = DB.t.OPERATORI.rows.find(function (o) { return L.s(o.email).toLowerCase() === Auth.email; });
+      var sup = CFG.SUPER_USERS.indexOf(Auth.email) >= 0;
+      if (!sup && (!me || L.up(me.attivo) === 'NO')) {
+        $('loginScreen').classList.remove('show'); $('deniedScreen').classList.add('show');
+        $('deniedMsg').textContent = Auth.email + ' non è tra gli operatori attivi. Chiedi all\'amministratore di inserire la tua email nelle impostazioni Admin.';
+        return;
+      }
+      App.me = me || { email: Auth.email, nome: Auth.name, sigla: 'ADM', ruolo: 'ADMIN' };
+      App.isAdmin = sup || L.up(App.me.ruolo) === 'ADMIN';
+      var s3 = step('Carico giacenza (UNITA)');
+      await DB.loadTables(['UNITA']); stepDone(s3, true, 'Giacenza: ' + DB.t.UNITA.rows.length + ' righe');
+      var s4 = step('Carico dati VLT (cache giornaliera)');
+      await DB.loadVlt(false); stepDone(s4, true, 'VLT: ' + DB.vlt.rows.length + ' FR · aggiornato ' + new Date(DB.vlt.ts).toLocaleString('it-IT'));
+      App.showShell();
+      DB.loadLookups(false).then(function () { App.fillLists(); App.syncInfo(); }).catch(function (e) { toast('Anagrafiche non caricate: ' + e.message, 'ko'); });
+    } catch (e) {
+      step('Errore: ' + e.message, 'ko'); $('btnLogin').style.display = '';
+    }
+  },
+  showShell: function () {
+    $('loginScreen').classList.remove('show'); $('appShell').style.display = 'flex';
+    $('uName').textContent = App.me.nome || Auth.email; $('uAv').textContent = (App.me.sigla || Auth.email).charAt(0).toUpperCase();
+    $('uRole').textContent = App.isAdmin ? 'admin' : (App.me.sigla || 'operatore');
+    var th = lsG('theme') || ''; $('themeSel').value = th; App.setTheme(th);
+    var tb = $('tabbar'); tb.innerHTML = '';
+    TABS.forEach(function (t) {
+      if (t.admin && !App.isAdmin) return;
+      var b = document.createElement('button'); b.className = 'tab-btn' + (t.soon ? ' soon' : ''); b.id = 'tab-' + t.k;
+      b.innerHTML = esc(t.label) + (t.soon ? '<span class="soon-tag">in arrivo</span>' : '');
+      b.onclick = function () { App.go(t.k); }; tb.appendChild(b);
+    });
+    App.fillLists(); App.syncInfo();
+    Ingresso.init(); Giacenze.init(); if (App.isAdmin) Admin.init();
+    App.go(lsG('tab') || 'ingresso');
+  },
+  go: function (k) {
+    var t = TABS.find(function (x) { return x.k === k; }) || TABS[0];
+    if (t.admin && !App.isAdmin) t = TABS[0];
+    App.tab = t.k; lsS('tab', t.k);
+    document.querySelectorAll('.tab-btn').forEach(function (b) { b.classList.toggle('active', b.id === 'tab-' + t.k); });
+    document.querySelectorAll('.view').forEach(function (v) { v.classList.remove('active'); });
+    if (t.soon) { $('view-soon').classList.add('active'); $('soonMsg').textContent = 'Il tab "' + t.label + '" è in sviluppo: arriva nei prossimi rilasci.'; return; }
+    $('view-' + t.k).classList.add('active');
+    if (t.k === 'giacenze') Giacenze.render();
+    if (t.k === 'admin') Admin.render();
+    if (t.k === 'ingresso') setTimeout(function () { $('scFr').focus(); }, 50);
+  },
+  setTheme: function (th) { document.body.className = th || ''; lsS('theme', th); },
+  syncInfo: function () { $('syncInfo').textContent = 'VLT ' + (DB.vlt ? new Date(DB.vlt.ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—') + ' · giacenza ' + DB.t.UNITA.rows.length; },
+  fillLists: function () {
+    var cp = DB.t.CONTROPARTI.rows.map(function (r) { return r.codice; }).filter(Boolean);
+    DB.t.RIPARATORI.rows.forEach(function (r) { if (r.codice && cp.indexOf(r.codice) < 0) cp.push(r.codice); });
+    $('dlControparti').innerHTML = cp.sort().map(function (c) { return '<option value="' + esc(c) + '">'; }).join('');
+    var vt = []; DB.t.VETTORI.rows.forEach(function (r) { if (r.vettore && vt.indexOf(r.vettore) < 0) vt.push(r.vettore); });
+    $('dlVettori').innerHTML = vt.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('');
+    if (DB.ubicazioni) $('dlUbicazioni').innerHTML = DB.ubicazioni.slice(0, 20000).map(function (c) { return '<option value="' + esc(c) + '">'; }).join('');
+  },
+  reload: async function () {
+    Modal.open('Aggiornamento', 'Ricarico configurazione, giacenza e VLT…', []);
+    try {
+      await DB.loadTables(DB.SMALL.concat(['UNITA'])); await DB.loadVlt(true);
+      App.fillLists(); App.syncInfo(); Ingresso.ricalcola(); Ingresso.renderOggi(); if (App.tab === 'giacenze') Giacenze.render(); if (App.tab === 'admin') Admin.render();
+      Modal.close(); toast('Dati aggiornati', 'ok');
+    } catch (e) { Modal.close(); toast('Errore aggiornamento: ' + e.message, 'ko'); }
+  },
+  log: function (azione, foglio, id, dett) { return [L.nowStamp(), Auth.email, azione, foglio, id, JSON.stringify(dett || {})]; }
+};
+
+// ───────────────────────── INGRESSO ─────────────────────────
+var Ingresso = {
+  rows: [],
+  init: function () {
+    var d = lsG('draft_' + Auth.email);
+    if (d && d.rows && d.rows.length) {
+      Ingresso.rows = d.rows; Ingresso.setTestata(d.testata || {});
+      toast('Ripristinata la lettura non caricata (' + d.rows.length + ' pezzi)');
+    } else Ingresso.nuovo(true);
+    var fr = $('scFr'), bc = $('scBc'), ub = $('scUbi');
+    function nextOn(e, fn) { if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) { e.preventDefault(); fn(); } }
+    fr.addEventListener('keydown', function (e) { nextOn(e, function () { if (L.s(fr.value)) bc.focus(); }); });
+    bc.addEventListener('keydown', function (e) { nextOn(e, function () { if (!L.s(bc.value)) return; if (Ingresso.needUbi()) ub.focus(); else Ingresso.aggiungi(); }); });
+    ub.addEventListener('keydown', function (e) { nextOn(e, function () { Ingresso.aggiungi(); }); });
+    Ingresso.ricalcola(); Ingresso.renderOggi();
+  },
+  T: function () {
+    return { tipo: $('inTipo').value, data: $('inData').value, mittente: L.s($('inMittente').value), awb: L.s($('inAwb').value), vettore: L.up($('inVettore').value),
+      ddt: L.s($('inDdt').value), po: L.s($('inPo').value), bal: $('inBal').checked };
+  },
+  setTestata: function (t) {
+    $('inTipo').value = t.tipo || ''; $('inData').value = t.data || L.isoToday(); $('inMittente').value = t.mittente || ''; $('inAwb').value = t.awb || '';
+    $('inVettore').value = t.vettore || ''; $('inDdt').value = t.ddt || ''; $('inPo').value = t.po || ''; $('inBal').checked = !!t.bal;
+  },
+  nuovo: function (silent) {
+    if (!silent && Ingresso.rows.length && !confirm('Ci sono ' + Ingresso.rows.length + ' pezzi non caricati. Scartarli?')) return;
+    Ingresso.rows = []; Ingresso.setTestata({ data: L.isoToday() }); Ingresso.save(); Ingresso.ricalcola(); $('scFr').value = ''; $('scBc').value = ''; $('scUbi').value = '';
+  },
+  save: function () { lsS('draft_' + Auth.email, Ingresso.rows.length ? { testata: Ingresso.T(), rows: Ingresso.rows } : null); },
+  needUbi: function () { var t = $('inTipo').value; return t === 'NEW' || t === 'REUSE'; },
+  onTestata: function () { $('wrapUbi').style.visibility = Ingresso.needUbi() ? 'visible' : 'hidden'; $('lblFr').textContent = $('inBal').checked ? 'FR / RMA balancing' : 'FR'; Ingresso.ricalcola(); },
+  onAwb: function () { var v = L.vettoreDaAwb($('inAwb').value, DB.t.VETTORI.rows); if (v) $('inVettore').value = v; Ingresso.ricalcola(); },
+  aggiungi: function () {
+    var fr = L.s($('scFr').value).replace(/^FR/i, '').replace(/^0+(?=\d)/, ''), bc = L.s($('scBc').value), ub = L.s($('scUbi').value);
+    if (!bc) { toast('Manca il barcode del seriale', 'ko'); $('scBc').focus(); return; }
+    if (fr && !/^\d+$/.test(fr)) { toast('FR/RMA deve essere un numero', 'ko'); $('scFr').focus(); return; }
+    Ingresso.rows.push({ fr: fr, bc: bc, ubi: ub, ser: '', pn: '', man: {} });
+    $('scFr').value = ''; $('scBc').value = ''; if (!Ingresso.needUbi()) $('scUbi').value = '';
+    Ingresso.ricalcola(); Ingresso.save(); $('scFr').focus();
+  },
+  del: function (i) { Ingresso.rows.splice(i, 1); Ingresso.ricalcola(); Ingresso.save(); },
+  edit: function (i, f, v) { var r = Ingresso.rows[i]; r.man[f] = L.s(v); Ingresso.ricalcola(); Ingresso.save(); },
+  // calcolo riga: replica della logica INPUT DATI del prototipo
+  calc: function (r, T, ctx) {
+    var regole = DB.t.REGOLE_BARCODE.rows.slice().sort(function (a, b) { return (parseInt(a.priorita, 10) || 0) - (parseInt(b.priorita, 10) || 0); });
+    var o = { fr: r.fr, rma: '', bc: r.bc, msgs: [], err: false, warn: false, tipo: T.tipo, ubicazione: r.ubi, destinazione: '', statoVlt: '', nota: '', mail: null };
+    var v = r.fr ? DB.vltMap[r.fr] : null;
+    // balancing: con il flag attivo, un numero non trovato tra gli FR è l'RMA della balancing
+    if ((T.bal || T.tipo === 'BALANCING') && r.fr && !v) { o.tipo = 'BALANCING'; o.rma = r.fr; o.fr = ''; }
+    o.ser = r.man.ser || L.estraiSeriale(r.bc, regole);
+    if (!v && !o.rma) { var vs = DB.vltBySer[L.up(o.ser)] || DB.vltBySer[L.up(L.afterSpace(o.ser))]; if (vs && !r.fr) v = vs; }
+    o.rip = r.man.rip || (v ? v.riparatore : '');
+    var sn = DB.serNoti[L.up(o.ser)];
+    o.pn = r.man.pn || L.estraiPn(r.bc, o.ser, o.rip, regole) || (sn && sn.pn) || (v ? v.f_mat_tmpn : '');
+    var rp = DB.t.RIPARATORI.rows.find(function (x) { return L.up(x.codice) === L.up(App.aliasRip(o.rip)); });
+    o.mnft = r.man.mnft || DB.artPn[L.up(o.pn)] || (sn && sn.mnft) || (rp && rp.mnft_default) || '';
+    if (v) {
+      o.statoVlt = '| ' + v.stato + (v.note ? ' | ' + v.note : '');
+      var dep = DB.t.DEPOT_VLT.rows.find(function (d) { return d.depot_vlt === v.depot_origine; });
+      o.depDest = dep ? dep.destinazione : '';
+    }
+    if (o.tipo === 'BALANCING') {
+      var b = DB.t.BALANCING.rows.find(function (x) { return L.up(x.seriale) === L.up(o.ser) && L.up(x.gestito) !== 'SI'; })
+           || DB.t.BALANCING.rows.find(function (x) { return x.rma === o.rma && L.up(x.gestito) !== 'SI'; });
+      o.destinazione = b ? b.destinatario : '';
+      o.nota = o.destinazione;
+      o.statoVlt = 'BALANCING';
+      if (!b) { o.msgs.push(['warn', 'Balancing non trovata in BALANCING (seriale/RMA)']); o.warn = true; }
+      o.mail = { tipo: 'bal' };
+    } else if (o.tipo === 'GOOD') {
+      o.destinazione = r.fr === '98787' ? 'INGEGNERIA' : (o.depDest || '');
+      o.nota = (r.man.nota !== undefined) ? r.man.nota : (o.destinazione ? o.destinazione + ' / ' + ctx.nextLabel() : '');
+      if (!v) { o.msgs.push(['warn', 'FR non trovato in VLT']); o.warn = true; }
+      if (!o.destinazione) { o.msgs.push(['warn', 'Destinazione non ricavata dal depot VLT']); o.warn = true; }
+    } else {
+      if (r.fr === '98787') o.destinazione = 'INGEGNERIA';
+      if (v) {
+        var auto = L.notaControllo(o.ser, o.pn, v.f_mat_serial_no, v.f_mat_tmpn);
+        o.nota = (r.man.nota !== undefined) ? r.man.nota : auto;
+        if (auto) { o.msgs.push(['warn', auto]); o.warn = true; o.anomalia = auto; }
+        if (L.up(v.stato) === 'OPEN') { o.msgs.push(['warn', 'FR in stato OPEN su VLT: scrivi al Service Desk']); o.warn = true; o.mail = { tipo: 'open' }; }
+      } else {
+        o.nota = r.man.nota || '';
+        if (r.fr) { o.msgs.push(['warn', 'FR non trovato in VLT']); o.warn = true; }
+        else if (['FAULTY', 'GOOD'].indexOf(o.tipo) >= 0) { o.msgs.push(['err', 'Manca l\'FR']); o.err = true; }
+      }
+    }
+    if (L.up(o.nota) === 'SCRAP') o.tipo = 'SCRAP';
+    // duplicati
+    var key = L.up(o.ser);
+    if (ctx.serSeen[key]) { o.msgs.push(['err', 'Seriale già letto in questa lista (riga ' + ctx.serSeen[key] + ')']); o.err = true; }
+    ctx.serSeen[key] = ctx.n;
+    if (o.fr) { if (ctx.frSeen[o.fr]) { o.msgs.push(['warn', 'FR già letto (riga ' + ctx.frSeen[o.fr] + ')']); o.warn = true; } ctx.frSeen[o.fr] = ctx.n; }
+    var g = ctx.giac[key] || ctx.giac[L.up(L.afterSpace(o.ser))];
+    if (g) { o.msgs.push(['err', 'Seriale già in giacenza (' + g.id_unita + ', ' + g.tipo + ', entrato ' + g.data_in + ')']); o.err = true; }
+    if (L.s(o.bc) !== L.s(o.ser)) o.msgs.push(['info', 'Seriale estratto dal barcode']);
+    if (!o.pn) { o.msgs.push(['warn', 'P/N non ricavato: inseriscilo']); o.warn = true; }
+    return o;
+  },
+  computed: [],
+  ricalcola: function () {
+    var T = Ingresso.T();
+    // controllo testata
+    var vet = T.vettore, vlist = DB.t.VETTORI.rows.map(function (x) { return L.up(x.vettore); });
+    $('hVettore').textContent = !vet ? '' : (vlist.indexOf(vet) < 0 ? 'VEDI FISICAMENTE: vettore non in elenco' : '');
+    $('hVettore').className = 'hint' + (vet && vlist.indexOf(vet) < 0 ? ' warn' : '');
+    // giacenza indicizzata
+    var giac = {}; DB.t.UNITA.rows.forEach(function (u) { if (u.stato === 'IN_GIACENZA' || u.stato === 'IN_LAVORAZIONE') giac[L.up(u.seriale)] = u; });
+    var lettera = L.up(App.me.sigla || 'X').charAt(0);
+    var re = new RegExp('/ 0?(\\d+)' + lettera + '$');
+    var base = 0; DB.t.UNITA.rows.forEach(function (u) { if (u.stato === 'IN_GIACENZA' && (u.tipo === 'GOOD' || u.tipo === 'BALANCING')) { var m = re.exec(L.s(u.note).split(' | ')[0]); if (m) base = Math.max(base, parseInt(m[1], 10)); } });
+    var lab = base;
+    var ctx = { serSeen: {}, frSeen: {}, giac: giac, n: 0, nextLabel: function () { lab++; return '0' + lab + lettera; } };
+    Ingresso.computed = Ingresso.rows.map(function (r) { ctx.n++; return Ingresso.calc(r, T, ctx); });
+    // proposte di testata dal primo FR
+    var first = Ingresso.computed.find(function (c) { return c.fr && DB.vltMap[c.fr]; });
+    if (first) {
+      var v1 = DB.vltMap[first.fr];
+      if (!L.s($('inMittente').value)) $('inMittente').value = (T.tipo === 'GOOD') ? App.aliasRip(first.rip) : (first.depDest || '');
+      if (!L.s($('inAwb').value) && T.tipo !== 'GOOD' && v1.awb_cw) { $('inAwb').value = v1.awb_cw; Ingresso.onAwbSilent(); }
+    }
+    Ingresso.render();
+  },
+  onAwbSilent: function () { var v = L.vettoreDaAwb($('inAwb').value, DB.t.VETTORI.rows); if (v && !L.s($('inVettore').value)) $('inVettore').value = v; },
+  mailLink: function (c, T) {
+    var to = DB.param('mail_sd', 'servicedesk@atsgruppo.eu'), cc = DB.param('mail_cc', '');
+    var subj, body;
+    if (c.mail.tipo === 'bal') { subj = 'BALANCING RMA ' + c.rma + ' ricevuta da ' + T.mittente; body = DB.param('testo_mail_balancing', ''); }
+    else { subj = 'OPEN ' + c.tipo + ' ' + c.fr + ' ricevuta da ' + T.mittente; body = DB.param('testo_mail_faulty_open', ''); }
+    return 'mailto:' + to + '?subject=' + encodeURIComponent(subj) + (cc ? '&cc=' + encodeURIComponent(cc) : '') + '&body=' + encodeURIComponent(body);
+  },
+  render: function () {
+    var T = Ingresso.T(), C = Ingresso.computed;
+    var tb = $('inRows');
+    if (!C.length) { tb.innerHTML = '<tr><td colspan="12" class="empty">Nessun pezzo letto</td></tr>'; }
+    else tb.innerHTML = C.map(function (c, i) {
+      var cls = c.err ? 'r-err' : (c.warn ? 'r-warn' : '');
+      var m = c.msgs.map(function (x) { return '<div class="msg ' + x[0] + '">' + esc(x[1]) + '</div>'; }).join('');
+      var mail = c.mail ? '<a class="mail" href="' + Ingresso.mailLink(c, T) + '">✉ scrivi mail</a>' : '';
+      function ed(f, val, w) { return '<input class="edit-cell mono' + (Ingresso.rows[i].man[f] !== undefined ? ' dirty' : '') + '" style="min-width:' + (w || 90) + 'px" value="' + esc(val) + '" onchange="Ingresso.edit(' + i + ',\'' + f + '\',this.value)">'; }
+      return '<tr class="' + cls + '"><td>' + (i + 1) + '</td><td class="mono">' + esc(c.fr) + '</td><td class="mono">' + esc(c.rma) + '</td>' +
+        '<td>' + ed('ser', c.ser, 150) + '</td><td>' + ed('pn', c.pn, 100) + '</td><td>' + ed('mnft', c.mnft, 80) + '</td>' +
+        '<td>' + esc(c.rip) + '</td><td style="font-size:11.5px;color:var(--subtle)">' + esc(c.statoVlt) + '</td>' +
+        '<td>' + ed('nota', c.nota, 180) + '</td><td>' + esc(c.tipo === 'NEW' || c.tipo === 'REUSE' ? c.ubicazione : c.destinazione) + '</td>' +
+        '<td><div class="msgs">' + m + mail + '</div></td><td><button class="ico-btn" title="Elimina" onclick="Ingresso.del(' + i + ')">✕</button></td></tr>';
+    }).join('');
+    var nErr = C.filter(function (c) { return c.err; }).length, nWarn = C.filter(function (c) { return c.warn && !c.err; }).length;
+    $('inStats').innerHTML = '<div class="stat"><b>' + C.length + '</b><span>pezzi</span></div>' +
+      (nErr ? '<div class="stat"><b style="color:var(--red)">' + nErr + '</b><span>bloccanti</span></div>' : '') +
+      (nWarn ? '<div class="stat"><b style="color:var(--amber)">' + nWarn + '</b><span>da verificare</span></div>' : '');
+    $('btnCarica').disabled = !C.length || nErr > 0;
+    $('btnCarica').title = nErr ? 'Correggi le righe in rosso' : '';
+    $('wrapUbi').style.visibility = Ingresso.needUbi() ? 'visible' : 'hidden';
+  },
+  validaTestata: function (T) {
+    var e = [];
+    if (!T.tipo) e.push('Tipo'); if (!T.data) e.push('Data ingresso'); if (!T.mittente) e.push('Mittente'); if (!T.vettore) e.push('Vettore');
+    return e;
+  },
+  carica: async function () {
+    var T = Ingresso.T(), C = Ingresso.computed;
+    var miss = Ingresso.validaTestata(T);
+    if (miss.length) { Modal.open('Testata incompleta', 'Compila: ' + miss.join(', ')); return; }
+    if (C.some(function (c) { return c.err; })) { Modal.open('Righe bloccanti', 'Correggi le righe in rosso prima di caricare.'); return; }
+    var nWarn = C.filter(function (c) { return c.warn; }).length;
+    var ok = await Modal.confirm('Carica ' + C.length + ' pezzi',
+      'Tipo ' + T.tipo + ' · ' + T.mittente + ' · ' + T.data + (nWarn ? '\n\n' + nWarn + ' righe hanno avvisi (gialle): verranno caricate e, se c\'è un errore seriale/TPN, aperta un\'anomalia.' : ''));
+    if (!ok) return;
+    Modal.open('Caricamento in corso', 'Non chiudere la pagina.', []);
+    try {
+      await Ingresso.scrivi(T, C);
+      Modal.close(); toast(C.length + ' pezzi caricati', 'ok');
+      Ingresso.rows = []; Ingresso.save(); Ingresso.setTestata({ data: L.isoToday() }); Ingresso.ricalcola(); Ingresso.renderOggi(); App.syncInfo();
+    } catch (e) {
+      Modal.open('Errore durante il caricamento', e.message + '\n\nI pezzi letti sono ancora qui: controlla in "Ingressi di oggi" cosa è stato scritto prima di riprovare.');
+    }
+  },
+  scrivi: async function (T, C) {
+    var now = L.nowStamp(), me = Auth.email, sigla = App.me.sigla || '';
+    var tU = DB.t.UNITA;
+    // MOVIMENTI e altri fogli: leggo solo le intestazioni
+    var heads = await API.batchGet(DB.id, ['RICEZIONI', 'MOVIMENTI', 'ANOMALIE', 'LOG'].map(function (n) { return API.q(n) + '!1:1'; }));
+    var tR = new Table('RICEZIONI', heads[0][0] || []), tM = new Table('MOVIMENTI', heads[1][0] || []), tA = new Table('ANOMALIE', heads[2][0] || []), tL = new Table('LOG', heads[3][0] || []);
+    var upd = [];
+    Modal.progress('1/5 ricezione');
+    var rR = await API.append(DB.id, 'RICEZIONI', [tR.toRow({ data_arrivo: T.data, mittente: T.mittente, awb: T.awb, vettore: T.vettore, ddt_mittente: T.ddt, po_mrn: T.po, tipo: T.tipo, flag_balancing: T.bal ? 'SI' : 'NO', n_pezzi: C.length, stato: 'CHIUSA', note: '', creato_il: now, creato_da: me })]);
+    var idR = 'R' + L.pad(rR - 1, 6);
+    upd.push({ range: tR.cell('id_ricezione', rR), values: [[idR]] });
+    Modal.progress('2/5 giacenza');
+    var mag = function (t) { return t === 'NEW' || t === 'REUSE' ? 'HUB_MAGAZZINO' : (t === 'SCRAP' ? 'SCRAP' : 'HUB_GUASTI'); };
+    var uObjs = C.map(function (c) {
+      return { seriale: c.ser, barcode_letto: c.bc, pn: c.pn, mnft: c.mnft, tipo: c.tipo, fr: c.fr, rma: c.rma, riparatore: c.rip, magazzino: mag(c.tipo),
+        ubicazione: (c.tipo === 'NEW' || c.tipo === 'REUSE') ? c.ubicazione : '', stato: 'IN_GIACENZA', destinazione_prevista: c.destinazione,
+        id_ricezione: idR, data_in: T.data, note: c.nota, rev: 1, creato_il: now, creato_da: me };
+    });
+    var rU = await API.append(DB.id, 'UNITA', uObjs.map(function (o) { return tU.toRow(o); }));
+    var uBase = parseInt(DB.param('unita_id_base', '0'), 10) || 0;
+    uObjs.forEach(function (o, i) { o.id_unita = 'U' + L.pad(uBase + rU + i - 1, 7); o._r = rU + i; });
+    Modal.progress('3/5 movimenti');
+    var mObjs = C.map(function (c, i) {
+      return { data_ora: T.data, direzione: 'IN', causale: 'INGRESSO', id_unita: uObjs[i].id_unita, seriale: c.ser, pn: c.pn, mnft: c.mnft, tipo: c.tipo, fr: c.fr, rma: c.rma,
+        po_mrn: T.po, controparte: T.mittente, awb: T.awb, vettore: T.vettore, ddt: T.ddt, id_ricezione: idR, riparatore: c.rip, ubicazione_a: uObjs[i].ubicazione,
+        operatore: me, operatore_sigla: sigla, note: c.nota, origine: 'APP' };
+    });
+    var rM = await API.append(DB.id, 'MOVIMENTI', mObjs.map(function (o) { return tM.toRow(o); }));
+    var mBase = parseInt(DB.param('mov_id_base', ''), 10);
+    if (isNaN(mBase)) {   // prima scrittura dall'app: allineo la numerazione all'ultimo ID migrato
+      mBase = (parseInt(DB.param('id_in_prossimo', '0'), 10) || 0) - rM;
+      var tP = DB.t.PARAMETRI;
+      await API.append(DB.id, 'PARAMETRI', [tP.toRow({ chiave: 'mov_id_base', valore: String(mBase), descrizione: 'ID movimento = prefisso IN/OUT + (mov_id_base + riga in MOVIMENTI). Impostato automaticamente alla prima scrittura; da aggiornare solo all\'archiviazione annuale.' })]);
+      tP.rows.push({ chiave: 'mov_id_base', valore: String(mBase) });
+    }
+    mObjs.forEach(function (o, i) { o.id_mov = 'IN' + (mBase + rM + i); });
+    Modal.progress('4/5 numerazione');
+    // colonne ID contigue: una scrittura per blocco
+    var n = C.length;
+    upd.push({ range: tU.cell('id_unita', rU) + ':' + tU.col('id_unita') + (rU + n - 1), values: uObjs.map(function (o) { return [o.id_unita]; }) });
+    upd.push({ range: tU.cell('id_mov_in', rU) + ':' + tU.col('id_mov_in') + (rU + n - 1), values: mObjs.map(function (o) { return [o.id_mov]; }) });
+    upd.push({ range: tM.cell('id_mov', rM) + ':' + tM.col('id_mov') + (rM + n - 1), values: mObjs.map(function (o) { return [o.id_mov]; }) });
+    await API.batchUpdate(DB.id, upd);
+    Modal.progress('5/5 anomalie e log');
+    var anom = [];
+    C.forEach(function (c, i) {
+      if (!c.anomalia) return;
+      anom.push(tA.toRow({ data: now, tipo: /SERIALE/.test(c.anomalia) ? 'SERIALE_ERRATO' : 'TPN_ERRATO', id_unita: uObjs[i].id_unita, seriale: c.ser, fr: c.fr, descrizione: c.anomalia, stato: 'APERTA', aperta_da: me, rev: 1 }));
+    });
+    if (anom.length) {
+      var rA = await API.append(DB.id, 'ANOMALIE', anom);
+      await API.batchUpdate(DB.id, [{ range: tA.cell('id_anomalia', rA) + ':' + tA.col('id_anomalia') + (rA + anom.length - 1), values: anom.map(function (x, i) { return ['A' + L.pad(rA + i - 1, 6)]; }) }]);
+    }
+    await API.append(DB.id, 'LOG', [tL.toRow({ data_ora: now, utente: me, azione: 'CREA', foglio: 'RICEZIONI', id_record: idR, dettaglio: JSON.stringify({ tipo: T.tipo, pezzi: n, mittente: T.mittente, unita: uObjs[0].id_unita + '…' + uObjs[n - 1].id_unita }) })]);
+    // aggiorno la giacenza in memoria
+    uObjs.forEach(function (o) { var x = {}; tU.header.forEach(function (h) { x[h] = o[h] === undefined ? '' : String(o[h]); }); x._r = o._r; tU.rows.push(x); });
+  },
+  renderOggi: function () {
+    var tutti = $('oggiTutti').checked, oggi = L.isoToday();
+    var list = DB.t.UNITA.rows.filter(function (u) { return L.s(u.creato_il).slice(0, 10) === oggi && u.creato_da !== 'MIGRAZIONE' && (tutti || u.creato_da === Auth.email); }).reverse();
+    var by = {}; list.forEach(function (u) { by[u.tipo] = (by[u.tipo] || 0) + 1; });
+    $('oggiStats').innerHTML = '<div class="stat"><b>' + list.length + '</b><span>totale</span></div>' + Object.keys(by).map(function (k) { return '<div class="stat"><b>' + by[k] + '</b><span>' + esc(k) + '</span></div>'; }).join('');
+    $('oggiRows').innerHTML = list.length ? list.slice(0, 1000).map(function (u) {
+      var op = DB.t.OPERATORI.rows.find(function (o) { return L.s(o.email).toLowerCase() === u.creato_da; });
+      return '<tr><td class="mono">' + esc(u.id_unita) + '</td><td>' + Pill.tipo(u.tipo) + '</td><td class="mono">' + esc(u.fr) + '</td><td class="mono">' + esc(u.rma) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.riparatore) + '</td><td>' + esc(u.note) + '</td><td>' + esc(op ? (op.sigla || op.nome) : u.creato_da) + '</td></tr>';
+    }).join('') : '<tr><td colspan="9" class="empty">Nessun ingresso oggi</td></tr>';
+  }
+};
+App.aliasRip = function (nome) {
+  var a = DB.t.RIPARATORI_ALIAS.rows.find(function (x) { return L.up(x.nome_vlt) === L.up(nome); });
+  return a ? a.codice_riparatore : nome;
+};
+var Pill = {
+  tipo: function (t) { var c = { FAULTY: 'p-red', GOOD: 'p-green', BALANCING: 'p-violet', NEW: 'p-blue', REUSE: 'p-teal', SCRAP: 'p-amber', RESO: 'p-amber' }[t] || ''; return '<span class="pill ' + c + '">' + esc(t) + '</span>'; }
+};
+
+// ───────────────────────── GIACENZE ─────────────────────────
+var Giacenze = {
+  init: function () {
+    $('gTipo').innerHTML = '<option value="">Tutti</option>' + TIPI.map(function (t) { return '<option>' + t + '</option>'; }).join('');
+    $('gMag').innerHTML = '<option value="">Tutti</option>' + DB.t.MAGAZZINI.rows.map(function (m) { return '<option>' + esc(m.codice) + '</option>'; }).join('');
+  },
+  debounce: function () { clearTimeout(Giacenze._t); Giacenze._t = setTimeout(Giacenze.render, 200); },
+  render: function () {
+    var q = L.up($('gQ').value), tipo = $('gTipo').value, mag = $('gMag').value, st = $('gStato').value;
+    var F = ['seriale', 'pn', 'fr', 'rma', 'ubicazione', 'material', 'note', 'id_unita', 'destinazione_prevista', 'bin_vlt'];
+    var all = DB.t.UNITA.rows.filter(function (u) { return (!st || u.stato === st) && (!mag || u.magazzino === mag); });
+    var list = all.filter(function (u) { return (!tipo || u.tipo === tipo) && (!q || F.some(function (f) { return L.up(u[f]).indexOf(q) >= 0; })); });
+    var by = {}; all.filter(function (u) { return !q || F.some(function (f) { return L.up(u[f]).indexOf(q) >= 0; }); }).forEach(function (u) { by[u.tipo] = (by[u.tipo] || 0) + 1; });
+    $('gStats').innerHTML = '<div class="stat"><b>' + list.length + '</b><span>risultati</span></div>' + TIPI.filter(function (t) { return by[t]; }).map(function (t) { return '<div class="stat" style="cursor:pointer" onclick="$(\'gTipo\').value=\'' + t + '\';Giacenze.render()"><b>' + by[t] + '</b><span>' + t + '</span></div>'; }).join('');
+    $('gRows').innerHTML = list.length ? list.slice(0, 500).map(function (u) {
+      return '<tr><td class="mono">' + esc(u.id_unita) + '</td><td>' + Pill.tipo(u.tipo) + '</td><td style="font-size:11px">' + esc(u.magazzino) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.mnft) + '</td><td class="mono">' + esc(u.fr) + '</td><td class="mono">' + esc(u.rma) + '</td><td>' + esc(u.riparatore) + '</td><td class="mono">' + esc(u.ubicazione) + '</td><td>' + esc(u.destinazione_prevista) + '</td><td class="mono">' + esc(u.data_in) + '</td><td style="font-size:11px">' + esc(u.stato) + '</td><td style="font-size:11.5px">' + esc(u.note) + '</td></tr>';
+    }).join('') : '<tr><td colspan="14" class="empty">Nessun risultato</td></tr>';
+    $('gHint').textContent = list.length > 500 ? 'Mostrati i primi 500 di ' + list.length + ': affina la ricerca.' : '';
+  }
+};
+
+// ───────────────────────── ADMIN ─────────────────────────
+var Admin = {
+  sez: 'OPERATORI', dirty: {},
+  CONF: {
+    OPERATORI: { title: 'Operatori', hint: 'Email Gmail di accesso per ogni sigla. Ruolo ADMIN = vede questo tab.', cols: ['email', 'nome', 'sigla', 'ruolo', 'attivo'], add: true },
+    RIPARATORI: { title: 'Riparatori', hint: 'Dati stampati sul DDT ACK. ack_include_as = SI fa entrare gli AS nell\'ACK del giorno.', cols: ['codice', 'ragione_sociale', 'indirizzo', 'ack_include_as', 'mnft_default', 'attivo', 'note'], add: true },
+    RIPARATORI_ALIAS: { title: 'Alias riparatori VLT', hint: 'Nome riparatore come scritto in VLT → codice riparatore.', cols: ['nome_vlt', 'codice_riparatore'], add: true },
+    PARAMETRI: { title: 'Parametri', hint: 'Modifica con attenzione: numerazioni DDT, mail, regole.', cols: ['chiave', 'valore', 'descrizione'], add: true },
+    VETTORI: { title: 'Vettori', hint: 'Prefisso AWB per il riconoscimento automatico del vettore.', cols: ['vettore', 'prefisso_awb'], add: true },
+    REGOLE_BARCODE: { title: 'Regole barcode', hint: 'Estrazione seriale/PN dal barcode, in ordine di priorità.', cols: ['priorita', 'prefisso', 'lunghezza', 'condizione_extra', 'riparatore', 'seriale_da', 'seriale_lung', 'pn_da', 'pn_lung', 'pn_prefisso', 'note'], add: true }
+  },
+  init: function () {
+    $('admTabs').innerHTML = Object.keys(Admin.CONF).map(function (k) { return '<span class="subtab" id="adm-' + k + '" onclick="Admin.open(\'' + k + '\')">' + esc(Admin.CONF[k].title) + '</span>'; }).join('');
+  },
+  open: function (k) {
+    if (Object.keys(Admin.dirty).length && !confirm('Ci sono modifiche non salvate: scartarle?')) return;
+    Admin.sez = k; Admin.dirty = {}; Admin.render();
+  },
+  render: function () {
+    var c = Admin.CONF[Admin.sez], t = DB.t[Admin.sez];
+    document.querySelectorAll('.subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-' + Admin.sez); });
+    $('admTitle').textContent = c.title; $('admHint').textContent = c.hint;
+    $('admHead').innerHTML = '<tr>' + c.cols.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr>';
+    $('admRows').innerHTML = t.rows.map(function (r, i) {
+      return '<tr>' + c.cols.map(function (h) {
+        var d = Admin.dirty[i] && Admin.dirty[i][h] !== undefined;
+        var v = d ? Admin.dirty[i][h] : r[h];
+        return '<td><input class="edit-cell' + (d ? ' dirty' : '') + '" value="' + esc(v) + '" onchange="Admin.set(' + i + ',\'' + h + '\',this.value)"></td>';
+      }).join('') + '</tr>';
+    }).join('');
+  },
+  set: function (i, h, v) { Admin.dirty[i] = Admin.dirty[i] || {}; Admin.dirty[i][h] = L.s(v); Admin.render(); },
+  addRow: function () { var t = DB.t[Admin.sez]; var o = { _r: null, _new: true }; t.header.forEach(function (h) { o[h] = ''; }); if (Admin.sez === 'OPERATORI') { o.ruolo = 'OPERATORE'; o.attivo = 'SI'; } t.rows.push(o); Admin.dirty[t.rows.length - 1] = {}; Admin.render(); },
+  save: async function () {
+    var t = DB.t[Admin.sez], keys = Object.keys(Admin.dirty);
+    if (!keys.length) { toast('Nessuna modifica'); return; }
+    try {
+      var upd = [], nuove = [], logs = [];
+      keys.forEach(function (k) {
+        var r = t.rows[k], ch = Admin.dirty[k];
+        var prima = {}; Object.keys(ch).forEach(function (h) { prima[h] = r[h]; r[h] = ch[h]; });
+        if (Admin.sez === 'OPERATORI' && r.email) r.email = r.email.toLowerCase();
+        if (r._new) nuove.push(r);
+        else { upd.push({ range: API.q(t.name) + '!A' + r._r + ':' + L.colLetter(t.header.length - 1) + r._r, values: [t.toRow(r)] }); }
+        logs.push(App.log(r._new ? 'CREA' : 'MODIFICA', t.name, r[t.header[0]], { prima: prima, dopo: ch }));
+      });
+      if (upd.length) await API.batchUpdate(DB.id, upd);
+      if (nuove.length) { var rr = await API.append(DB.id, t.name, nuove.map(function (r) { return t.toRow(r); })); nuove.forEach(function (r, i) { r._r = rr + i; delete r._new; }); }
+      await API.append(DB.id, 'LOG', logs);
+      Admin.dirty = {}; Admin.render(); App.fillLists(); toast('Salvato', 'ok');
+    } catch (e) { toast('Errore salvataggio: ' + e.message, 'ko'); }
+  }
+};
+
+window.addEventListener('load', Auth.init);
+</script>
+</body>
+</html>
