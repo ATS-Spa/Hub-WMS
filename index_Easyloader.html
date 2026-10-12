@@ -177,7 +177,7 @@ a.mail{color:var(--blue);font-size:11.5px;text-decoration:none}
       </div>
 
       <div class="card">
-        <div class="card-h"><div class="card-t">Lettura pezzi</div><span class="hint" id="hScan">Spara FR, poi il barcode del seriale. Invio o Tab per passare al campo successivo.</span></div>
+        <div class="card-h"><div class="card-t">Lettura pezzi</div><span class="hint" id="hScan">Spara FR, poi il barcode del seriale (Invio o Tab per passare al campo dopo). Per i Huawei puoi lasciare vuoto l'FR: lo ricava dal seriale.</span></div>
         <div class="scan-row">
           <div class="fg"><span class="fl" id="lblFr">FR / RMA</span><input class="fc mono" id="scFr" autocomplete="off"></div>
           <div class="fg"><span class="fl">Barcode seriale</span><input class="fc mono" id="scBc" autocomplete="off"></div>
@@ -328,6 +328,8 @@ var CFG = {
   DB_MAIN: 'DB_EASYLOADER',
   VLT_ID: '1KxP-nGn6AbenWhZXi1EAPRxSKeCRdEoESH4UzMqqjdk',
   VLT_SHEET: 'Foglio1',
+  HUAWEI_ID: '1oorvMVY8DIfBfVl2Bdi4EmL7C3swNgijOdP9sOEFskQ',
+  HUAWEI_RANGE: "'CERCA FR HUAWEI ASSOCIATO'!F2:I",   // F = seriale, I = FR (come la funzione con nome del prototipo)
   SUPER_USERS: ['daniele.izzo.ats@gmail.com'],
   VLT_REFRESH_HOUR: 8          // dopo questa ora la cache VLT del giorno prima viene ricaricata
 };
@@ -440,7 +442,7 @@ Table.prototype.col = function (h) { if (!(h in this.idx)) throw new Error('Colo
 Table.prototype.cell = function (h, row) { return API.q(this.name) + '!' + this.col(h) + row; };
 
 var DB = {
-  id: null, t: {}, vlt: null, vltMap: {}, vltBySer: {}, artPn: {}, serNoti: {},
+  id: null, t: {}, vlt: null, vltMap: {}, vltBySer: {}, artPn: {}, serNoti: {}, huaweiFr: {}, huaweiTs: null,
   SMALL: ['OPERATORI', 'PARAMETRI', 'RIPARATORI', 'RIPARATORI_ALIAS', 'CONTROPARTI', 'DEPOT_VLT', 'VETTORI', 'REGOLE_BARCODE', 'MAGAZZINI', 'BALANCING'],
   loadTables: async function (names) {
     var vals = await API.batchGet(DB.id, names.map(function (n) { return API.q(n); }));
@@ -475,6 +477,16 @@ var DB = {
     }
     DB.vlt = c; DB.vltMap = {}; DB.vltBySer = {};
     c.rows.forEach(function (r) { if (r.fr_id) DB.vltMap[r.fr_id] = r; var s = L.up(r.f_mat_serial_no); if (s) DB.vltBySer[s] = r; });
+  },
+  loadHuawei: async function (force) {
+    var c = force ? null : await DB.cacheGet('huawei');
+    if (!c || (Date.now() - c.ts) > 3 * 3600 * 1000) {
+      var v = (await API.batchGet(CFG.HUAWEI_ID, [CFG.HUAWEI_RANGE]))[0] || [];
+      var m = {};
+      v.forEach(function (r) { var sn = L.up(r[0]), fr = L.s(r[3]).replace(/^FR/i, '').replace(/^0+(?=\d)/, ''); if (sn && fr) m[sn] = fr; });
+      c = { ts: Date.now(), map: m }; await DB.cacheSet('huawei', c);
+    }
+    DB.huaweiFr = c.map; DB.huaweiTs = c.ts;
   },
   loadLookups: async function (force) {
     var c = force ? null : await DB.cacheGet('lookups');
@@ -523,7 +535,8 @@ var App = {
       var s4 = step('Carico dati VLT (cache giornaliera)');
       await DB.loadVlt(false); stepDone(s4, true, 'VLT: ' + DB.vlt.rows.length + ' FR · aggiornato ' + new Date(DB.vlt.ts).toLocaleString('it-IT'));
       App.showShell();
-      DB.loadLookups(false).then(function () { App.fillLists(); App.syncInfo(); }).catch(function (e) { toast('Anagrafiche non caricate: ' + e.message, 'ko'); });
+      DB.loadLookups(false).then(function () { App.fillLists(); App.syncInfo(); Ingresso.ricalcola(); }).catch(function (e) { toast('Anagrafiche non caricate: ' + e.message, 'ko'); });
+      DB.loadHuawei(false).then(function () { App.syncInfo(); Ingresso.ricalcola(); }).catch(function (e) { toast('File Huawei non leggibile (FR da seriale Huawei non disponibile): ' + e.message, 'ko'); });
     } catch (e) {
       step('Errore: ' + e.message, 'ko'); $('btnLogin').style.display = '';
     }
@@ -557,7 +570,7 @@ var App = {
     if (t.k === 'ingresso') setTimeout(function () { $('scFr').focus(); }, 50);
   },
   setTheme: function (th) { document.body.className = th || ''; lsS('theme', th); },
-  syncInfo: function () { $('syncInfo').textContent = 'VLT ' + (DB.vlt ? new Date(DB.vlt.ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—') + ' · giacenza ' + DB.t.UNITA.rows.length; },
+  syncInfo: function () { $('syncInfo').textContent = 'VLT ' + (DB.vlt ? new Date(DB.vlt.ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—') + ' · Huawei ' + Object.keys(DB.huaweiFr).length + ' seriali · giacenza ' + DB.t.UNITA.rows.length; },
   fillLists: function () {
     var cp = DB.t.CONTROPARTI.rows.map(function (r) { return r.codice; }).filter(Boolean);
     DB.t.RIPARATORI.rows.forEach(function (r) { if (r.codice && cp.indexOf(r.codice) < 0) cp.push(r.codice); });
@@ -570,6 +583,7 @@ var App = {
     Modal.open('Aggiornamento', 'Ricarico configurazione, giacenza e VLT…', []);
     try {
       await DB.loadTables(DB.SMALL.concat(['UNITA'])); await DB.loadVlt(true);
+      try { await DB.loadHuawei(true); } catch (e) { toast('File Huawei non leggibile: ' + e.message, 'ko'); }
       App.fillLists(); App.syncInfo(); Ingresso.ricalcola(); Ingresso.renderOggi(); if (App.tab === 'giacenze') Giacenze.render(); if (App.tab === 'admin') Admin.render();
       Modal.close(); toast('Dati aggiornati', 'ok');
     } catch (e) { Modal.close(); toast('Errore aggiornamento: ' + e.message, 'ko'); }
@@ -588,7 +602,7 @@ var Ingresso = {
     } else Ingresso.nuovo(true);
     var fr = $('scFr'), bc = $('scBc'), ub = $('scUbi');
     function nextOn(e, fn) { if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) { e.preventDefault(); fn(); } }
-    fr.addEventListener('keydown', function (e) { nextOn(e, function () { if (L.s(fr.value)) bc.focus(); }); });
+    fr.addEventListener('keydown', function (e) { nextOn(e, function () { bc.focus(); }); });
     bc.addEventListener('keydown', function (e) { nextOn(e, function () { if (!L.s(bc.value)) return; if (Ingresso.needUbi()) ub.focus(); else Ingresso.aggiungi(); }); });
     ub.addEventListener('keydown', function (e) { nextOn(e, function () { Ingresso.aggiungi(); }); });
     Ingresso.ricalcola(); Ingresso.renderOggi();
@@ -622,12 +636,18 @@ var Ingresso = {
   // calcolo riga: replica della logica INPUT DATI del prototipo
   calc: function (r, T, ctx) {
     var regole = DB.t.REGOLE_BARCODE.rows.slice().sort(function (a, b) { return (parseInt(a.priorita, 10) || 0) - (parseInt(b.priorita, 10) || 0); });
-    var o = { fr: r.fr, rma: '', bc: r.bc, msgs: [], err: false, warn: false, tipo: T.tipo, ubicazione: r.ubi, destinazione: '', statoVlt: '', nota: '', mail: null };
-    var v = r.fr ? DB.vltMap[r.fr] : null;
+    // FR mancante: lo cerco nel foglio Huawei (funzione ATS_CERCA_FR_HUAWEI_DDT del prototipo)
+    var frIn = r.fr, frHuawei = false;
+    if (!frIn) {
+      var hf = DB.huaweiFr[L.up(r.bc)] || DB.huaweiFr[L.up(L.estraiSeriale(r.bc, regole))] || DB.huaweiFr[L.up(L.afterSpace(r.bc))];
+      if (hf) { frIn = hf; frHuawei = true; }
+    }
+    var o = { fr: frIn, rma: '', bc: r.bc, msgs: [], err: false, warn: false, tipo: T.tipo, ubicazione: r.ubi, destinazione: '', statoVlt: '', nota: '', mail: null };
+    var v = frIn ? DB.vltMap[frIn] : null;
     // balancing: con il flag attivo, un numero non trovato tra gli FR è l'RMA della balancing
-    if ((T.bal || T.tipo === 'BALANCING') && r.fr && !v) { o.tipo = 'BALANCING'; o.rma = r.fr; o.fr = ''; }
+    if ((T.bal || T.tipo === 'BALANCING') && frIn && !v) { o.tipo = 'BALANCING'; o.rma = frIn; o.fr = ''; }
     o.ser = r.man.ser || L.estraiSeriale(r.bc, regole);
-    if (!v && !o.rma) { var vs = DB.vltBySer[L.up(o.ser)] || DB.vltBySer[L.up(L.afterSpace(o.ser))]; if (vs && !r.fr) v = vs; }
+    if (!v && !o.rma) { var vs = DB.vltBySer[L.up(o.ser)] || DB.vltBySer[L.up(L.afterSpace(o.ser))]; if (vs && !frIn) v = vs; }
     o.rip = r.man.rip || (v ? v.riparatore : '');
     var sn = DB.serNoti[L.up(o.ser)];
     o.pn = r.man.pn || L.estraiPn(r.bc, o.ser, o.rip, regole) || (sn && sn.pn) || (v ? v.f_mat_tmpn : '');
@@ -647,12 +667,12 @@ var Ingresso = {
       if (!b) { o.msgs.push(['warn', 'Balancing non trovata in BALANCING (seriale/RMA)']); o.warn = true; }
       o.mail = { tipo: 'bal' };
     } else if (o.tipo === 'GOOD') {
-      o.destinazione = r.fr === '98787' ? 'INGEGNERIA' : (o.depDest || '');
+      o.destinazione = frIn === '98787' ? 'INGEGNERIA' : (o.depDest || '');
       o.nota = (r.man.nota !== undefined) ? r.man.nota : (o.destinazione ? o.destinazione + ' / ' + ctx.nextLabel() : '');
       if (!v) { o.msgs.push(['warn', 'FR non trovato in VLT']); o.warn = true; }
       if (!o.destinazione) { o.msgs.push(['warn', 'Destinazione non ricavata dal depot VLT']); o.warn = true; }
     } else {
-      if (r.fr === '98787') o.destinazione = 'INGEGNERIA';
+      if (frIn === '98787') o.destinazione = 'INGEGNERIA';
       if (v) {
         var auto = L.notaControllo(o.ser, o.pn, v.f_mat_serial_no, v.f_mat_tmpn);
         o.nota = (r.man.nota !== undefined) ? r.man.nota : auto;
@@ -660,10 +680,11 @@ var Ingresso = {
         if (L.up(v.stato) === 'OPEN') { o.msgs.push(['warn', 'FR in stato OPEN su VLT: scrivi al Service Desk']); o.warn = true; o.mail = { tipo: 'open' }; }
       } else {
         o.nota = r.man.nota || '';
-        if (r.fr) { o.msgs.push(['warn', 'FR non trovato in VLT']); o.warn = true; }
+        if (frIn) { o.msgs.push(['warn', 'FR non trovato in VLT']); o.warn = true; }
         else if (['FAULTY', 'GOOD'].indexOf(o.tipo) >= 0) { o.msgs.push(['err', 'Manca l\'FR']); o.err = true; }
       }
     }
+    if (frHuawei) o.msgs.push(['info', 'FR ricavato dal file Huawei (seriale → FR)']);
     if (L.up(o.nota) === 'SCRAP') o.tipo = 'SCRAP';
     // duplicati
     var key = L.up(o.ser);
