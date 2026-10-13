@@ -436,6 +436,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
         <div class="card-h"><div class="card-t" id="admTitle"></div><span class="hint" id="admHint"></span><div class="spacer"></div>
           <input class="fc" id="admQ" placeholder="filtra…" style="width:200px" oninput="Admin.render()">
           <button class="btn ghost sm" id="admAdd" onclick="Admin.addRow()">+ Riga</button>
+          <label class="btn ghost sm" id="admCal" style="cursor:pointer;display:none" title="Importa il calendario aggiornato (xlsx): sostituisce quello esistente">⬆ Importa calendario<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Cal.importa(this)"></label>
           <button class="btn ghost sm" id="admXls" onclick="Admin.excel()">⬇ Excel</button>
           <button class="btn sm" id="admSave" onclick="Admin.save()">Salva modifiche</button></div>
         <div class="tbl-wrap"><table><thead id="admHead"></thead><tbody id="admRows"></tbody></table></div>
@@ -1700,6 +1701,57 @@ var Giacenze = {
   }
 };
 
+// ───────────────────────── IMPORT CALENDARIO USCITE ─────────────────────────
+// accetta il file storico (DATA + RIPARATORE1…5) o l'export dell'app (data, riparatore, …); sostituisce tutto il calendario,
+// mantenendo stato e spedizione delle coppie data+riparatore già presenti
+var Cal = {
+  importa: async function (inp) {
+    var f = inp.files && inp.files[0]; inp.value = ''; if (!f) return;
+    if (Object.keys(Admin.dirty).length) { Modal.open('Calendario', 'Salva o annulla prima le modifiche in corso.'); return; }
+    var rows; try { rows = await leggiFoglio(f); } catch (e) { Modal.open('Import calendario', 'File non leggibile: ' + e.message); return; }
+    var codici = {}; DB.t.RIPARATORI.rows.forEach(function (r) { codici[L.up(r.codice)] = r.codice; });
+    var nuove = [], ignote = {}, senzaData = 0, visti = {};
+    rows.forEach(function (r) {
+      var d = L.normDate(campo(r, ['DATA', 'DATE', 'GIORNO']));
+      var nomi = Object.keys(r).filter(function (k) { return /^RIPARATORE\s*\d*$/.test(k); }).sort().map(function (k) { return L.s(r[k]); }).filter(Boolean);
+      if (!nomi.length) return;
+      if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) { senzaData++; return; }
+      nomi.forEach(function (n) {
+        var c = App.aliasRip(n) || n, cod = codici[L.up(c)] || codici[L.up(n)];
+        if (!cod) { ignote[n] = (ignote[n] || 0) + 1; cod = n; }
+        var k = d + '|' + L.up(cod); if (visti[k]) return; visti[k] = 1;
+        nuove.push({ data: d, riparatore: cod, stato: L.s(r.STATO) || 'PIANIFICATA', id_spedizione: L.s(r.ID_SPEDIZIONE), note: L.s(r.NOTE) });
+      });
+    });
+    if (!nuove.length) { Modal.open('Import calendario', 'Nessuna riga valida: servono le colonne DATA e RIPARATORE (o RIPARATORE1…5).\nColonne trovate: ' + Object.keys(rows[0] || {}).join(', ')); return; }
+    nuove.sort(function (a, b) { return a.data.localeCompare(b.data) || a.riparatore.localeCompare(b.riparatore); });
+    // conservo stato e spedizione già registrati
+    var vecchi = {}; DB.t.CALENDARIO_USCITE.rows.forEach(function (r) { vecchi[L.normDate(r.data) + '|' + L.up(r.riparatore)] = r; });
+    var conservate = 0; nuove.forEach(function (o) { var v = vecchi[o.data + '|' + L.up(o.riparatore)]; if (v && (L.s(v.id_spedizione) || L.s(v.stato) !== 'PIANIFICATA')) { o.stato = v.stato; o.id_spedizione = v.id_spedizione; o.note = o.note || v.note; conservate++; } });
+    var perse = DB.t.CALENDARIO_USCITE.rows.filter(function (r) { return L.s(r.id_spedizione) && !visti[L.normDate(r.data) + '|' + L.up(r.riparatore)]; }).length;
+    var giorni = {}; nuove.forEach(function (o) { giorni[o.data] = 1; });
+    var ig = Object.keys(ignote);
+    Modal.html('Importa calendario · ' + f.name,
+      '<div style="font-size:13px;line-height:1.7"><b>' + nuove.length + '</b> uscite su <b>' + Object.keys(giorni).length + '</b> giorni, dal ' + esc(L.itDate(nuove[0].data)) + ' al ' + esc(L.itDate(nuove[nuove.length - 1].data)) + '.<br>' +
+      'Sostituisce le <b>' + DB.t.CALENDARIO_USCITE.rows.length + '</b> righe attuali.' + (conservate ? '<br>' + conservate + ' righe già lavorate mantengono stato e spedizione.' : '') +
+      (perse ? '<br><span style="color:var(--amber)">⚠ ' + perse + ' uscite già spedite non sono nel nuovo file: restano nello storico spedizioni ma spariscono dal calendario.</span>' : '') +
+      (senzaData ? '<br><span style="color:var(--amber)">⚠ ' + senzaData + ' righe senza data valida ignorate.</span>' : '') +
+      (ig.length ? '<br><span style="color:var(--amber)">⚠ Riparatori non in anagrafica: ' + ig.map(function (n) { return esc(n) + ' (' + ignote[n] + ')'; }).join(', ') + ' — importati così come sono, aggiungili in Riparatori o Alias.</span>' : '') + '</div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Sostituisci calendario', cls: 'green', keep: true, fn: function () { Cal.scrivi(nuove, f.name); } }]);
+  },
+  scrivi: async function (nuove, nome) {
+    Modal.progress('Scrivo il calendario…');
+    try {
+      var t = DB.t.CALENDARIO_USCITE, n0 = t.rows.length, last = L.colLetter(t.header.length - 1);
+      if (n0) await API.call(API.S + DB.id + '/values/' + encodeURIComponent(API.q(t.name) + '!A2:' + last) + ':clear', { method: 'POST' });
+      await API.batchUpdate(DB.id, [{ range: API.q(t.name) + '!A2:' + last + (nuove.length + 1), values: nuove.map(function (o) { return t.toRow(o); }) }]);
+      await API.append(DB.id, 'LOG', [App.log('IMPORT_CALENDARIO', 'CALENDARIO_USCITE', nome, { righe_prima: n0, righe_dopo: nuove.length, dal: nuove[0].data, al: nuove[nuove.length - 1].data })]);
+      await DB.loadTables(['CALENDARIO_USCITE']);
+      Modal.close(); toast('Calendario sostituito: ' + nuove.length + ' uscite', 'ok'); Admin.render(); if (Ack.loaded) Ack.render();
+    } catch (e) { Modal.progress(''); Modal.open('Calendario non importato', e.message + '\n\nPremi Aggiorna e controlla il calendario prima di riprovare.'); }
+  }
+};
+
 // ───────────────────────── ADMIN ─────────────────────────
 var Admin = {
   sez: 'OPERATORI', dirty: {},
@@ -1726,6 +1778,7 @@ var Admin = {
   render: function () {
     var acc = Admin.sez === 'ACCESSI';
     ['admAdd', 'admQ', 'admSave', 'admXls'].forEach(function (id) { $(id).style.display = acc ? 'none' : ''; });
+    $('admCal').style.display = Admin.sez === 'CALENDARIO_USCITE' ? '' : 'none';
     if (acc) { document.querySelectorAll('#admTabs .subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-ACCESSI'); }); Accessi.render(); return; }
     var c = Admin.CONF[Admin.sez], t = DB.t[Admin.sez];
     document.querySelectorAll('.subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-' + Admin.sez); });
