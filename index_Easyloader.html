@@ -95,6 +95,12 @@ td{padding:6px 10px;border-bottom:1px solid var(--border);vertical-align:top}
 td.mono{font-family:var(--ff-mono);font-size:12px}
 tr.r-err td{background:rgba(239,68,68,.08)}
 tr.r-warn td{background:rgba(245,158,11,.07)}
+tr.r-var td{background:rgba(167,139,250,.10)}
+tr.r-var td:first-child{box-shadow:inset 3px 0 0 var(--violet)}
+.var-tag{color:var(--violet);font-weight:600;white-space:nowrap}
+.var-tag small{font-size:9.5px;border:1px solid var(--violet);border-radius:4px;padding:0 4px;margin-left:4px;font-weight:600}
+.edit-cell.edit-vis{border:1px dashed var(--border)}
+.edit-cell.edit-vis:hover{border-color:var(--blue)}
 .pill{display:inline-block;font-size:10.5px;font-weight:600;padding:2px 8px;border-radius:10px;border:1px solid var(--border);white-space:nowrap}
 .p-blue{color:var(--blue);border-color:rgba(59,130,246,.4)} .p-green{color:var(--green);border-color:rgba(16,185,129,.4)}
 .p-red{color:var(--red);border-color:rgba(239,68,68,.4)} .p-amber{color:var(--amber);border-color:rgba(245,158,11,.4)}
@@ -146,7 +152,15 @@ tr.r-off td{opacity:.5}
 .g-th{cursor:pointer;user-select:none}
 .g-th:hover{color:var(--text)}
 th.g-sorted{color:var(--blue)}
-tr.g-filters th{padding:4px 6px;background:var(--surface);top:31px}
+tr.g-filters th{padding:4px 6px;background:var(--surface)}
+/* intestazione + filtri bloccati insieme: niente righe visibili tra le due */
+thead.g-head{position:sticky;top:0;z-index:3;background:var(--card);box-shadow:0 1px 0 var(--border)}
+thead.g-head th{position:relative;top:auto;border-bottom:0;box-shadow:inset 0 -1px 0 var(--border)}
+thead.g-head tr.g-filters th{box-shadow:none}
+.g-rs{position:absolute;top:0;right:-3px;width:7px;height:100%;cursor:col-resize;z-index:2}
+.g-rs:hover,.g-resizing .g-rs:active{background:var(--blue);opacity:.5}
+body.g-resizing{cursor:col-resize;user-select:none}
+td[style*="max-width"]{overflow:hidden;text-overflow:ellipsis}
 .g-f{width:100%;min-width:70px;background:var(--card);border:1px solid var(--border);border-radius:5px;color:var(--text);font:11px var(--ff-sans);padding:3px 5px;text-transform:none;letter-spacing:0}
 .g-f.g-on{border-color:var(--blue);color:var(--blue)}
 #appShell{--viz-1:#3987e5;--viz-track:rgba(148,163,184,.12)}
@@ -1540,8 +1554,27 @@ var Drive = {
 
 // ───────────────────────── GRIGLIA "ALLA EXCEL": ordina cliccando l'intestazione, filtri per colonna ─────────────────────────
 // cols: [{ k, label, get(row) → valore per ordine/filtro, html(row) → cella, filter: 'select' | 'text' | null, cls, nw }]
-function Grid(name, o) { this.name = name; this.o = o; this.sort = o.sort || null; this.dir = o.dir || 1; this.f = {}; this.limit = o.limit || 500; Grid.all[name] = this; }
+function Grid(name, o) {
+  this.name = name; this.o = o; this.sort = o.sort || null; this.dir = o.dir || 1; this.f = {}; this.limit = o.limit || 500; Grid.all[name] = this;
+  this.w = {}; try { this.w = JSON.parse(localStorage.getItem('gw_' + name) || '{}') || {}; } catch (x) { }
+}
 Grid.all = {};
+// larghezza colonne: trascina il bordo destro dell'intestazione; doppio clic = torna automatica (salvata per utente/browser)
+Grid.stile = function (w) { return w ? ' style="width:' + w + 'px;min-width:' + w + 'px;max-width:' + w + 'px"' : ''; };
+Grid.rs = function (ev, name, k) {
+  ev.preventDefault(); ev.stopPropagation();
+  var g = Grid.all[name], th = ev.target.parentNode, x0 = ev.clientX, w0 = th.getBoundingClientRect().width, i = Array.prototype.indexOf.call(th.parentNode.children, th);
+  document.body.classList.add('g-resizing');
+  function mv(e) {
+    var w = Math.max(40, Math.round(w0 + e.clientX - x0)); g.w[k] = w;
+    var st = 'width:' + w + 'px;min-width:' + w + 'px;max-width:' + w + 'px';
+    th.setAttribute('style', st);
+    var tb = $(g.o.tbody); if (tb) Array.prototype.forEach.call(tb.rows, function (r) { if (r.cells[i] && r.cells.length > 1) r.cells[i].setAttribute('style', st); });
+  }
+  function up() { document.removeEventListener('mousemove', mv); document.removeEventListener('mouseup', up); document.body.classList.remove('g-resizing'); try { localStorage.setItem('gw_' + name, JSON.stringify(g.w)); } catch (x) { } }
+  document.addEventListener('mousemove', mv); document.addEventListener('mouseup', up);
+};
+Grid.rsReset = function (ev, name, k) { ev.stopPropagation(); var g = Grid.all[name]; delete g.w[k]; try { localStorage.setItem('gw_' + name, JSON.stringify(g.w)); } catch (x) { } g.render(true); };
 Grid.prototype.val = function (c, r) { return L.s(c.get ? c.get(r) : r[c.k]); };
 Grid.prototype.match = function (r, skip) {
   var self = this;
@@ -1561,7 +1594,8 @@ Grid.prototype.head = function () {
   var self = this, g = 'Grid.all[\'' + this.name + '\']';
   var h1 = '<tr>' + this.o.cols.map(function (c) {
     var ar = self.sort === c.k ? (self.dir > 0 ? ' ▲' : ' ▼') : '';
-    return '<th class="g-th' + (self.sort === c.k ? ' g-sorted' : '') + '" onclick="' + g + '.ordina(\'' + c.k + '\')" title="Clicca per ordinare">' + esc(c.label) + ar + '</th>';
+    return '<th class="g-th' + (self.sort === c.k ? ' g-sorted' : '') + '"' + Grid.stile(self.w[c.k]) + ' onclick="' + g + '.ordina(\'' + c.k + '\')" title="Clicca per ordinare">' + esc(c.label) + ar +
+      '<span class="g-rs" title="Trascina per allargare · doppio clic: automatica" onclick="event.stopPropagation()" onmousedown="Grid.rs(event,\'' + self.name + '\',\'' + c.k + '\')" ondblclick="Grid.rsReset(event,\'' + self.name + '\',\'' + c.k + '\')"></span></th>';
   }).join('') + '</tr>';
   var h2 = '<tr class="g-filters">' + this.o.cols.map(function (c) {
     if (c.filter === 'select') return '<th><select class="g-f" id="gf_' + self.name + '_' + c.k + '" onchange="' + g + '.filtra(\'' + c.k + '\',this.value)"></select></th>';
@@ -1578,7 +1612,7 @@ Grid.prototype.altri = function () { this.limit += 1000; this.render(); };
 Grid.prototype.render = function (rifaiTesta) {
   var self = this, o = this.o, all = o.rows(), th = $(o.thead), tb = $(o.tbody);
   if (!th || !tb) return;
-  if (rifaiTesta || !th.dataset.g) { th.innerHTML = this.head(); th.dataset.g = '1'; }
+  if (rifaiTesta || !th.dataset.g) { th.innerHTML = this.head(); th.dataset.g = '1'; th.classList.add('g-head'); }
   var list = all.filter(function (r) { return self.match(r); });
   var sc = this.sort && o.cols.find(function (x) { return x.k === self.sort; });
   if (sc) { var c = sc; list = list.slice().sort(function (a, b) { return self.dir * self.cmp(self.val(c, a), self.val(c, b)); }); }
@@ -1593,7 +1627,7 @@ Grid.prototype.render = function (rifaiTesta) {
   });
   o.cols.forEach(function (c) { if (c.filter === 'text') { var e = $('gf_' + self.name + '_' + c.k); if (e) e.classList.toggle('g-on', !!self.f[c.k]); } });
   tb.innerHTML = list.length ? list.slice(0, this.limit).map(function (r) {
-    return '<tr' + (o.rowAttr ? ' ' + o.rowAttr(r) : '') + '>' + o.cols.map(function (c) { return '<td' + (c.cls ? ' class="' + c.cls + '"' : '') + '>' + (c.html ? c.html(r) : esc(self.val(c, r))) + '</td>'; }).join('') + '</tr>';
+    return '<tr' + (o.rowAttr ? ' ' + o.rowAttr(r) : '') + '>' + o.cols.map(function (c) { return '<td' + (c.cls ? ' class="' + c.cls + '"' : '') + Grid.stile(self.w[c.k]) + '>' + (c.html ? c.html(r) : esc(self.val(c, r))) + '</td>'; }).join('') + '</tr>';
   }).join('') : '<tr><td colspan="' + o.cols.length + '" class="empty">' + esc(o.empty || 'Nessuna riga') + '</td></tr>';
   var nf = Object.keys(this.f).length;
   if (o.foot && $(o.foot)) $(o.foot).innerHTML = list.length + ' righe' + (list.length !== all.length ? ' su ' + all.length : '') +
@@ -2346,19 +2380,8 @@ var Rma = {
     var by = {}; Rma.daSpedire().forEach(function (x) { by[x.u.id_unita] = x; });
     var vis = (Rma.grids.inv && Rma.grids.inv.visibili) || [];
     // solo le schede con variazione di destino (come la colonna "Var. destino"), non tutte quelle con RMA
-    // destinazione d'origine = deposito VLT da cui è partito l'FR (resta valida anche dopo una modifica manuale della destinazione)
-    var origine = function (u) {
-      var v = DB.vltMap && DB.vltMap[u.fr], dep = v && DB.t.DEPOT_VLT.rows.find(function (d) { return d.depot_vlt === v.depot_origine; });
-      return dep ? [L.s(dep.destinazione), L.s(dep.destinazione_conversione)].filter(Boolean) : [];
-    };
-    var info = function (u) {
-      var x = by[u.id_unita], a = (Rma.abb || {})[u.id_unita], prev = L.s(u.destinazione_prevista), o = origine(u), D = L.up(x.dest);
-      if (o.length && o.every(function (n) { return L.up(n) !== D; })) return o[0];
-      if (a && a.variazione) return prev;
-      return prev && L.up(prev) !== D ? prev : null;
-    };
-    Etichette.rma(vis.filter(function (u) { return by[u.id_unita] && info(u) !== null; }).map(function (u) {
-      var x = by[u.id_unita], prima = info(u) || '';
+    Etichette.rma(vis.filter(function (u) { return by[u.id_unita] && Rma.varia(u); }).map(function (u) {
+      var x = by[u.id_unita], prima = Rma.varia(u).prima || '';
       return { rma: x.rma, dest: x.dest, prima: prima, idScheda: Etichette.idScheda(u), idUnita: u.id_unita, seriale: u.seriale };
     }));
   },
@@ -2387,6 +2410,21 @@ var Rma = {
     return DB.t.RMA_RITORNI.rows.filter(function (r) { return r.importato_il === ult && (r.stato === 'DA_EVADERE' || r.stato === 'ASSEGNATA') && DB.daQuestAnno(r.data_apertura); });
   },
   inventario: function () { return DB.t.UNITA.rows.filter(function (u) { return u.stato === 'IN_GIACENZA' && (u.tipo === 'GOOD' || u.tipo === 'BALANCING'); }); },
+  // destinazione d'origine della GOOD = deposito VLT da cui è partito l'FR (non cambia quando il SD modifica la destinazione)
+  origine: function (u) {
+    var v = DB.vltMap && DB.vltMap[u.fr], dep = v && DB.t.DEPOT_VLT.rows.find(function (d) { return d.depot_vlt === v.depot_origine; });
+    return dep ? [L.s(dep.destinazione), L.s(dep.destinazione_conversione)].filter(Boolean) : [];
+  },
+  // variazione di destino: { nuova, prima, da: 'SD' (modificata a mano) | 'RMA' (ritorno in giacenza verso altro deposito) } oppure null
+  varia: function (u) {
+    if (u.tipo !== 'GOOD') return null;
+    var cur = L.s(Rma.dv(u, 'dest')), o = Rma.origine(u), a = (Rma.abb || {})[u.id_unita];
+    if (cur && o.length && o.every(function (n) { return L.up(n) !== L.up(cur); })) return { nuova: cur, prima: o[0], da: 'SD' };
+    var d = Rma.dirty[u.id_unita];
+    if (d && d.dest !== undefined && L.up(d.dest) !== L.up(u.destinazione_prevista)) return { nuova: d.dest, prima: L.s(u.destinazione_prevista), da: 'SD' };
+    if (a && a.variazione) return { nuova: Rma.destRma(a.rma), prima: cur, da: 'RMA' };
+    return null;
+  },
   dv: function (u, f) { var d = Rma.dirty[u.id_unita]; return d && d[f] !== undefined ? d[f] : u[f === 'dest' ? 'destinazione_prevista' : 'rma']; },
   calcola: function () {
     var inv = Rma.inventario(), creati = {};
@@ -2442,7 +2480,7 @@ var Rma = {
     if (s === 'inv') {
       var inv = Rma.inventario(), nG = inv.filter(function (u) { return u.tipo === 'GOOD'; }).length, nB = inv.length - nG;
       var nCre = inv.filter(function (u) { return u.tipo === 'GOOD' && L.s(Rma.dv(u, 'rma')); }).length, nAut = Object.keys(abb).length;
-      var nVar = Object.keys(abb).filter(function (k) { return abb[k].variazione; }).length;
+      var nVar = inv.filter(function (u) { return Rma.varia(u); }).length;
       h = '<div class="stat"><b>' + inv.length + '</b><span>in inventario</span></div><div class="stat"><b>' + nG + '</b><span>good</span></div><div class="stat"><b>' + nB + '</b><span>balancing</span></div>' +
         '<div class="stat"><b style="color:var(--green)">' + nAut + '</b><span>rma giacenza</span></div><div class="stat"><b style="color:var(--blue)">' + nCre + '</b><span>rma creato</span></div>' +
         '<div class="stat"><b style="color:var(--amber)">' + (nG - nAut - nCre) + '</b><span>senza rma</span></div>' + (nVar ? '<div class="stat"><b style="color:var(--violet)">' + nVar + '</b><span>variaz. destino</span></div>' : '');
@@ -2463,7 +2501,7 @@ var Rma = {
     if (s === 'inv') Rma.grids.inv = new Grid('rmaInv', Object.assign({}, base, {
       empty: 'Nessun pezzo GOOD/BALANCING in giacenza',
       rows: function () { return Rma.inventario().sort(function (a, b) { return ((a.tipo === 'GOOD' ? '0' : '1') + a.data_in).localeCompare((b.tipo === 'GOOD' ? '0' : '1') + b.data_in); }); },
-      rowAttr: function (u) { var a = Rma.abb[u.id_unita]; return a && a.variazione ? 'class="r-warn"' : ''; },
+      rowAttr: function (u) { return Rma.varia(u) ? 'class="r-var"' : ''; },
       cols: [
         { k: 'tipo', label: 'Tipo', filter: 'select', html: function (u) { return Pill.tipo(u.tipo); } },
         { k: 'fr', label: 'FR', filter: 'text', cls: 'mono' },
@@ -2474,8 +2512,9 @@ var Rma = {
         { k: 'note', label: 'Nota', filter: 'text', cls: 'nw', get: function (u) { return Rma.nota(u.note); } },
         { k: 'material', label: 'Material', filter: 'select', cls: 'mono', get: function (u) { return ctx().materialDi(u); } },
         { k: 'dest', label: 'Destinazione', filter: 'select', get: function (u) { return Rma.dv(u, 'dest'); },
-          html: function (u) { var d = Rma.dirty[u.id_unita], on = d && d.dest !== undefined; return '<input class="edit-cell' + (on ? ' dirty' : '') + '" style="width:calc(' + Math.max(14, Math.min(44, L.s(Rma.dv(u, 'dest')).length + 5)) + 'ch + 16px)" list="dlControparti" value="' + esc(Rma.dv(u, 'dest')) + '" title="Variazione destinazione (Service Desk)" onchange="Rma.set(\'' + u.id_unita + '\',\'dest\',this.value)">'; } },
-        { k: 'var', label: 'Var. destino', filter: 'select', get: function (u) { var a = Rma.abb[u.id_unita]; return a && a.variazione ? Rma.destRma(a.rma) : ''; }, html: function (u) { var a = Rma.abb[u.id_unita]; return a && a.variazione ? '<span style="color:var(--violet)">' + esc(Rma.destRma(a.rma)) + '</span>' : ''; } },
+          html: function (u) { var d = Rma.dirty[u.id_unita], on = d && d.dest !== undefined; if (u.tipo !== 'GOOD') return esc(Rma.dv(u, 'dest')); return '<input class="edit-cell edit-vis' + (on ? ' dirty' : '') + '" style="width:calc(' + Math.max(14, Math.min(44, L.s(Rma.dv(u, 'dest')).length + 5)) + 'ch + 16px)" list="dlControparti" value="' + esc(Rma.dv(u, 'dest')) + '" placeholder="✎ destinazione" title="Variazione destino (Service Desk): scrivi o scegli la nuova destinazione e premi Salva modifiche" onchange="Rma.set(\'' + u.id_unita + '\',\'dest\',this.value)">'; } },
+        { k: 'var', label: 'Var. destino', filter: 'select', get: function (u) { var v = Rma.varia(u); return v ? v.nuova : ''; },
+          html: function (u) { var v = Rma.varia(u); if (!v) return ''; return '<span class="var-tag" title="' + (v.da === 'SD' ? 'Variata dal Service Desk' : 'Variata da RMA ritorno in giacenza') + '">⇄ ' + esc(v.nuova) + ' <small>' + (v.da === 'SD' ? 'SD' : 'RMA') + '</small></span>' + (v.prima ? '<div class="hint" style="font-size:10.5px">era: ' + esc(v.prima) + '</div>' : ''); } },
         { k: 'rma', label: 'RMA creato (SD)', filter: 'text', get: function (u) { return Rma.dv(u, 'rma'); },
           html: function (u) { if (u.tipo === 'BALANCING') return '<span class="mono">' + esc(u.rma) + '</span>'; var d = Rma.dirty[u.id_unita], on = d && d.rma !== undefined; return '<input class="edit-cell mono' + (on ? ' dirty' : '') + '" style="width:11ch" value="' + esc(Rma.dv(u, 'rma')) + '" placeholder="—" onchange="Rma.set(\'' + u.id_unita + '\',\'rma\',this.value)">'; } },
         { k: 'rmag', label: 'RMA giacenza', filter: 'text', cls: 'mono', get: function (u) { var a = Rma.abb[u.id_unita]; return a ? a.rma.id_rma : ''; }, html: function (u) { var a = Rma.abb[u.id_unita]; return a ? '<span style="color:var(--green)">' + esc(a.rma.id_rma) + '</span>' : ''; } },
