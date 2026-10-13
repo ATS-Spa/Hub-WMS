@@ -2669,13 +2669,41 @@ var Rma = {
   varia: function (u) {
     if (u.tipo !== 'GOOD') return null;
     var cur = L.s(Rma.dv(u, 'dest')), o = Rma.origine(u), a = (Rma.abb || {})[u.id_unita];
-    if (cur && o.length && o.every(function (n) { return L.up(n) !== L.up(cur); })) return { nuova: cur, prima: o[0], da: 'SD' };
+    if (cur && o.length && o.every(function (n) { return L.up(n) !== L.up(cur); })) {
+      var rit = L.s(u.rma) && (DB.t.RMA_RITORNI ? DB.t.RMA_RITORNI.rows : []).find(function (r) { return r.id_rma === L.s(u.rma); });
+      return { nuova: cur, prima: o[0], da: rit && L.up(Rma.destRma(rit)) === L.up(cur) ? 'RMA' : 'SD' };
+    }
     var d = Rma.dirty[u.id_unita];
     if (d && d.dest !== undefined && L.up(d.dest) !== L.up(u.destinazione_prevista)) return { nuova: d.dest, prima: L.s(u.destinazione_prevista), da: 'SD' };
     if (a && a.variazione) return { nuova: Rma.destRma(a.rma), prima: cur, da: 'RMA' };
     return null;
   },
   dv: function (u, f) { var d = Rma.dirty[u.id_unita]; return d && d[f] !== undefined ? d[f] : u[f === 'dest' ? 'destinazione_prevista' : 'rma']; },
+  // RMA giacenza aperti "ieri" (dal giorno lavorativo precedente a oggi escluso: il lunedì prende venerdì, sabato e domenica)
+  daIeri: function (r) {
+    var oggi = L.isoToday(), d = new Date(); do { d.setDate(d.getDate() - 1); } while (d.getDay() === 0 || d.getDay() === 6);
+    var g = L.normDate(r.data_apertura); return !!g && g >= L.isoToday(d) && g < oggi;
+  },
+  ieri: function () { var abb = Rma.abb || {}; return Object.keys(abb).filter(function (k) { return Rma.daIeri(abb[k].rma); }); },
+  // l'RMA giacenza abbinato (aperto ieri) diventa l'RMA creato della scheda; i più vecchi restano al controllo del Service Desk
+  associaIeri: async function (auto) {
+    var ids = Rma.ieri(); if (!ids.length) { if (!auto) toast('Nessun RMA giacenza aperto ieri da associare', 'ko'); return; }
+    var tU = DB.t.UNITA, now = L.nowStamp(), upd = [], logs = [], ok = [];
+    ids.forEach(function (id) {
+      var u = tU.rows.find(function (x) { return x.id_unita === id; }), a = Rma.abb[id]; if (!u || L.s(u.rma)) return;
+      var ch = { rma: a.rma.id_rma, modificato_il: now, modificato_da: Auth.email, rev: (parseInt(u.rev, 10) || 1) + 1 };
+      if (a.variazione) ch.destinazione_prevista = Rma.destRma(a.rma);
+      var prima = {}; Object.keys(ch).forEach(function (h) { if (h in tU.idx) { prima[h] = u[h]; upd.push({ range: tU.cell(h, u._r), values: [[String(ch[h])]] }); } });
+      logs.push(App.log('RMA_GIACENZA_ASSOCIATO', 'UNITA', id, { prima: prima, dopo: ch, data_open: a.rma.data_apertura, automatico: !!auto }));
+      ok.push([u, ch]);
+    });
+    if (!ok.length) return;
+    try {
+      await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', logs)]);
+      ok.forEach(function (x) { Object.keys(x[1]).forEach(function (h) { x[0][h] = String(x[1][h]); }); });
+      toast(ok.length + ' RMA giacenza di ieri associati come RMA creato', 'ok'); Rma.render();
+    } catch (e) { toast('Associazione non salvata: ' + e.message, 'ko'); }
+  },
   calcola: function () {
     var inv = Rma.inventario(), creati = {};
     inv.forEach(function (u) { var v = L.s(Rma.dv(u, 'rma')); if (v) creati[v] = 1; });
@@ -2693,7 +2721,7 @@ var Rma = {
     var imp = '<label class="btn ghost sm" style="cursor:pointer" title="CSV esportato da VLT: Ritorni in giacenza">⬆ Importa CSV ritorni<input type="file" accept=".csv,.txt" style="display:none" onchange="Rma.importa(this)"></label>';
     var info = '<div class="hint" style="margin-top:8px">' + (ult ? 'Ultimo import ritorni: ' + esc(ult) + ' · ' + Rma.attivi().length + ' RMA aperte dal ' + esc(L.itDate(DB.dataInizio())) : 'Nessun import ritorni: carica il CSV esportato da VLT.') + '</div>';
     var xl = ' <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button>';
-    if (s === 'inv') return '<div class="row">' + imp + xl + ' <button class="btn ghost sm" onclick="Rma.etichette()" title="Etichetta 10x5 solo per le schede con variazione di destino (tra le righe filtrate)">🏷 Etichette RMA</button><div class="spacer"></div><button class="btn sm" ' + (nD ? '' : 'disabled') + ' onclick="Rma.salva()">Salva modifiche' + (nD ? ' (' + nD + ')' : '') + '</button></div>' + info;
+    if (s === 'inv') return '<div class="row">' + imp + xl + ' <button class="btn ghost sm" onclick="Rma.etichette()" title="Etichetta 10x5 solo per le schede con variazione di destino (tra le righe filtrate)">🏷 Etichette RMA</button>' + (Rma.ieri().length ? ' <button class="btn sm" onclick="Rma.associaIeri()" title="Gli RMA giacenza aperti ieri diventano RMA creato; i più vecchi li controlla il Service Desk">✓ Associa RMA di ieri (' + Rma.ieri().length + ')</button>' : '') + '<div class="spacer"></div><button class="btn sm" ' + (nD ? '' : 'disabled') + ' onclick="Rma.salva()">Salva modifiche' + (nD ? ' (' + nD + ')' : '') + '</button></div>' + info;
     if (s === 'rit') return '<div class="row">' + imp + xl + '</div>' + info;
     if (s === 'car') return '<div class="row">' +
       '<div class="fg" style="width:240px"><span class="fl">Seriale *</span><input class="fc mono" id="carSer" autocomplete="off" placeholder="spara il seriale" onkeydown="if(event.key===\'Enter\'){event.preventDefault();$(\'carRma\').focus()}" oninput="Rma.carInfo()"><span class="hint" id="carHint"></span></div>' +
@@ -2714,12 +2742,11 @@ var Rma = {
     document.querySelectorAll('#rmaTabs .subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'rmaT-' + Rma.sez); });
     var foc = document.activeElement && document.activeElement.id;
     var keep = {}; ['carSer', 'carRma', 'carDest', 'carPo', 'carNote'].forEach(function (id) { if ($(id)) keep[id] = $(id).value; });
-    $('rmaBar').innerHTML = Rma.bar();
+    Rma.calcola(); $('rmaBar').innerHTML = Rma.bar();
     Object.keys(keep).forEach(function (id) { if ($(id)) $(id).value = keep[id]; });
     if (foc && $(foc) && /^car/.test(foc)) $(foc).focus();
     var usc = Rma.sez === 'usc';
     $('rmaGridBox').style.display = usc ? 'none' : ''; $('rmaUsc').style.display = usc ? '' : 'none';
-    Rma.calcola();
     if (usc) { Rma.renderUscite(); return; }
     var g = Rma.grid(Rma.sez);
     if (rifai || Rma._last !== Rma.sez) { $('rmaHead').dataset.g = ''; Rma._last = Rma.sez; }
@@ -2879,6 +2906,7 @@ var Rma = {
       await API.append(DB.id, 'LOG', [App.log('IMPORT_RITORNI', 'RMA_RITORNI', f.name, { righe: recs.length, nuove: nuove.length, aggiornate: upd.length })]);
       var vecchie = recs.filter(function (o) { return !DB.daQuestAnno(o.data_apertura); }).length;
       Modal.close(); toast('Ritorni importati: ' + nuove.length + ' nuovi, ' + upd.length + ' aggiornati' + (vecchie ? ' · ' + vecchie + ' anteriori al ' + L.itDate(DB.dataInizio()) + ' ignorati' : ''), 'ok'); Rma.render();
+      await Rma.associaIeri(true);
     } catch (e) { Modal.open('Import non riuscito', e.message); }
   },
 
