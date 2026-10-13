@@ -98,6 +98,10 @@ tr.r-warn td{background:rgba(245,158,11,.07)}
 tr.r-var td{background:rgba(167,139,250,.10)}
 tr.r-var td:first-child{box-shadow:inset 3px 0 0 var(--violet)}
 .var-tag{color:var(--violet);font-weight:600;white-space:nowrap}
+.edit-cell.var-in{color:var(--violet);font-weight:600;border-color:var(--violet)}
+.var-era{font-size:10.5px;color:var(--violet);opacity:.85;margin-top:2px;white-space:nowrap}
+.var-era small{font-size:9px;border:1px solid var(--violet);border-radius:4px;padding:0 3px;margin-left:3px}
+.stat.stat-on{border-color:var(--violet);box-shadow:0 0 0 1px var(--violet) inset}
 .var-tag small{font-size:9.5px;border:1px solid var(--violet);border-radius:4px;padding:0 4px;margin-left:4px;font-weight:600}
 .edit-cell.edit-vis{border:1px dashed var(--border)}
 .edit-cell.edit-vis:hover{border-color:var(--blue)}
@@ -2379,10 +2383,11 @@ var Rma = {
   etichette: function () {
     var by = {}; Rma.daSpedire().forEach(function (x) { by[x.u.id_unita] = x; });
     var vis = (Rma.grids.inv && Rma.grids.inv.visibili) || [];
-    // solo le schede con variazione di destino (come la colonna "Var. destino"), non tutte quelle con RMA
-    Etichette.rma(vis.filter(function (u) { return by[u.id_unita] && Rma.varia(u); }).map(function (u) {
-      var x = by[u.id_unita], prima = Rma.varia(u).prima || '';
-      return { rma: x.rma, dest: x.dest, prima: prima, idScheda: Etichette.idScheda(u), idUnita: u.id_unita, seriale: u.seriale };
+    // tutte le schede variate tra le righe filtrate (anche se l'RMA non è ancora stato inserito)
+    Etichette.rma(vis.filter(function (u) { return Rma.varia(u); }).map(function (u) {
+      var v = Rma.varia(u), x = by[u.id_unita], a = (Rma.abb || {})[u.id_unita];
+      var rma = x ? x.rma : (L.s(Rma.dv(u, 'rma')) || (a ? a.rma.id_rma : ''));
+      return { rma: rma, dest: v.nuova, prima: v.prima, idScheda: Etichette.idScheda(u), idUnita: u.id_unita, seriale: u.seriale };
     }));
   },
   nota: function (n) { n = L.s(n).split(' | fonte:')[0]; return /^fonte:/i.test(n) ? '' : n; },
@@ -2483,7 +2488,7 @@ var Rma = {
       var nVar = inv.filter(function (u) { return Rma.varia(u); }).length;
       h = '<div class="stat"><b>' + inv.length + '</b><span>in inventario</span></div><div class="stat"><b>' + nG + '</b><span>good</span></div><div class="stat"><b>' + nB + '</b><span>balancing</span></div>' +
         '<div class="stat"><b style="color:var(--green)">' + nAut + '</b><span>rma giacenza</span></div><div class="stat"><b style="color:var(--blue)">' + nCre + '</b><span>rma creato</span></div>' +
-        '<div class="stat"><b style="color:var(--amber)">' + (nG - nAut - nCre) + '</b><span>senza rma</span></div>' + (nVar ? '<div class="stat"><b style="color:var(--violet)">' + nVar + '</b><span>variaz. destino</span></div>' : '');
+        '<div class="stat"><b style="color:var(--amber)">' + (nG - nAut - nCre) + '</b><span>senza rma</span></div>' + (nVar || Rma.soloVar ? '<div class="stat' + (Rma.soloVar ? ' stat-on' : '') + '" style="cursor:pointer" title="Clicca per vedere solo le schede con variazione di destino" onclick="Rma.soloVar=!Rma.soloVar;Rma.render()"><b style="color:var(--violet)">' + nVar + '</b><span>variaz. destino' + (Rma.soloVar ? ' ✓' : '') + '</span></div>' : '');
     } else if (s === 'rit') {
       var att = Rma.attivi(), con = {}; Object.keys(abb).forEach(function (k) { con[abb[k].rma.id_rma] = 1; });
       var nOk = att.filter(function (r) { return con[r.id_rma]; }).length, nLate = att.filter(function (r) { return r.data_scadenza && r.data_scadenza < oggi; }).length;
@@ -2500,7 +2505,7 @@ var Rma = {
     var base = { thead: 'rmaHead', tbody: 'rmaRows', foot: 'rmaFoot' };
     if (s === 'inv') Rma.grids.inv = new Grid('rmaInv', Object.assign({}, base, {
       empty: 'Nessun pezzo GOOD/BALANCING in giacenza',
-      rows: function () { return Rma.inventario().sort(function (a, b) { return ((a.tipo === 'GOOD' ? '0' : '1') + a.data_in).localeCompare((b.tipo === 'GOOD' ? '0' : '1') + b.data_in); }); },
+      rows: function () { return Rma.inventario().filter(function (u) { return !Rma.soloVar || Rma.varia(u); }).sort(function (a, b) { return ((a.tipo === 'GOOD' ? '0' : '1') + a.data_in).localeCompare((b.tipo === 'GOOD' ? '0' : '1') + b.data_in); }); },
       rowAttr: function (u) { return Rma.varia(u) ? 'class="r-var"' : ''; },
       cols: [
         { k: 'tipo', label: 'Tipo', filter: 'select', html: function (u) { return Pill.tipo(u.tipo); } },
@@ -2511,10 +2516,13 @@ var Rma = {
         { k: 'riparatore', label: 'Repair', filter: 'select' },
         { k: 'note', label: 'Nota', filter: 'text', cls: 'nw', get: function (u) { return Rma.nota(u.note); } },
         { k: 'material', label: 'Material', filter: 'select', cls: 'mono', get: function (u) { return ctx().materialDi(u); } },
-        { k: 'dest', label: 'Destinazione', filter: 'select', get: function (u) { return Rma.dv(u, 'dest'); },
-          html: function (u) { var d = Rma.dirty[u.id_unita], on = d && d.dest !== undefined; if (u.tipo !== 'GOOD') return esc(Rma.dv(u, 'dest')); return '<input class="edit-cell edit-vis' + (on ? ' dirty' : '') + '" style="width:calc(' + Math.max(14, Math.min(44, L.s(Rma.dv(u, 'dest')).length + 5)) + 'ch + 16px)" list="dlControparti" value="' + esc(Rma.dv(u, 'dest')) + '" placeholder="✎ destinazione" title="Variazione destino (Service Desk): scrivi o scegli la nuova destinazione e premi Salva modifiche" onchange="Rma.set(\'' + u.id_unita + '\',\'dest\',this.value)">'; } },
-        { k: 'var', label: 'Var. destino', filter: 'select', get: function (u) { var v = Rma.varia(u); return v ? v.nuova : ''; },
-          html: function (u) { var v = Rma.varia(u); if (!v) return ''; return '<span class="var-tag" title="' + (v.da === 'SD' ? 'Variata dal Service Desk' : 'Variata da RMA ritorno in giacenza') + '">⇄ ' + esc(v.nuova) + ' <small>' + (v.da === 'SD' ? 'SD' : 'RMA') + '</small></span>' + (v.prima ? '<div class="hint" style="font-size:10.5px">era: ' + esc(v.prima) + '</div>' : ''); } },
+        { k: 'dest', label: 'Destinazione', filter: 'select', get: function (u) { var v = Rma.varia(u); return v ? v.nuova : Rma.dv(u, 'dest'); },
+          html: function (u) {
+            var v = Rma.varia(u), d = Rma.dirty[u.id_unita], on = d && d.dest !== undefined, val = v ? v.nuova : L.s(Rma.dv(u, 'dest'));
+            if (u.tipo !== 'GOOD') return esc(val);
+            return '<input class="edit-cell edit-vis' + (on ? ' dirty' : '') + (v ? ' var-in' : '') + '" style="width:calc(' + Math.max(14, Math.min(44, val.length + 5)) + 'ch + 16px)" list="dlControparti" value="' + esc(val) + '" placeholder="✎ destinazione" title="Variazione destino (Service Desk): scrivi o scegli la nuova destinazione e premi Salva modifiche" onchange="Rma.set(\'' + u.id_unita + '\',\'dest\',this.value)">' +
+              (v ? '<div class="var-era">⇄ era: ' + esc(v.prima || '—') + ' <small title="' + (v.da === 'SD' ? 'Variata dal Service Desk' : 'Variata da RMA ritorno in giacenza') + '">' + v.da + '</small></div>' : '');
+          } },
         { k: 'rma', label: 'RMA creato (SD)', filter: 'text', get: function (u) { return Rma.dv(u, 'rma'); },
           html: function (u) { if (u.tipo === 'BALANCING') return '<span class="mono">' + esc(u.rma) + '</span>'; var d = Rma.dirty[u.id_unita], on = d && d.rma !== undefined; return '<input class="edit-cell mono' + (on ? ' dirty' : '') + '" style="width:11ch" value="' + esc(Rma.dv(u, 'rma')) + '" placeholder="—" onchange="Rma.set(\'' + u.id_unita + '\',\'rma\',this.value)">'; } },
         { k: 'rmag', label: 'RMA giacenza', filter: 'text', cls: 'mono', get: function (u) { var a = Rma.abb[u.id_unita]; return a ? a.rma.id_rma : ''; }, html: function (u) { var a = Rma.abb[u.id_unita]; return a ? '<span style="color:var(--green)">' + esc(a.rma.id_rma) + '</span>' : ''; } },
@@ -3293,7 +3301,7 @@ var Etichette = {
       var J = window.jspdf.jsPDF, d = new J({ unit: 'mm', format: [100, 50], orientation: 'landscape' }), logo = (Ack._lg || {}).sx, q = Etichette.QR;
       lista.forEach(function (e, i) {
         if (i) d.addPage([100, 50], 'landscape');
-        Etichette.testata(d, logo, 'RMA ' + L.s(e.rma));
+        Etichette.testata(d, logo, L.s(e.rma) ? 'RMA ' + L.s(e.rma) : 'VARIAZIONE DESTINO');
         d.setTextColor(110); d.setFont('helvetica', 'bold'); d.setFontSize(7); d.text('NUOVA DESTINAZIONE', 3, 15.5);
         d.setTextColor(0); Etichette.fit(d, L.s(e.dest) || '—', 3, 22.5, 94, 17, 9);
         if (e.prima) { d.setFont('helvetica', 'normal'); d.setTextColor(90); Etichette.fit(d, 'era: ' + e.prima, 3, 27.5, 94, 9, 6); }
