@@ -413,6 +413,27 @@ L.estraiPn = function (bc, seriale, rip, regole) {
   }
   return '';
 };
+// tutti i P/N possibili dalle regole che corrispondono al barcode, nello stesso ordine di estraiPn
+L.candidatiPn = function (bc, seriale, rip, regole) {
+  bc = L.s(bc); if (!bc) return [];
+  var spec = regole.filter(function (r) { return r.riparatore; });
+  var gen = regole.filter(function (r) { return !r.riparatore && (r.pn_da || r.condizione_extra === 'split_spazio'); });
+  var out = [];
+  spec.concat(gen).forEach(function (r) {
+    if (!L.ruleMatch(r, bc, rip)) return;
+    var pn = '';
+    if (r.condizione_extra === 'split_spazio') { if (seriale.indexOf(' ') > 0) pn = L.beforeSpace(seriale); }
+    else if (r.pn_da) pn = (r.pn_prefisso || '') + L.mid(bc, parseInt(r.pn_da, 10), parseInt(r.pn_lung || 999, 10)).trim();
+    if (pn && out.indexOf(pn) < 0) out.push(pn);
+  });
+  return out;
+};
+// regola valida = quella il cui P/N esiste in anagrafica ARTICOLI; se nessuna, la prima che corrisponde
+L.scegliPn = function (bc, seriale, rip, regole, esiste) {
+  var c = L.candidatiPn(bc, seriale, rip, regole);
+  for (var i = 0; i < c.length; i++) if (esiste(c[i])) return { pn: c[i], anag: true, scartati: c.slice(0, i) };
+  return { pn: c[0] || '', anag: false, scartati: [] };
+};
 // vettore dal prefisso AWB (formula C2 del prototipo)
 L.vettoreDaAwb = function (awb, vettori) {
   awb = L.up(awb); if (!awb) return '';
@@ -495,6 +516,52 @@ L.abbinaRma = function (rmaList, units, ctx) {
       usati[u.id_unita] = 1; out[u.id_unita] = { rma: r, variazione: !!dest && L.up(ctx.destUnita(u)) !== dest };
     });
   return out;
+};
+// ── PULIZIA SERIALI: porting dello script "Pulizia Seriali Automatica" (Tampermonkey GRN, v3.0)
+// lookup(pn) → { produttore } se il P/N esiste in anagrafica ARTICOLI, altrimenti null
+L.vbMid = function (str, start1, len) { if (!str) return ''; if (start1 < 1) start1 = 1; return len == null ? str.substr(start1 - 1) : str.substr(start1 - 1, Math.max(0, len)); };
+L.vbInStr = function (h, n, start) { start = start || 1; var i = h.indexOf(n, Math.max(0, start - 1)); return i === -1 ? 0 : i + 1; };
+L.pulisciSeriale = function (var1, lookup) {
+  var VF = 'Verificare Fisicamente', mid = L.vbMid, inStr = L.vbInStr;
+  function pul(x) { return String(x || '').replace(/["​\r\n]/g, '').trim(); }
+  function esito(pn, ser, regola, chk) { return { pn: pn, ser: ser, regola: regola, validato: !!(chk && pn && pn !== VF && lookup(pn)) }; }
+  if (!var1) return esito('', '', '');
+  var1 = String(var1).trim();
+  if (var1.length <= 1) return esito('', '', '');
+  if (/^\([\da-zA-Z]S\)/.test(mid(var1, 1, 4))) {                       // (XS) pattern
+    var ps = inStr(var1, ' ');
+    return ps > 0 ? esito(mid(var1, 5, ps - 4).trim(), mid(var1, 5), '(XS)', true) : esito(mid(var1, 5), '', '(XS)', true);
+  }
+  if (mid(var1, 1, 2) === 'SS' || var1.charAt(0) === 'S') return esito(VF, mid(var1, 2, 20), 'prefisso S', false);
+  var psc = inStr(var1, ';');
+  if (psc > 1) return esito(mid(var1, psc + 1, 20), mid(var1, 1, psc - 1), 'separatore ;', true);
+  if (var1.length === 20 && var1.substr(0, 2) === '21') return esito(mid(var1, 3, 8), var1, '21 · 20 car.', true);
+  if (var1.length === 16 && (var1.substr(0, 2) === '02' || var1.substr(0, 2) === '03')) return esito('03' + mid(var1, 1, 6), var1, '02/03 · 16 car.', true);
+  if (var1.length > 39) {
+    var app = pul(mid(var1, 7, 8)), pos = inStr(var1, ' '), ser = pos > 14 ? mid(var1, pos - 14, 14) : '';
+    if (lookup(app)) return esito(app, ser, 'lungo · tentativo 0', true);
+    var p1 = inStr(var1, '1P');
+    if (p1 > 0) {
+      app = pul(mid(var1, p1 + 2, 8)); ser = p1 > 14 ? mid(var1, p1 - 14, 14) : '';
+      if (lookup(app)) return esito(app, ser, 'lungo · tentativo 1 (1P)', true);
+      app = pul(mid(var1, p1 + 2, 12)); var rec = lookup(app);
+      if (rec && L.up(rec.produttore) === 'HUAWEI') return esito(app, var1.length >= 12 ? var1.substr(var1.length - 12) : '', 'lungo · tentativo 2 (Huawei)', true);
+      if (var1.length > 41) {
+        var s1p = inStr(var1, '1P', p1 + 2);
+        if (s1p > 0) {
+          app = pul(mid(var1, s1p + 2, 12)); pos = inStr(var1, app); ser = pos > 18 ? mid(var1, pos - 2 - 18, 18) : '';
+          if (lookup(app)) return esito(app, ser, 'lungo · tentativo 3 (secondo 1P)', true);
+        }
+      }
+      app = pul(mid(var1, p1 + 2, 10)); pos = inStr(var1, app); ser = pos > 19 ? mid(var1, pos - 2 - 18, 19) : '';
+      if (lookup(app)) return esito(app, ser, 'lungo · tentativo 4', true);
+      var pS = inStr(var1, 'S');
+      if (pS > 0 && pS > p1 + 2) { app = mid(var1, p1 + 2, pS - (p1 + 2)); ser = var1.length >= pS + 10 ? mid(var1, pS + 1, 11) : ''; } else app = '';
+      if (app && lookup(app)) return esito(app, ser, 'lungo · tentativo 5', true);
+    }
+    return esito(VF, var1, 'lungo · nessun P/N in anagrafica', false);
+  }
+  return esito(VF, var1, '', false);
 };
 if (typeof module !== 'undefined') module.exports = L;
 </script>
@@ -686,7 +753,7 @@ var DB = {
       var ub = await DB.loadCols(DB.id, 'UBICAZIONI', ['codice']);
       c = { ts: Date.now(), art: art, ser: ser, ub: ub.map(function (x) { return x.codice; }) }; await DB.cacheSet('lookups', c);
     }
-    DB.artPn = {}; c.art.forEach(function (a) { if (a.pn && a.mnft && !DB.artPn[L.up(a.pn)]) DB.artPn[L.up(a.pn)] = a.mnft; });
+    App._pnKeys = null; DB.artPn = {}; c.art.forEach(function (a) { if (a.pn && a.mnft && !DB.artPn[L.up(a.pn)]) DB.artPn[L.up(a.pn)] = a.mnft; });
     DB.serNoti = {}; c.ser.forEach(function (s) { if (s.seriale) DB.serNoti[L.up(s.seriale)] = s; });
     DB.ubicazioni = c.ub;
   }
@@ -864,9 +931,20 @@ var Ingresso = {
   },
   del: function (i) { Ingresso.rows.splice(i, 1); Ingresso.ricalcola(); Ingresso.save(); },
   edit: function (i, f, v) { var r = Ingresso.rows[i]; r.man[f] = L.s(v); Ingresso.ricalcola(); Ingresso.save(); },
+  // PULIZIA: 1) script pulizia con P/N in anagrafica · 2) regole barcode con P/N in anagrafica · 3) casi fissi dello script · 4) prima regola barcode
+  pulisci: function (bc, rip) {
+    bc = L.s(bc); if (!bc) return { ser: '', pn: '', fonte: '' };
+    var regole = Ingresso.regole(), look = function (pn) { var m = DB.artPn && DB.artPn[L.up(pn)]; return m ? { produttore: m } : null; };
+    var sc = L.pulisciSeriale(bc, look), serF = L.estraiSeriale(bc, regole);
+    if (sc.validato) return { ser: sc.ser || serF, pn: sc.pn, anag: true, fonte: 'pulizia seriali · ' + sc.regola };
+    var f = L.scegliPn(bc, serF, rip, regole, App.pnEsiste);
+    if (f.anag) return { ser: serF, pn: f.pn, anag: true, fonte: 'regole barcode', scartati: f.scartati };
+    if (sc.pn && sc.pn !== 'Verificare Fisicamente' && sc.regola) return { ser: sc.ser || serF, pn: sc.pn, anag: false, fonte: 'pulizia seriali · ' + sc.regola };
+    return { ser: serF, pn: f.pn, anag: false, fonte: f.pn ? 'regole barcode' : '', verificare: !f.pn, sospettoS: sc.regola === 'prefisso S' ? sc.ser : '' };
+  },
   // FR dal seriale: per le GOOD prima il file Huawei, poi VLT (FR più recente)
   trovaFr: function (bc, tipo) {
-    var regole = Ingresso.regole(), ser0 = L.estraiSeriale(bc, regole);
+    var ser0 = Ingresso.pulisci(bc, '').ser;
     var CLOSED = {}; L.s(DB.param('vlt_stati_chiusi', '')).split(';').forEach(function (x) { if (x) CLOSED[x] = 1; });
     var hf = DB.huaweiFr[L.up(bc)] || DB.huaweiFr[L.up(ser0)] || DB.huaweiFr[L.up(L.afterSpace(bc))];
     var pick = L.pickFr(DB.vltBySer[L.up(ser0)] || DB.vltBySer[L.up(L.afterSpace(ser0))] || DB.vltBySer[L.up(bc)] || [], CLOSED);
@@ -888,6 +966,7 @@ var Ingresso = {
         $('hFr').textContent = r.fr ? (r.origine === 'HUAWEI' ? 'da file Huawei' : (v ? v.stato : '') + (r.pick && r.pick.n > 1 ? ' · ' + r.pick.n + ' FR, preso il più recente' : '')) : (L.s(bc.value) ? 'non trovato: scrivilo' : '');
         $('hFr').className = 'hint' + (L.s(bc.value) && !r.fr ? ' warn' : '');
       }
+      Ingresso.anteprimaSer();
     } else {
       fr.dataset.auto = '0'; $('hFr').textContent = ''; $('hFr').className = 'hint';
       if (bc.dataset.auto === '1' || !L.s(bc.value)) {
@@ -899,12 +978,23 @@ var Ingresso = {
     }
     Ingresso.fitScan();
   },
+  // sotto il campo seriale: seriale pulito e P/N con l'esito anagrafica, prima di premere Tab
+  anteprimaSer: function () {
+    var b = L.s($('scBc').value), h = $('hBc');
+    if (!b) { h.textContent = ''; h.className = 'hint'; return; }
+    var fr = L.frKey($('scFr').value), v = DB.vltMap[fr], rip = v ? v.riparatore : '', sc = Ingresso.pulisci(b, rip), ser = sc.ser, sn = DB.serNoti[L.up(ser)];
+    var pn = sc.pn || (sn && sn.pn) || (v ? v.f_mat_tmpn : ''), da = sc.pn ? ' (' + sc.fonte + ')' : (sn && sn.pn ? ' (da seriali noti)' : (pn ? ' (da VLT)' : ''));
+    var ok = pn && App.pnEsiste(pn), sim = pn && !ok ? App.pnSimile(pn) : '';
+    h.innerHTML = 'Seriale: <b class="mono">' + esc(ser) + '</b>' + (ser !== b ? ' <span style="opacity:.7">(pulito)</span>' : '') +
+      ' · P/N: <b class="mono">' + esc(pn || 'verificare fisicamente') + '</b> <span style="opacity:.7">' + esc(da) + '</span>' + (pn ? (ok ? ' <span style="color:var(--green)">✓ in anagrafica</span>' : ' <span style="color:var(--amber)">✗ non in anagrafica' + (sim ? ' (simile ' + esc(sim) + ')' : '') + '</span>') : '');
+    h.className = 'hint';
+  },
   fitScan: function () { ['scFr', 'scBc'].forEach(function (id) { var e = $(id); e.style.minWidth = Math.min(60, Math.max(12, L.s(e.value).length + 3)) + 'ch'; }); },
   // calcolo riga: replica della logica INPUT DATI del prototipo
   calc: function (r, T, ctx) {
     var regole = DB.t.REGOLE_BARCODE.rows.slice().sort(function (a, b) { return (parseInt(a.priorita, 10) || 0) - (parseInt(b.priorita, 10) || 0); });
     var frIn = r.fr, frOrig = '', pick = null;
-    var ser0 = r.bc ? L.estraiSeriale(r.bc, regole) : '';
+    var ser0 = r.bc ? Ingresso.pulisci(r.bc, '').ser : '';
     // lettura dal seriale: l'FR si cerca da solo (stessa logica dell'anteprima)
     if (!frIn && r.bc) { var tf = Ingresso.trovaFr(r.bc, T.tipo); frIn = tf.fr; frOrig = tf.origine; pick = tf.pick; }
     var o = { fr: frIn, rma: '', bc: r.bc, msgs: [], err: false, warn: false, tipo: T.tipo, ubicazione: r.ubi, destinazione: '', statoVlt: '', nota: '', mail: null };
@@ -922,7 +1012,10 @@ var Ingresso = {
     if (frOrig === 'HUAWEI') o.msgs.push(['info', 'FR ricavato dal file Huawei (seriale → FR)']);
     o.rip = r.man.rip || (v ? v.riparatore : '');
     var sn = DB.serNoti[L.up(o.ser)];
-    o.pn = r.man.pn || L.estraiPn(r.bc || o.ser, o.ser, o.rip, regole) || (sn && sn.pn) || (v ? v.f_mat_tmpn : '');   // senza barcode le regole si applicano al seriale VLT
+    var scP = r.bc ? Ingresso.pulisci(r.bc, o.rip) : { pn: L.scegliPn(o.ser, o.ser, o.rip, regole, App.pnEsiste).pn, fonte: 'regole barcode' };
+    o.pn = r.man.pn || scP.pn || (sn && sn.pn) || (v ? v.f_mat_tmpn : '');
+    if (!r.man.pn && scP.pn && scP.fonte) o.msgs.push(['info', 'P/N da ' + scP.fonte + (scP.scartati && scP.scartati.length ? ' (scartati: ' + scP.scartati.join(', ') + ')' : '')]);
+    if (!r.man.ser && scP.sospettoS) o.msgs.push(['info', 'Barcode con prefisso S: senza S sarebbe ' + scP.sospettoS]);   // senza barcode le regole si applicano al seriale VLT
     var rp = DB.t.RIPARATORI.rows.find(function (x) { return L.up(x.codice) === L.up(App.aliasRip(o.rip)); });
     o.mnft = r.man.mnft || DB.artPn[L.up(o.pn)] || (sn && sn.mnft) || (rp && rp.mnft_default) || '';
     if (v) {
@@ -935,7 +1028,7 @@ var Ingresso = {
       var b = DB.t.BALANCING.rows.find(function (x) { return L.up(x.seriale) === L.up(o.ser) && aperta(x) && DB.daQuestAnno(x.data_inbound); })
            || DB.t.BALANCING.rows.find(function (x) { return o.rma && x.rma === o.rma && aperta(x) && DB.daQuestAnno(x.data_inbound); });
       o.bal = b || null;
-      o.destinazione = b ? b.destinatario : '';
+      o.destinazione = b ? App.destDaSigla(b.destinatario) : '';
       o.nota = o.destinazione;
       o.statoVlt = 'BALANCING';
       if (!b) { o.msgs.push(['warn', 'Balancing non trovata in BALANCING (seriale/RMA)']); o.warn = true; }
@@ -968,6 +1061,15 @@ var Ingresso = {
     if (g) { o.msgs.push(['err', 'Seriale già in giacenza (' + g.id_unita + ', ' + g.tipo + ', entrato ' + g.data_in + ')']); o.err = true; }
     if (o.bc && L.s(o.bc) !== L.s(o.ser)) o.msgs.push(['info', 'Seriale estratto dal barcode']);
     if (!o.pn) { o.msgs.push(['warn', 'P/N non ricavato: inseriscilo']); o.warn = true; }
+    else if (DB.artPn && Object.keys(DB.artPn).length) {
+      o.pnAnag = App.pnEsiste(o.pn);
+      if (!o.pnAnag) { var sim = App.pnSimile(o.pn); o.pnSimile = sim; o.msgs.push(['warn', 'P/N ' + o.pn + ' non in anagrafica articoli' + (sim ? ' (simile: ' + sim + ')' : '')]); o.warn = true; }
+    }
+    // il FR fa fede: stesso FR già in giacenza con un altro seriale (es. Huawei che sostituisce il pezzo)
+    if (o.fr && (o.tipo === 'FAULTY' || o.tipo === 'GOOD')) {
+      var gf = (ctx.giacFr[o.fr] || []).filter(function (u) { return u.tipo === o.tipo && L.up(u.seriale) !== L.up(o.ser); });
+      if (gf.length) { o.msgs.push(['warn', 'FR ' + o.fr + ' già in giacenza come ' + o.tipo + ' con seriale ' + gf[0].seriale + ' (' + gf[0].id_unita + ')']); o.warn = true; }
+    }
     return o;
   },
   computed: [],
@@ -978,12 +1080,12 @@ var Ingresso = {
     $('hVettore').textContent = !vet ? '' : (vlist.indexOf(vet) < 0 ? 'VEDI FISICAMENTE: vettore non in elenco' : '');
     $('hVettore').className = 'hint' + (vet && vlist.indexOf(vet) < 0 ? ' warn' : '');
     // giacenza indicizzata
-    var giac = {}; DB.t.UNITA.rows.forEach(function (u) { if (u.stato === 'IN_GIACENZA' || u.stato === 'IN_LAVORAZIONE') giac[L.up(u.seriale)] = u; });
+    var giac = {}, giacFr = {}; DB.t.UNITA.rows.forEach(function (u) { if (u.stato === 'IN_GIACENZA' || u.stato === 'IN_LAVORAZIONE') { giac[L.up(u.seriale)] = u; if (u.fr) (giacFr[u.fr] = giacFr[u.fr] || []).push(u); } });
     var lettera = L.up(App.me.sigla || 'X').charAt(0);
     var re = new RegExp('/ 0?(\\d+)' + lettera + '$');
     var base = 0; DB.t.UNITA.rows.forEach(function (u) { if (u.stato === 'IN_GIACENZA' && (u.tipo === 'GOOD' || u.tipo === 'BALANCING')) { var m = re.exec(L.s(u.note).split(' | ')[0]); if (m) base = Math.max(base, parseInt(m[1], 10)); } });
     var lab = base;
-    var ctx = { serSeen: {}, frSeen: {}, giac: giac, n: 0, nextLabel: function () { lab++; return '0' + lab + lettera; } };
+    var ctx = { serSeen: {}, frSeen: {}, giac: giac, giacFr: giacFr, n: 0, nextLabel: function () { lab++; return '0' + lab + lettera; } };
     Ingresso.computed = Ingresso.rows.map(function (r) { ctx.n++; return Ingresso.calc(r, T, ctx); });
     // proposte di testata dal primo FR
     var first = Ingresso.computed.find(function (c) { return c.fr && DB.vltMap[c.fr]; });
@@ -1012,7 +1114,7 @@ var Ingresso = {
       var mail = c.mail ? '<a class="mail" href="' + Ingresso.mailLink(c, T) + '">✉ scrivi mail</a>' : '';
       function ed(f, val, min) { return '<input class="edit-cell mono' + (Ingresso.rows[i].man[f] !== undefined ? ' dirty' : '') + '" style="width:calc(' + Math.max(min || 8, Math.min(60, L.s(val).length + 1)) + 'ch + 16px)" oninput="this.style.width=\'calc(\'+Math.max(' + (min || 8) + ',Math.min(60,this.value.length+1))+\'ch + 16px)\'" value="' + esc(val) + '" onchange="Ingresso.edit(' + i + ',\'' + f + '\',this.value)">'; }
       return '<tr class="' + cls + '"><td>' + (i + 1) + '</td><td class="mono">' + esc(c.fr) + '</td><td class="mono">' + esc(c.rma) + '</td>' +
-        '<td class="nw">' + ed('ser', c.ser, 12) + '</td><td class="nw">' + ed('pn', c.pn, 8) + '</td><td class="nw">' + ed('mnft', c.mnft, 6) + '</td>' +
+        '<td class="nw">' + ed('ser', c.ser, 12) + '</td><td class="nw">' + ed('pn', c.pn, 8) + (c.pn && c.pnAnag !== undefined ? (c.pnAnag ? ' <span title="P/N presente in anagrafica articoli" style="color:var(--green)">✓</span>' : ' <span title="P/N NON presente in anagrafica articoli' + (c.pnSimile ? ' (simile: ' + esc(c.pnSimile) + ')' : '') + '" style="color:var(--amber)">✗</span>') : '') + '</td><td class="nw">' + ed('mnft', c.mnft, 6) + '</td>' +
         '<td>' + esc(c.rip) + '</td><td style="font-size:11.5px;color:var(--subtle)">' + esc(c.statoVlt) + '</td>' +
         '<td>' + ed('nota', c.nota, 10) + '</td><td>' + esc(c.tipo === 'NEW' || c.tipo === 'REUSE' ? c.ubicazione : c.destinazione) + '</td>' +
         '<td><div class="msgs">' + m + mail + '</div></td><td><button class="ico-btn" title="Elimina" onclick="Ingresso.del(' + i + ')">✕</button></td></tr>';
@@ -1232,6 +1334,19 @@ var Ingresso = {
       return '<tr' + (mia ? ' class="r-edit" title="Clicca per modificare" onclick="Ingresso.apriModifica(\'' + u.id_unita + '\')"' : ' title="Riga di un altro operatore (o già uscita): sola lettura"') + '><td class="mono">' + esc(u.id_unita) + '</td><td>' + Pill.tipo(u.tipo) + '</td><td class="mono">' + esc(u.fr) + '</td><td class="mono">' + esc(u.rma) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.riparatore) + '</td><td>' + esc(u.note) + '</td><td>' + esc(op ? (op.sigla || op.nome) : u.creato_da) + '</td><td>' + (mia ? '<button class="ico-btn" title="Elimina" onclick="event.stopPropagation();Ingresso.chiediElimina(\'' + u.id_unita + '\')">🗑</button>' : '') + '</td></tr>';
     }).join('') : '<tr><td colspan="10" class="empty">Nessun ingresso oggi</td></tr>';
   }
+};
+// destinazione balancing: la sigla (NA, CA, MI…) diventa la destinazione di CONVERSIONE DESTINAZIONE (foglio DEPOT_VLT)
+App.destDaSigla = function (x) {
+  x = L.s(x); if (!x) return x;
+  var d = DB.t.DEPOT_VLT.rows.find(function (r) { return L.up(r.sigla) === L.up(x); });
+  return d ? (L.s(d.destinazione_conversione) || d.destinazione) : x;
+};
+// P/N in anagrafica ARTICOLI: esatto, oppure un P/N di anagrafica che ne è l'inizio (es. 82.86F-8660 per 82.86F-8660-R6)
+App.pnEsiste = function (pn) { return !!(DB.artPn && DB.artPn[L.up(pn)]); };
+App.pnSimile = function (pn) {
+  pn = L.up(pn); if (!pn || !DB.artPn) return '';
+  if (!App._pnKeys) App._pnKeys = Object.keys(DB.artPn).filter(function (k) { return k.length >= 5; });
+  return App._pnKeys.find(function (k) { return pn.indexOf(k) === 0 || k.indexOf(pn) === 0; }) || '';
 };
 App.aliasRip = function (nome) {
   var a = DB.t.RIPARATORI_ALIAS.rows.find(function (x) { return L.up(x.nome_vlt) === L.up(nome); });
@@ -2472,7 +2587,7 @@ var Rma = {
         var a = abb[u.id_unita];
         if (L.s(u.rma)) out.push({ u: u, rma: u.rma, dest: u.destinazione_prevista, fonte: 'RMA creato', causale: 'RMA' });
         else if (a) out.push({ u: u, rma: a.rma.id_rma, dest: a.variazione ? Rma.destRma(a.rma) : u.destinazione_prevista, fonte: 'RMA giacenza', causale: 'RMA', rit: a.rma });
-      } else if (u.tipo === 'BALANCING' && L.s(u.rma)) out.push({ u: u, rma: u.rma, dest: u.destinazione_prevista, fonte: 'Balancing', causale: 'BALANCING' });
+      } else if (u.tipo === 'BALANCING' && L.s(u.rma)) out.push({ u: u, rma: u.rma, dest: App.destDaSigla(u.destinazione_prevista), fonte: 'Balancing', causale: 'BALANCING' });
     });
     var U = {}; DB.t.UNITA.rows.forEach(function (u) { U[u.id_unita] = u; });
     Rma.carichi().forEach(function (c) { var u = U[c.id_unita]; if (u && u.stato === 'IN_LAVORAZIONE') out.push({ u: u, rma: c.rma, dest: c.destinazione, po: c.po_mrn, fonte: 'Carico ' + c.tipo, causale: 'RMA', car: c }); });
