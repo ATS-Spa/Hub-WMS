@@ -303,6 +303,17 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
     </div>
 
     <!-- GIACENZE -->
+    <div class="view" id="view-newreuse">
+      <div class="card"><div class="row">
+        <div class="hint" style="flex:1;line-height:1.5">Ogni ingresso NEW/REUSE crea il file per il Service Desk nella cartella <b>CARICHI NEW REUSE</b>. ✉ manda la mail con il link · ⬆ carica il file lavorato dal cliente (sostituisce quello su Drive) · 📦 mette tutto il file in uscita RMA.</div>
+        <label style="font-size:12px;color:var(--subtle);display:flex;gap:6px;align-items:center"><input type="checkbox" id="nrTutte" onchange="Nr.render()"> anche spedite</label>
+        <button class="btn ghost sm" onclick="Nr.loaded=false;Nr.show()">↻</button>
+        <button class="btn ghost sm" onclick="Nr.grid&&Nr.grid.excel('Pratiche_NEW_REUSE')">⬇ Excel</button>
+      </div></div>
+      <div class="stats" id="nrStats"></div>
+      <div class="tbl-wrap"><table><thead id="nrHead"></thead><tbody id="nrRows"></tbody></table></div><div class="hint" id="nrFoot" style="margin-top:6px"></div>
+    </div>
+
     <div class="view" id="view-giacenze">
       <div class="card">
         <div class="row">
@@ -777,6 +788,7 @@ var Sync = {
     if (ackLibero && T.indexOf('SPEDIZIONI') < 0) T = T.concat(['SPEDIZIONI']);
     if (ackLibero) T = T.concat(['SPEDIZIONI_RIGHE', 'ACK_PENDING']);
     if (Jun.loaded) T.push('JUNIPER');
+    if (Nr.loaded) T.push('PRATICHE_NEW_REUSE');
     if (Sync.occupato()) { Sync.dovuto = true; return; }
     await DB.loadTables(T);
     if (Sto.dati.cur) { Sto.dati.cur = null; Giacenze._miN = -1; }
@@ -789,6 +801,7 @@ var Sync = {
     if (t === 'balancing' && Bal.loaded) Bal.render();
     if (t === 'juniper' && Jun.loaded) Jun.render();
     if (t === 'storico') Sto.ricarica();
+    if (t === 'newreuse') Nr.render();
     toast('Dati aggiornati: modifiche di altri operatori', 'ok');
   }
 };
@@ -918,7 +931,7 @@ var DB = {
 var TABS = [
   { k: 'ingresso', label: 'Ingresso' },
   { k: 'ack', label: 'ACK' }, { k: 'rma', label: 'RMA' }, { k: 'balancing', label: 'Balancing' },
-  { k: 'juniper', label: 'Juniper' }, { k: 'giacenze', label: 'Giacenze' }, { k: 'vlt', label: 'VLT' },
+  { k: 'newreuse', label: 'Carichi NEW/REUSE' }, { k: 'juniper', label: 'Juniper' }, { k: 'giacenze', label: 'Giacenze' }, { k: 'vlt', label: 'VLT' },
   { k: 'storico', label: 'Movimenti' }, { k: 'dashboard', label: 'Dashboard', admin: true }, { k: 'admin', label: 'Admin', admin: true }
 ];
 var App = {
@@ -983,6 +996,7 @@ var App = {
     if (t.k === 'ingresso') setTimeout(function () { if ($('inTipo').value) $('scBc').focus(); else $('inTipo').focus(); }, 50);
     if (t.k === 'ack') Ack.show();
     if (t.k === 'rma') Rma.show();
+    if (t.k === 'newreuse') Nr.show();
     if (t.k === 'balancing') Bal.show();
     if (t.k === 'juniper') Jun.show();
     if (t.k === 'vlt') Vlt.show();
@@ -1308,8 +1322,9 @@ var Ingresso = {
     if (!ok) return;
     Modal.open('Caricamento in corso', 'Non chiudere la pagina.', []);
     try {
-      await Ingresso.scrivi(T, C);
+      var esito = await Ingresso.scrivi(T, C);
       Modal.close(); toast(C.length + ' pezzi caricati', 'ok');
+      if (esito && (T.tipo === 'NEW' || T.tipo === 'REUSE')) Nr.daIngresso(T, esito.pezzi, esito.idR);
       Export.scrivi().catch(function (e) { toast('Export FR da chiudere non aggiornato: ' + e.message, 'ko'); });
       Ingresso.rows = []; Ingresso.save(); Ingresso.setTestata({ data: L.isoToday() }); Ingresso.ricalcola(); Ingresso.renderOggi(); App.syncInfo();
     } catch (e) {
@@ -1383,6 +1398,7 @@ var Ingresso = {
     ]);
     // aggiorno la giacenza in memoria
     uObjs.forEach(function (o) { var x = {}; tU.header.forEach(function (h) { x[h] = o[h] === undefined ? '' : String(o[h]); }); x._r = o._r; tU.rows.push(x); });
+    return { idR: idR, pezzi: uObjs };
   },
   // riga del movimento di ingresso ricavata dall'ID (IN + mov_id_base + riga), verificata rileggendo la cella
   rigaMov: async function (u, tM) {
@@ -2977,6 +2993,10 @@ var Rma = {
     var rows;
     try { rows = await leggiFoglio(f); } catch (e) { Modal.open('Import Excel', 'File non leggibile: ' + e.message); return; }
     if (!rows.length) { Modal.open('Import Excel', 'Il file è vuoto.'); return; }
+    Rma.carAnteprima(rows, f.name);
+  },
+  carAnteprima: function (rows, titolo, dopo) {
+    var f = { name: titolo };
     var visti = {}, righe = rows.map(function (r) {
       var o = { seriale: campo(r, ['SERIALE', 'SERIAL', 'SERIAL NO.', 'SN', 'S/N']), rma: L.frKey(campo(r, ['RMA'])), destinazione: campo(r, ['DESTINAZIONE', 'PV DESTINO', 'DESTINO', 'DESTINAZIONE INTERA']),
         po_mrn: campo(r, ['PO', 'P.O', 'PO / MRN', 'PO/MRN', 'MRN', 'PO NEW / MRN']), note: campo(r, ['NOTE', 'NOTE SD / FR', 'NOTE SD']) };
@@ -2988,7 +3008,7 @@ var Rma = {
       righe.map(function (o) { return '<tr class="' + (o.err ? 'r-err' : '') + '"><td class="mono">' + esc(o.seriale) + '</td><td>' + esc(o.u ? o.u.tipo : '') + '</td><td class="mono">' + esc(o.u ? o.u.pn : '') + '</td><td class="mono">' + esc(o.rma) + '</td><td>' + esc(o.destinazione) + '</td><td class="mono">' + esc(o.po_mrn) + '</td><td>' + esc(o.note) + '</td><td style="font-size:11.5px;color:' + (o.err ? 'var(--red)' : 'var(--green)') + '">' + esc(o.err || 'ok') + '</td></tr>'; }).join('') + '</tbody></table></div>';
     Modal.html('Import carichi NEW/REUSE · ' + f.name, html, [{ label: 'Annulla', cls: 'ghost' }].concat(ok.length ? [{ label: 'Carica ' + ok.length + ' righe', cls: 'green', fn: async function () {
       Modal.open('Import carichi', 'Salvo ' + ok.length + ' carichi…', []);
-      try { await Rma.carScrivi(ok); Modal.close(); toast(ok.length + ' carichi importati', 'ok'); Rma.render(); } catch (e) { Modal.open('Import non riuscito', e.message); }
+      try { await Rma.carScrivi(ok); Modal.close(); toast(ok.length + ' carichi importati', 'ok'); Rma.render(); if (dopo) await dopo(ok.length); } catch (e) { Modal.open('Import non riuscito', e.message); }
     } }] : []), true);
   },
   carModello: async function () {
@@ -3180,6 +3200,7 @@ var Rma = {
     } catch (e) { toast('PDF ' + nDdt + ' non salvato su Drive (' + e.message + ')', 'ko'); }
     await API.append(DB.id, 'LOG', [App.log('RMA_USCITA', 'SPEDIZIONI', id, { destinazione: s.destinatario, ddt: nDdt, awb: s.awb, pezzi: n })]);
     await Jun.dopoRma(P, s, nDdt, oggi);
+    await Nr.dopoRma();
     var e0 = Rma.escl(); P.forEach(function (p) { delete e0[p.u.id_unita]; }); lsS('usc_escl_' + d, e0);
     return { id: id, dest: s.destinatario, ddt: nDdt, n: n };
   },
@@ -3477,6 +3498,186 @@ Jun.salvaUscita = async function (id, idU) {
     await Jun.aggiorna([{ r: r, ch: { stato: 'GOOD_IN_USCITA', note: Jun.nota(r, 'GOOD ' + u.id_unita + ' messa in uscita RMA verso ' + dest + (rma ? ' (RMA ' + rma + ')' : '') + ' il ' + L.itDate(L.isoToday())) } }], 'JUNIPER_GOOD_IN_USCITA');
     Modal.close(); toast('GOOD ' + u.seriale + ' in uscita RMA verso ' + dest, 'ok'); Jun.render();
   } catch (e) { Modal.progress(''); err('Non salvato: ' + e.message); }
+};
+
+// ───────────────────────── CARICHI NEW/REUSE: file per il Service Desk / cliente ─────────────────────────
+// all'ingresso NEW/REUSE: file xlsx (tracciato dello script CREAZIONE FILE NEW & REUSE) nella cartella CARICHI NEW REUSE + pratica;
+// il file torna lavorato dal cliente (stesso tracciato, campi compilati) → upload che sostituisce il file → "metti in uscita RMA"
+var Nr = {
+  H: ['id_pratica', 'data', 'tipo', 'mittente', 'po_mrn', 'ddt', 'awb', 'id_ricezione', 'n_pezzi', 'file_id', 'file_link', 'file_nome', 'file_originale_id', 'impronta_inviata',
+    'stato', 'mail_inviata_il', 'lavorata_il', 'lavorata_da', 'in_uscita_il', 'note', 'rev', 'creato_il', 'creato_da', 'modificato_il', 'modificato_da'],
+  STATI: { DA_INVIARE: ['p-amber', 'da inviare'], INVIATA: ['p-blue', 'inviata al SD'], LAVORATA: ['p-teal', 'lavorata dal cliente'], IN_USCITA: ['p-violet', 'in uscita RMA'], SPEDITA: ['p-green', 'spedita'] },
+  loaded: false, grid: null,
+  t: function () { return DB.t.PRATICHE_NEW_REUSE; },
+  load: async function () { await DB.ensureSheet('PRATICHE_NEW_REUSE', Nr.H); await DB.loadTables(['PRATICHE_NEW_REUSE']); Nr.loaded = true; },
+  show: async function () {
+    try { if (!Nr.loaded) { $('nrRows').innerHTML = '<tr><td class="empty">Carico le pratiche…</td></tr>'; await Nr.load(); } if (!Rma.loaded) await Rma.load(); Nr.render(); }
+    catch (e) { $('nrRows').innerHTML = '<tr><td class="empty">Errore: ' + esc(e.message) + '</td></tr>'; }
+  },
+  // ─ Drive
+  cartella: async function () {
+    var id = L.s(DB.param('drive_cartella_new_reuse', '')); if (id) return id;
+    if (Nr._f) return Nr._f;
+    var nome = 'CARICHI NEW REUSE', q = "'" + CFG.FOLDER_ID + "' in parents and name='" + nome + "' and mimeType='application/vnd.google-apps.folder' and trashed=false";
+    var js = await API.call('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id)&q=' + encodeURIComponent(q));
+    var f = (js.files || [])[0];
+    if (!f) f = await API.call('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id', { method: 'POST', body: JSON.stringify({ name: nome, mimeType: 'application/vnd.google-apps.folder', parents: [CFG.FOLDER_ID] }) });
+    Nr._f = f.id; return f.id;
+  },
+  XLSX_MIME: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
+  carica: async function (nome, bytes) {
+    var folder = await Nr.cartella(), fd = new FormData();
+    fd.append('metadata', new Blob([JSON.stringify({ name: nome, parents: [folder], mimeType: Nr.XLSX_MIME })], { type: 'application/json' }));
+    fd.append('file', new Blob([bytes], { type: Nr.XLSX_MIME }));
+    var res = await Busy.wrap(fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id,webViewLink', { method: 'POST', headers: { Authorization: 'Bearer ' + Auth.token }, body: fd }));
+    var js = await res.json(); if (!res.ok) throw new Error((js.error && js.error.message) || ('HTTP ' + res.status)); return js;
+  },
+  sostituisci: async function (fileId, bytes) {
+    var res = await Busy.wrap(fetch('https://www.googleapis.com/upload/drive/v3/files/' + fileId + '?uploadType=media&supportsAllDrives=true', { method: 'PATCH', headers: { Authorization: 'Bearer ' + Auth.token, 'Content-Type': Nr.XLSX_MIME }, body: bytes }));
+    if (!res.ok) { var js = await res.json().catch(function () { return {}; }); throw new Error((js.error && js.error.message) || ('HTTP ' + res.status)); }
+  },
+  copia: async function (fileId, nome) { return API.call('https://www.googleapis.com/drive/v3/files/' + fileId + '/copy?supportsAllDrives=true&fields=id', { method: 'POST', body: JSON.stringify({ name: nome }) }); },
+  scaricaBytes: async function (fileId) {
+    var res = await fetch('https://www.googleapis.com/drive/v3/files/' + fileId + '?alt=media&supportsAllDrives=true', { headers: { Authorization: 'Bearer ' + Auth.token } });
+    if (!res.ok) throw new Error('file non leggibile da Drive (HTTP ' + res.status + ')'); return res.arrayBuffer();
+  },
+  // ─ file: stesso tracciato dello script (CREAZIONE FILE NEW & REUSE + STAMPA CEDOLINO)
+  nomeFile: function (p) { return (L.s(p.mittente) + ' ' + L.s(p.po_mrn) + ' | ' + L.s(p.ddt)).replace(/[\\/:*?"<>]/g, '_') + '.xlsx'; },
+  crea: async function (p, pezzi) {
+    await Lib.xlsx();
+    var a = [['S/N', 'P/N', 'POSITION', 'NOTE', 'MITTENTE', 'PO/MRN', 'PL']];
+    pezzi.forEach(function (u, i) { a.push([u.seriale, u.pn, u.ubicazione || '', Rma.nota(u.note), i ? '' : p.mittente, i ? '' : p.po_mrn, i ? '' : p.ddt]); });
+    var g = {}, ord = []; pezzi.forEach(function (u) { var k = L.s(u.pn); if (!g[k]) { g[k] = { q: 0, pos: [] }; ord.push(k); } g[k].q++; if (u.ubicazione && g[k].pos.indexOf(u.ubicazione) < 0) g[k].pos.push(u.ubicazione); });
+    var c = [['TPN', 'NOTE', 'Q', 'POS.']].concat(ord.map(function (k) { return [k, '', g[k].q, g[k].pos.join(' / ')]; }));
+    var wb = XLSX.utils.book_new(), w1 = XLSX.utils.aoa_to_sheet(a), w2 = XLSX.utils.aoa_to_sheet(c);
+    w1['!cols'] = [{ wch: 26 }, { wch: 18 }, { wch: 18 }, { wch: 30 }, { wch: 24 }, { wch: 16 }, { wch: 22 }]; w2['!cols'] = [{ wch: 22 }, { wch: 20 }, { wch: 6 }, { wch: 40 }];
+    XLSX.utils.book_append_sheet(wb, w1, 'CREAZIONE FILE NEW & REUSE'); XLSX.utils.book_append_sheet(wb, w2, 'STAMPA CEDOLINO');
+    return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+  },
+  // impronta del contenuto del primo foglio: serve a capire se il file ricaricato è identico a quello inviato
+  impronta: async function (bytes) {
+    await Lib.xlsx();
+    var wb = XLSX.read(bytes, { type: 'array' }), r = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, defval: '' });
+    var s = JSON.stringify(r.map(function (x) { return x.map(L.s); }).filter(function (x) { return x.some(function (v) { return v !== ''; }); }));
+    var h = 5381; for (var i = 0; i < s.length; i++) h = ((h << 5) + h + s.charCodeAt(i)) | 0; return (h >>> 0).toString(16) + '-' + s.length;
+  },
+  // chiamata dopo un ingresso NEW/REUSE riuscito: non blocca mai l'ingresso
+  daIngresso: async function (T, pezzi, idR) {
+    if (T.tipo !== 'NEW' && T.tipo !== 'REUSE') return;
+    try {
+      if (!Nr.loaded) await Nr.load();
+      var t = Nr.t(), now = L.nowStamp();
+      var p = { data: T.data, tipo: T.tipo, mittente: T.mittente, po_mrn: T.po, ddt: T.ddt, awb: T.awb, id_ricezione: idR, n_pezzi: pezzi.length, stato: 'DA_INVIARE', rev: 1, creato_il: now, creato_da: Auth.email };
+      var bytes = await Nr.crea(p, pezzi); p.file_nome = Nr.nomeFile(p); p.impronta_inviata = await Nr.impronta(bytes);
+      var f = await Nr.carica(p.file_nome, bytes); p.file_id = f.id; p.file_link = f.webViewLink || '';
+      var r = await API.append(DB.id, 'PRATICHE_NEW_REUSE', [t.toRow(p)]); p.id_pratica = 'P' + L.pad(r - 1, 6);
+      await API.batchUpdate(DB.id, [{ range: t.cell('id_pratica', r), values: [[p.id_pratica]] }]); Ack.pushRow(t, p, r);
+      Modal.html('File ' + T.tipo + ' creato', '<div style="font-size:13px;line-height:1.6">Pratica <b>' + esc(p.id_pratica) + '</b> · ' + esc(p.file_nome) + '<br>Salvato nella cartella <b>CARICHI NEW REUSE</b>.</div>',
+        [{ label: 'Chiudi', cls: 'ghost' }, { label: '✉ Mail al Service Desk', fn: function () { Nr.mail(p.id_pratica); } }]);
+    } catch (e) { toast('File ' + T.tipo + ' non creato: ' + e.message + ' — ricrealo dal tab Carichi NEW/REUSE', 'ko'); }
+  },
+  // ricrea il file di una ricezione (se la creazione automatica non è riuscita)
+  pezziRic: function (idR) { return DB.t.UNITA.rows.filter(function (u) { return u.id_ricezione === idR; }); },
+  // ─ mail con link al file
+  mail: function (id) {
+    var p = Nr.t().rows.find(function (x) { return x.id_pratica === id; }); if (!p) return;
+    var to = DB.param('mail_new_reuse', '') || DB.param('mail_sd', ''), cc = DB.param('mail_cc', '');
+    var subj = p.tipo + ' PO ' + L.s(p.po_mrn) + ' DDT ' + L.s(p.ddt) + ' - ' + L.s(p.mittente) + ' (' + p.n_pezzi + ' pz)';
+    var body = (DB.param('testo_mail_new_reuse', '') || 'Buongiorno,\nin allegato (link) il file dei materiali ' + p.tipo + ' ricevuti.') + '\n\nFile: ' + L.s(p.file_link) + '\n\nPO/MRN: ' + L.s(p.po_mrn) + '\nDDT: ' + L.s(p.ddt) + '\nMittente: ' + L.s(p.mittente) + '\nPezzi: ' + p.n_pezzi;
+    location.href = 'mailto:' + to + '?subject=' + encodeURIComponent(subj) + (cc ? '&cc=' + encodeURIComponent(cc) : '') + '&body=' + encodeURIComponent(body);
+    if (p.stato === 'DA_INVIARE') Nr.set(p, { stato: 'INVIATA', mail_inviata_il: L.nowStamp() }, 'NR_MAIL');
+  },
+  set: async function (p, ch, azione) {
+    var t = Nr.t(), now = L.nowStamp(), all = Object.assign({}, ch, { rev: (parseInt(p.rev, 10) || 1) + 1, modificato_il: now, modificato_da: Auth.email }), upd = [], prima = {};
+    Object.keys(all).forEach(function (k) { if (k in t.idx) { prima[k] = p[k]; upd.push({ range: t.cell(k, p._r), values: [[String(all[k])]] }); } });
+    await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', [App.log(azione, 'PRATICHE_NEW_REUSE', p.id_pratica, { prima: prima, dopo: ch })])]);
+    Object.keys(all).forEach(function (k) { p[k] = String(all[k]); }); if (App.tab === 'newreuse') Nr.render();
+  },
+  scarica: async function (id) {
+    var p = Nr.t().rows.find(function (x) { return x.id_pratica === id; });
+    try {
+      var b = await Busy.wrap(Nr.scaricaBytes(p.file_id)), a = document.createElement('a');
+      a.href = URL.createObjectURL(new Blob([b], { type: Nr.XLSX_MIME })); a.download = p.file_nome || (id + '.xlsx'); document.body.appendChild(a); a.click(); a.remove();
+    } catch (e) { toast(e.message, 'ko'); }
+  },
+  // ─ file lavorato dal cliente: sostituisce quello su Drive (l'originale resta come copia)
+  ricarica: async function (id, inp) {
+    var f = inp.files && inp.files[0]; inp.value = ''; if (!f) return;
+    var p = Nr.t().rows.find(function (x) { return x.id_pratica === id; });
+    try {
+      var bytes = await f.arrayBuffer(), imp = await Nr.impronta(bytes);
+      if (imp === p.impronta_inviata) { Modal.open('File identico', 'Il file "' + f.name + '" è identico a quello inviato: il cliente non lo ha ancora lavorato.\nNon l\'ho caricato.'); return; }
+      var rows = await leggiFoglio(new File([bytes], f.name)), sn = {}; rows.forEach(function (r) { var s = L.up(campo(r, ['S/N', 'SERIALE', 'SERIAL NO.'])); if (s) sn[s] = 1; });
+      var miei = Nr.pezziRic(p.id_ricezione).map(function (u) { return L.up(u.seriale); });
+      var manca = miei.filter(function (s) { return !sn[s]; }), extra = Object.keys(sn).filter(function (s) { return miei.indexOf(s) < 0; });
+      var avviso = (manca.length ? '\n\n⚠ ' + manca.length + ' seriali della pratica non sono nel file: ' + manca.slice(0, 8).join(', ') + (manca.length > 8 ? '…' : '') : '') +
+        (extra.length ? '\n\n⚠ ' + extra.length + ' seriali nel file non sono di questa pratica: ' + extra.slice(0, 8).join(', ') + (extra.length > 8 ? '…' : '') : '');
+      if (!(await Modal.confirm('Carica il file lavorato', 'Sostituisco il file della pratica ' + id + ' con "' + f.name + '".\nL\'originale resta su Drive come copia.' + avviso))) return;
+      var ch = { stato: 'LAVORATA', lavorata_il: L.nowStamp(), lavorata_da: Auth.email };
+      if (!L.s(p.file_originale_id)) { var cp = await Nr.copia(p.file_id, (p.file_nome || id).replace(/\.xlsx$/i, '') + ' (ORIGINALE INVIATO).xlsx'); ch.file_originale_id = cp.id; }
+      await Nr.sostituisci(p.file_id, bytes);
+      await Nr.set(p, ch, 'NR_FILE_LAVORATO'); toast('File lavorato caricato: pratica ' + id + ' → lavorata dal cliente', 'ok');
+    } catch (e) { Modal.open('File non caricato', e.message); }
+  },
+  // ─ tutto il file in uscita RMA (anteprima dei carichi come l'import Excel)
+  inUscita: async function (id) {
+    var p = Nr.t().rows.find(function (x) { return x.id_pratica === id; });
+    try {
+      var rows = await leggiFoglio(new File([await Busy.wrap(Nr.scaricaBytes(p.file_id))], p.file_nome || 'file.xlsx'));
+      var po = ''; rows.forEach(function (r) { var v = campo(r, ['PO/MRN', 'PO', 'PO / MRN', 'MRN']); if (v) po = v; else if (po) r['PO/MRN'] = po; });
+      if (!rows.some(function (r) { return campo(r, ['RMA']); })) { Modal.open('Manca l\'RMA', 'Nel file non trovo una colonna "RMA" compilata: senza RMA e destinazione i pezzi non possono andare in uscita.\nColonne trovate: ' + Object.keys(rows[0] || {}).join(', ')); return; }
+      Rma.carAnteprima(rows, 'Pratica ' + id + ' · ' + (p.file_nome || ''), function (n) { return Nr.set(p, { stato: 'IN_USCITA', in_uscita_il: L.nowStamp() }, 'NR_IN_USCITA').then(function () { toast(n + ' pezzi della pratica ' + id + ' in uscita RMA', 'ok'); }); });
+    } catch (e) { Modal.open('Uscita non preparata', e.message); }
+  },
+  // dopo un DDT RMA: se tutti i pezzi della pratica sono usciti → SPEDITA
+  dopoRma: async function () {
+    try {
+      if (!Nr.loaded) return;
+      var lista = Nr.t().rows.filter(function (p) { return p.stato === 'IN_USCITA'; });
+      for (var i = 0; i < lista.length; i++) {
+        var P = Nr.pezziRic(lista[i].id_ricezione);
+        if (P.length && P.every(function (u) { return u.stato === 'USCITO' || u.stato === 'ANNULLATO'; })) await Nr.set(lista[i], { stato: 'SPEDITA' }, 'NR_SPEDITA');
+      }
+    } catch (e) { }
+  },
+  ricrea: async function (id) {
+    var p = Nr.t().rows.find(function (x) { return x.id_pratica === id; }), P = Nr.pezziRic(p.id_ricezione);
+    if (!P.length) { toast('Nessun pezzo trovato per la ricezione ' + p.id_ricezione, 'ko'); return; }
+    try {
+      var bytes = await Nr.crea(p, P), imp = await Nr.impronta(bytes), f = await Nr.carica(Nr.nomeFile(p), bytes);
+      await Nr.set(p, { file_id: f.id, file_link: f.webViewLink || '', file_nome: Nr.nomeFile(p), impronta_inviata: imp }, 'NR_FILE_RICREATO'); toast('File ricreato', 'ok');
+    } catch (e) { toast(e.message, 'ko'); }
+  },
+  render: function () {
+    if (!Nr.loaded) return;
+    if (!Nr.grid) Nr.grid = new Grid('nr', {
+      thead: 'nrHead', tbody: 'nrRows', foot: 'nrFoot', sort: 'id_pratica', dir: -1, empty: 'Nessuna pratica: si creano da sole con gli ingressi NEW/REUSE',
+      rows: function () { return Nr.t().rows.filter(function (p) { return $('nrTutte').checked || p.stato !== 'SPEDITA'; }); },
+      cols: [
+        { k: 'id_pratica', label: 'ID', cls: 'mono' },
+        { k: 'data', label: 'Data', cls: 'mono', get: function (p) { return L.normDate(p.data); } },
+        { k: 'tipo', label: 'Tipo', filter: 'select', html: function (p) { return Pill.tipo(p.tipo); } },
+        { k: 'mittente', label: 'Mittente', filter: 'select' },
+        { k: 'po_mrn', label: 'PO/MRN', filter: 'text', cls: 'mono' },
+        { k: 'ddt', label: 'DDT', filter: 'text', cls: 'mono' },
+        { k: 'n_pezzi', label: 'Pezzi', cls: 'mono' },
+        { k: 'stato', label: 'Stato', filter: 'select', html: function (p) { var s = Nr.STATI[p.stato] || ['', p.stato]; return '<span class="pill ' + s[0] + '">' + esc(s[1]) + '</span>'; } },
+        { k: 'lavorata_il', label: 'Lavorata il', cls: 'mono nw', get: function (p) { return L.s(p.lavorata_il).slice(0, 16); } },
+        { k: 'az', label: 'Azioni', noXls: true, html: function (p) {
+          var id = esc(p.id_pratica), b = function (t, fn, tit, cls) { return '<button class="btn ' + (cls || 'ghost') + ' sm" style="padding:3px 8px" title="' + tit + '" onclick="' + fn + '">' + t + '</button> '; };
+          if (!p.file_id) return b('↻ Crea file', 'Nr.ricrea(\'' + id + '\')', 'Crea il file della pratica');
+          return '<span class="nw">' + b('⬇', 'Nr.scarica(\'' + id + '\')', 'Scarica il file') + (p.file_link ? '<a class="btn ghost sm" style="padding:3px 8px" target="_blank" href="' + esc(p.file_link) + '" title="Apri su Drive">↗</a> ' : '') +
+            b('✉', 'Nr.mail(\'' + id + '\')', 'Mail al Service Desk con il link al file') +
+            '<label class="btn ghost sm" style="padding:3px 8px;cursor:pointer" title="Carica il file lavorato dal cliente (sostituisce quello su Drive)">⬆<input type="file" accept=".xlsx,.xls" style="display:none" onchange="Nr.ricarica(\'' + id + '\',this)"></label> ' +
+            (p.stato === 'LAVORATA' || p.stato === 'INVIATA' ? b('📦 Uscita RMA', 'Nr.inUscita(\'' + id + '\')', 'Metti tutto il file in uscita RMA', p.stato === 'LAVORATA' ? '' : 'ghost') : '') + '</span>';
+        } },
+        { k: 'note', label: 'Note', filter: 'text' }
+      ]
+    });
+    Nr.grid.render();
+    var R = Nr.t().rows, n = function (s) { return R.filter(function (p) { return p.stato === s; }).length; };
+    $('nrStats').innerHTML = Object.keys(Nr.STATI).map(function (k) { return '<div class="stat"><b>' + n(k) + '</b><span>' + Nr.STATI[k][1] + '</span></div>'; }).join('');
+  }
 };
 
 // ───────────────────────── VLT (sola lettura + rettifiche) ─────────────────────────
