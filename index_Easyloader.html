@@ -128,6 +128,9 @@ td.mono,td.nw{white-space:nowrap}
 .modal .row{justify-content:flex-end;margin-top:18px}
 .ack-grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(300px,1fr));gap:12px;margin-bottom:14px}
 .ack-card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:14px;display:flex;flex-direction:column;gap:8px}
+.usc-grid{grid-template-columns:repeat(auto-fill,minmax(380px,1fr))}
+.usc-grid table{width:100%;font-size:11.5px}
+.usc-grid td{padding:4px 6px}
 .ack-card.sel{border-color:var(--blue);box-shadow:0 0 0 1px var(--blue)}
 .ack-card .t{font-family:var(--ff-cond);font-size:20px;font-weight:700;letter-spacing:.5px}
 .ack-nums{display:flex;gap:6px;flex-wrap:wrap}
@@ -140,6 +143,12 @@ tr.r-edit{cursor:pointer}
 tr.r-edit:hover td{background:rgba(59,130,246,.08)}
 tr.r-ok td{background:rgba(16,185,129,.07)}
 tr.r-off td{opacity:.5}
+.g-th{cursor:pointer;user-select:none}
+.g-th:hover{color:var(--text)}
+th.g-sorted{color:var(--blue)}
+tr.g-filters th{padding:4px 6px;background:var(--surface);top:31px}
+.g-f{width:100%;min-width:70px;background:var(--card);border:1px solid var(--border);border-radius:5px;color:var(--text);font:11px var(--ff-sans);padding:3px 5px;text-transform:none;letter-spacing:0}
+.g-f.g-on{border-color:var(--blue);color:var(--blue)}
 .progress{font-family:var(--ff-mono);font-size:12px;color:var(--subtle);margin-top:10px;white-space:pre-line}
 </style>
 </head>
@@ -271,23 +280,61 @@ tr.r-off td{opacity:.5}
 
     <!-- RMA -->
     <div class="view" id="view-rma">
+      <input type="hidden" id="uscData">
       <div class="subtabs" id="rmaTabs">
         <span class="subtab" id="rmaT-inv" onclick="Rma.apri('inv')">Inventario giornaliero</span>
         <span class="subtab" id="rmaT-rit" onclick="Rma.apri('rit')">Ritorni in giacenza (VLT)</span>
-        <span class="subtab" style="opacity:.45;cursor:default" title="Prossimo rilascio">Carichi NEW/REUSE · in arrivo</span>
-        <span class="subtab" style="opacity:.45;cursor:default" title="Prossimo rilascio">Uscite e DDT RMA · in arrivo</span>
+        <span class="subtab" id="rmaT-car" onclick="Rma.apri('car')">Carichi NEW/REUSE</span>
+        <span class="subtab" id="rmaT-usc" onclick="Rma.apri('usc')">Uscite e DDT RMA</span>
       </div>
-      <div class="card">
-        <div class="row">
-          <div class="fg" style="flex:1;min-width:240px"><span class="fl">Cerca (seriale, P/N, FR, RMA, material, destinazione)</span><input class="fc mono" id="rmaQ" oninput="Rma.debounce()"></div>
-          <label class="btn ghost sm" style="cursor:pointer" title="CSV esportato da VLT: Ritorni in giacenza">⬆ Importa CSV ritorni<input type="file" id="rmaFile" accept=".csv,.txt" style="display:none" onchange="Rma.importa(this)"></label>
-          <button class="btn sm" id="rmaSalva" onclick="Rma.salva()" disabled>Salva RMA creati</button>
-        </div>
-        <div class="hint" id="rmaInfo" style="margin-top:8px"></div>
-      </div>
+      <div class="card" id="rmaBar"></div>
       <div class="stats" id="rmaStats"></div>
-      <div class="tbl-wrap"><table><thead id="rmaHead"></thead><tbody id="rmaRows"></tbody></table></div>
-      <div class="hint" id="rmaHint" style="margin-top:6px"></div>
+      <div id="rmaGridBox"><div class="tbl-wrap"><table><thead id="rmaHead"></thead><tbody id="rmaRows"></tbody></table></div><div class="hint" id="rmaFoot" style="margin-top:6px"></div></div>
+      <div id="rmaUsc"></div>
+    </div>
+
+    <!-- BALANCING -->
+    <div class="view" id="view-balancing">
+      <div class="card"><div class="row">
+        <button class="btn sm" onclick="Bal.apri()">+ Nuova balancing</button>
+        <label class="btn ghost sm" style="cursor:pointer">⬆ Importa Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Bal.importaX(this)"></label>
+        <button class="btn ghost sm" onclick="Bal.modello(['MITTENTE','DATA INBOUND','AWB MITTENTE','SERIALE','PN','RMA','DESTINATARIO','CONFERMA PN','INFO EXTRA MAGAZZINO','NOTE'],'modello_balancing.xlsx')">Modello Excel</button>
+        <div class="spacer"></div>
+        <label style="font-size:12px;color:var(--subtle);display:flex;gap:6px;align-items:center"><input type="checkbox" onchange="Bal.tutte=this.checked;Bal.render()"> anche gli anni precedenti</label>
+      </div><div class="hint" style="margin-top:8px">Previsioni di arrivo inserite dal Service Desk. Quando il magazzino registra l'ingresso BALANCING, la riga diventa "arrivata" da sola (gestito = SI).</div></div>
+      <div class="stats" id="balStats"></div>
+      <div class="tbl-wrap"><table><thead id="balHead"></thead><tbody id="balRows"></tbody></table></div><div class="hint" id="balFoot" style="margin-top:6px"></div>
+    </div>
+
+    <!-- JUNIPER -->
+    <div class="view" id="view-juniper">
+      <div class="card"><div class="row"><button class="btn sm" onclick="Jun.apri()">+ Nuova pratica</button>
+        <label class="btn ghost sm" style="cursor:pointer">⬆ Importa Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Jun.importa(this,{fr:['FR JUNIPER','FR'],case_number:['CASE NUMBER'],rma:['RMA'],faulty_model_id:['MODEL ID'],faulty_seriale:['SERIALE'],faulty_pn:['PART NUMBER'],data_ricezione_faulty:['DATA RICEZIONE FAULTY'],awb_ups_faulty:['AWB UPS PER FAULTY'],data_uscita_faulty:['DATA USCITA FAULTY'],note:['NOTE']})"></label>
+      </div><div class="hint" style="margin-top:8px">Pratiche fuori processo: faulty spedite a Juniper via UPS e good ricevute in sostituzione. Clicca una riga per modificarla.</div></div>
+      <div class="stats" id="junStats"></div>
+      <div class="tbl-wrap"><table><thead id="junHead"></thead><tbody id="junRows"></tbody></table></div><div class="hint" id="junFoot" style="margin-top:6px"></div>
+    </div>
+
+    <!-- VLT -->
+    <div class="view" id="view-vlt">
+      <div class="card"><div class="row">
+        <button class="btn ghost sm" id="vltBtnEdit" onclick="Vlt.toggle()">✏️ Abilita modifiche</button>
+        <button class="btn sm" id="vltSalva" style="display:none" onclick="Vlt.salva()">Salva rettifiche</button>
+        <button class="btn ghost sm" onclick="Ack.ricaricaVlt().then(function(){Vlt.render()})">↻ Rileggi VLT</button>
+        <div class="spacer"></div>
+        <label style="font-size:12px;color:var(--subtle);display:flex;gap:6px;align-items:center"><input type="checkbox" onchange="Vlt.tutte=this.checked;Vlt.render()"> anche gli anni precedenti</label>
+      </div><div class="hint" id="vltInfo" style="margin-top:8px"></div></div>
+      <div class="tbl-wrap"><table><thead id="vltHead"></thead><tbody id="vltRows"></tbody></table></div><div class="hint" id="vltFoot" style="margin-top:6px"></div>
+    </div>
+
+    <!-- STORICO -->
+    <div class="view" id="view-storico">
+      <div class="card"><div class="row">
+        <div class="fg" style="width:200px"><span class="fl">Periodo</span><select class="fc" id="stoFonte" onchange="Sto.cambia(this.value)"><option value="cur">Anno in corso (database)</option><option value="2025">2025 (archivio)</option><option value="2024">2024 (archivio)</option></select></div>
+        <div class="fg" style="flex:1;min-width:240px"><span class="fl">Cerca seriale, FR, RMA, DDT, AWB, P/N, PO</span><input class="fc mono" id="stoQ" oninput="Sto.cerca()"></div>
+        <button class="btn ghost sm" style="margin-bottom:2px" onclick="Sto.ricarica()">↻ Ricarica</button>
+      </div></div>
+      <div class="tbl-wrap"><table><thead id="stoHead"></thead><tbody id="stoRows"></tbody></table></div><div class="hint" id="stoFoot" style="margin-top:6px"></div>
     </div>
 
     <!-- ADMIN -->
@@ -580,7 +627,7 @@ Table.prototype.cell = function (h, row) { return API.q(this.name) + '!' + this.
 
 var DB = {
   id: null, t: {}, vlt: null, vltMap: {}, vltBySer: {}, artPn: {}, serNoti: {}, huaweiFr: {}, huaweiTs: null,
-  SMALL: ['OPERATORI', 'PARAMETRI', 'RIPARATORI', 'RIPARATORI_ALIAS', 'CONTROPARTI', 'DEPOT_VLT', 'VETTORI', 'REGOLE_BARCODE', 'MAGAZZINI', 'BALANCING', 'CALENDARIO_USCITE'],
+  SMALL: ['OPERATORI', 'PARAMETRI', 'RIPARATORI', 'RIPARATORI_ALIAS', 'CONTROPARTI', 'DEPOT_VLT', 'VETTORI', 'REGOLE_BARCODE', 'MAGAZZINI', 'BALANCING', 'CALENDARIO_USCITE', 'VLT_RETTIFICHE'],
   loadTables: async function (names) {
     var vals = await API.batchGet(DB.id, names.map(function (n) { return API.q(n); }));
     names.forEach(function (n, i) { var v = vals[i]; DB.t[n] = new Table(n, v[0] || [], v.slice(1)); });
@@ -608,12 +655,18 @@ var DB = {
   },
   loadVlt: async function (force) {
     var c = force ? null : await DB.cacheGet('vlt');
-    if (!c || DB.vltStale(c.ts)) {
-      var rows = await DB.loadCols(CFG.VLT_ID, CFG.VLT_SHEET, ['fr_id', 'depot_origine', 'f_mat_serial_no', 'f_mat_tmpn', 'awb_cw', 'note', 'stato', 'riparatore', 'advanced_swap', 'f_mat_material']);
+    if (!c || DB.vltStale(c.ts) || (c.rows[0] && !('data_apertura' in c.rows[0]))) {
+      var rows = await DB.loadCols(CFG.VLT_ID, CFG.VLT_SHEET, ['fr_id', 'data_apertura', 'depot_origine', 'f_mat_serial_no', 'f_mat_tmpn', 'awb_cw', 'note', 'stato', 'riparatore', 'advanced_swap', 'f_mat_material']);
       c = { ts: Date.now(), rows: rows }; await DB.cacheSet('vlt', c);
     }
-    DB.vlt = c; DB.vltMap = {}; DB.vltBySer = {};
-    c.rows.forEach(function (r) { if (r.fr_id) DB.vltMap[r.fr_id] = r; var s = L.up(r.f_mat_serial_no); if (s) (DB.vltBySer[s] = DB.vltBySer[s] || []).push(r); });
+    DB.vlt = c; DB.indexVlt();
+  },
+  // indici VLT (FR e seriale), dopo aver applicato le rettifiche attive
+  indexVlt: function () {
+    DB.vltMap = {}; DB.vltBySer = {};
+    DB.vlt.rows.forEach(function (r) { if (r.fr_id) DB.vltMap[r.fr_id] = r; });
+    DB.applyRett();
+    DB.vlt.rows.forEach(function (r) { var s = L.up(r.f_mat_serial_no); if (s) (DB.vltBySer[s] = DB.vltBySer[s] || []).push(r); });
   },
   loadHuawei: async function (force) {
     var c = force ? null : await DB.cacheGet('huawei');
@@ -642,9 +695,9 @@ var DB = {
 // ───────────────────────── APP ─────────────────────────
 var TABS = [
   { k: 'ingresso', label: 'Ingresso' },
-  { k: 'ack', label: 'ACK' }, { k: 'rma', label: 'RMA' }, { k: 'balancing', label: 'Balancing', soon: true },
-  { k: 'juniper', label: 'Juniper', soon: true }, { k: 'giacenze', label: 'Giacenze' }, { k: 'vlt', label: 'VLT', soon: true },
-  { k: 'storico', label: 'Storico', soon: true }, { k: 'admin', label: 'Admin', admin: true }
+  { k: 'ack', label: 'ACK' }, { k: 'rma', label: 'RMA' }, { k: 'balancing', label: 'Balancing' },
+  { k: 'juniper', label: 'Juniper' }, { k: 'giacenze', label: 'Giacenze' }, { k: 'vlt', label: 'VLT' },
+  { k: 'storico', label: 'Storico' }, { k: 'admin', label: 'Admin', admin: true }
 ];
 var App = {
   me: null, isAdmin: false, tab: 'ingresso',
@@ -707,6 +760,10 @@ var App = {
     if (t.k === 'ingresso') setTimeout(function () { if ($('inTipo').value) $('scBc').focus(); else $('inTipo').focus(); }, 50);
     if (t.k === 'ack') Ack.show();
     if (t.k === 'rma') Rma.show();
+    if (t.k === 'balancing') Bal.show();
+    if (t.k === 'juniper') Jun.show();
+    if (t.k === 'vlt') Vlt.show();
+    if (t.k === 'storico') Sto.show();
   },
   setTheme: function (th) { document.body.className = th || ''; lsS('theme', th); },
   syncInfo: function () { $('syncInfo').textContent = 'VLT ' + (DB.vlt ? new Date(DB.vlt.ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—') + ' · Huawei ' + Object.keys(DB.huaweiFr).length + ' seriali · giacenza ' + DB.t.UNITA.rows.length; },
@@ -724,9 +781,10 @@ var App = {
       await DB.loadTables(DB.SMALL.concat(['UNITA'])); await DB.loadVlt(true);
       try { await DB.loadHuawei(true); } catch (e) { toast('File Huawei non leggibile: ' + e.message, 'ko'); }
       Ingresso._heads = null;
-    if (Rma.loaded) await DB.loadTables(['RMA_RITORNI']);
+    if (Rma.loaded) await DB.loadTables(['RMA_RITORNI', 'SPEDIZIONI', 'SPEDIZIONI_COLLI', 'CARICHI_RMA']);
+    if (Bal.loaded) await Bal.load(); if (Jun.loaded) await Jun.load(); Sto.dati.cur = null;
     if (Ack.loaded) { await Ack.flush(); await Ack.load(); }
-      App.fillLists(); App.syncInfo(); Ingresso.ricalcola(); Ingresso.renderOggi(); if (App.tab === 'giacenze') Giacenze.render(); if (App.tab === 'admin') Admin.render(); if (App.tab === 'ack') Ack.render(); if (App.tab === 'rma') Rma.render();
+      App.fillLists(); App.syncInfo(); Ingresso.ricalcola(); Ingresso.renderOggi(); if (App.tab === 'giacenze') Giacenze.render(); if (App.tab === 'admin') Admin.render(); if (App.tab === 'ack') Ack.render(); if (App.tab === 'rma') Rma.render(); if (App.tab === 'balancing') Bal.render(); if (App.tab === 'juniper') Jun.render(); if (App.tab === 'vlt') Vlt.render();
       Modal.close(); toast('Dati aggiornati', 'ok');
     } catch (e) { Modal.close(); toast('Errore aggiornamento: ' + e.message, 'ko'); }
   },
@@ -873,8 +931,10 @@ var Ingresso = {
       o.depDest = dep ? dep.destinazione : '';
     }
     if (o.tipo === 'BALANCING') {
-      var b = DB.t.BALANCING.rows.find(function (x) { return L.up(x.seriale) === L.up(o.ser) && L.up(x.gestito) !== 'SI'; })
-           || DB.t.BALANCING.rows.find(function (x) { return x.rma === o.rma && L.up(x.gestito) !== 'SI'; });
+      var aperta = function (x) { return L.up(x.gestito) === 'NO' || !L.s(x.gestito); };
+      var b = DB.t.BALANCING.rows.find(function (x) { return L.up(x.seriale) === L.up(o.ser) && aperta(x) && DB.daQuestAnno(x.data_inbound); })
+           || DB.t.BALANCING.rows.find(function (x) { return o.rma && x.rma === o.rma && aperta(x) && DB.daQuestAnno(x.data_inbound); });
+      o.bal = b || null;
       o.destinazione = b ? b.destinatario : '';
       o.nota = o.destinazione;
       o.statoVlt = 'BALANCING';
@@ -1044,6 +1104,9 @@ var Ingresso = {
     Modal.progress('2/2 numerazione, anomalie e log');
     function colRange(t, h, r) { return t.cell(h, r) + ':' + t.col(h) + (r + n - 1); }
     var upd = [{ range: tR.cell('id_ricezione', rR), values: [[idR]] }];
+    // balancing previste dal Service Desk: ora sono arrivate
+    var tB = DB.t.BALANCING;
+    C.forEach(function (c, i) { if (c.bal && c.bal._r) { var ch = { gestito: 'SI', data_gestione: now, gestito_da: me, id_unita: uObjs[i].id_unita }; Object.keys(ch).forEach(function (h) { if (h in tB.idx) { c.bal[h] = ch[h]; upd.push({ range: tB.cell(h, c.bal._r), values: [[ch[h]]] }); } }); } });
     ['id_unita', 'id_ricezione', 'id_mov_in'].forEach(function (h) { upd.push({ range: colRange(tU, h, rU), values: uObjs.map(function (o) { return [o[h]]; }) }); });
     ['id_mov', 'id_unita', 'id_ricezione'].forEach(function (h) { upd.push({ range: colRange(tM, h, rM), values: mObjs.map(function (o) { return [o[h]]; }) }); });
     var anom = [];
@@ -1304,6 +1367,207 @@ var Drive = {
   }
 };
 
+// ───────────────────────── GRIGLIA "ALLA EXCEL": ordina cliccando l'intestazione, filtri per colonna ─────────────────────────
+// cols: [{ k, label, get(row) → valore per ordine/filtro, html(row) → cella, filter: 'select' | 'text' | null, cls, nw }]
+function Grid(name, o) { this.name = name; this.o = o; this.sort = o.sort || null; this.dir = o.dir || 1; this.f = {}; this.limit = o.limit || 500; Grid.all[name] = this; }
+Grid.all = {};
+Grid.prototype.val = function (c, r) { return L.s(c.get ? c.get(r) : r[c.k]); };
+Grid.prototype.match = function (r, skip) {
+  var self = this;
+  return this.o.cols.every(function (c) {
+    var fv = self.f[c.k]; if (!fv || c.k === skip) return true;
+    var v = L.up(self.val(c, r));
+    if (c.filter === 'select') return fv === '(vuoto)' ? v === '' : v === L.up(fv);
+    return v.indexOf(L.up(fv)) >= 0;
+  });
+};
+Grid.prototype.cmp = function (a, b) {
+  var na = parseFloat(a), nb = parseFloat(b);
+  if (/^-?\d+(\.\d+)?$/.test(a) && /^-?\d+(\.\d+)?$/.test(b)) return na - nb;
+  return a.localeCompare(b, 'it', { numeric: true, sensitivity: 'base' });
+};
+Grid.prototype.head = function () {
+  var self = this, g = 'Grid.all[\'' + this.name + '\']';
+  var h1 = '<tr>' + this.o.cols.map(function (c) {
+    var ar = self.sort === c.k ? (self.dir > 0 ? ' ▲' : ' ▼') : '';
+    return '<th class="g-th' + (self.sort === c.k ? ' g-sorted' : '') + '" onclick="' + g + '.ordina(\'' + c.k + '\')" title="Clicca per ordinare">' + esc(c.label) + ar + '</th>';
+  }).join('') + '</tr>';
+  var h2 = '<tr class="g-filters">' + this.o.cols.map(function (c) {
+    if (c.filter === 'select') return '<th><select class="g-f" id="gf_' + self.name + '_' + c.k + '" onchange="' + g + '.filtra(\'' + c.k + '\',this.value)"></select></th>';
+    if (c.filter === 'text') return '<th><input class="g-f" id="gf_' + self.name + '_' + c.k + '" value="' + esc(self.f[c.k] || '') + '" placeholder="filtra" oninput="' + g + '.filtraT(\'' + c.k + '\',this.value)"></th>';
+    return '<th></th>';
+  }).join('') + '</tr>';
+  return h1 + h2;
+};
+Grid.prototype.ordina = function (k) { if (this.sort === k) { if (this.dir > 0) this.dir = -1; else { this.sort = null; this.dir = 1; } } else { this.sort = k; this.dir = 1; } this.render(true); };
+Grid.prototype.filtra = function (k, v) { if (v) this.f[k] = v; else delete this.f[k]; this.limit = this.o.limit || 500; this.render(); };
+Grid.prototype.filtraT = function (k, v) { var self = this; clearTimeout(this._t); this._t = setTimeout(function () { self.filtra(k, L.s(v)); }, 200); };
+Grid.prototype.reset = function () { this.f = {}; this.render(true); };
+Grid.prototype.altri = function () { this.limit += 1000; this.render(); };
+Grid.prototype.render = function (rifaiTesta) {
+  var self = this, o = this.o, all = o.rows(), th = $(o.thead), tb = $(o.tbody);
+  if (!th || !tb) return;
+  if (rifaiTesta || !th.dataset.g) { th.innerHTML = this.head(); th.dataset.g = '1'; }
+  var list = all.filter(function (r) { return self.match(r); });
+  var sc = this.sort && o.cols.find(function (x) { return x.k === self.sort; });
+  if (sc) { var c = sc; list = list.slice().sort(function (a, b) { return self.dir * self.cmp(self.val(c, a), self.val(c, b)); }); }
+  // opzioni dei filtri a tendina: valori presenti con gli altri filtri attivi (come Excel)
+  o.cols.forEach(function (c) {
+    if (c.filter !== 'select') return;
+    var e = $('gf_' + self.name + '_' + c.k); if (!e) return;
+    var cnt = {}; all.forEach(function (r) { if (!self.match(r, c.k)) return; var v = self.val(c, r) || '(vuoto)'; cnt[v] = (cnt[v] || 0) + 1; });
+    var ks = Object.keys(cnt).sort(function (a, b) { return self.cmp(a, b); }), cur = self.f[c.k] || '';
+    e.innerHTML = '<option value="">tutti</option>' + ks.map(function (v) { return '<option value="' + esc(v) + '"' + (v === cur ? ' selected' : '') + '>' + esc(v) + ' (' + cnt[v] + ')</option>'; }).join('');
+    e.classList.toggle('g-on', !!cur);
+  });
+  o.cols.forEach(function (c) { if (c.filter === 'text') { var e = $('gf_' + self.name + '_' + c.k); if (e) e.classList.toggle('g-on', !!self.f[c.k]); } });
+  tb.innerHTML = list.length ? list.slice(0, this.limit).map(function (r) {
+    return '<tr' + (o.rowAttr ? ' ' + o.rowAttr(r) : '') + '>' + o.cols.map(function (c) { return '<td' + (c.cls ? ' class="' + c.cls + '"' : '') + '>' + (c.html ? c.html(r) : esc(self.val(c, r))) + '</td>'; }).join('') + '</tr>';
+  }).join('') : '<tr><td colspan="' + o.cols.length + '" class="empty">' + esc(o.empty || 'Nessuna riga') + '</td></tr>';
+  var nf = Object.keys(this.f).length;
+  if (o.foot && $(o.foot)) $(o.foot).innerHTML = list.length + ' righe' + (list.length !== all.length ? ' su ' + all.length : '') +
+    (list.length > this.limit ? ' · mostrate ' + this.limit + ' <a class="mail" href="javascript:Grid.all[\'' + this.name + '\'].altri()">mostra altre</a>' : '') +
+    (nf ? ' · <a class="mail" href="javascript:Grid.all[\'' + this.name + '\'].reset()">togli i filtri (' + nf + ')</a>' : '');
+  this.visibili = list;
+  return list;
+};
+
+// ───────────────────────── utilità comuni ─────────────────────────
+DB.dataInizio = function () { return L.normDate(DB.param('data_inizio_operativa', '')) || (L.isoToday().slice(0, 4) + '-01-01'); };
+DB.daQuestAnno = function (d) { d = L.normDate(d); return !d || d >= DB.dataInizio(); };   // senza data: tenuta
+// crea il foglio se manca (con intestazione) e lo carica
+DB.ensureSheet = async function (name, header) {
+  try { await DB.loadTables([name]); if (DB.t[name].header.length) return DB.t[name]; }
+  catch (e) {
+    if (!/parse range|no sheet/i.test(e.message)) throw e;
+    try { await API.call(API.S + DB.id + ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: [{ addSheet: { properties: { title: name } } }] }) }); }
+    catch (e2) { if (!/already exists|esiste gi/i.test(e2.message)) throw e2; }
+  }
+  await API.batchUpdate(DB.id, [{ range: API.q(name) + '!A1', values: [header] }]);
+  DB.t[name] = new Table(name, header, []); return DB.t[name];
+};
+// rettifiche VLT attive: il dato VLT resta com'è, l'app usa il valore corretto
+DB.applyRett = function () {
+  var t = DB.t.VLT_RETTIFICHE; if (!t || !DB.vlt) return;
+  t.rows.forEach(function (r) {
+    if (r.stato !== 'ATTIVA') return; var v = DB.vltMap[r.fr_id]; if (!v) return;
+    v._orig = v._orig || {}; if (!(r.campo in v._orig)) v._orig[r.campo] = v[r.campo];
+    v[r.campo] = r.valore_nuovo;
+  });
+};
+// librerie caricate solo quando servono
+var Lib = {
+  _p: {},
+  load: function (url, test) {
+    if (test()) return Promise.resolve();
+    if (Lib._p[url]) return Lib._p[url];
+    Lib._p[url] = new Promise(function (res, rej) { var s = document.createElement('script'); s.src = url; s.onload = function () { res(); }; s.onerror = function () { Lib._p[url] = null; rej(new Error('libreria non raggiungibile: ' + url)); }; document.head.appendChild(s); });
+    return Lib._p[url];
+  },
+  xlsx: function () { return Lib.load('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', function () { return !!window.XLSX; }); },
+  qr: function () { return Lib.load('https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js', function () { return !!window.qrcode; }); }
+};
+// legge un Excel/CSV caricato: righe come oggetti {INTESTAZIONE MAIUSCOLA: valore}
+async function leggiFoglio(file) {
+  var rows;
+  if (/\.(csv|txt)$/i.test(file.name)) rows = L.parseCsv(await file.text());
+  else {
+    await Lib.xlsx();
+    var wb = XLSX.read(await file.arrayBuffer(), { type: 'array', cellDates: true });
+    rows = XLSX.utils.sheet_to_json(wb.Sheets[wb.SheetNames[0]], { header: 1, raw: false, dateNF: 'yyyy-mm-dd', defval: '' });
+  }
+  rows = rows.filter(function (r) { return r.some(function (x) { return L.s(x) !== ''; }); });
+  if (!rows.length) return [];
+  var h = rows[0].map(function (x) { return L.up(x).replace(/\s+/g, ' '); });
+  return rows.slice(1).map(function (r) { var o = {}; h.forEach(function (k, i) { if (k) o[k] = L.s(r[i]); }); return o; });
+}
+// prende il primo valore tra più nomi di colonna possibili
+function campo(o, nomi) { for (var i = 0; i < nomi.length; i++) { var v = o[nomi[i]]; if (L.s(v) !== '') return L.s(v); } return ''; }
+
+// ───────────────────────── DDT PDF (comune ad ACK e RMA) ─────────────────────────
+// p: { numero, data, destinatario, indirizzo, vettore, awb, colli:[{tipo_collo,lunghezza_cm,larghezza_cm,altezza_cm,peso_kg}], cols:[{h,w}], righe:[[...]], qr }
+var Ddt = {
+  // d: documento a cui accodare (per stampare più DDT in un solo PDF)
+  pdf: function (p, d) {
+    var J = window.jspdf && window.jspdf.jsPDF; if (!J) throw new Error('libreria PDF non caricata');
+    if (d) d.addPage(); else d = new J({ unit: 'mm', format: 'a4' });
+    var P0 = d.getNumberOfPages(), M = 12, W = 210 - 2 * M, y = 14, lg = Ack._lg || {};
+    function box(x, yy, w, h, lab, txt) {
+      d.setDrawColor(120); d.rect(x, yy, w, h); d.setFont('helvetica', 'bold'); d.setFontSize(7.5); d.text(lab, x + 2, yy + 4);
+      d.setFont('helvetica', 'normal'); d.setFontSize(9.5); d.text(d.splitTextToSize(L.s(txt).replace(/\s+/g, ' '), w - 4), x + 2, yy + 9);
+    }
+    function logo(im, destra) {
+      if (!im) return; var h = 18, w = h * im.w / im.h; if (w > 55) { w = 55; h = w * im.h / im.w; }
+      try { d.addImage(im.url, 'PNG', destra ? 210 - M - w : M, 8 + (18 - h) / 2, w, h); } catch (e) { }
+    }
+    logo(lg.sx, false); logo(lg.dx, true);
+    if (lg.sx || lg.dx) y = 34;
+    var qrW = 0;
+    if (p.qr && window.qrcode) {
+      try { var q = qrcode(0, 'M'); q.addData(String(p.numero)); q.make(); var img = q.createDataURL(4, 0); qrW = 18; d.addImage(img, 'GIF', 210 - M - qrW, y - 6, qrW, qrW); } catch (e) { qrW = 0; }
+    }
+    d.setFont('helvetica', 'bold'); d.setFontSize(15); d.text('DOCUMENTO DI TRASPORTO', M, y);
+    d.setFontSize(11); d.text('N. ' + p.numero + '   del ' + L.itDate(p.data || L.isoToday()), 210 - M - (qrW ? qrW + 3 : 0), y, { align: 'right' });
+    y += qrW ? 14 : 5;
+    box(M, y, W / 2 - 1, 20, 'CESSIONARIO', DB.param('ddt_cessionario', ''));
+    box(M + W / 2 + 1, y, W / 2 - 1, 20, 'MITTENTE', DB.param('ddt_mittente', ''));
+    y += 22;
+    box(M, y, W / 2 - 1, 20, 'DESTINATARIO', p.destinatario);
+    box(M + W / 2 + 1, y, W / 2 - 1, 20, 'DESTINAZIONE', p.indirizzo || '');
+    y += 22;
+    var C = p.colli || [], peso = C.reduce(function (a, c) { return a + (parseFloat(c.peso_kg) || 0); }, 0), cw = W / 5;
+    box(M, y, cw - 1, 14, 'DESCRIZIONE MERCE', DB.param('ddt_descrizione_merce', 'MATERIALE PER TLC'));
+    box(M + cw, y, cw - 1, 14, 'VETTORE', p.vettore);
+    box(M + 2 * cw, y, cw - 1, 14, 'AWB', p.awb);
+    box(M + 3 * cw, y, cw - 1, 14, 'COLLI', String(C.length || ''));
+    box(M + 4 * cw, y, cw, 14, 'PESO KG', String(Math.round(peso * 100) / 100));
+    y += 18;
+    if (C.length) {
+      d.setFont('helvetica', 'normal'); d.setFontSize(8);
+      d.text(d.splitTextToSize('Colli: ' + C.map(function (c, i) { return (i + 1) + ') ' + c.tipo_collo + ' ' + c.lunghezza_cm + 'x' + c.larghezza_cm + 'x' + c.altezza_cm + ' cm ' + c.peso_kg + ' kg'; }).join('  '), W), M, y);
+      y += 4 + 3.5 * Math.ceil(C.length / 4);
+    }
+    var cols = [{ h: '#', w: 10 }].concat(p.cols), used = cols.reduce(function (a, c) { return a + (c.w || 0); }, 0);
+    cols.forEach(function (c) { if (!c.w) c.w = W - used; });
+    function head() {
+      d.setFillColor(230); d.rect(M, y, W, 7, 'F'); d.setFont('helvetica', 'bold'); d.setFontSize(9);
+      var x = M; cols.forEach(function (c) { d.text(c.h, x + 1.5, y + 5); x += c.w; }); y += 7; d.setFont('helvetica', 'normal');
+    }
+    head();
+    p.righe.forEach(function (r, i) {
+      if (y > 268) { d.addPage(); y = 14; head(); }
+      var vals = [String(i + 1)].concat(r), x = M;
+      d.setFontSize(8.5);
+      cols.forEach(function (c, j) { d.text(d.splitTextToSize(L.s(vals[j]), c.w - 2)[0] || '', x + 1.5, y + 4.6); x += c.w; });
+      d.setDrawColor(210); d.line(M, y + 6.5, M + W, y + 6.5); y += 6.5;
+    });
+    y += 4; if (y > 262) { d.addPage(); y = 20; }
+    d.setFont('helvetica', 'bold'); d.setFontSize(9); d.text('Totale pezzi: ' + p.righe.length, M, y);
+    y += 14; d.setFont('helvetica', 'normal'); d.setFontSize(8.5);
+    ['Firma mittente', 'Firma vettore', 'Firma destinatario'].forEach(function (t, i) { var x = M + i * (W / 3); d.line(x + 4, y, x + W / 3 - 4, y); d.text(t, x + 4, y + 4); });
+    var n = d.getNumberOfPages();
+    for (var pg = P0; pg <= n; pg++) { d.setPage(pg); d.setFontSize(7.5); d.text('DDT ' + p.numero + ' · pag. ' + (pg - P0 + 1) + '/' + (n - P0 + 1), 210 - M, 290, { align: 'right' }); }
+    return d;
+  },
+  // cedolini: una pagina per collo con la destinazione in grande
+  cedolini: function (p) {
+    var J = window.jspdf && window.jspdf.jsPDF; if (!J) throw new Error('libreria PDF non caricata');
+    var d = new J({ unit: 'mm', format: 'a5', orientation: 'landscape' }), n = Math.max(1, (p.colli || []).length);
+    for (var i = 0; i < n; i++) {
+      if (i) d.addPage();
+      d.setFont('helvetica', 'bold'); d.setFontSize(11); d.text('DESTINAZIONE', 12, 16);
+      d.setFontSize(26); d.text(d.splitTextToSize(L.s(p.destinatario), 186), 12, 30);
+      d.setFont('helvetica', 'normal'); d.setFontSize(13); d.text(d.splitTextToSize(L.s(p.indirizzo), 186), 12, 56);
+      d.setFont('helvetica', 'bold'); d.setFontSize(16); d.text('COLLO ' + (i + 1) + ' / ' + n, 12, 96);
+      d.setFont('helvetica', 'normal'); d.setFontSize(12); d.text('DDT ' + L.s(p.numero) + '   ·   AWB ' + L.s(p.awb) + '   ·   ' + L.s(p.vettore), 12, 108);
+      d.setFontSize(9); d.text('Mittente: ' + DB.param('ddt_mittente', ''), 12, 136);
+    }
+    return d;
+  },
+  // w: finestra già aperta al clic (i browser bloccano quelle aperte dopo un'attesa)
+  apri: function (d, w) { var url = d.output('bloburl'); if (w) { w.location.href = url; return; } w = window.open(url, '_blank'); if (!w) toast('Popup bloccato: consenti i popup per stampare', 'ko'); }
+};
+
 // ───────────────────────── ACK ─────────────────────────
 var Ack = {
   loaded: false, cur: null, q: [], qA: [], colli: {}, busy: false, extra: {},
@@ -1441,7 +1705,7 @@ var Ack = {
   attesi: function (cod, ix) {
     var c = Ack.cfg(), rp = Ack.rip(cod), as = L.up(rp.ack_include_as) === 'SI'; ix = ix || Ack.idxU();
     if (!DB.vlt) return [];
-    return DB.vlt.rows.filter(function (v) { return (v.stato === c.statoAck || (as && v.stato === c.statoAs)) && L.up(App.aliasRip(v.riparatore)) === L.up(cod); })
+    return DB.vlt.rows.filter(function (v) { return (v.stato === c.statoAck || (as && v.stato === c.statoAs)) && L.up(App.aliasRip(v.riparatore)) === L.up(cod) && DB.daQuestAnno(v.data_apertura); })
       .map(function (v) { return { v: v, flag: L.isBan(v.note) ? 'BAN' : (v.stato === c.statoAs ? 'AS' : ''), u: ix.fr[v.fr_id] || null }; });
   },
   conta: function (R) {
@@ -1762,68 +2026,14 @@ var Ack = {
 
   // ─ DDT PDF (layout del modello DDT RIP)
   pdf: function (id) {
-    var J = window.jspdf && window.jspdf.jsPDF; if (!J) throw new Error('libreria PDF non caricata');
-    var s = Ack.byId(id), rp = Ack.rip(s.destinatario), R = Ack.righe(id).filter(function (r) { return r.esito === 'SPUNTATO'; }), C = Ack.colliDb(id);
-    var d = new J({ unit: 'mm', format: 'a4' }), M = 12, W = 210 - 2 * M, y = 14;
-    function box(x, yy, w, h, lab, txt) {
-      d.setDrawColor(120); d.rect(x, yy, w, h); d.setFont('helvetica', 'bold'); d.setFontSize(7.5); d.text(lab, x + 2, yy + 4);
-      d.setFont('helvetica', 'normal'); d.setFontSize(9.5); d.text(d.splitTextToSize(L.s(txt), w - 4), x + 2, yy + 9);
-    }
-    // loghi: ATS a sinistra, Fastweb/Vodafone a destra (riquadro 55 × 18 mm, proporzioni mantenute)
-    var lg = Ack._lg || {};
-    function logo(im, destra) {
-      if (!im) return; var h = 18, w = h * im.w / im.h; if (w > 55) { w = 55; h = w * im.h / im.w; }
-      try { d.addImage(im.url, 'PNG', destra ? 210 - M - w : M, 8 + (18 - h) / 2, w, h); } catch (e) { }
-    }
-    logo(lg.sx, false); logo(lg.dx, true);
-    if (lg.sx || lg.dx) y = 34;
-    d.setFont('helvetica', 'bold'); d.setFontSize(15); d.text('DOCUMENTO DI TRASPORTO', M, y);
-    d.setFontSize(11); d.text('N. ' + s.n_ddt + '   del ' + L.itDate(s.data_ddt || L.isoToday()), 210 - M, y, { align: 'right' });
-    y += 5;
-    box(M, y, W / 2 - 1, 20, 'CESSIONARIO', DB.param('ddt_cessionario', ''));
-    box(M + W / 2 + 1, y, W / 2 - 1, 20, 'MITTENTE', DB.param('ddt_mittente', ''));
-    y += 22;
-    box(M, y, W / 2 - 1, 20, 'DESTINATARIO', rp.ragione_sociale || s.destinatario);
-    box(M + W / 2 + 1, y, W / 2 - 1, 20, 'DESTINAZIONE', rp.indirizzo || '');
-    y += 22;
-    var peso = C.reduce(function (a, c) { return a + (parseFloat(c.peso_kg) || 0); }, 0);
-    var cw = W / 5;
-    box(M, y, cw - 1, 14, 'DESCRIZIONE MERCE', DB.param('ddt_descrizione_merce', 'MATERIALE PER TLC'));
-    box(M + cw, y, cw - 1, 14, 'VETTORE', s.vettore);
-    box(M + 2 * cw, y, cw - 1, 14, 'AWB', s.awb);
-    box(M + 3 * cw, y, cw - 1, 14, 'COLLI', String(C.length || s.n_colli || ''));
-    box(M + 4 * cw, y, cw, 14, 'PESO KG', String(Math.round((peso || parseFloat(s.peso_tot_kg) || 0) * 100) / 100));
-    y += 18;
-    if (C.length) {
-      d.setFont('helvetica', 'normal'); d.setFontSize(8);
-      d.text(d.splitTextToSize('Colli: ' + C.map(function (c, i) { return (i + 1) + ') ' + c.tipo_collo + ' ' + c.lunghezza_cm + 'x' + c.larghezza_cm + 'x' + c.altezza_cm + ' cm ' + c.peso_kg + ' kg'; }).join('  '), W), M, y);
-      y += 4 + 3.5 * Math.ceil(C.length / 4);
-    }
-    var cols = [{ h: '#', w: 10 }, { h: 'FR', w: 26 }, { h: 'S/N', w: 70 }, { h: 'P/N', w: 50 }, { h: 'NOTE', w: W - 156 }];
-    function head() {
-      d.setFillColor(230); d.rect(M, y, W, 7, 'F'); d.setFont('helvetica', 'bold'); d.setFontSize(9);
-      var x = M; cols.forEach(function (c) { d.text(c.h, x + 1.5, y + 5); x += c.w; }); y += 7; d.setFont('helvetica', 'normal');
-    }
-    head();
-    R.forEach(function (r, i) {
-      if (y > 268) { d.addPage(); y = 14; head(); }
-      var vals = [String(i + 1), r.fr, r.seriale, r.pn, r.flag_vlt], x = M;
-      d.setFontSize(8.5);
-      cols.forEach(function (c, j) { d.text(d.splitTextToSize(L.s(vals[j]), c.w - 2)[0] || '', x + 1.5, y + 4.6); x += c.w; });
-      d.setDrawColor(210); d.line(M, y + 6.5, M + W, y + 6.5); y += 6.5;
-    });
-    y += 4; if (y > 262) { d.addPage(); y = 20; }
-    d.setFont('helvetica', 'bold'); d.setFontSize(9); d.text('Totale pezzi: ' + R.length, M, y);
-    y += 14; d.setFont('helvetica', 'normal'); d.setFontSize(8.5);
-    ['Firma mittente', 'Firma vettore', 'Firma destinatario'].forEach(function (t, i) { var x = M + i * (W / 3); d.line(x + 4, y, x + W / 3 - 4, y); d.text(t, x + 4, y + 4); });
-    var n = d.getNumberOfPages();
-    for (var p = 1; p <= n; p++) { d.setPage(p); d.setFontSize(7.5); d.text('DDT ' + s.n_ddt + ' · pag. ' + p + '/' + n, 210 - M, 290, { align: 'right' }); }
-    return d;
+    var s = Ack.byId(id), rp = Ack.rip(s.destinatario), R = Ack.righe(id).filter(function (r) { return r.esito === 'SPUNTATO'; });
+    return Ddt.pdf({ numero: s.n_ddt, data: s.data_ddt, destinatario: rp.ragione_sociale || s.destinatario, indirizzo: rp.indirizzo || '', vettore: s.vettore, awb: s.awb, colli: Ack.colliDb(id),
+      cols: [{ h: 'FR', w: 26 }, { h: 'S/N', w: 70 }, { h: 'P/N', w: 50 }, { h: 'NOTE' }], righe: R.map(function (r) { return [r.fr, r.seriale, r.pn, r.flag_vlt]; }) });
   },
   stampa: async function (id) {
-    await Ack.loghi();
-    try { var url = Ack.pdf(id).output('bloburl'); var w = window.open(url, '_blank'); if (!w) toast('Popup bloccato: consenti i popup per stampare', 'ko'); }
-    catch (e) { Modal.open('Stampa DDT', e.message); }
+    var w = window.open('', '_blank');
+    try { await Ack.loghi(); Ddt.apri(Ack.pdf(id), w); }
+    catch (e) { if (w) w.close(); Modal.open('Stampa DDT', e.message); }
   },
   mail: function (id) {
     var s = Ack.byId(id); if (!s) return '#';
@@ -1921,19 +2131,21 @@ var Ack = {
 
 // ───────────────────────── RMA ─────────────────────────
 var Rma = {
-  loaded: false, sez: 'inv', dirty: {}, lk: null, abb: {},
+  loaded: false, sez: 'inv', dirty: {}, lk: null, abb: {}, grids: {}, colli: {}, busy: false,
   RIT_MAP: { 'Id': 'id_rma', 'Richiedente': 'richiedente', 'Data Apertura': 'data_apertura', 'Data Ultima Modifica': 'data_ultima_modifica', 'Material': 'material', 'Equipment': 'equipment',
     'Seriale': 'seriale_vlt', 'Manufact Part Number': 'mpn', 'Materiale Descrizione': 'descrizione', 'Stato': 'stato_vlt', 'Deposito Origine': 'deposito_origine',
     'Deposito Destinazione RMA': 'deposito_dest_rma', 'Deposito Destinazione Indirizzo RMA': 'indirizzo_dest_rma', 'Failure Report': 'failure_report', 'Priorita': 'priorita', 'Quantita': 'quantita', 'Note': 'note_vlt' },
+  CAR_H: ['id_carico', 'data', 'id_unita', 'seriale', 'pn', 'tipo', 'rma', 'destinazione', 'po_mrn', 'posizione', 'note', 'stato', 'id_spedizione', 'creato_il', 'creato_da'],
   show: async function () {
     if (!Rma.loaded) {
-      $('rmaRows').innerHTML = '<tr><td class="empty">Carico ritorni e anagrafiche…</td></tr>';
+      $('rmaRows').innerHTML = '<tr><td class="empty">Carico ritorni, carichi e anagrafiche…</td></tr>';
       try { await Rma.load(); } catch (e) { $('rmaRows').innerHTML = '<tr><td class="empty">Errore: ' + esc(e.message) + '</td></tr>'; return; }
     }
     Rma.render();
   },
   load: async function () {
-    await DB.loadTables(['RMA_RITORNI']);
+    await DB.loadTables(['RMA_RITORNI', 'SPEDIZIONI', 'SPEDIZIONI_COLLI']);
+    await DB.ensureSheet('CARICHI_RMA', Rma.CAR_H);
     var c = await DB.cacheGet('rmalk');
     if (!c || (Date.now() - c.ts) > 24 * 3600 * 1000) {
       var art = await DB.loadCols(DB.id, 'ARTICOLI', ['material', 'pn']);
@@ -1944,11 +2156,11 @@ var Rma = {
     c.art.forEach(function (a) { var m = k(a.material); if (m && a.pn) { lk.pnByMat[m] = a.pn; if (!lk.matByPn[L.up(a.pn)]) lk.matByPn[L.up(a.pn)] = m; } });
     c.eq.forEach(function (e) { var m = k(e.material), q = k(e.material_equivalente); if (m && q) (lk.eq[m] = lk.eq[m] || []).push(q); });
     Rma.lk = lk; Rma.loaded = true;
+    if (!$('uscData').value) $('uscData').value = L.isoToday();
   },
-  nota: function (n) { n = L.s(n).split(' | fonte:')[0]; return /^fonte:/i.test(n) ? '' : n; },   // senza le note tecniche della migrazione
-  mk: function (m) { return L.s(m).replace(/\.0$/, '').replace(/^0+/, ''); },   // material senza zeri iniziali
-  apri: function (s) { Rma.sez = s; Rma.render(); },
-  debounce: function () { clearTimeout(Rma._t); Rma._t = setTimeout(Rma.render, 200); },
+  nota: function (n) { n = L.s(n).split(' | fonte:')[0]; return /^fonte:/i.test(n) ? '' : n; },
+  mk: function (m) { return L.s(m).replace(/\.0$/, '').replace(/^0+/, ''); },
+  apri: function (s) { Rma.sez = s; Rma.render(true); },
   ctx: function () {
     var lk = Rma.lk, k = Rma.mk;
     return {
@@ -1965,23 +2177,177 @@ var Rma = {
     return d ? d.destinazione : r.deposito_dest_rma;
   },
   ultimoImport: function () { var m = ''; DB.t.RMA_RITORNI.rows.forEach(function (r) { if (r.importato_il > m) m = r.importato_il; }); return m; },
+  // RMA aperte dell'ultimo import, dalla data di inizio operativa in poi
   attivi: function () {
     var ult = Rma.ultimoImport();
-    return DB.t.RMA_RITORNI.rows.filter(function (r) { return r.importato_il === ult && (r.stato === 'DA_EVADERE' || r.stato === 'ASSEGNATA'); });
+    return DB.t.RMA_RITORNI.rows.filter(function (r) { return r.importato_il === ult && (r.stato === 'DA_EVADERE' || r.stato === 'ASSEGNATA') && DB.daQuestAnno(r.data_apertura); });
   },
   inventario: function () { return DB.t.UNITA.rows.filter(function (u) { return u.stato === 'IN_GIACENZA' && (u.tipo === 'GOOD' || u.tipo === 'BALANCING'); }); },
+  dv: function (u, f) { var d = Rma.dirty[u.id_unita]; return d && d[f] !== undefined ? d[f] : u[f === 'dest' ? 'destinazione_prevista' : 'rma']; },
   calcola: function () {
     var inv = Rma.inventario(), creati = {};
-    inv.forEach(function (u) { var v = Rma.dirty[u.id_unita] !== undefined ? Rma.dirty[u.id_unita] : u.rma; if (v) creati[L.s(v)] = 1; });
+    inv.forEach(function (u) { var v = L.s(Rma.dv(u, 'rma')); if (v) creati[v] = 1; });
+    Rma.carichi().forEach(function (c) { if (c.rma) creati[c.rma] = 1; });
     var rmaList = Rma.attivi().filter(function (r) { return !creati[r.id_rma]; });
-    var liberi = inv.filter(function (u) { return u.tipo === 'GOOD' && !L.s(Rma.dirty[u.id_unita] !== undefined ? Rma.dirty[u.id_unita] : u.rma); });
+    var liberi = inv.filter(function (u) { return u.tipo === 'GOOD' && !L.s(Rma.dv(u, 'rma')); });
     Rma.abb = L.abbinaRma(rmaList, liberi, Rma.ctx());
     return inv;
+  },
+  carichi: function (tutti) { return (DB.t.CARICHI_RMA ? DB.t.CARICHI_RMA.rows : []).filter(function (c) { return tutti || c.stato === 'APERTO'; }); },
+
+  // ─ barra comandi per sezione
+  bar: function () {
+    var s = Rma.sez, nD = Object.keys(Rma.dirty).length, ult = Rma.ultimoImport();
+    var imp = '<label class="btn ghost sm" style="cursor:pointer" title="CSV esportato da VLT: Ritorni in giacenza">⬆ Importa CSV ritorni<input type="file" accept=".csv,.txt" style="display:none" onchange="Rma.importa(this)"></label>';
+    var info = '<div class="hint" style="margin-top:8px">' + (ult ? 'Ultimo import ritorni: ' + esc(ult) + ' · ' + Rma.attivi().length + ' RMA aperte dal ' + esc(L.itDate(DB.dataInizio())) : 'Nessun import ritorni: carica il CSV esportato da VLT.') + '</div>';
+    if (s === 'inv') return '<div class="row">' + imp + '<div class="spacer"></div><button class="btn sm" ' + (nD ? '' : 'disabled') + ' onclick="Rma.salva()">Salva modifiche' + (nD ? ' (' + nD + ')' : '') + '</button></div>' + info;
+    if (s === 'rit') return '<div class="row">' + imp + '</div>' + info;
+    if (s === 'car') return '<div class="row">' +
+      '<div class="fg" style="width:240px"><span class="fl">Seriale *</span><input class="fc mono" id="carSer" autocomplete="off" placeholder="spara il seriale" onkeydown="if(event.key===\'Enter\'){event.preventDefault();$(\'carRma\').focus()}" oninput="Rma.carInfo()"><span class="hint" id="carHint"></span></div>' +
+      '<div class="fg" style="width:120px"><span class="fl">RMA *</span><input class="fc mono" id="carRma" autocomplete="off"></div>' +
+      '<div class="fg" style="width:220px"><span class="fl">Destinazione *</span><input class="fc" id="carDest" list="dlControparti" autocomplete="off"></div>' +
+      '<div class="fg" style="width:130px"><span class="fl">PO / MRN</span><input class="fc mono" id="carPo" autocomplete="off"></div>' +
+      '<div class="fg" style="width:180px"><span class="fl">Note</span><input class="fc" id="carNote" autocomplete="off" onkeydown="if(event.key===\'Enter\'){event.preventDefault();Rma.carAggiungi()}"></div>' +
+      '<button class="btn" style="margin-bottom:18px" onclick="Rma.carAggiungi()">Aggiungi</button><div class="spacer"></div>' +
+      '<label class="btn ghost sm" style="cursor:pointer;margin-bottom:18px">⬆ Importa Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Rma.carImporta(this)"></label>' +
+      '<button class="btn ghost sm" style="margin-bottom:18px" onclick="Rma.carModello()">Modello Excel</button></div>' +
+      '<div class="hint">Solo pezzi NEW/REUSE in giacenza. Excel: colonne SERIALE, RMA, DESTINAZIONE, PO, NOTE (anche PV DESTINO, P.O, SERIAL).</div>';
+    return '<div class="row"><div class="fg" style="width:160px"><span class="fl">Giorno di uscita</span><input class="fc" type="date" id="uscData2" value="' + esc($('uscData').value) + '" onchange="$(\'uscData\').value=this.value;Rma.render()"></div><div class="spacer"></div>' +
+      '<button class="btn green" id="uscTutti" onclick="Rma.emettiTutti()">Genera i DDT pronti</button></div>' +
+      '<div class="hint" style="margin-top:8px">Un DDT per destinazione (serie RMA). Pronta = colli e peso salvati + AWB. In uscita: GOOD con RMA (creato o giacenza), BALANCING arrivate, carichi NEW/REUSE.</div>';
+  },
+  render: function (rifai) {
+    if (!Rma.loaded) return;
+    document.querySelectorAll('#rmaTabs .subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'rmaT-' + Rma.sez); });
+    var foc = document.activeElement && document.activeElement.id;
+    var keep = {}; ['carSer', 'carRma', 'carDest', 'carPo', 'carNote'].forEach(function (id) { if ($(id)) keep[id] = $(id).value; });
+    $('rmaBar').innerHTML = Rma.bar();
+    Object.keys(keep).forEach(function (id) { if ($(id)) $(id).value = keep[id]; });
+    if (foc && $(foc) && /^car/.test(foc)) $(foc).focus();
+    var usc = Rma.sez === 'usc';
+    $('rmaGridBox').style.display = usc ? 'none' : ''; $('rmaUsc').style.display = usc ? '' : 'none';
+    Rma.calcola();
+    if (usc) { Rma.renderUscite(); return; }
+    var g = Rma.grid(Rma.sez);
+    if (rifai || Rma._last !== Rma.sez) { $('rmaHead').dataset.g = ''; Rma._last = Rma.sez; }
+    g.render(); Rma.stats();
+  },
+  stats: function () {
+    var s = Rma.sez, abb = Rma.abb, oggi = L.isoToday(), h = '';
+    if (s === 'inv') {
+      var inv = Rma.inventario(), nG = inv.filter(function (u) { return u.tipo === 'GOOD'; }).length, nB = inv.length - nG;
+      var nCre = inv.filter(function (u) { return u.tipo === 'GOOD' && L.s(Rma.dv(u, 'rma')); }).length, nAut = Object.keys(abb).length;
+      var nVar = Object.keys(abb).filter(function (k) { return abb[k].variazione; }).length;
+      h = '<div class="stat"><b>' + inv.length + '</b><span>in inventario</span></div><div class="stat"><b>' + nG + '</b><span>good</span></div><div class="stat"><b>' + nB + '</b><span>balancing</span></div>' +
+        '<div class="stat"><b style="color:var(--green)">' + nAut + '</b><span>rma giacenza</span></div><div class="stat"><b style="color:var(--blue)">' + nCre + '</b><span>rma creato</span></div>' +
+        '<div class="stat"><b style="color:var(--amber)">' + (nG - nAut - nCre) + '</b><span>senza rma</span></div>' + (nVar ? '<div class="stat"><b style="color:var(--violet)">' + nVar + '</b><span>variaz. destino</span></div>' : '');
+    } else if (s === 'rit') {
+      var att = Rma.attivi(), con = {}; Object.keys(abb).forEach(function (k) { con[abb[k].rma.id_rma] = 1; });
+      var nOk = att.filter(function (r) { return con[r.id_rma]; }).length, nLate = att.filter(function (r) { return r.data_scadenza && r.data_scadenza < oggi; }).length;
+      h = '<div class="stat"><b>' + att.length + '</b><span>rma aperte</span></div><div class="stat"><b style="color:var(--green)">' + nOk + '</b><span>con pezzo</span></div><div class="stat"><b style="color:var(--amber)">' + (att.length - nOk) + '</b><span>senza pezzo</span></div>' + (nLate ? '<div class="stat"><b style="color:var(--red)">' + nLate + '</b><span>scadute</span></div>' : '');
+    } else if (s === 'car') {
+      var c = Rma.carichi();
+      h = '<div class="stat"><b>' + c.length + '</b><span>carichi aperti</span></div><div class="stat"><b>' + c.filter(function (x) { return x.tipo === 'NEW'; }).length + '</b><span>new</span></div><div class="stat"><b>' + c.filter(function (x) { return x.tipo === 'REUSE'; }).length + '</b><span>reuse</span></div>';
+    }
+    $('rmaStats').innerHTML = h;
+  },
+  grid: function (s) {
+    if (Rma.grids[s]) return Rma.grids[s];
+    var ctx = function () { return Rma.ctx(); }, oggi = function () { return L.isoToday(); };
+    var base = { thead: 'rmaHead', tbody: 'rmaRows', foot: 'rmaFoot' };
+    if (s === 'inv') Rma.grids.inv = new Grid('rmaInv', Object.assign({}, base, {
+      empty: 'Nessun pezzo GOOD/BALANCING in giacenza',
+      rows: function () { return Rma.inventario().sort(function (a, b) { return ((a.tipo === 'GOOD' ? '0' : '1') + a.data_in).localeCompare((b.tipo === 'GOOD' ? '0' : '1') + b.data_in); }); },
+      rowAttr: function (u) { var a = Rma.abb[u.id_unita]; return a && a.variazione ? 'class="r-warn"' : ''; },
+      cols: [
+        { k: 'tipo', label: 'Tipo', filter: 'select', html: function (u) { return Pill.tipo(u.tipo); } },
+        { k: 'fr', label: 'FR', filter: 'text', cls: 'mono' },
+        { k: 'mnft', label: 'MNFT', filter: 'select' },
+        { k: 'seriale', label: 'Seriale', filter: 'text', cls: 'mono' },
+        { k: 'pn', label: 'P/N', filter: 'select', cls: 'mono' },
+        { k: 'riparatore', label: 'Repair', filter: 'select' },
+        { k: 'note', label: 'Nota', filter: 'text', cls: 'nw', get: function (u) { return Rma.nota(u.note); } },
+        { k: 'material', label: 'Material', filter: 'select', cls: 'mono', get: function (u) { return ctx().materialDi(u); } },
+        { k: 'dest', label: 'Destinazione', filter: 'select', get: function (u) { return Rma.dv(u, 'dest'); },
+          html: function (u) { var d = Rma.dirty[u.id_unita], on = d && d.dest !== undefined; return '<input class="edit-cell' + (on ? ' dirty' : '') + '" style="width:calc(' + Math.max(14, Math.min(44, L.s(Rma.dv(u, 'dest')).length + 5)) + 'ch + 16px)" list="dlControparti" value="' + esc(Rma.dv(u, 'dest')) + '" title="Variazione destinazione (Service Desk)" onchange="Rma.set(\'' + u.id_unita + '\',\'dest\',this.value)">'; } },
+        { k: 'var', label: 'Var. destino', filter: 'select', get: function (u) { var a = Rma.abb[u.id_unita]; return a && a.variazione ? Rma.destRma(a.rma) : ''; }, html: function (u) { var a = Rma.abb[u.id_unita]; return a && a.variazione ? '<span style="color:var(--violet)">' + esc(Rma.destRma(a.rma)) + '</span>' : ''; } },
+        { k: 'rma', label: 'RMA creato (SD)', filter: 'text', get: function (u) { return Rma.dv(u, 'rma'); },
+          html: function (u) { if (u.tipo === 'BALANCING') return '<span class="mono">' + esc(u.rma) + '</span>'; var d = Rma.dirty[u.id_unita], on = d && d.rma !== undefined; return '<input class="edit-cell mono' + (on ? ' dirty' : '') + '" style="width:11ch" value="' + esc(Rma.dv(u, 'rma')) + '" placeholder="—" onchange="Rma.set(\'' + u.id_unita + '\',\'rma\',this.value)">'; } },
+        { k: 'rmag', label: 'RMA giacenza', filter: 'text', cls: 'mono', get: function (u) { var a = Rma.abb[u.id_unita]; return a ? a.rma.id_rma : ''; }, html: function (u) { var a = Rma.abb[u.id_unita]; return a ? '<span style="color:var(--green)">' + esc(a.rma.id_rma) + '</span>' : ''; } },
+        { k: 'open', label: 'Data open', cls: 'mono', get: function (u) { var a = Rma.abb[u.id_unita]; return a ? a.rma.data_apertura.slice(0, 10) : ''; } },
+        { k: 'scad', label: 'Scadenza', cls: 'mono', get: function (u) { var a = Rma.abb[u.id_unita]; return a ? a.rma.data_scadenza : ''; }, html: function (u) { var a = Rma.abb[u.id_unita], sc = a ? a.rma.data_scadenza : ''; return '<span' + (sc && sc < oggi() ? ' style="color:var(--red)"' : '') + '>' + esc(sc) + '</span>'; } },
+        { k: 'nsd', label: 'Note SD', filter: 'text', get: function (u) { var a = Rma.abb[u.id_unita]; return a && a.rma.failure_report ? 'RITORNO GIACENZA FR ' + a.rma.failure_report : ''; } }
+      ]
+    }));
+    if (s === 'rit') {
+      var byRma = function () { var m = {}; Object.keys(Rma.abb).forEach(function (k) { m[Rma.abb[k].rma.id_rma] = k; }); return m; };
+      Rma.grids.rit = new Grid('rmaRit', Object.assign({}, base, {
+        empty: 'Nessuna RMA aperta: importa il CSV dei ritorni in giacenza esportato da VLT', sort: 'data_scadenza',
+        rows: function () { Rma._byRma = byRma(); return Rma.attivi(); },
+        rowAttr: function (r) { return Rma._byRma[r.id_rma] ? '' : 'class="r-warn"'; },
+        cols: [
+          { k: 'id_rma', label: 'RMA', filter: 'text', cls: 'mono' },
+          { k: 'data_apertura', label: 'Data open', cls: 'mono' },
+          { k: 'data_scadenza', label: 'Scadenza', cls: 'mono', html: function (r) { return '<span' + (r.data_scadenza && r.data_scadenza < oggi() ? ' style="color:var(--red)"' : '') + '>' + esc(r.data_scadenza) + '</span>'; } },
+          { k: 'material', label: 'Material', filter: 'select', cls: 'mono' },
+          { k: 'pnc', label: 'P/N cercato', filter: 'select', cls: 'mono', get: function (r) { return Rma.lk.pnByMat[Rma.mk(r.material)] || ''; } },
+          { k: 'descrizione', label: 'Descrizione', filter: 'text' },
+          { k: 'dest', label: 'Destinazione', filter: 'select', get: function (r) { return Rma.destRma(r); } },
+          { k: 'failure_report', label: 'FR', filter: 'text', cls: 'mono' },
+          { k: 'stato_vlt', label: 'Stato VLT', filter: 'select' },
+          { k: 'pezzo', label: 'Pezzo abbinato', filter: 'text', get: function (r) { var id = Rma._byRma[r.id_rma], u = id && DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); return u ? u.seriale : ''; },
+            html: function (r) { var id = Rma._byRma[r.id_rma], u = id && DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); return u ? '<span class="mono">' + esc(u.seriale) + '</span> <span class="hint">' + esc(u.id_unita) + (Rma.abb[id].variazione ? ' · variazione destino' : '') + '</span>' : '<span style="color:var(--amber)">nessun pezzo in giacenza</span>'; } }
+        ]
+      }));
+    }
+    if (s === 'car') Rma.grids.car = new Grid('rmaCar', Object.assign({}, base, {
+      empty: 'Nessun carico aperto', sort: 'data', dir: -1,
+      rows: function () { return Rma.carichi(); },
+      cols: [
+        { k: 'data', label: 'Data', cls: 'mono' },
+        { k: 'tipo', label: 'Tipo', filter: 'select', html: function (c) { return Pill.tipo(c.tipo); } },
+        { k: 'seriale', label: 'Seriale', filter: 'text', cls: 'mono' },
+        { k: 'pn', label: 'P/N', filter: 'select', cls: 'mono' },
+        { k: 'rma', label: 'RMA', filter: 'text', cls: 'mono' },
+        { k: 'destinazione', label: 'Destinazione', filter: 'select' },
+        { k: 'po_mrn', label: 'PO / MRN', filter: 'text', cls: 'mono' },
+        { k: 'posizione', label: 'Posizione', filter: 'select', cls: 'mono' },
+        { k: 'note', label: 'Note', filter: 'text' },
+        { k: 'creato_da', label: 'Da', filter: 'select', get: function (c) { return L.s(c.creato_da).split('@')[0]; } },
+        { k: 'az', label: '', html: function (c) { return '<button class="ico-btn" title="Annulla carico: il pezzo torna in giacenza" onclick="Rma.carAnnulla(\'' + c.id_carico + '\')">✕</button>'; } }
+      ]
+    }));
+    return Rma.grids[s];
+  },
+  set: function (id, f, v) {
+    var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); v = f === 'rma' ? L.frKey(v) : L.s(v);
+    var orig = L.s(f === 'dest' ? u.destinazione_prevista : u.rma), d = Rma.dirty[id] || {};
+    if (v === orig) delete d[f]; else d[f] = v;
+    if (Object.keys(d).length) Rma.dirty[id] = d; else delete Rma.dirty[id];
+    Rma.render();
+  },
+  salva: async function () {
+    var ids = Object.keys(Rma.dirty); if (!ids.length) return;
+    var bad = ids.filter(function (id) { var d = Rma.dirty[id]; return d.rma && !/^\d+$/.test(d.rma); });
+    if (bad.length) { Modal.open('RMA non valido', 'L\'RMA deve essere un numero.'); return; }
+    var tU = DB.t.UNITA, now = L.nowStamp(), upd = [], logs = [], ch = {};
+    ids.forEach(function (id) {
+      var u = tU.rows.find(function (x) { return x.id_unita === id; }), d = Rma.dirty[id], c = { modificato_il: now, modificato_da: Auth.email, rev: (parseInt(u.rev, 10) || 1) + 1 }, prima = {};
+      if (d.rma !== undefined) { c.rma = d.rma; prima.rma = u.rma; }
+      if (d.dest !== undefined) { c.destinazione_prevista = d.dest; prima.destinazione_prevista = u.destinazione_prevista; }
+      Object.keys(c).forEach(function (h) { upd.push({ range: tU.cell(h, u._r), values: [[String(c[h])]] }); });
+      logs.push(App.log(d.dest !== undefined ? 'VARIAZIONE_RMA' : 'RMA_CREATO', 'UNITA', id, { prima: prima, dopo: d, seriale: u.seriale })); ch[id] = c;
+    });
+    try {
+      await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', logs)]);
+      ids.forEach(function (id) { var u = tU.rows.find(function (x) { return x.id_unita === id; }); Object.keys(ch[id]).forEach(function (h) { u[h] = String(ch[id][h]); }); });
+      Rma.dirty = {}; toast(ids.length + ' righe salvate', 'ok'); Rma.render();
+    } catch (e) { toast('Errore salvataggio: ' + e.message, 'ko'); }
   },
   // ─ import del CSV "Ritorni in giacenza" esportato da VLT
   importa: async function (inp) {
     var f = inp.files && inp.files[0]; inp.value = ''; if (!f) return;
-    var txt = await f.text(), rows = L.parseCsv(txt);
+    var rows = L.parseCsv(await f.text());
     if (rows.length < 2) { Modal.open('Import ritorni', 'Il file è vuoto.'); return; }
     var h = rows[0].map(L.s), idx = {};
     Object.keys(Rma.RIT_MAP).forEach(function (c) { var i = h.indexOf(c); if (i >= 0) idx[Rma.RIT_MAP[c]] = i; });
@@ -2010,73 +2376,587 @@ var Rma = {
       if (upd.length) await API.batchUpdate(DB.id, upd);
       if (nuove.length) { var r0 = await API.append(DB.id, 'RMA_RITORNI', nuove.map(function (o) { return t.toRow(o); })); nuove.forEach(function (o, i) { Ack.pushRow(t, o, r0 + i); }); }
       await API.append(DB.id, 'LOG', [App.log('IMPORT_RITORNI', 'RMA_RITORNI', f.name, { righe: recs.length, nuove: nuove.length, aggiornate: upd.length })]);
-      Modal.close(); toast('Ritorni importati: ' + nuove.length + ' nuovi, ' + upd.length + ' aggiornati', 'ok'); Rma.render();
+      var vecchie = recs.filter(function (o) { return !DB.daQuestAnno(o.data_apertura); }).length;
+      Modal.close(); toast('Ritorni importati: ' + nuove.length + ' nuovi, ' + upd.length + ' aggiornati' + (vecchie ? ' · ' + vecchie + ' anteriori al ' + L.itDate(DB.dataInizio()) + ' ignorati' : ''), 'ok'); Rma.render();
     } catch (e) { Modal.open('Import non riuscito', e.message); }
   },
-  set: function (id, v) { v = L.frKey(v); var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); if (v === L.s(u.rma)) delete Rma.dirty[id]; else Rma.dirty[id] = v; Rma.render(); },
-  salva: async function () {
-    var ids = Object.keys(Rma.dirty); if (!ids.length) return;
-    var bad = ids.filter(function (id) { return Rma.dirty[id] && !/^\d+$/.test(Rma.dirty[id]); });
-    if (bad.length) { Modal.open('RMA non valido', 'L\'RMA deve essere un numero.'); return; }
-    var tU = DB.t.UNITA, now = L.nowStamp(), upd = [], logs = [];
-    ids.forEach(function (id) {
-      var u = tU.rows.find(function (x) { return x.id_unita === id; }), rev = (parseInt(u.rev, 10) || 1) + 1;
-      [['rma', Rma.dirty[id]], ['modificato_il', now], ['modificato_da', Auth.email], ['rev', rev]].forEach(function (p) { upd.push({ range: tU.cell(p[0], u._r), values: [[String(p[1])]] }); });
-      logs.push(App.log('RMA_CREATO', 'UNITA', id, { prima: u.rma, dopo: Rma.dirty[id], seriale: u.seriale }));
+
+  // ─ CARICHI NEW/REUSE
+  carUnita: function (ser) {
+    ser = L.up(ser); if (!ser) return null;
+    return DB.t.UNITA.rows.find(function (u) { return (u.tipo === 'NEW' || u.tipo === 'REUSE') && (u.stato === 'IN_GIACENZA' || u.stato === 'IN_LAVORAZIONE') && (L.up(u.seriale) === ser || L.up(L.afterSpace(u.seriale)) === ser); }) || null;
+  },
+  carInfo: function () {
+    var u = Rma.carUnita($('carSer').value), h = $('carHint'); if (!h) return;
+    if (!L.s($('carSer').value)) { h.textContent = ''; h.className = 'hint'; return; }
+    var gia = u && Rma.carichi().some(function (c) { return c.id_unita === u.id_unita; });
+    h.textContent = !u ? 'non trovato tra NEW/REUSE in giacenza' : (gia ? 'già in un carico aperto' : u.tipo + ' · ' + u.pn + (u.ubicazione ? ' · ' + u.ubicazione : ''));
+    h.className = 'hint' + (!u || gia ? ' err' : '');
+  },
+  // controlla una riga di carico; restituisce { u, err }
+  carValida: function (o, visti) {
+    var u = Rma.carUnita(o.seriale);
+    if (!L.s(o.seriale)) return { err: 'seriale mancante' };
+    if (!u) return { err: 'seriale non trovato tra NEW/REUSE in giacenza' };
+    if (Rma.carichi().some(function (c) { return c.id_unita === u.id_unita; })) return { u: u, err: 'già in un carico aperto' };
+    if (visti && visti[u.id_unita]) return { u: u, err: 'seriale ripetuto nel file' };
+    if (!L.s(o.rma)) return { u: u, err: 'RMA mancante' };
+    if (!L.s(o.destinazione)) return { u: u, err: 'destinazione mancante' };
+    return { u: u, err: '' };
+  },
+  carScrivi: async function (lista) {   // lista: [{ u, rma, destinazione, po_mrn, note }]
+    var t = DB.t.CARICHI_RMA, tU = DB.t.UNITA, now = L.nowStamp(), oggi = L.isoToday();
+    var objs = lista.map(function (x) { return { data: oggi, id_unita: x.u.id_unita, seriale: x.u.seriale, pn: x.u.pn, tipo: x.u.tipo, rma: x.rma, destinazione: x.destinazione, po_mrn: x.po_mrn, posizione: x.u.ubicazione, note: x.note, stato: 'APERTO', creato_il: now, creato_da: Auth.email }; });
+    var r = await API.append(DB.id, 'CARICHI_RMA', objs.map(function (o) { return t.toRow(o); }));
+    objs.forEach(function (o, i) { o.id_carico = 'K' + L.pad(r + i - 1, 6); });
+    var upd = [{ range: t.cell('id_carico', r) + ':' + t.col('id_carico') + (r + objs.length - 1), values: objs.map(function (o) { return [o.id_carico]; }) }];
+    lista.forEach(function (x) {
+      var c = { stato: 'IN_LAVORAZIONE', rma: x.rma, destinazione_prevista: x.destinazione, modificato_il: now, modificato_da: Auth.email, rev: (parseInt(x.u.rev, 10) || 1) + 1 };
+      Object.keys(c).forEach(function (h) { x.u[h] = String(c[h]); upd.push({ range: tU.cell(h, x.u._r), values: [[x.u[h]]] }); });
     });
+    await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', [App.log('CARICO_RMA', 'CARICHI_RMA', objs[0].id_carico + (objs.length > 1 ? '…' + objs[objs.length - 1].id_carico : ''), { pezzi: objs.length })])]);
+    objs.forEach(function (o, i) { Ack.pushRow(t, o, r + i); });
+  },
+  carAggiungi: async function () {
+    var o = { seriale: L.s($('carSer').value), rma: L.frKey($('carRma').value), destinazione: L.s($('carDest').value), po_mrn: L.s($('carPo').value), note: L.s($('carNote').value) };
+    var v = Rma.carValida(o);
+    if (v.err) { toast(v.err, 'ko'); (v.u ? (!o.rma ? $('carRma') : $('carDest')) : $('carSer')).focus(); return; }
+    if (!DB.t.CONTROPARTI.rows.some(function (c) { return L.up(c.codice) === L.up(o.destinazione); }) && !(await Modal.confirm('Destinazione non in anagrafica', '"' + o.destinazione + '" non è tra le controparti: il DDT uscirà senza indirizzo. Continuo?'))) return;
     try {
-      await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', logs)]);
-      ids.forEach(function (id) { var u = tU.rows.find(function (x) { return x.id_unita === id; }); u.rma = Rma.dirty[id]; u.modificato_il = now; u.modificato_da = Auth.email; u.rev = String((parseInt(u.rev, 10) || 1) + 1); });
-      Rma.dirty = {}; toast(ids.length + ' RMA salvati', 'ok'); Rma.render();
-    } catch (e) { toast('Errore salvataggio: ' + e.message, 'ko'); }
+      await Rma.carScrivi([Object.assign({ u: v.u }, o)]);
+      toast('Carico aggiunto: ' + v.u.seriale, 'ok'); $('carSer').value = ''; $('carNote').value = ''; $('carHint').textContent = '';
+      Rma.render(); $('carSer').focus();
+    } catch (e) { Modal.open('Carico non salvato', e.message); }
+  },
+  carImporta: async function (inp) {
+    var f = inp.files && inp.files[0]; inp.value = ''; if (!f) return;
+    var rows;
+    try { rows = await leggiFoglio(f); } catch (e) { Modal.open('Import Excel', 'File non leggibile: ' + e.message); return; }
+    if (!rows.length) { Modal.open('Import Excel', 'Il file è vuoto.'); return; }
+    var visti = {}, righe = rows.map(function (r) {
+      var o = { seriale: campo(r, ['SERIALE', 'SERIAL', 'SERIAL NO.', 'SN', 'S/N']), rma: L.frKey(campo(r, ['RMA'])), destinazione: campo(r, ['DESTINAZIONE', 'PV DESTINO', 'DESTINO', 'DESTINAZIONE INTERA']),
+        po_mrn: campo(r, ['PO', 'P.O', 'PO / MRN', 'PO/MRN', 'MRN', 'PO NEW / MRN']), note: campo(r, ['NOTE', 'NOTE SD / FR', 'NOTE SD']) };
+      var v = Rma.carValida(o, visti); if (v.u && !v.err) visti[v.u.id_unita] = 1; o.u = v.u; o.err = v.err; return o;
+    }).filter(function (o) { return o.seriale || o.rma; });
+    var ok = righe.filter(function (o) { return !o.err; }), ko = righe.filter(function (o) { return o.err; });
+    var html = '<div style="font-size:13px;margin-bottom:8px">' + ok.length + ' righe valide' + (ko.length ? ', <b style="color:var(--red)">' + ko.length + ' con errori (non verranno caricate)</b>' : '') + '</div>' +
+      '<div class="tbl-wrap modal-scroll"><table><thead><tr><th>Seriale</th><th>Tipo</th><th>P/N</th><th>RMA</th><th>Destinazione</th><th>PO</th><th>Note</th><th>Esito</th></tr></thead><tbody>' +
+      righe.map(function (o) { return '<tr class="' + (o.err ? 'r-err' : '') + '"><td class="mono">' + esc(o.seriale) + '</td><td>' + esc(o.u ? o.u.tipo : '') + '</td><td class="mono">' + esc(o.u ? o.u.pn : '') + '</td><td class="mono">' + esc(o.rma) + '</td><td>' + esc(o.destinazione) + '</td><td class="mono">' + esc(o.po_mrn) + '</td><td>' + esc(o.note) + '</td><td style="font-size:11.5px;color:' + (o.err ? 'var(--red)' : 'var(--green)') + '">' + esc(o.err || 'ok') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+    Modal.html('Import carichi NEW/REUSE · ' + f.name, html, [{ label: 'Annulla', cls: 'ghost' }].concat(ok.length ? [{ label: 'Carica ' + ok.length + ' righe', cls: 'green', fn: async function () {
+      Modal.open('Import carichi', 'Salvo ' + ok.length + ' carichi…', []);
+      try { await Rma.carScrivi(ok); Modal.close(); toast(ok.length + ' carichi importati', 'ok'); Rma.render(); } catch (e) { Modal.open('Import non riuscito', e.message); }
+    } }] : []), true);
+  },
+  carModello: async function () {
+    try {
+      await Lib.xlsx();
+      var ws = XLSX.utils.aoa_to_sheet([['SERIALE', 'RMA', 'DESTINAZIONE', 'PO', 'NOTE']]), wb = XLSX.utils.book_new();
+      XLSX.utils.book_append_sheet(wb, ws, 'CARICHI'); XLSX.writeFile(wb, 'modello_carichi_new_reuse.xlsx');
+    } catch (e) { toast(e.message, 'ko'); }
+  },
+  carAnnulla: async function (id) {
+    var c = DB.t.CARICHI_RMA.rows.find(function (x) { return x.id_carico === id; }); if (!c) return;
+    if (!(await Modal.confirm('Annulla carico', c.seriale + ' · RMA ' + c.rma + ' → ' + c.destinazione + '\n\nIl pezzo torna in giacenza senza RMA.'))) return;
+    var tC = DB.t.CARICHI_RMA, tU = DB.t.UNITA, u = tU.rows.find(function (x) { return x.id_unita === c.id_unita; }), now = L.nowStamp(), upd = [{ range: tC.cell('stato', c._r), values: [['ANNULLATO']] }];
+    if (u && u.stato === 'IN_LAVORAZIONE') { var ch = { stato: 'IN_GIACENZA', rma: '', destinazione_prevista: '', modificato_il: now, modificato_da: Auth.email, rev: (parseInt(u.rev, 10) || 1) + 1 }; Object.keys(ch).forEach(function (h) { u[h] = String(ch[h]); upd.push({ range: tU.cell(h, u._r), values: [[u[h]]] }); }); }
+    try { await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', [App.log('ANNULLA_CARICO', 'CARICHI_RMA', id, { seriale: c.seriale, rma: c.rma })])]); c.stato = 'ANNULLATO'; toast('Carico annullato', 'ok'); Rma.render(); }
+    catch (e) { toast('Errore: ' + e.message, 'ko'); }
+  },
+
+  // ─ USCITE E DDT RMA
+  // pezzi pronti a uscire: GOOD con RMA, BALANCING arrivate con RMA, carichi NEW/REUSE aperti
+  daSpedire: function () {
+    var out = [], abb = Rma.abb;
+    Rma.inventario().forEach(function (u) {
+      if (u.tipo === 'GOOD') {
+        var a = abb[u.id_unita];
+        if (L.s(u.rma)) out.push({ u: u, rma: u.rma, dest: u.destinazione_prevista, fonte: 'RMA creato', causale: 'RMA' });
+        else if (a) out.push({ u: u, rma: a.rma.id_rma, dest: a.variazione ? Rma.destRma(a.rma) : u.destinazione_prevista, fonte: 'RMA giacenza', causale: 'RMA', rit: a.rma });
+      } else if (u.tipo === 'BALANCING' && L.s(u.rma)) out.push({ u: u, rma: u.rma, dest: u.destinazione_prevista, fonte: 'Balancing', causale: 'BALANCING' });
+    });
+    var U = {}; DB.t.UNITA.rows.forEach(function (u) { U[u.id_unita] = u; });
+    Rma.carichi().forEach(function (c) { var u = U[c.id_unita]; if (u && u.stato === 'IN_LAVORAZIONE') out.push({ u: u, rma: c.rma, dest: c.destinazione, po: c.po_mrn, fonte: 'Carico ' + c.tipo, causale: 'RMA', car: c }); });
+    var R = {}; DB.t.RMA_RITORNI.rows.forEach(function (r) { R[r.id_rma] = r; });
+    out.forEach(function (x) { if (!x.rit && R[x.rma]) x.rit = R[x.rma]; });
+    return out.filter(function (x) { return L.s(x.dest); });
+  },
+  escl: function () { return lsG('usc_escl_' + $('uscData').value) || {}; },
+  toggle: function (id, on) { var e = Rma.escl(); if (on) delete e[id]; else e[id] = 1; lsS('usc_escl_' + $('uscData').value, e); Rma.renderUscite(); },
+  cp: function (dest) { return DB.t.CONTROPARTI.rows.find(function (c) { return L.up(c.codice) === L.up(dest); }) || null; },
+  sped: function (d, dest) { return DB.t.SPEDIZIONI.rows.find(function (s) { return s.tipo === 'RMA' && L.normDate(s.data) === d && L.up(s.destinatario) === L.up(dest) && s.stato !== 'ANNULLATA'; }); },
+  gruppi: function () {
+    var d = $('uscData').value, esc0 = Rma.escl(), g = {};
+    Rma.daSpedire().forEach(function (x) { var k = L.up(x.dest); (g[k] = g[k] || { dest: x.dest, pezzi: [] }).pezzi.push(x); });
+    DB.t.SPEDIZIONI.rows.forEach(function (s) { if (s.tipo === 'RMA' && L.normDate(s.data) === d && s.stato !== 'ANNULLATA') { var k = L.up(s.destinatario); g[k] = g[k] || { dest: s.destinatario, pezzi: [] }; } });
+    return Object.keys(g).sort().map(function (k) {
+      var x = g[k]; x.s = Rma.sped(d, x.dest); x.attivi = x.pezzi.filter(function (p) { return !esc0[p.u.id_unita]; });
+      x.pronta = x.s && x.s.stato === 'PRONTA' && L.s(x.s.awb) && x.attivi.length > 0; return x;
+    });
+  },
+  renderUscite: function () {
+    var G = Rma.gruppi(), d = $('uscData').value, esc0 = Rma.escl(), nP = G.filter(function (g) { return g.pronta; }).length;
+    if ($('uscTutti')) { $('uscTutti').disabled = !nP; $('uscTutti').textContent = 'Genera i DDT pronti' + (nP ? ' (' + nP + ')' : ''); }
+    var tot = G.reduce(function (a, g) { return a + g.attivi.length; }, 0), sped = G.filter(function (g) { return g.s && g.s.stato === 'SPEDITA'; }).length;
+    $('rmaStats').innerHTML = '<div class="stat"><b>' + G.length + '</b><span>destinazioni</span></div><div class="stat"><b>' + tot + '</b><span>pezzi da spedire</span></div><div class="stat"><b style="color:var(--violet)">' + nP + '</b><span>pronte per ddt</span></div><div class="stat"><b style="color:var(--green)">' + sped + '</b><span>spedite</span></div>';
+    var PILL = { BOZZA: 'p-blue', PRONTA: 'p-violet', SPEDITA: 'p-green' };
+    $('rmaUsc').innerHTML = G.length ? '<div class="ack-grid usc-grid">' + G.map(function (g) {
+      var s = g.s, k = Ack.key(g.dest), cp = Rma.cp(g.dest), st = s ? s.stato : 'DA PREPARARE', done = s && s.stato === 'SPEDITA', lock = done ? ' disabled' : '';
+      var col = done ? Ack.colliDb(s.id_spedizione).map(function (c) { return { tipo: c.tipo_collo, misura: [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X'), peso: c.peso_kg }; })
+        : (Rma.colli[k] || (s ? Ack.colliDb(s.id_spedizione).map(function (c) { return { tipo: c.tipo_collo, misura: [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X'), peso: c.peso_kg }; }) : []));
+      if (!done && !Rma.colli[k]) Rma.colli[k] = col.length ? col : [{ tipo: 'COLLO', misura: '', peso: '' }];
+      col = done ? col : Rma.colli[k];
+      var peso = col.reduce(function (a, c) { return a + (parseFloat(String(c.peso).replace(',', '.')) || 0); }, 0);
+      var bt = done ? '<button class="btn sm" onclick="Rma.stampa(\'' + s.id_spedizione + '\')">Stampa DDT</button> <button class="btn ghost sm" onclick="Rma.cedolini(\'' + s.id_spedizione + '\')">Cedolini</button>' + (s.link_pdf ? ' <a class="mail" target="_blank" href="' + esc(s.link_pdf) + '">PDF su Drive</a>' : '')
+        : '<button class="btn ghost sm" onclick="Rma.salvaDest(\'' + esc(g.dest) + '\')">Salva colli e AWB</button> <button class="btn sm green"' + (g.pronta ? '' : ' disabled title="Servono colli/peso salvati, AWB e almeno un pezzo"') + ' onclick="Rma.emettiUno(\'' + esc(g.dest) + '\')">Genera DDT</button> <button class="btn ghost sm" onclick="Rma.cedolini(null,\'' + esc(g.dest) + '\')">Cedolini</button>';
+      var lista = (done ? Ack.righe(s.id_spedizione).map(function (r) { return { u: { id_unita: r.id_unita, seriale: r.seriale, pn: r.pn, tipo: '' }, rma: r.rma, fonte: r.note }; }) : g.pezzi);
+      return '<div class="ack-card">' +
+        '<div class="row" style="align-items:center"><span class="t">' + esc(g.dest) + '</span><div class="spacer"></div><span class="pill ' + (PILL[st] || '') + '">' + esc(st) + '</span></div>' +
+        '<div class="hint">' + (cp && cp.indirizzo_completo ? esc(cp.indirizzo_completo) : '<span style="color:var(--amber)">indirizzo non in anagrafica CONTROPARTI</span>') + (s && s.n_ddt ? ' · <b>DDT ' + esc(s.n_ddt) + '</b>' : '') + '</div>' +
+        '<details' + (done ? '' : ' open') + '><summary style="cursor:pointer;font-size:12.5px;color:var(--subtle)">' + (done ? lista.length + ' pezzi spediti' : g.attivi.length + ' pezzi in uscita' + (g.pezzi.length - g.attivi.length ? ' · ' + (g.pezzi.length - g.attivi.length) + ' esclusi oggi' : '')) + '</summary>' +
+        '<div style="max-height:220px;overflow:auto;margin-top:6px"><table><tbody>' + lista.map(function (p) {
+          var off = !done && esc0[p.u.id_unita];
+          return '<tr' + (off ? ' class="r-off"' : '') + '>' + (done ? '' : '<td><input type="checkbox"' + (off ? '' : ' checked') + ' title="Togli dall\'uscita di oggi" onchange="Rma.toggle(\'' + p.u.id_unita + '\',this.checked)"></td>') + '<td class="mono">' + esc(p.u.seriale) + '</td><td class="mono">' + esc(p.u.pn) + '</td><td class="mono">' + esc(p.rma) + '</td><td style="font-size:11px">' + esc(p.fonte || '') + '</td></tr>';
+        }).join('') + '</tbody></table></div></details>' +
+        '<div style="font-size:12px;color:var(--subtle)">Colli: ' + col.length + ' · ' + Math.round(peso * 100) / 100 + ' kg</div>' +
+        (done ? '' : '<table style="width:auto;font-size:12px"><tbody>' + col.map(function (c, i) {
+          return '<tr><td><select class="fc" style="width:86px;padding:4px 6px" onchange="Rma.collo(\'' + k + '\',' + i + ',\'tipo\',this.value)"><option' + (c.tipo === 'COLLO' ? ' selected' : '') + '>COLLO</option><option' + (c.tipo === 'PLT' ? ' selected' : '') + '>PLT</option></select></td>' +
+            '<td><input class="fc mono' + (c.misura && !L.misura(c.misura) ? ' err' : '') + '" style="width:110px;padding:4px 6px" list="dlMisure" value="' + esc(c.misura) + '" placeholder="40X30X20" onchange="Rma.collo(\'' + k + '\',' + i + ',\'misura\',this.value)"></td>' +
+            '<td><input class="fc mono" style="width:64px;padding:4px 6px" inputmode="decimal" value="' + esc(c.peso) + '" placeholder="kg" onchange="Rma.collo(\'' + k + '\',' + i + ',\'peso\',this.value)"></td><td><button class="ico-btn" onclick="Rma.collo(\'' + k + '\',' + i + ',\'del\')">✕</button></td></tr>';
+        }).join('') + '</tbody></table><button class="btn ghost sm" style="align-self:flex-start" onclick="Rma.collo(\'' + k + '\',0,\'add\')">+ Collo</button>') +
+        '<div class="row"><div class="fg" style="flex:1;min-width:130px"><span class="fl">AWB (Service Desk)</span><input class="fc mono" id="uawb_' + k + '" value="' + esc(s ? s.awb : '') + '"' + lock + ' oninput="var v=L.vettoreDaAwb(this.value,DB.t.VETTORI.rows);if(v)$(\'uvet_' + k + '\').value=v"></div>' +
+        '<div class="fg" style="width:110px"><span class="fl">Vettore</span><input class="fc" id="uvet_' + k + '" list="dlVettori" value="' + esc(s ? s.vettore : '') + '"' + lock + '></div></div>' +
+        '<div class="row" style="align-items:center">' + bt + '</div></div>';
+    }).join('') + '</div>' : '<div class="card empty">Nessun pezzo pronto a uscire: servono GOOD con RMA, BALANCING arrivate o carichi NEW/REUSE.</div>';
+  },
+  collo: function (k, i, f, v) { var c = Rma.colli[k] = Rma.colli[k] || []; if (f === 'del') c.splice(i, 1); else if (f === 'add') c.push({ tipo: (c[c.length - 1] || {}).tipo || 'COLLO', misura: '', peso: '' }); else c[i][f] = L.s(v).toUpperCase(); Rma.renderUscite(); },
+  salvaDest: async function (dest) {
+    var d = $('uscData').value, k = Ack.key(dest), col = Rma.colli[k] || [], err = Ack.validaColli(col);
+    var awb = L.up($('uawb_' + k).value).replace(/\s+/g, ''), vet = L.up($('uvet_' + k).value) || L.vettoreDaAwb(awb, DB.t.VETTORI.rows);
+    if (err.length) { Modal.open('Colli e peso · ' + dest, err.join('\n')); return; }
+    try {
+      await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_COLLI']);
+      var s = Rma.sped(d, dest), cp = Rma.cp(dest), tC = DB.t.SPEDIZIONI_COLLI;
+      if (s && s.stato === 'SPEDITA') { toast('Già spedita', 'ko'); Rma.render(); return; }
+      if (!s) s = await Rma.creaSped(d, dest, cp);
+      var vecchi = Ack.colliDb(s.id_spedizione);
+      if (vecchi.length) await API.call(API.S + DB.id + '/values:batchClear', { method: 'POST', body: JSON.stringify({ ranges: vecchi.map(function (c) { return API.q('SPEDIZIONI_COLLI') + '!A' + c._r + ':' + L.colLetter(tC.header.length - 1) + c._r; }) }) });
+      tC.rows = tC.rows.filter(function (c) { return c.id_spedizione !== s.id_spedizione; });
+      var objs = col.map(function (x, i) { var m = L.misura(x.misura); return { id_spedizione: s.id_spedizione, n_collo: i + 1, tipo_collo: x.tipo || 'COLLO', lunghezza_cm: m[0], larghezza_cm: m[1], altezza_cm: m[2], peso_kg: String(x.peso).replace(',', '.') }; });
+      var r = await API.append(DB.id, 'SPEDIZIONI_COLLI', objs.map(function (o) { return tC.toRow(o); }));
+      objs.forEach(function (o, i) { o.id_collo = 'C' + L.pad(r + i - 1, 6); Ack.pushRow(tC, o, r + i); });
+      var peso = objs.reduce(function (a, o) { return a + parseFloat(o.peso_kg); }, 0);
+      await API.batchUpdate(DB.id, [{ range: tC.cell('id_collo', r) + ':' + tC.col('id_collo') + (r + objs.length - 1), values: objs.map(function (o) { return [o.id_collo]; }) }]
+        .concat(Ack.setS(s, { stato: 'PRONTA', n_colli: objs.length, peso_tot_kg: Math.round(peso * 100) / 100, awb: awb, vettore: vet })));
+      delete Rma.colli[k]; toast(dest + ': colli e AWB salvati', 'ok'); Rma.render();
+    } catch (e) { Modal.open('Errore', e.message); }
+  },
+  creaSped: async function (d, dest, cp) {
+    var t = DB.t.SPEDIZIONI, o = { tipo: 'RMA', data: d, destinatario: cp ? cp.codice : dest, destinazione_estesa: cp ? cp.indirizzo_completo : '', stato: 'BOZZA', n_pezzi: 0, rev: 1, creato_il: L.nowStamp(), creato_da: Auth.email };
+    var r = await API.append(DB.id, 'SPEDIZIONI', [t.toRow(o)]); o.id_spedizione = 'S' + L.pad(r - 1, 6);
+    await API.batchUpdate(DB.id, [{ range: t.cell('id_spedizione', r), values: [[o.id_spedizione]] }]);
+    return Ack.pushRow(t, o, r);
+  },
+  emettiUno: async function (dest) { await Rma.emettiLista([dest]); },
+  emettiTutti: async function () { var G = Rma.gruppi().filter(function (g) { return g.pronta; }); if (!G.length) return; if (!(await Modal.confirm('Genera ' + G.length + ' DDT', G.map(function (g) { return g.dest + ' · ' + g.attivi.length + ' pezzi · AWB ' + g.s.awb; }).join('\n')))) return; await Rma.emettiLista(G.map(function (g) { return g.dest; })); },
+  // DDT multipli: uno per destinazione, numerati in sequenza dalla serie RMA
+  emettiLista: async function (dests) {
+    if (Rma.busy) return; Rma.busy = true;
+    var fatti = [], errori = [];
+    Modal.open('DDT RMA', 'Non chiudere la pagina.', []);
+    try {
+      Modal.progress('Ricarico giacenza e spedizioni…');
+      await DB.loadTables(['UNITA', 'SPEDIZIONI', 'SPEDIZIONI_RIGHE', 'SPEDIZIONI_COLLI', 'PARAMETRI', 'RMA_RITORNI', 'CARICHI_RMA']);
+      await Ack.loghi(); try { await Lib.qr(); } catch (e) { }
+      Rma.calcola();
+      for (var i = 0; i < dests.length; i++) {
+        Modal.progress((i + 1) + '/' + dests.length + ' ' + dests[i]);
+        try { fatti.push(await Rma.emetti(dests[i])); } catch (e) { errori.push(dests[i] + ': ' + e.message); }
+      }
+      try { await Export.scrivi(); } catch (e) { }
+      Ack.loaded = false;
+      Modal.open('DDT RMA', (fatti.length ? 'Emessi:\n' + fatti.map(function (f) { return '• ' + f.dest + ' · DDT ' + f.ddt + ' · ' + f.n + ' pezzi'; }).join('\n') : '') + (errori.length ? '\n\nNON emessi:\n' + errori.join('\n') : ''),
+        [{ label: 'Chiudi', cls: 'ghost' }].concat(fatti.length ? [{ label: 'Stampa tutti', fn: function () { Rma.stampaMolti(fatti.map(function (f) { return f.id; })); } }] : []));
+      App.syncInfo(); Rma.render();
+    } catch (e) { Modal.open('DDT non emessi', e.message); }
+    finally { Rma.busy = false; }
+  },
+  emetti: async function (dest) {
+    var d = $('uscData').value, g = Rma.gruppi().find(function (x) { return L.up(x.dest) === L.up(dest); });
+    if (!g || !g.s) throw new Error('spedizione non preparata');
+    var s = g.s, P = g.attivi.filter(function (p) { return p.u.stato === 'IN_GIACENZA' || p.u.stato === 'IN_LAVORAZIONE'; });
+    if (s.n_ddt) throw new Error('DDT già emesso (' + s.n_ddt + ')');
+    if (s.stato !== 'PRONTA' || !L.s(s.awb)) throw new Error('mancano colli o AWB');
+    if (!P.length) throw new Error('nessun pezzo in giacenza');
+    var now = L.nowStamp(), me = Auth.email, oggi = L.isoToday(), anno = oggi.slice(0, 4), sigla = App.me.sigla || '', id = s.id_spedizione;
+    var heads = await API.batchGet(DB.id, ['DDT_REGISTRO', 'MOVIMENTI'].map(function (n) { return API.q(n) + '!1:1'; }));
+    var tD = new Table('DDT_REGISTRO', heads[0][0] || []), tM = new Table('MOVIMENTI', heads[1][0] || []);
+    // 1. numero DDT (serie RMA)
+    var rD = await API.append(DB.id, 'DDT_REGISTRO', [tD.toRow({ serie: 'RMA', anno: anno, data: oggi, id_spedizione: id, destinatario: s.destinatario, n_righe: P.length, stato: 'EMESSO', operatore: me, creato_il: now })]);
+    var reg = (await API.batchGet(DB.id, [API.q('DDT_REGISTRO') + '!A1:' + L.colLetter(tD.header.length - 1) + rD]))[0];
+    var prima = new Table('DDT_REGISTRO', reg[0] || [], reg.slice(1)).rows.filter(function (x) { return x._r < rD && x.serie === 'RMA' && L.s(x.anno) === anno; }).length;
+    var p0 = L.s(DB.param('ddt_rma_anno', '')) === anno ? (parseInt(DB.param('ddt_rma_prossimo', '1'), 10) || 1) : 1;
+    var prog = p0 + prima, nDdt = L.fmtDdt(DB.param('ddt_rma_formato', '{N:05}_{ANNO} SPARE'), prog, anno);
+    await API.batchUpdate(DB.id, [{ range: tD.cell('n_ddt', rD), values: [[nDdt]] }, { range: tD.cell('progressivo', rD), values: [[String(prog)]] }]);
+    // 2. righe spedizione + movimenti OUT
+    var tR = DB.t.SPEDIZIONI_RIGHE;
+    var righe = P.map(function (p) { return { id_spedizione: id, id_unita: p.u.id_unita, seriale: p.u.seriale, pn: p.u.pn, fr: p.u.fr, rma: p.rma, esito: 'SPUNTATO', spuntato_da: me, spuntato_il: now, note: p.fonte }; });
+    var mObjs = P.map(function (p) {
+      return { data_ora: oggi, direzione: 'OUT', causale: p.causale, id_unita: p.u.id_unita, seriale: p.u.seriale, pn: p.u.pn, mnft: p.u.mnft, tipo: p.u.tipo, fr: p.u.fr, rma: p.rma, po_mrn: p.po || '',
+        controparte: s.destinatario, awb: s.awb, vettore: s.vettore, ddt: nDdt, id_spedizione: id, riparatore: p.u.riparatore, ubicazione_da: p.u.ubicazione, operatore: me, operatore_sigla: sigla, note: p.fonte, origine: 'APP' };
+    });
+    var rr = await Promise.all([API.append(DB.id, 'SPEDIZIONI_RIGHE', righe.map(function (o) { return tR.toRow(o); })), API.append(DB.id, 'MOVIMENTI', mObjs.map(function (o) { return tM.toRow(o); }))]);
+    var rS = rr[0], rM = rr[1];
+    var oBase = parseInt(DB.param('mov_out_id_base', ''), 10);
+    if (isNaN(oBase)) {
+      oBase = (parseInt(DB.param('id_out_prossimo', '0'), 10) || 0) - rM;
+      await API.append(DB.id, 'PARAMETRI', [DB.t.PARAMETRI.toRow({ chiave: 'mov_out_id_base', valore: String(oBase), descrizione: 'ID uscita = OUT + (mov_out_id_base + riga in MOVIMENTI). Impostato automaticamente alla prima uscita dall\'app.' })]);
+      DB.t.PARAMETRI.rows.push({ chiave: 'mov_out_id_base', valore: String(oBase) });
+    }
+    var n = P.length, upd = [
+      { range: tR.cell('id_riga', rS) + ':' + tR.col('id_riga') + (rS + n - 1), values: righe.map(function (o, i) { return ['SR' + L.pad(rS + i - 1, 6)]; }) },
+      { range: tM.cell('id_mov', rM) + ':' + tM.col('id_mov') + (rM + n - 1), values: mObjs.map(function (o, i) { return ['OUT' + (oBase + rM + i)]; }) }
+    ];
+    // 3. giacenza, ritorni, carichi, spedizione
+    var tU = DB.t.UNITA, tRR = DB.t.RMA_RITORNI, tC = DB.t.CARICHI_RMA;
+    P.forEach(function (p) {
+      var u = p.u, ch = { stato: 'USCITO', id_spedizione: id, data_out: oggi, rma: p.rma, destinazione_prevista: s.destinatario, modificato_il: now, modificato_da: me, rev: (parseInt(u.rev, 10) || 1) + 1 };
+      Object.keys(ch).forEach(function (h) { if (h in tU.idx) { u[h] = String(ch[h]); upd.push({ range: tU.cell(h, u._r), values: [[u[h]]] }); } });
+      var rit = tRR.rows.find(function (r) { return r.id_rma === L.s(p.rma); });
+      if (rit) [['stato', 'EVASA'], ['id_unita_assegnata', u.id_unita], ['id_spedizione', id]].forEach(function (x) { rit[x[0]] = x[1]; upd.push({ range: tRR.cell(x[0], rit._r), values: [[x[1]]] }); });
+      var car = tC.rows.find(function (c) { return c.id_unita === u.id_unita && c.stato === 'APERTO'; });
+      if (car) [['stato', 'SPEDITO'], ['id_spedizione', id]].forEach(function (x) { car[x[0]] = x[1]; upd.push({ range: tC.cell(x[0], car._r), values: [[x[1]]] }); });
+    });
+    upd = upd.concat(Ack.setS(s, { stato: 'SPEDITA', n_ddt: nDdt, data_ddt: oggi, n_pezzi: n, rev: (parseInt(s.rev, 10) || 1) + 1 }));
+    await API.batchUpdate(DB.id, upd);
+    righe.forEach(function (o, i) { o.id_riga = 'SR' + L.pad(rS + i - 1, 6); Ack.pushRow(tR, o, rS + i); });
+    // 4. PDF su Drive
+    try {
+      var link = await Drive.upload('DDT RMA ' + nDdt + ' ' + s.destinatario + ' ' + oggi + '.pdf', Rma.pdf(id).output('blob'));
+      await API.batchUpdate(DB.id, Ack.setS(s, { link_pdf: link }).concat([{ range: tD.cell('link_pdf', rD), values: [[link]] }]));
+    } catch (e) { toast('PDF ' + nDdt + ' non salvato su Drive (' + e.message + ')', 'ko'); }
+    await API.append(DB.id, 'LOG', [App.log('RMA_USCITA', 'SPEDIZIONI', id, { destinazione: s.destinatario, ddt: nDdt, awb: s.awb, pezzi: n })]);
+    var e0 = Rma.escl(); P.forEach(function (p) { delete e0[p.u.id_unita]; }); lsS('usc_escl_' + d, e0);
+    return { id: id, dest: s.destinatario, ddt: nDdt, n: n };
+  },
+  pdfParams: function (id) {
+    var s = DB.t.SPEDIZIONI.rows.find(function (x) { return x.id_spedizione === id; }), cp = Rma.cp(s.destinatario);
+    return { numero: s.n_ddt, data: s.data_ddt, destinatario: s.destinatario, indirizzo: s.destinazione_estesa || (cp ? cp.indirizzo_completo : ''), vettore: s.vettore, awb: s.awb, colli: Ack.colliDb(id), qr: true,
+      cols: [{ h: 'RMA', w: 26 }, { h: 'S/N', w: 62 }, { h: 'P/N', w: 46 }, { h: 'NOTE' }], righe: Ack.righe(id).map(function (r) { return [r.rma, r.seriale, r.pn, r.note]; }) };
+  },
+  pdf: function (id) { return Ddt.pdf(Rma.pdfParams(id)); },
+  stampa: async function (id) { var w = window.open('', '_blank'); try { await Ack.loghi(); try { await Lib.qr(); } catch (e) { } Ddt.apri(Rma.pdf(id), w); } catch (e) { if (w) w.close(); Modal.open('Stampa DDT', e.message); } },
+  stampaMolti: async function (ids) {
+    var w = window.open('', '_blank');
+    try {
+      await Ack.loghi(); try { await Lib.qr(); } catch (e) { }
+      var d = null; ids.forEach(function (id) { d = Ddt.pdf(Rma.pdfParams(id), d); });   // tutti i DDT in un solo PDF
+      Ddt.apri(d, w);
+    } catch (e) { if (w) w.close(); Modal.open('Stampa DDT', e.message); }
+  },
+  cedolini: function (id, dest) {
+    var w = window.open('', '_blank');
+    try {
+      var p;
+      if (id) p = Rma.pdfParams(id);
+      else { var k = Ack.key(dest), s = Rma.sped($('uscData').value, dest), cp = Rma.cp(dest); p = { destinatario: dest, indirizzo: cp ? cp.indirizzo_completo : '', numero: s ? s.n_ddt : '', awb: s ? s.awb : $('uawb_' + k).value, vettore: s ? s.vettore : $('uvet_' + k).value, colli: (Rma.colli[k] || []).length ? Rma.colli[k] : (s ? Ack.colliDb(s.id_spedizione) : []) }; }
+      Ddt.apri(Ddt.cedolini(p), w);
+    } catch (e) { if (w) w.close(); Modal.open('Cedolini', e.message); }
+  }
+};
+
+// ───────────────────────── ELENCO MODIFICABILE (Balancing, Juniper) ─────────────────────────
+// cfg: { sheet, id, prefisso, cifre, titolo, fields:[{k,label,type:'text'|'date'|'select'|'area',opts,list,wide,req}], cols (Grid), rows(tab), puoModificare(row), nuovo() → defaults, prima(o) → errore|'' }
+function Crud(name, cfg) { this.name = name; this.c = cfg; this.loaded = false; Crud.all[name] = this; }
+Crud.all = {};
+Crud.prototype.t = function () { return DB.t[this.c.sheet]; };
+Crud.prototype.load = async function () { await DB.loadTables([this.c.sheet]); this.loaded = true; };
+Crud.prototype.form = function (o, nuovo) {
+  var self = this;
+  return '<div class="grid">' + this.c.fields.map(function (f) {
+    var v = o[f.k] === undefined ? '' : o[f.k], id = 'cr_' + self.name + '_' + f.k, lab = '<span class="fl">' + esc(f.label) + (f.req ? ' *' : '') + '</span>';
+    if (f.type === 'select') return '<div class="fg"><span class="fl">' + esc(f.label) + '</span><select class="fc" id="' + id + '">' + f.opts.map(function (x) { return '<option' + (x === v ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></div>';
+    if (f.type === 'area') return '<div class="fg wide">' + lab + '<textarea class="fc" rows="2" id="' + id + '">' + esc(v) + '</textarea></div>';
+    return '<div class="fg' + (f.wide ? ' wide' : '') + '">' + lab + '<input class="fc' + (f.mono ? ' mono' : '') + '" id="' + id + '"' + (f.type === 'date' ? ' type="date"' : '') + (f.list ? ' list="' + f.list + '"' : '') + ' value="' + esc(f.type === 'date' ? L.normDate(v) : v) + '"></div>';
+  }).join('') + '</div><div class="hint" id="crErr_' + this.name + '" style="margin-top:8px"></div>';
+};
+Crud.prototype.leggi = function () {
+  var self = this, o = {};
+  this.c.fields.forEach(function (f) { var e = $('cr_' + self.name + '_' + f.k); if (e) o[f.k] = L.s(e.value); });
+  return o;
+};
+Crud.prototype.apri = function (id) {
+  var self = this, t = this.t(), r = id ? t.rows.find(function (x) { return x[self.c.id] === id; }) : null;
+  if (r && this.c.puoModificare && !this.c.puoModificare(r)) { toast('Riga non modificabile', 'ko'); return; }
+  var o = r ? r : (this.c.nuovo ? this.c.nuovo() : {});
+  var bt = [{ label: 'Annulla', cls: 'ghost' }];
+  if (r && this.c.elimina) bt.unshift({ label: '🗑 ' + this.c.elimina.label, cls: 'red', keep: true, fn: function () { self.elimina(id); } });
+  bt.push({ label: 'Salva', cls: 'green', keep: true, fn: function () { self.salva(id); } });
+  Modal.html((r ? 'Modifica · ' : 'Nuovo · ') + this.c.titolo + (r ? ' ' + id : ''), this.form(o, !r), bt, true);
+};
+Crud.prototype.err = function (m) { var e = $('crErr_' + this.name); e.textContent = m; e.className = 'hint err'; };
+Crud.prototype.salva = async function (id) {
+  var self = this, t = this.t(), o = this.leggi(), now = L.nowStamp();
+  var miss = this.c.fields.filter(function (f) { return f.req && !o[f.k]; }).map(function (f) { return f.label; });
+  if (miss.length) { this.err('Compila: ' + miss.join(', ')); return; }
+  var er = this.c.prima ? this.c.prima(o, id) : ''; if (er) { this.err(er); return; }
+  Modal.progress('Salvataggio…');
+  try {
+    if (id) {
+      var r = t.rows.find(function (x) { return x[self.c.id] === id; }), last = L.colLetter(t.header.length - 1);
+      var cur = (await API.batchGet(DB.id, [API.q(t.name) + '!A' + r._r + ':' + last + r._r]))[0][0] || [];
+      if (('rev' in t.idx) && L.s(cur[t.idx.rev]) !== L.s(r.rev)) throw new Error('la riga è stata modificata da un altro utente: premi Aggiorna e riprova');
+      var prima = {}, upd = [];
+      Object.keys(o).forEach(function (k) { if (L.s(o[k]) !== L.s(r[k]) && (k in t.idx)) { prima[k] = r[k]; upd.push({ range: t.cell(k, r._r), values: [[o[k]]] }); } });
+      if (!upd.length) { Modal.close(); return; }
+      var meta = { rev: (parseInt(r.rev, 10) || 1) + 1, modificato_il: now, modificato_da: Auth.email };
+      Object.keys(meta).forEach(function (k) { if (k in t.idx) { o[k] = meta[k]; upd.push({ range: t.cell(k, r._r), values: [[String(meta[k])]] }); } });
+      await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', [App.log('MODIFICA', t.name, id, { prima: prima, dopo: o })])]);
+      Object.keys(o).forEach(function (k) { r[k] = String(o[k]); });
+    } else {
+      o = Object.assign({}, this.c.nuovo ? this.c.nuovo() : {}, o, { rev: 1, creato_il: now, creato_da: Auth.email });
+      await this.inserisci([o]);
+    }
+    Modal.close(); toast('Salvato', 'ok'); this.render();
+  } catch (e) { Modal.progress(''); this.err('Non salvato: ' + e.message); }
+};
+Crud.prototype.inserisci = async function (objs) {
+  var t = this.t(), c = this.c;
+  var r = await API.append(DB.id, t.name, objs.map(function (o) { return t.toRow(o); }));
+  objs.forEach(function (o, i) { o[c.id] = c.prefisso + L.pad(r + i - 1, c.cifre || 6); });
+  await Promise.all([API.batchUpdate(DB.id, [{ range: t.cell(c.id, r) + ':' + t.col(c.id) + (r + objs.length - 1), values: objs.map(function (o) { return [o[c.id]]; }) }]),
+    API.append(DB.id, 'LOG', [App.log('CREA', t.name, objs[0][c.id] + (objs.length > 1 ? '…' + objs[objs.length - 1][c.id] : ''), { righe: objs.length })])]);
+  objs.forEach(function (o, i) { Ack.pushRow(t, o, r + i); });
+};
+Crud.prototype.elimina = async function (id) {
+  var self = this, t = this.t(), r = t.rows.find(function (x) { return x[self.c.id] === id; }), el = this.c.elimina;
+  if (!confirm(el.domanda + '\n\n' + id)) return;
+  try {
+    var upd = Object.keys(el.set).map(function (k) { r[k] = el.set[k]; return { range: t.cell(k, r._r), values: [[el.set[k]]] }; });
+    await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', [App.log('ANNULLA', t.name, id, el.set)])]);
+    Modal.close(); toast('Fatto', 'ok'); this.render();
+  } catch (e) { this.err('Errore: ' + e.message); }
+};
+// import da Excel: map { campo: [intestazioni possibili] }
+Crud.prototype.importa = async function (inp, map, valida) {
+  var self = this, f = inp.files && inp.files[0]; inp.value = ''; if (!f) return;
+  var rows; try { rows = await leggiFoglio(f); } catch (e) { Modal.open('Import Excel', 'File non leggibile: ' + e.message); return; }
+  var now = L.nowStamp(), list = rows.map(function (r) { var o = {}; Object.keys(map).forEach(function (k) { o[k] = campo(r, map[k]); }); o._err = valida ? valida(o) : ''; return o; })
+    .filter(function (o) { return Object.keys(map).some(function (k) { return o[k]; }); });
+  var ok = list.filter(function (o) { return !o._err; }), ko = list.length - ok.length, ks = Object.keys(map);
+  var html = '<div style="font-size:13px;margin-bottom:8px">' + ok.length + ' righe valide' + (ko ? ', <b style="color:var(--red)">' + ko + ' con errori (non caricate)</b>' : '') + '</div><div class="tbl-wrap modal-scroll"><table><thead><tr>' + ks.map(function (k) { return '<th>' + esc(k) + '</th>'; }).join('') + '<th>Esito</th></tr></thead><tbody>' +
+    list.map(function (o) { return '<tr class="' + (o._err ? 'r-err' : '') + '">' + ks.map(function (k) { return '<td>' + esc(o[k]) + '</td>'; }).join('') + '<td style="font-size:11.5px;color:' + (o._err ? 'var(--red)' : 'var(--green)') + '">' + esc(o._err || 'ok') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+  Modal.html('Import ' + this.c.titolo + ' · ' + f.name, html, [{ label: 'Annulla', cls: 'ghost' }].concat(ok.length ? [{ label: 'Carica ' + ok.length + ' righe', cls: 'green', fn: async function () {
+    Modal.open('Import', 'Salvo ' + ok.length + ' righe…', []);
+    try { await self.inserisci(ok.map(function (o) { delete o._err; return Object.assign({}, self.c.nuovo ? self.c.nuovo() : {}, o, { rev: 1, creato_il: now, creato_da: Auth.email }); })); Modal.close(); toast(ok.length + ' righe importate', 'ok'); self.render(); }
+    catch (e) { Modal.open('Import non riuscito', e.message); }
+  } }] : []), true);
+};
+Crud.prototype.modello = async function (heads, nome) {
+  try { await Lib.xlsx(); var wb = XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb, XLSX.utils.aoa_to_sheet([heads]), 'DATI'); XLSX.writeFile(wb, nome); } catch (e) { toast(e.message, 'ko'); }
+};
+Crud.prototype.show = async function () {
+  if (!this.loaded) { $(this.c.tbody).innerHTML = '<tr><td class="empty">Carico…</td></tr>'; try { await this.load(); } catch (e) { $(this.c.tbody).innerHTML = '<tr><td class="empty">Errore: ' + esc(e.message) + '</td></tr>'; return; } }
+  this.render();
+};
+Crud.prototype.render = function () {
+  if (!this.grid) { var self = this; this.grid = new Grid('crud_' + this.name, Object.assign({ thead: this.c.thead, tbody: this.c.tbody, foot: this.c.foot }, this.c.grid, { rows: function () { return self.c.rows(self.t().rows); } })); if (this.c.filtriIniziali) this.grid.f = this.c.filtriIniziali; }
+  this.grid.render(); if (this.c.dopo) this.c.dopo();
+};
+
+// ───────────────────────── BALANCING (previsioni del Service Desk) ─────────────────────────
+var Bal = new Crud('bal', {
+  sheet: 'BALANCING', id: 'id_balancing', prefisso: 'B', titolo: 'balancing', thead: 'balHead', tbody: 'balRows', foot: 'balFoot',
+  fields: [
+    { k: 'mittente', label: 'Mittente', list: 'dlControparti', req: true }, { k: 'data_inbound', label: 'Data inbound', type: 'date' }, { k: 'awb_mittente', label: 'AWB mittente', mono: true },
+    { k: 'seriale', label: 'Seriale', mono: true, req: true }, { k: 'pn', label: 'P/N', mono: true }, { k: 'rma', label: 'RMA', mono: true, req: true },
+    { k: 'destinatario', label: 'Destinatario', list: 'dlControparti', req: true }, { k: 'conferma_pn', label: 'Conferma P/N', mono: true }, { k: 'info_extra', label: 'Info extra magazzino', wide: true }, { k: 'note', label: 'Note', wide: true }
+  ],
+  nuovo: function () { return { gestito: 'NO', data_inbound: L.isoToday() }; },
+  puoModificare: function (r) { return L.up(r.gestito) !== 'SI'; },
+  prima: function (o, id) {
+    var d = DB.t.BALANCING.rows.find(function (x) { return x.id_balancing !== id && L.up(x.seriale) === L.up(o.seriale) && L.up(x.gestito) === 'NO'; });
+    return d ? 'Seriale già presente in una balancing aperta (' + d.id_balancing + ')' : '';
+  },
+  elimina: { label: 'Annulla balancing', domanda: 'Annullare questa balancing? Non verrà più proposta all\'ingresso.', set: { gestito: 'ANNULLATA' } },
+  rows: function (R) { return R.filter(function (r) { return Bal.tutte || DB.daQuestAnno(r.data_inbound); }); },
+  filtriIniziali: { gestito: 'NO' },
+  grid: {
+    empty: 'Nessuna balancing', sort: 'data_inbound', dir: -1,
+    rowAttr: function (r) { return L.up(r.gestito) === 'SI' || L.up(r.gestito) === 'ANNULLATA' ? 'class="r-off"' : 'class="r-edit" onclick="Bal.apri(\'' + r.id_balancing + '\')" title="Clicca per modificare"'; },
+    cols: [
+      { k: 'id_balancing', label: 'ID', cls: 'mono' }, { k: 'mittente', label: 'Mittente', filter: 'select' }, { k: 'data_inbound', label: 'Data inbound', cls: 'mono', get: function (r) { return L.normDate(r.data_inbound); } },
+      { k: 'awb_mittente', label: 'AWB', filter: 'text', cls: 'mono' }, { k: 'seriale', label: 'Seriale', filter: 'text', cls: 'mono' }, { k: 'pn', label: 'P/N', filter: 'select', cls: 'mono' },
+      { k: 'rma', label: 'RMA', filter: 'text', cls: 'mono' }, { k: 'destinatario', label: 'Destinatario', filter: 'select' }, { k: 'conferma_pn', label: 'Conferma P/N', cls: 'mono' },
+      { k: 'info_extra', label: 'Info extra', filter: 'text' }, { k: 'gestito', label: 'Gestito', filter: 'select' }, { k: 'data_gestione', label: 'Arrivata il', cls: 'mono', get: function (r) { return L.s(r.data_gestione).slice(0, 10); } }, { k: 'id_unita', label: 'Unità', cls: 'mono' }
+    ]
+  },
+  dopo: function () {
+    var R = Bal.t().rows.filter(function (r) { return Bal.tutte || DB.daQuestAnno(r.data_inbound); });
+    var n = function (g) { return R.filter(function (r) { return L.up(r.gestito) === g; }).length; };
+    $('balStats').innerHTML = '<div class="stat"><b style="color:var(--amber)">' + n('NO') + '</b><span>attese</span></div><div class="stat"><b style="color:var(--green)">' + n('SI') + '</b><span>arrivate</span></div><div class="stat"><b>' + n('ANNULLATA') + '</b><span>annullate</span></div>';
+  }
+});
+Bal.tutte = false;
+Bal.MAP = { mittente: ['MITTENTE'], data_inbound: ['DATA INBOUND', 'DATA'], awb_mittente: ['AWB MITTENTE', 'AWB'], seriale: ['SERIALE', 'SERIAL'], pn: ['PN', 'P/N', 'PART NUMBER'], rma: ['RMA'], destinatario: ['DESTINATARIO', 'DESTINAZIONE'], conferma_pn: ['CONFERMA PN'], info_extra: ['INFO EXTRA MAGAZZINO', 'INFO EXTRA'], note: ['NOTE'] };
+Bal.importaX = function (inp) {
+  var aperti = {}; Bal.t().rows.forEach(function (r) { if (L.up(r.gestito) === 'NO') aperti[L.up(r.seriale)] = r.id_balancing; });
+  var visti = {};
+  Bal.importa(inp, Bal.MAP, function (o) {
+    o.data_inbound = L.normDate(o.data_inbound);
+    if (!o.seriale) return 'seriale mancante'; if (!o.rma) return 'RMA mancante'; if (!o.destinatario) return 'destinatario mancante';
+    if (aperti[L.up(o.seriale)]) return 'già aperta (' + aperti[L.up(o.seriale)] + ')';
+    if (visti[L.up(o.seriale)]) return 'ripetuto nel file'; visti[L.up(o.seriale)] = 1; return '';
+  });
+};
+
+// ───────────────────────── JUNIPER (fuori processo) ─────────────────────────
+var Jun = new Crud('jun', {
+  sheet: 'JUNIPER', id: 'id_juniper', prefisso: 'J', titolo: 'pratica Juniper', thead: 'junHead', tbody: 'junRows', foot: 'junFoot',
+  fields: [
+    { k: 'fr', label: 'FR', mono: true }, { k: 'case_number', label: 'Case number', mono: true }, { k: 'rma', label: 'RMA', mono: true },
+    { k: 'faulty_model_id', label: 'Model ID faulty', mono: true }, { k: 'faulty_seriale', label: 'Seriale faulty', mono: true }, { k: 'faulty_pn', label: 'P/N faulty', mono: true },
+    { k: 'data_ricezione_faulty', label: 'Ricezione faulty', type: 'date' }, { k: 'awb_ups_faulty', label: 'AWB UPS faulty', mono: true }, { k: 'data_uscita_faulty', label: 'Uscita faulty', type: 'date' },
+    { k: 'good_model_id', label: 'Model ID good', mono: true }, { k: 'good_seriale', label: 'Seriale good', mono: true }, { k: 'good_pn', label: 'P/N good', mono: true },
+    { k: 'good_data_ricezione', label: 'Ricezione good', type: 'date' }, { k: 'data_ricezione_materiale_juniper', label: 'Ricezione materiale Juniper', type: 'date' },
+    { k: 'stato', label: 'Stato', type: 'select', opts: ['APERTA', 'FAULTY_SPEDITA', 'CHIUSA'] }, { k: 'note', label: 'Note', type: 'area' }
+  ],
+  nuovo: function () { return { stato: 'APERTA' }; },
+  rows: function (R) { return R; },
+  filtriIniziali: {},
+  grid: {
+    empty: 'Nessuna pratica Juniper', sort: 'id_juniper', dir: -1,
+    rowAttr: function (r) { return 'class="r-edit" onclick="Jun.apri(\'' + r.id_juniper + '\')" title="Clicca per modificare"'; },
+    cols: [
+      { k: 'id_juniper', label: 'ID', cls: 'mono' }, { k: 'fr', label: 'FR', filter: 'text', cls: 'mono' }, { k: 'case_number', label: 'Case', filter: 'text', cls: 'mono' }, { k: 'rma', label: 'RMA', filter: 'text', cls: 'mono' },
+      { k: 'faulty_model_id', label: 'Model faulty', filter: 'select', cls: 'mono' }, { k: 'faulty_seriale', label: 'Seriale faulty', filter: 'text', cls: 'mono' },
+      { k: 'data_ricezione_faulty', label: 'Ricez. faulty', cls: 'mono', get: function (r) { return L.normDate(r.data_ricezione_faulty); } }, { k: 'awb_ups_faulty', label: 'AWB UPS', filter: 'text', cls: 'mono' },
+      { k: 'data_uscita_faulty', label: 'Uscita faulty', cls: 'mono', get: function (r) { return L.normDate(r.data_uscita_faulty); } }, { k: 'good_seriale', label: 'Seriale good', filter: 'text', cls: 'mono' },
+      { k: 'good_data_ricezione', label: 'Ricez. good', cls: 'mono', get: function (r) { return L.normDate(r.good_data_ricezione); } },
+      { k: 'stato', label: 'Stato', filter: 'select', html: function (r) { return '<span class="pill ' + ({ APERTA: 'p-amber', FAULTY_SPEDITA: 'p-blue', CHIUSA: 'p-green' }[r.stato] || '') + '">' + esc(r.stato) + '</span>'; } },
+      { k: 'note', label: 'Note', filter: 'text' }
+    ]
+  },
+  dopo: function () {
+    var R = Jun.t().rows, n = function (s) { return R.filter(function (r) { return r.stato === s; }).length; };
+    $('junStats').innerHTML = '<div class="stat"><b style="color:var(--amber)">' + n('APERTA') + '</b><span>aperte</span></div><div class="stat"><b style="color:var(--blue)">' + n('FAULTY_SPEDITA') + '</b><span>faulty spedite</span></div><div class="stat"><b style="color:var(--green)">' + n('CHIUSA') + '</b><span>chiuse</span></div>';
+  }
+});
+
+// ───────────────────────── VLT (sola lettura + rettifiche) ─────────────────────────
+var Vlt = {
+  edit: false, dirty: {}, tutte: false, grid: null,
+  EDIT: ['f_mat_serial_no', 'f_mat_tmpn', 'f_mat_material', 'stato', 'riparatore', 'depot_origine', 'awb_cw', 'note'],
+  RETT_H: ['id_rettifica', 'fr_id', 'campo', 'valore_vlt', 'valore_nuovo', 'motivo', 'stato', 'creato_il', 'creato_da', 'chiusa_il'],
+  show: function () { Vlt.render(); },
+  cella: function (k, mono) {
+    return function (r) {
+      var orig = r._orig && (k in r._orig), dk = r.fr_id + '|' + k, v = Vlt.dirty[dk] !== undefined ? Vlt.dirty[dk] : r[k];
+      if (Vlt.edit) return '<input class="edit-cell' + (mono ? ' mono' : '') + (Vlt.dirty[dk] !== undefined ? ' dirty' : '') + '" style="width:calc(' + Math.max(8, Math.min(40, L.s(v).length + 1)) + 'ch + 16px)" value="' + esc(v) + '" onchange="Vlt.set(\'' + esc(r.fr_id) + '\',\'' + k + '\',this.value)">';
+      return orig ? '<span title="VLT: ' + esc(r._orig[k]) + '" style="color:var(--violet)">★ ' + esc(v) + '</span>' : esc(v);
+    };
+  },
+  mkGrid: function () {
+    var c = Vlt.cella;
+    Vlt.grid = new Grid('vlt', {
+      thead: 'vltHead', tbody: 'vltRows', foot: 'vltFoot', sort: 'fr_id', dir: -1, limit: 300, empty: 'Nessun FR',
+      rows: function () { return (DB.vlt ? DB.vlt.rows : []).filter(function (r) { return Vlt.tutte || DB.daQuestAnno(r.data_apertura); }); },
+      cols: [
+        { k: 'fr_id', label: 'FR', filter: 'text', cls: 'mono' },
+        { k: 'data_apertura', label: 'Apertura', cls: 'mono', get: function (r) { return L.normDate(r.data_apertura); } },
+        { k: 'stato', label: 'Stato', filter: 'select', html: c('stato') },
+        { k: 'riparatore', label: 'Riparatore', filter: 'select', html: c('riparatore') },
+        { k: 'depot_origine', label: 'Depot origine', filter: 'select', html: c('depot_origine') },
+        { k: 'f_mat_serial_no', label: 'Seriale', filter: 'text', cls: 'mono', html: c('f_mat_serial_no', 1) },
+        { k: 'f_mat_tmpn', label: 'TMPN', filter: 'text', cls: 'mono', html: c('f_mat_tmpn', 1) },
+        { k: 'f_mat_material', label: 'Material', filter: 'text', cls: 'mono', html: c('f_mat_material', 1) },
+        { k: 'awb_cw', label: 'AWB', filter: 'text', cls: 'mono', html: c('awb_cw', 1) },
+        { k: 'note', label: 'Note', filter: 'text', html: c('note') }
+      ]
+    });
   },
   render: function () {
-    if (!Rma.loaded) return;
-    document.querySelectorAll('#rmaTabs .subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'rmaT-' + Rma.sez); });
-    var inv = Rma.calcola(), q = L.up($('rmaQ').value), oggi = L.isoToday(), ult = Rma.ultimoImport();
-    var nD = Object.keys(Rma.dirty).length;
-    $('rmaSalva').disabled = !nD; $('rmaSalva').textContent = 'Salva RMA creati' + (nD ? ' (' + nD + ')' : '');
-    $('rmaInfo').textContent = ult ? 'Ultimo import ritorni: ' + ult + ' · ' + Rma.attivi().length + ' RMA aperti' : 'Nessun import ritorni: carica il CSV esportato da VLT.';
-    var abb = Rma.abb;
-    if (Rma.sez === 'inv') {
-      var list = inv.filter(function (u) { var a = abb[u.id_unita]; return !q || [u.seriale, u.pn, u.fr, u.rma, u.destinazione_prevista, u.note, a ? a.rma.id_rma : ''].some(function (x) { return L.up(x).indexOf(q) >= 0; }); })
-        .sort(function (a, b) { return ((a.tipo === 'GOOD' ? '0' : '1') + a.data_in).localeCompare((b.tipo === 'GOOD' ? '0' : '1') + b.data_in); });
-      var nG = inv.filter(function (u) { return u.tipo === 'GOOD'; }).length, nB = inv.length - nG;
-      var nCre = inv.filter(function (u) { return L.s(Rma.dirty[u.id_unita] !== undefined ? Rma.dirty[u.id_unita] : u.rma) && u.tipo === 'GOOD'; }).length, nAut = Object.keys(abb).length;
-      var nVar = Object.keys(abb).filter(function (k) { return abb[k].variazione; }).length;
-      $('rmaStats').innerHTML = '<div class="stat"><b>' + inv.length + '</b><span>in inventario</span></div><div class="stat"><b>' + nG + '</b><span>good</span></div><div class="stat"><b>' + nB + '</b><span>balancing</span></div>' +
-        '<div class="stat"><b style="color:var(--green)">' + nAut + '</b><span>rma giacenza</span></div><div class="stat"><b style="color:var(--blue)">' + nCre + '</b><span>rma creato</span></div>' +
-        '<div class="stat"><b style="color:var(--amber)">' + (nG - nAut - nCre) + '</b><span>senza rma</span></div>' + (nVar ? '<div class="stat"><b style="color:var(--violet)">' + nVar + '</b><span>variaz. destino</span></div>' : '');
-      $('rmaHead').innerHTML = '<tr><th>Tipo</th><th>FR</th><th>MNFT</th><th>Seriale</th><th>P/N</th><th>Repair</th><th>Nota</th><th>Material</th><th>Destinazione</th><th>Var. destino</th><th>RMA creato (SD)</th><th>RMA giacenza</th><th>Data open</th><th>Scadenza</th><th>Note SD</th></tr>';
-      var ctx = Rma.ctx();
-      $('rmaRows').innerHTML = list.length ? list.slice(0, 1000).map(function (u) {
-        var a = abb[u.id_unita], r = a ? a.rma : null, d = Rma.dirty[u.id_unita], val = d !== undefined ? d : u.rma, bal = u.tipo === 'BALANCING';
-        var scad = r ? r.data_scadenza : '', late = scad && scad < oggi;
-        var cell = bal ? '<span class="mono">' + esc(u.rma) + '</span>' : '<input class="edit-cell mono' + (d !== undefined ? ' dirty' : '') + '" style="width:11ch" value="' + esc(val) + '" placeholder="—" onchange="Rma.set(\'' + u.id_unita + '\',this.value)">';
-        return '<tr class="' + (a && a.variazione ? 'r-warn' : '') + '"><td>' + Pill.tipo(u.tipo) + '</td><td class="mono">' + esc(u.fr) + '</td><td>' + esc(u.mnft) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.riparatore) + '</td>' +
-          '<td class="nw" style="font-size:11.5px">' + esc(Rma.nota(u.note)) + '</td><td class="mono" style="font-size:11px">' + esc(ctx.materialDi(u)) + '</td><td>' + esc(u.destinazione_prevista) + '</td>' +
-          '<td style="color:var(--violet)">' + (a && a.variazione ? esc(Rma.destRma(r)) : '') + '</td><td>' + cell + '</td>' +
-          '<td class="mono" style="color:var(--green)">' + (r ? esc(r.id_rma) : '') + '</td><td class="mono" style="font-size:11px">' + (r ? esc(r.data_apertura.slice(0, 10)) : '') + '</td>' +
-          '<td class="mono" style="font-size:11px' + (late ? ';color:var(--red)' : '') + '">' + esc(scad) + '</td><td style="font-size:11.5px">' + (r && r.failure_report ? 'RITORNO GIACENZA FR ' + esc(r.failure_report) : esc(r ? r.note_sd : '')) + '</td></tr>';
-      }).join('') : '<tr><td colspan="15" class="empty">Nessun pezzo GOOD/BALANCING in giacenza</td></tr>';
-      $('rmaHint').textContent = 'RMA giacenza = abbinamento automatico ai ritorni VLT (material o equivalente, prima la stessa destinazione; in viola le variazioni di destino). RMA creato = inserito dal Service Desk: ha la precedenza.';
-    } else {
-      var att = Rma.attivi(), byRma = {}; Object.keys(abb).forEach(function (k) { byRma[abb[k].rma.id_rma] = k; });
-      var U = {}; DB.t.UNITA.rows.forEach(function (u) { U[u.id_unita] = u; });
-      var L2 = att.filter(function (r) { return !q || [r.id_rma, r.material, r.descrizione, Rma.destRma(r), r.failure_report, r.mpn].some(function (x) { return L.up(x).indexOf(q) >= 0; }); })
-        .sort(function (a, b) { return (a.data_scadenza || '').localeCompare(b.data_scadenza || ''); });
-      var nOk = att.filter(function (r) { return byRma[r.id_rma]; }).length, nLate = att.filter(function (r) { return r.data_scadenza && r.data_scadenza < oggi; }).length;
-      $('rmaStats').innerHTML = '<div class="stat"><b>' + att.length + '</b><span>rma aperti</span></div><div class="stat"><b style="color:var(--green)">' + nOk + '</b><span>con pezzo</span></div><div class="stat"><b style="color:var(--amber)">' + (att.length - nOk) + '</b><span>senza pezzo</span></div>' + (nLate ? '<div class="stat"><b style="color:var(--red)">' + nLate + '</b><span>scaduti</span></div>' : '');
-      $('rmaHead').innerHTML = '<tr><th>RMA</th><th>Data open</th><th>Scadenza</th><th>Material</th><th>P/N cercato</th><th>Descrizione</th><th>Destinazione</th><th>FR</th><th>Stato VLT</th><th>Pezzo abbinato</th></tr>';
-      $('rmaRows').innerHTML = L2.length ? L2.map(function (r) {
-        var id = byRma[r.id_rma], u = id ? U[id] : null, late = r.data_scadenza && r.data_scadenza < oggi;
-        return '<tr class="' + (u ? '' : 'r-warn') + '"><td class="mono">' + esc(r.id_rma) + '</td><td class="mono" style="font-size:11px">' + esc(r.data_apertura) + '</td><td class="mono" style="font-size:11px' + (late ? ';color:var(--red)' : '') + '">' + esc(r.data_scadenza) + '</td>' +
-          '<td class="mono" style="font-size:11px">' + esc(r.material) + '</td><td class="mono">' + esc(Rma.lk.pnByMat[Rma.mk(r.material)] || '') + '</td><td style="font-size:11.5px">' + esc(r.descrizione) + '</td><td>' + esc(Rma.destRma(r)) + '</td>' +
-          '<td class="mono">' + esc(r.failure_report) + '</td><td style="font-size:11px">' + esc(r.stato_vlt) + '</td><td>' + (u ? '<span class="mono">' + esc(u.seriale) + '</span> <span class="hint">' + esc(u.id_unita) + (abb[id].variazione ? ' · variazione destino' : '') + '</span>' : '<span style="color:var(--amber)">nessun pezzo in giacenza</span>') + '</td></tr>';
-      }).join('') : '<tr><td colspan="10" class="empty">' + (ult ? 'Nessun RMA aperto' : 'Importa il CSV dei ritorni in giacenza esportato da VLT') + '</td></tr>';
-      $('rmaHint').textContent = '';
-    }
+    if (!Vlt.grid) Vlt.mkGrid();
+    var nD = Object.keys(Vlt.dirty).length, nR = (DB.t.VLT_RETTIFICHE ? DB.t.VLT_RETTIFICHE.rows : []).filter(function (r) { return r.stato === 'ATTIVA'; }).length;
+    $('vltBtnEdit').textContent = Vlt.edit ? '🔒 Blocca modifiche' : '✏️ Abilita modifiche';
+    $('vltBtnEdit').className = 'btn sm ' + (Vlt.edit ? 'red' : 'ghost');
+    $('vltSalva').style.display = Vlt.edit ? '' : 'none'; $('vltSalva').disabled = !nD; $('vltSalva').textContent = 'Salva rettifiche' + (nD ? ' (' + nD + ')' : '');
+    $('vltInfo').textContent = 'Foglio VLT aggiornato ' + (DB.vlt ? new Date(DB.vlt.ts).toLocaleString('it-IT') : '—') + ' · ' + (Vlt.tutte ? 'tutti gli anni' : 'FR aperti dal ' + L.itDate(DB.dataInizio())) + ' · ' + nR + ' rettifiche attive (★: il file VLT non viene mai modificato, l\'app usa il valore corretto)';
+    Vlt.grid.render();
+  },
+  toggle: async function () {
+    if (!Vlt.edit && !(await Modal.confirm('Abilita modifiche', 'Le correzioni vengono salvate come rettifiche (foglio VLT_RETTIFICHE): il file VLT resta com\'è e l\'app usa il valore corretto in ingresso, ACK e RMA.'))) return;
+    if (Vlt.edit && Object.keys(Vlt.dirty).length && !confirm('Ci sono rettifiche non salvate: scartarle?')) return;
+    Vlt.edit = !Vlt.edit; Vlt.dirty = {}; Vlt.render();
+  },
+  set: function (fr, k, v) { var r = DB.vltMap[fr], dk = fr + '|' + k; v = L.s(v); if (v === L.s(r[k])) delete Vlt.dirty[dk]; else Vlt.dirty[dk] = v; Vlt.render(); },
+  salva: async function () {
+    var ks = Object.keys(Vlt.dirty); if (!ks.length) return;
+    var motivo = prompt('Motivo della rettifica (vale per tutte le ' + ks.length + ' modifiche):', ''); if (motivo === null) return;
+    try {
+      var t = await DB.ensureSheet('VLT_RETTIFICHE', Vlt.RETT_H), now = L.nowStamp(), upd = [];
+      var objs = ks.map(function (dk) {
+        var p = dk.split('|'), fr = p[0], k = p[1], r = DB.vltMap[fr], orig = r._orig && (k in r._orig) ? r._orig[k] : r[k];
+        // una rettifica precedente sullo stesso campo viene sostituita
+        t.rows.forEach(function (x) { if (x.fr_id === fr && x.campo === k && x.stato === 'ATTIVA') { x.stato = 'ANNULLATA'; upd.push({ range: t.cell('stato', x._r), values: [['ANNULLATA']] }, { range: t.cell('chiusa_il', x._r), values: [[now]] }); } });
+        return { fr_id: fr, campo: k, valore_vlt: orig, valore_nuovo: Vlt.dirty[dk], motivo: L.s(motivo), stato: 'ATTIVA', creato_il: now, creato_da: Auth.email };
+      });
+      var r0 = await API.append(DB.id, 'VLT_RETTIFICHE', objs.map(function (o) { return t.toRow(o); }));
+      objs.forEach(function (o, i) { o.id_rettifica = 'V' + L.pad(r0 + i - 1, 6); });
+      upd.push({ range: t.cell('id_rettifica', r0) + ':' + t.col('id_rettifica') + (r0 + objs.length - 1), values: objs.map(function (o) { return [o.id_rettifica]; }) });
+      await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', [App.log('RETTIFICA_VLT', 'VLT_RETTIFICHE', objs[0].id_rettifica, { righe: objs.length, motivo: motivo })])]);
+      objs.forEach(function (o, i) { Ack.pushRow(t, o, r0 + i); });
+      DB.indexVlt(); Vlt.dirty = {}; toast(objs.length + ' rettifiche salvate', 'ok'); Vlt.render(); Ingresso.ricalcola();
+    } catch (e) { Modal.open('Rettifiche non salvate', e.message); }
   }
+};
+
+// ───────────────────────── STORICO MOVIMENTI (anno in corso + archivi) ─────────────────────────
+var Sto = {
+  fonte: 'cur', dati: {}, grid: null,
+  COLS: ['id_mov', 'data_ora', 'direzione', 'causale', 'seriale', 'pn', 'mnft', 'tipo', 'fr', 'rma', 'po_mrn', 'controparte', 'awb', 'vettore', 'ddt', 'riparatore', 'operatore_sigla', 'operatore', 'note'],
+  colsSafe: async function (ss, sheet) {
+    var h = ((await API.batchGet(ss, [API.q(sheet) + '!1:1']))[0][0] || []).map(L.s);
+    var have = Sto.COLS.filter(function (c) { return h.indexOf(c) >= 0; });
+    var rows = await DB.loadCols(ss, sheet, have);
+    rows.forEach(function (r) { Sto.COLS.forEach(function (c) { if (!(c in r)) r[c] = ''; }); });
+    return rows.filter(function (r) { return r.id_mov || r.seriale; });
+  },
+  carica: async function (forza) {
+    var f = Sto.fonte;
+    if (Sto.dati[f] && !forza) return Sto.dati[f];
+    $('stoRows').innerHTML = '<tr><td class="empty">Carico i movimenti ' + (f === 'cur' ? 'dell\'anno in corso' : 'dell\'archivio ' + f) + '…</td></tr>';
+    if (f === 'cur') Sto.dati.cur = await Sto.colsSafe(DB.id, 'MOVIMENTI');
+    else {
+      var c = forza ? null : await DB.cacheGet('arch_' + f);
+      if (!c) {
+        var file = await API.findInFolder(CFG.FOLDER_ID, 'DB_ARCHIVIO_' + f);
+        if (!file) throw new Error('File "DB_ARCHIVIO_' + f + '" non trovato nella cartella del database');
+        c = { ts: Date.now(), rows: await Sto.colsSafe(file.id, 'MOVIMENTI') }; await DB.cacheSet('arch_' + f, c);   // gli archivi non cambiano: restano in cache
+      }
+      Sto.dati[f] = c.rows;
+    }
+    return Sto.dati[f];
+  },
+  show: async function () {
+    if (!Sto.grid) Sto.grid = new Grid('sto', {
+      thead: 'stoHead', tbody: 'stoRows', foot: 'stoFoot', sort: 'data_ora', dir: -1, limit: 300, empty: 'Nessun movimento',
+      rows: function () {
+        var q = L.up($('stoQ').value), R = Sto.dati[Sto.fonte] || [];
+        return q ? R.filter(function (r) { return [r.seriale, r.fr, r.rma, r.ddt, r.awb, r.id_mov, r.pn, r.po_mrn].some(function (x) { return L.up(x).indexOf(q) >= 0; }); }) : R;
+      },
+      cols: [
+        { k: 'id_mov', label: 'ID', cls: 'mono' }, { k: 'data_ora', label: 'Data', cls: 'mono', get: function (r) { return L.normDate(r.data_ora); } },
+        { k: 'direzione', label: 'Dir.', filter: 'select' }, { k: 'causale', label: 'Causale', filter: 'select' }, { k: 'tipo', label: 'Tipo', filter: 'select', html: function (r) { return r.tipo ? Pill.tipo(r.tipo) : ''; } },
+        { k: 'seriale', label: 'Seriale', filter: 'text', cls: 'mono' }, { k: 'pn', label: 'P/N', filter: 'text', cls: 'mono' }, { k: 'fr', label: 'FR', filter: 'text', cls: 'mono' }, { k: 'rma', label: 'RMA', filter: 'text', cls: 'mono' },
+        { k: 'controparte', label: 'Controparte', filter: 'select' }, { k: 'awb', label: 'AWB', filter: 'text', cls: 'mono' }, { k: 'ddt', label: 'DDT', filter: 'text', cls: 'mono' },
+        { k: 'op', label: 'Op.', filter: 'select', get: function (r) { return r.operatore_sigla || L.s(r.operatore).split('@')[0]; } }, { k: 'note', label: 'Note', filter: 'text' }
+      ]
+    });
+    try { await Sto.carica(false); Sto.grid.render(true); } catch (e) { $('stoRows').innerHTML = '<tr><td class="empty">Errore: ' + esc(e.message) + '</td></tr>'; }
+  },
+  cambia: function (f) { Sto.fonte = f; Sto.grid && (Sto.grid.f = {}); Sto.show(); },
+  cerca: function () { clearTimeout(Sto._t); Sto._t = setTimeout(function () { Sto.grid.limit = 300; Sto.grid.render(); }, 250); },
+  ricarica: async function () { try { await Sto.carica(true); Sto.grid.render(); } catch (e) { toast(e.message, 'ko'); } }
 };
 
 window.addEventListener('load', Auth.init);
