@@ -130,6 +130,11 @@ td.mono,td.nw{white-space:nowrap}
 #toast.ok{border-color:var(--green)} #toast.ko{border-color:var(--red)}
 .modal-bg{position:fixed;inset:0;background:rgba(0,0,0,.55);display:none;align-items:center;justify-content:center;z-index:300}
 .modal-bg.show{display:flex}
+.busy{position:fixed;inset:0;z-index:400;display:none;align-items:center;justify-content:center;background:rgba(0,0,0,.25);cursor:progress}
+.busy.show{display:flex}
+.busy-box{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 22px;font-size:14px;color:var(--text);box-shadow:0 10px 30px rgba(0,0,0,.35)}
+.busy-spin{width:26px;height:26px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:busyRot .8s linear infinite}
+@keyframes busyRot{to{transform:rotate(360deg)}}
 .modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px 24px;max-width:520px;width:92%}
 .modal.wide{max-width:1280px}
 .modal-scroll{max-height:60vh;overflow:auto;margin-top:6px}
@@ -167,8 +172,12 @@ body.g-resizing{cursor:col-resize;user-select:none}
 td[style*="max-width"]{overflow:hidden;text-overflow:ellipsis}
 .g-f{width:100%;min-width:70px;background:var(--card);border:1px solid var(--border);border-radius:5px;color:var(--text);font:11px var(--ff-sans);padding:3px 5px;text-transform:none;letter-spacing:0}
 .g-f.g-on{border-color:var(--blue);color:var(--blue)}
-#appShell{--viz-1:#3987e5;--viz-track:rgba(148,163,184,.12)}
-body.theme-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12)}
+.g-stati{display:flex;gap:16px;font-size:13px;padding:4px 0}.g-stati label{display:flex;align-items:center;gap:6px;cursor:pointer}
+.g-var{display:grid;grid-template-columns:repeat(auto-fill,minmax(200px,1fr));gap:8px;margin-top:8px}
+.col-pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:4px 12px;font-size:13px}
+.col-pick label{display:flex;align-items:center;gap:6px;cursor:pointer;padding:2px 0}
+#appShell{--viz-1:#3987e5;--viz-track:rgba(148,163,184,.12);--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s-altri:#64748b}
+body.theme-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#6250d6;--s-altri:#94a3b8}
 .dash-grid{display:grid;grid-template-columns:minmax(320px,1fr) minmax(360px,1.4fr);gap:14px}
 @media (max-width:1000px){.dash-grid{grid-template-columns:1fr}}
 .dash-row{display:flex;align-items:center;gap:10px;padding:4px 6px;border-radius:6px;cursor:pointer}
@@ -177,11 +186,17 @@ body.theme-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12)}
 .dash-track{flex:1;height:14px;background:var(--viz-track);border-radius:0 4px 4px 0}
 .dash-bar{display:block;height:100%;background:var(--viz-1);border-radius:0 4px 4px 0}
 .dash-val{width:48px;text-align:right;font:12px var(--ff-mono);color:var(--subtle)}
-.dash-trend{display:flex;align-items:flex-end;gap:2px;height:170px;border-bottom:1px solid var(--border);overflow-x:auto}
-.dash-col{height:100%;display:flex;align-items:flex-end;flex-shrink:0}
+.dash-trend{display:flex;align-items:flex-end;gap:2px;height:170px;border-bottom:1px solid var(--border)}
+.dash-col{height:100%;display:flex;align-items:flex-end;flex:1 1 0;min-width:0;max-width:48px;border-radius:3px 3px 0 0}
 .dash-col.we{background:var(--viz-track)}
-.dash-cbar{display:block;width:100%;background:var(--viz-1);border-radius:4px 4px 0 0;min-height:0}
-.dash-col:hover .dash-cbar{filter:brightness(1.25)}
+.dash-stack{display:flex;flex-direction:column-reverse;width:100%;height:100%;justify-content:flex-start}
+.dash-seg{display:block;width:100%;min-height:0;border-top:1px solid var(--surface)}
+.dash-seg:last-child{border-radius:4px 4px 0 0}
+.dash-col:hover .dash-seg{filter:brightness(1.2)}
+.dash-leg{display:flex;flex-wrap:wrap;gap:4px 12px;margin-bottom:10px;font-size:12px;color:var(--subtle)}
+.dash-leg span{cursor:pointer;display:inline-flex;align-items:center;padding:2px 4px;border-radius:5px}
+.dash-leg span:hover,.dash-leg span.on{background:var(--card);color:var(--text)}
+.dash-sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;flex-shrink:0}
 .dash-axis{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px}
 .progress{font-family:var(--ff-mono);font-size:12px;color:var(--subtle);margin-top:10px;white-space:pre-line}
 </style>
@@ -282,18 +297,17 @@ body.theme-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12)}
     <div class="view" id="view-giacenze">
       <div class="card">
         <div class="row">
-          <div class="fg" style="flex:1;min-width:240px"><span class="fl">Cerca (seriale, P/N, FR, RMA, ubicazione, material, nota)</span><input class="fc mono" id="gQ" oninput="Giacenze.debounce()"></div>
+          <div class="fg" style="flex:1;min-width:240px"><span class="fl">Cerca (seriale, P/N, FR, RMA, AWB, DDT, mittente, PO, ubicazione, nota)</span><input class="fc mono" id="gQ" oninput="Giacenze.debounce()"></div>
           <div class="fg"><span class="fl">Tipo</span><select class="fc" id="gTipo" onchange="Giacenze.render()"><option value="">Tutti</option></select></div>
           <div class="fg"><span class="fl">Magazzino</span><select class="fc" id="gMag" onchange="Giacenze.render()"><option value="">Tutti</option></select></div>
-          <div class="fg"><span class="fl">Stato</span><select class="fc" id="gStato" onchange="Giacenze.render()"><option value="IN_GIACENZA">In giacenza</option><option value="">Tutti</option><option>IN_LAVORAZIONE</option><option>BLOCCATO</option><option>USCITO</option><option>ANNULLATO</option></select></div>
-          <div class="spacer"></div><button class="btn ghost sm" onclick="Xls.scarica('Giacenze',[Object.assign({nome:'Giacenze'},Xls.oggetti(Giacenze._list||[],Giacenze.XCOLS))])">⬇ Excel</button>
+          <div class="fg"><span class="fl">Stato</span><select class="fc" id="gStato" onchange="Giacenze.render()"><option value="A_MAG">A magazzino (anche bloccati / in attesa)</option><option value="IN_GIACENZA">Disponibili</option><option value="BLOCCATO">Bloccati</option><option value="IN_ATTESA">In attesa</option><option value="IN_LAVORAZIONE">In lavorazione</option><option value="USCITO">Usciti</option><option value="ANNULLATO">Annullati</option><option value="">Tutti</option></select></div>
+          <div class="spacer"></div>
+          <button class="btn ghost sm" onclick="Giacenze.grid().scegli()" title="Mostra o nascondi colonne">⚙ Colonne</button>
+          <button class="btn ghost sm" onclick="Giacenze.excel()">⬇ Excel</button>
         </div>
       </div>
       <div class="stats" id="gStats"></div>
-      <div class="tbl-wrap"><table>
-        <thead><tr><th>ID</th><th>Tipo</th><th>Mag.</th><th>Seriale</th><th>P/N</th><th>MNFT</th><th>FR</th><th>RMA</th><th>Riparatore</th><th>Ubicazione</th><th>Destinazione</th><th>Data in</th><th>Stato</th><th>Nota</th></tr></thead>
-        <tbody id="gRows"></tbody>
-      </table></div>
+      <div class="tbl-wrap"><table><thead id="gHead"></thead><tbody id="gRows"></tbody></table></div>
       <div class="hint" id="gHint" style="margin-top:6px"></div>
     </div>
 
@@ -369,11 +383,16 @@ body.theme-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12)}
     <!-- STORICO -->
     <div class="view" id="view-storico">
       <div class="card"><div class="row">
-        <div class="fg" style="width:200px"><span class="fl">Periodo</span><select class="fc" id="stoFonte" onchange="Sto.cambia(this.value)"><option value="cur">Anno in corso (database)</option><option value="2025">2025 (archivio)</option><option value="2024">2024 (archivio)</option></select></div>
-        <div class="fg" style="flex:1;min-width:240px"><span class="fl">Cerca seriale, FR, RMA, DDT, AWB, P/N, PO</span><input class="fc mono" id="stoQ" oninput="Sto.cerca()"></div>
+        <div class="fg" style="width:190px"><span class="fl">Dati</span><select class="fc" id="stoFonte" onchange="Sto.cambia(this.value)"><option value="cur">Anno in corso (database)</option><option value="2025">2025 (archivio)</option><option value="2024">2024 (archivio)</option></select></div>
+        <div class="fg"><span class="fl">Dal</span><input class="fc mono" type="date" id="stoDa" onchange="Sto.render()"></div>
+        <div class="fg"><span class="fl">Al</span><input class="fc mono" type="date" id="stoA" onchange="Sto.render()"></div>
+        <div class="fg" style="flex:1;min-width:220px"><span class="fl">Cerca seriale, FR, RMA, DDT, AWB, P/N, PO, mittente</span><input class="fc mono" id="stoQ" oninput="Sto.cerca()"></div>
         <button class="btn ghost sm" style="margin-bottom:2px" onclick="Sto.ricarica()">↻ Ricarica</button>
-        <button class="btn ghost sm" style="margin-bottom:2px" onclick="Sto.grid.excel('Storico_movimenti_' + Sto.fonte)">⬇ Excel</button>
+        <button class="btn ghost sm" style="margin-bottom:2px" onclick="Sto.colonneScegli()" title="Mostra o nascondi colonne">⚙ Colonne</button>
+        <button class="btn ghost sm" style="margin-bottom:2px" onclick="Sto.excelVista()" title="Le righe della scheda aperta, con i filtri">⬇ Excel vista</button>
+        <button class="btn sm" style="margin-bottom:2px" onclick="Sto.excelEasyloader()" title="File come l'Easyloader: fogli INBOUND e OUTBOUND del periodo scelto">⬇ Excel Easyloader</button>
       </div></div>
+      <div class="subtabs" id="stoTabs" style="margin-bottom:10px"></div>
       <div class="tbl-wrap"><table><thead id="stoHead"></thead><tbody id="stoRows"></tbody></table></div><div class="hint" id="stoFoot" style="margin-top:6px"></div>
     </div>
 
@@ -415,6 +434,7 @@ body.theme-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12)}
 <datalist id="dlMotivi"></datalist>
 <datalist id="dlMotiviIn"><option value="Letto per errore"><option value="Pezzo duplicato"><option value="Tipo sbagliato: da ricaricare"><option value="Pezzo non arrivato fisicamente"></datalist>
 
+<div class="busy" id="busy"><div class="busy-box"><span class="busy-spin"></span><span>Salvataggio in corso…</span></div></div>
 <div class="modal-bg" id="modal"><div class="modal">
   <h3 id="mTitle"></h3><div class="mbody" id="mBody"></div><div class="progress" id="mProg"></div>
   <div class="row" id="mBtns"></div>
@@ -699,9 +719,78 @@ var Auth = {
   }
 };
 
+// ───────────────────────── ROTELLINA DI SALVATAGGIO ─────────────────────────
+// compare al centro su ogni scrittura (dopo 250 ms, così le scritture velocissime non lampeggiano) e blocca i clic finché non ha finito;
+// le spunte ACK salvate in background non la mostrano, per non interrompere la lettura
+var Busy = {
+  n: 0, muto: 0,
+  on: function () { if (Busy.muto) return false; Busy.n++; clearTimeout(Busy._t); Busy._t = setTimeout(function () { if (Busy.n) $('busy').classList.add('show'); }, 250); return true; },
+  off: function () { Busy.n = Math.max(0, Busy.n - 1); if (!Busy.n) { clearTimeout(Busy._t); $('busy').classList.remove('show'); } },
+  wrap: function (p) { var c = Busy.on(); return c ? p.finally(Busy.off) : p; }
+};
+
+// ───────────────────────── AGGIORNAMENTO AUTOMATICO ─────────────────────────
+// ogni minuto legge solo le righe nuove del LOG (pochi byte): se un altro utente ha scritto qualcosa, ricarica
+// la giacenza e le tabelle del modulo aperto. VLT, Huawei e configurazione restano manuali (pulsante Aggiorna).
+var Sync = {
+  n: 0, ogni: 60, ultimo: null,
+  avvia: async function () {
+    try { var r = (await API.batchGet(DB.id, [API.q('LOG') + '!A1:A']))[0]; Sync.n = r.length; } catch (e) { return; }
+    Sync.ogni = Math.max(30, parseInt(DB.param('aggiornamento_auto_sec', '60'), 10) || 60);
+    clearInterval(Sync._i); Sync._i = setInterval(Sync.giro, Sync.ogni * 1000);
+    document.addEventListener('visibilitychange', function () { if (!document.hidden && Sync.dovuto) Sync.giro(); });
+  },
+  occupato: function () {
+    var a = document.activeElement;
+    return $('modal').classList.contains('show') || Busy.n > 0 ||
+      Object.keys(Rma.dirty || {}).length || Object.keys(Admin.dirty || {}).length || Object.keys((window.Vlt && Vlt.dirty) || {}).length ||
+      (a && a.classList && a.classList.contains('edit-cell')) || (Ack.q && (Ack.q.length || Ack.qA.length));
+  },
+  giro: async function () {
+    if (!DB.id || !Auth.token) return;
+    if (Sync._run) return;
+    if (document.hidden || Sync.occupato()) { Sync.dovuto = true; return; }
+    Sync._run = true; Sync.dovuto = false;
+    try {
+      var r = (await API.batchGet(DB.id, [API.q('LOG') + '!A' + (Sync.n + 1) + ':E' + (Sync.n + 500)]))[0];
+      if (!r.length) return;
+      Sync.n += r.length;
+      var altri = r.filter(function (x) { return L.s(x[1]).toLowerCase() !== Auth.email; });
+      if (!altri.length) return;
+      await Sync.ricarica(altri.map(function (x) { return L.s(x[3]); }));
+    } catch (e) { /* rete assente: si riprova al giro dopo */ }
+    finally { Sync._run = false; }
+  },
+  ricarica: async function (fogli) {
+    var T = ['UNITA', 'BALANCING', 'CALENDARIO_USCITE'];
+    if (Rma.loaded) T = T.concat(['RMA_RITORNI', 'SPEDIZIONI', 'CARICHI_RMA']);
+    var ackLibero = Ack.loaded && !Ack.cur;
+    if (ackLibero && T.indexOf('SPEDIZIONI') < 0) T = T.concat(['SPEDIZIONI']);
+    if (ackLibero) T = T.concat(['SPEDIZIONI_RIGHE', 'ACK_PENDING']);
+    if (Jun.loaded) T.push('JUNIPER');
+    if (Sync.occupato()) { Sync.dovuto = true; return; }
+    await DB.loadTables(T);
+    if (Sto.dati.cur) { Sto.dati.cur = null; Giacenze._miN = -1; }
+    Ingresso._heads = null; Sync.ultimo = new Date(); App.syncInfo();
+    var t = App.tab;
+    if (t === 'ingresso') { Ingresso.ricalcola(); Ingresso.renderOggi(); }
+    if (t === 'giacenze') Giacenze.render();
+    if (t === 'rma') Rma.render();
+    if (t === 'ack' && ackLibero) Ack.render();
+    if (t === 'balancing' && Bal.loaded) Bal.render();
+    if (t === 'juniper' && Jun.loaded) Jun.render();
+    if (t === 'storico') Sto.ricarica();
+    toast('Dati aggiornati: modifiche di altri operatori', 'ok');
+  }
+};
+
 // ───────────────────────── Google API (con ritentativi) ─────────────────────────
 var API = {
-  call: async function (url, opt, attempt) {
+  call: function (url, opt, attempt) {
+    var w = opt && opt.method && opt.method !== 'GET' && !attempt;
+    return w ? Busy.wrap(API._call(url, opt, attempt)) : API._call(url, opt, attempt);
+  },
+  _call: async function (url, opt, attempt) {
     attempt = attempt || 0; opt = opt || {};
     var headers = Object.assign({ Authorization: 'Bearer ' + Auth.token }, opt.body ? { 'Content-Type': 'application/json' } : {});
     var res;
@@ -821,7 +910,7 @@ var TABS = [
   { k: 'ingresso', label: 'Ingresso' },
   { k: 'ack', label: 'ACK' }, { k: 'rma', label: 'RMA' }, { k: 'balancing', label: 'Balancing' },
   { k: 'juniper', label: 'Juniper' }, { k: 'giacenze', label: 'Giacenze' }, { k: 'vlt', label: 'VLT' },
-  { k: 'storico', label: 'Storico' }, { k: 'dashboard', label: 'Dashboard', admin: true }, { k: 'admin', label: 'Admin', admin: true }
+  { k: 'storico', label: 'Movimenti' }, { k: 'dashboard', label: 'Dashboard', admin: true }, { k: 'admin', label: 'Admin', admin: true }
 ];
 var App = {
   me: null, isAdmin: false, tab: 'ingresso',
@@ -870,6 +959,7 @@ var App = {
     App.fillLists(); App.syncInfo();
     Ingresso.init(); Giacenze.init(); Ack.init(); if (App.isAdmin) Admin.init();
     App.go(lsG('tab') || 'ingresso');
+    Sync.avvia();
   },
   go: function (k) {
     var t = TABS.find(function (x) { return x.k === k; }) || TABS[0];
@@ -891,7 +981,7 @@ var App = {
     if (t.k === 'dashboard') Dash.show();
   },
   setTheme: function (th) { document.body.className = th || ''; lsS('theme', th); },
-  syncInfo: function () { $('syncInfo').textContent = 'VLT ' + (DB.vlt ? new Date(DB.vlt.ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—') + ' · Huawei ' + Object.keys(DB.huaweiFr).length + ' seriali · giacenza ' + DB.t.UNITA.rows.length; },
+  syncInfo: function () { $('syncInfo').textContent = 'VLT ' + (DB.vlt ? new Date(DB.vlt.ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—') + ' · Huawei ' + Object.keys(DB.huaweiFr).length + ' seriali · giacenza ' + DB.t.UNITA.rows.length + (window.Sync && Sync.ultimo ? ' · agg. auto ' + Sync.ultimo.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : ''); },
   fillLists: function () {
     var cp = DB.t.CONTROPARTI.rows.map(function (r) { return r.codice; }).filter(Boolean);
     DB.t.RIPARATORI.rows.forEach(function (r) { if (r.codice && cp.indexOf(r.codice) < 0) cp.push(r.codice); });
@@ -1138,7 +1228,7 @@ var Ingresso = {
     $('hVettore').textContent = !vet ? '' : (vlist.indexOf(vet) < 0 ? 'VEDI FISICAMENTE: vettore non in elenco' : '');
     $('hVettore').className = 'hint' + (vet && vlist.indexOf(vet) < 0 ? ' warn' : '');
     // giacenza indicizzata
-    var giac = {}, giacFr = {}; DB.t.UNITA.rows.forEach(function (u) { if (u.stato === 'IN_GIACENZA' || u.stato === 'IN_LAVORAZIONE') { giac[L.up(u.seriale)] = u; if (u.fr) (giacFr[u.fr] = giacFr[u.fr] || []).push(u); } });
+    var giac = {}, giacFr = {}; DB.t.UNITA.rows.forEach(function (u) { if (Giacenze.A_MAG.indexOf(u.stato) >= 0) { giac[L.up(u.seriale)] = u; if (u.fr) (giacFr[u.fr] = giacFr[u.fr] || []).push(u); } });
     var lettera = L.up(App.me.sigla || 'X').charAt(0);
     var re = new RegExp('/ 0?(\\d+)' + lettera + '$');
     var base = 0; DB.t.UNITA.rows.forEach(function (u) { if (u.stato === 'IN_GIACENZA' && (u.tipo === 'GOOD' || u.tipo === 'BALANCING')) { var m = re.exec(L.s(u.note).split(' | ')[0]); if (m) base = Math.max(base, parseInt(m[1], 10)); } });
@@ -1234,7 +1324,7 @@ var Ingresso = {
         data_in: T.data, note: c.nota, rev: 1, creato_il: now, creato_da: me };
     });
     var mObjs = C.map(function (c, i) {
-      return { data_ora: T.data, data_registrazione_vlt: L.isoToday(), posizione_note: uObjs[i].ubicazione, direzione: 'IN', causale: 'INGRESSO', seriale: c.ser, pn: c.pn, mnft: c.mnft, tipo: c.tipo, fr: c.fr, rma: c.rma,
+      return { data_ora: T.data + ' ' + now.slice(11), data_registrazione_vlt: L.isoToday(), posizione_note: uObjs[i].ubicazione, direzione: 'IN', causale: 'INGRESSO', seriale: c.ser, pn: c.pn, mnft: c.mnft, tipo: c.tipo, fr: c.fr, rma: c.rma,
         po_mrn: T.po, controparte: T.mittente, awb: T.awb, vettore: T.vettore, ddt: T.ddt, riparatore: c.rip, ubicazione_a: uObjs[i].ubicazione,
         operatore: me, operatore_sigla: sigla, note: c.nota, origine: 'APP' };
     });
@@ -1427,23 +1517,155 @@ var Pill = {
 
 // ───────────────────────── GIACENZE ─────────────────────────
 var Giacenze = {
-  XCOLS: [['id_unita', 'ID'], ['tipo', 'Tipo'], ['magazzino', 'Magazzino'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['mnft', 'MNFT'], ['material', 'Material'], ['fr', 'FR'], ['rma', 'RMA'], ['riparatore', 'Riparatore'], ['ubicazione', 'Ubicazione'], ['destinazione_prevista', 'Destinazione'], ['data_in', 'Data in'], ['stato', 'Stato'], ['data_out', 'Data out'], ['note', 'Nota']],
+  A_MAG: ['IN_GIACENZA', 'IN_LAVORAZIONE', 'BLOCCATO', 'IN_ATTESA'],
+  bloccato: function (id) { var u = id && DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); return u && (u.stato === 'BLOCCATO' || u.stato === 'IN_ATTESA') ? u : null; },
   init: function () {
     $('gTipo').innerHTML = '<option value="">Tutti</option>' + TIPI.map(function (t) { return '<option>' + t + '</option>'; }).join('');
     $('gMag').innerHTML = '<option value="">Tutti</option>' + DB.t.MAGAZZINI.rows.map(function (m) { return '<option>' + esc(m.codice) + '</option>'; }).join('');
   },
   debounce: function () { clearTimeout(Giacenze._t); Giacenze._t = setTimeout(Giacenze.render, 200); },
+  // dati dell'ingresso (AWB, DDT, mittente, vettore, PO, operatore, data e ora) dal movimento IN della scheda
+  movIn: function (u) { return (Giacenze._mi || {})[u.id_mov_in] || {}; },
+  indice: function () {
+    var R = Sto.dati.cur; if (!R || Giacenze._miN === R.length) return;
+    var m = {}; R.forEach(function (r) { if (r.direzione === 'IN') m[r.id_mov] = r; }); Giacenze._mi = m; Giacenze._miN = R.length;
+  },
+  carica: async function () {
+    if (Sto.dati.cur) return;
+    try { Sto.dati.cur = await Sto.colsSafe(DB.id, 'MOVIMENTI'); Giacenze.render(); } catch (e) { toast('Movimenti non caricati: ' + e.message, 'ko'); }
+  },
+  filtra: function (u) {
+    var st = $('gStato').value, tipo = $('gTipo').value, mag = $('gMag').value, q = L.up($('gQ').value);
+    if (st === 'A_MAG' ? Giacenze.A_MAG.indexOf(u.stato) < 0 : (st && u.stato !== st)) return false;
+    if (mag && u.magazzino !== mag) return false;
+    if (q) { var m = Giacenze.movIn(u); if (![u.seriale, u.pn, u.fr, u.rma, u.ubicazione, u.material, u.note, u.id_unita, u.destinazione_prevista, u.bin_vlt, m.awb, m.ddt, m.controparte, m.po_mrn].some(function (x) { return L.up(x).indexOf(q) >= 0; })) return false; }
+    return !tipo || u.tipo === tipo;
+  },
+  grid: function () {
+    if (Giacenze.g) return Giacenze.g;
+    var mi = Giacenze.movIn, sp = function (k) { return function (u) { return L.s(mi(u)[k]); }; };
+    var STATO = { IN_GIACENZA: ['p-green', 'in giacenza'], IN_LAVORAZIONE: ['p-blue', 'in lavorazione'], BLOCCATO: ['p-red', '⛔ bloccato'], IN_ATTESA: ['p-amber', '⏸ in attesa'], USCITO: ['', 'uscito'], ANNULLATO: ['', 'annullato'] };
+    return Giacenze.g = new Grid('giac', {
+      thead: 'gHead', tbody: 'gRows', foot: 'gHint', limit: 500, sort: 'data_in', dir: -1, empty: 'Nessun risultato',
+      hidden: ['barcode_letto', 'sap_code_ats', 'descrizione', 'bin_vlt', 'n_plt', 'id_ricezione', 'id_mov_in', 'id_spedizione', 'data_out', 'data_vlt', 'creato_da', 'modificato', 'vettore', 'po'],
+      rowAttr: function (u) { return u.stato === 'BLOCCATO' ? 'class="r-err"' : (u.stato === 'IN_ATTESA' ? 'class="r-warn"' : ''); },
+      rows: function () { Giacenze.indice(); return DB.t.UNITA.rows.filter(Giacenze.filtra); },
+      cols: [
+        { k: 'az', label: '', noXls: true, html: function (u) { return '<button class="btn ghost sm" style="padding:2px 8px" title="Nota, blocco, attesa, variazione" onclick="Giacenze.gestisci(\'' + esc(u.id_unita) + '\')">✎</button>'; } },
+        { k: 'id_unita', label: 'ID', filter: 'text', cls: 'mono' },
+        { k: 'tipo', label: 'Tipo', filter: 'select', html: function (u) { return Pill.tipo(u.tipo); } },
+        { k: 'stato', label: 'Stato', filter: 'select', html: function (u) { var x = STATO[u.stato] || ['', u.stato]; return '<span class="pill ' + x[0] + '">' + esc(x[1]) + '</span>'; } },
+        { k: 'magazzino', label: 'Mag.', filter: 'select' },
+        { k: 'fr', label: 'FR', filter: 'text', cls: 'mono' },
+        { k: 'rma', label: 'RMA', filter: 'text', cls: 'mono' },
+        { k: 'data_in', label: 'Data in hub', cls: 'mono nw', get: function (u) { return L.s(mi(u).data_ora) || L.s(u.data_in); }, html: function (u) { return esc(Sto.dataOra(mi(u).data_ora || u.data_in)); } },
+        { k: 'data_vlt', label: 'Data reg. VLT', cls: 'mono', get: function (u) { return L.normDate(mi(u).data_registrazione_vlt); } },
+        { k: 'po', label: 'PO/MRN', filter: 'text', cls: 'mono', get: sp('po_mrn') },
+        { k: 'mittente', label: 'Mittente', filter: 'select', get: sp('controparte') },
+        { k: 'awb', label: 'AWB', filter: 'text', cls: 'mono', get: sp('awb') },
+        { k: 'vettore', label: 'Carrier', filter: 'select', get: sp('vettore') },
+        { k: 'ddt', label: 'DDT', filter: 'text', cls: 'mono', get: sp('ddt') },
+        { k: 'op', label: 'OP', filter: 'select', get: function (u) { var m = mi(u); return m.id_mov ? Sto.op(m) : L.s(u.creato_da).split('@')[0]; } },
+        { k: 'mnft', label: 'MNFT', filter: 'select' },
+        { k: 'seriale', label: 'Seriale', filter: 'text', cls: 'mono' },
+        { k: 'pn', label: 'P/N', filter: 'text', cls: 'mono' },
+        { k: 'material', label: 'Material', filter: 'text', cls: 'mono' },
+        { k: 'riparatore', label: 'Riparatore', filter: 'select' },
+        { k: 'ubicazione', label: 'Ubicazione', filter: 'text', cls: 'mono' },
+        { k: 'destinazione_prevista', label: 'Destinazione', filter: 'select' },
+        { k: 'note', label: 'Nota', filter: 'text', get: function (u) { return L.s(u.note).split(' | fonte:')[0].replace(/^fonte:.*$/i, ''); } },
+        { k: 'posizione', label: 'Posizione e note new/reuse', filter: 'text', get: sp('posizione_note') },
+        { k: 'anomalia', label: 'Anomalia', filter: 'text', get: sp('anomalia') },
+        { k: 'barcode_letto', label: 'Barcode letto', cls: 'mono' },
+        { k: 'sap_code_ats', label: 'SAP code', cls: 'mono' },
+        { k: 'descrizione', label: 'Descrizione' },
+        { k: 'bin_vlt', label: 'Bin VLT', cls: 'mono' },
+        { k: 'n_plt', label: 'N. PLT', cls: 'mono' },
+        { k: 'id_ricezione', label: 'ID ricezione', cls: 'mono' },
+        { k: 'id_mov_in', label: 'ID mov. IN', cls: 'mono' },
+        { k: 'id_spedizione', label: 'ID spedizione', cls: 'mono' },
+        { k: 'data_out', label: 'Data out', cls: 'mono' },
+        { k: 'creato_da', label: 'Creato da', filter: 'select', get: function (u) { return L.s(u.creato_da).split('@')[0]; } },
+        { k: 'modificato', label: 'Ultima modifica', cls: 'mono nw', get: function (u) { return L.s(u.modificato_il) ? L.s(u.modificato_il) + ' · ' + L.s(u.modificato_da).split('@')[0] : ''; } }
+      ]
+    });
+  },
   render: function () {
-    var q = L.up($('gQ').value), tipo = $('gTipo').value, mag = $('gMag').value, st = $('gStato').value;
-    var F = ['seriale', 'pn', 'fr', 'rma', 'ubicazione', 'material', 'note', 'id_unita', 'destinazione_prevista', 'bin_vlt'];
-    var all = DB.t.UNITA.rows.filter(function (u) { return (!st || u.stato === st) && (!mag || u.magazzino === mag); });
-    var list = Giacenze._list = all.filter(function (u) { return (!tipo || u.tipo === tipo) && (!q || F.some(function (f) { return L.up(u[f]).indexOf(q) >= 0; })); });
-    var by = {}; all.filter(function (u) { return !q || F.some(function (f) { return L.up(u[f]).indexOf(q) >= 0; }); }).forEach(function (u) { by[u.tipo] = (by[u.tipo] || 0) + 1; });
-    $('gStats').innerHTML = '<div class="stat"><b>' + list.length + '</b><span>risultati</span></div>' + TIPI.filter(function (t) { return by[t]; }).map(function (t) { return '<div class="stat" style="cursor:pointer" onclick="$(\'gTipo\').value=\'' + t + '\';Giacenze.render()"><b>' + by[t] + '</b><span>' + t + '</span></div>'; }).join('');
-    $('gRows').innerHTML = list.length ? list.slice(0, 500).map(function (u) {
-      return '<tr><td class="mono">' + esc(u.id_unita) + '</td><td>' + Pill.tipo(u.tipo) + '</td><td style="font-size:11px">' + esc(u.magazzino) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.mnft) + '</td><td class="mono">' + esc(u.fr) + '</td><td class="mono">' + esc(u.rma) + '</td><td>' + esc(u.riparatore) + '</td><td class="mono">' + esc(u.ubicazione) + '</td><td>' + esc(u.destinazione_prevista) + '</td><td class="mono">' + esc(u.data_in) + '</td><td style="font-size:11px">' + esc(u.stato) + '</td><td style="font-size:11.5px">' + esc(u.note) + '</td></tr>';
-    }).join('') : '<tr><td colspan="14" class="empty">Nessun risultato</td></tr>';
-    $('gHint').textContent = list.length > 500 ? 'Mostrati i primi 500 di ' + list.length + ': affina la ricerca.' : '';
+    if (!$('gHead')) return;
+    var g = Giacenze.grid(); g.render();
+    var list = g.visibili || [], by = {}; list.forEach(function (u) { by[u.tipo] = (by[u.tipo] || 0) + 1; });
+    var nb = list.filter(function (u) { return u.stato === 'BLOCCATO'; }).length, na = list.filter(function (u) { return u.stato === 'IN_ATTESA'; }).length;
+    $('gStats').innerHTML = '<div class="stat"><b>' + list.length + '</b><span>risultati</span></div>' + TIPI.filter(function (t) { return by[t]; }).map(function (t) { return '<div class="stat" style="cursor:pointer" onclick="$(\'gTipo\').value=\'' + t + '\';Giacenze.render()"><b>' + by[t] + '</b><span>' + t + '</span></div>'; }).join('') +
+      (nb ? '<div class="stat" style="cursor:pointer" onclick="$(\'gStato\').value=\'BLOCCATO\';Giacenze.render()"><b style="color:var(--red)">' + nb + '</b><span>bloccati</span></div>' : '') +
+      (na ? '<div class="stat" style="cursor:pointer" onclick="$(\'gStato\').value=\'IN_ATTESA\';Giacenze.render()"><b style="color:var(--amber)">' + na + '</b><span>in attesa</span></div>' : '');
+    if (!Sto.dati.cur && !Giacenze._loading) { Giacenze._loading = true; Giacenze.carica().then(function () { Giacenze._loading = false; }); }
+  },
+  excel: function () { Giacenze.grid().excel('Giacenze'); },
+
+  // ─ gestione item: nota, blocco, attesa, variazione dati (tracciati in MOVIMENTI come movimenti interni + LOG)
+  VAR_F: [['tipo', 'Tipo'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['fr', 'FR'], ['rma', 'RMA'], ['riparatore', 'Riparatore'], ['magazzino', 'Magazzino'], ['ubicazione', 'Ubicazione'], ['destinazione_prevista', 'Destinazione']],
+  gestisci: function (id) {
+    var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); if (!u) return;
+    var gestibile = Giacenze.A_MAG.indexOf(u.stato) >= 0 && u.stato !== 'IN_LAVORAZIONE';
+    var nota = L.s(u.note).split(' | fonte:')[0].replace(/^fonte:.*$/i, '');
+    var opz = function (v, list) { return list.map(function (x) { return '<option' + (x === v ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join(''); };
+    var campo = function (f) {
+      var k = f[0], v = L.s(u[k]);
+      if (k === 'tipo') return '<select class="fc" id="gv_tipo">' + opz(v, TIPI) + '</select>';
+      if (k === 'magazzino') return '<select class="fc" id="gv_magazzino">' + opz(v, DB.t.MAGAZZINI.rows.map(function (m) { return m.codice; }).concat(v && !DB.t.MAGAZZINI.rows.some(function (m) { return m.codice === v; }) ? [v] : [])) + '</select>';
+      return '<input class="fc' + (/seriale|pn|fr|rma|ubicazione/.test(k) ? ' mono' : '') + '" id="gv_' + k + '" value="' + esc(v) + '"' + (k === 'destinazione_prevista' ? ' list="dlControparti"' : '') + '>';
+    };
+    Modal.html('Gestisci ' + u.id_unita + ' · ' + u.seriale,
+      '<div style="font-size:12.5px;color:var(--subtle);margin-bottom:10px">' + Pill.tipo(u.tipo) + ' ' + esc(u.stato) + (u.fr ? ' · FR ' + esc(u.fr) : '') + ' · ' + esc(u.pn) + ' · ' + esc(u.riparatore) + '</div>' +
+      (gestibile ? '<div class="fg"><span class="fl">Stato operativo</span><div class="g-stati">' +
+        [['IN_GIACENZA', '✓ Disponibile'], ['BLOCCATO', '⛔ Bloccato'], ['IN_ATTESA', '⏸ In attesa']].map(function (x) { return '<label><input type="radio" name="gvStato" value="' + x[0] + '"' + (u.stato === x[0] ? ' checked' : '') + '> ' + x[1] + '</label>'; }).join('') +
+        '</div><div class="hint">Bloccato / in attesa: il pezzo resta in giacenza ma non può uscire (ACK, RMA) finché non torna disponibile.</div></div>' :
+        '<div class="hint" style="margin-bottom:8px">Stato ' + esc(u.stato) + ': blocco e attesa non disponibili.</div>') +
+      '<div class="fg" style="margin-top:8px"><span class="fl">Motivo / nota del cambio <span class="hint">(obbligatorio per blocco, attesa e variazioni)</span></span><input class="fc" id="gvMotivo" autocomplete="off" placeholder="es. in attesa conferma SD, seriale da verificare…"></div>' +
+      '<div class="fg" style="margin-top:8px"><span class="fl">Nota della scheda</span><input class="fc" id="gvNota" value="' + esc(nota) + '"></div>' +
+      '<details style="margin-top:10px"' + '><summary style="cursor:pointer;font-size:13px">Varia i dati della scheda</summary><div class="g-var">' +
+      Giacenze.VAR_F.map(function (f) { return '<div class="fg"><span class="fl">' + f[1] + '</span>' + campo(f) + '</div>'; }).join('') + '</div></details>' +
+      '<div class="hint" id="gvErr" style="margin-top:8px"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Salva', keep: true, fn: function () { Giacenze.salva(id); } }], true);
+  },
+  salva: async function (id) {
+    var tU = DB.t.UNITA, u = tU.rows.find(function (x) { return x.id_unita === id; }), ch = {}, err = function (t) { $('gvErr').textContent = t; $('gvErr').className = 'hint err'; };
+    var motivo = L.s($('gvMotivo').value), notaOld = L.s(u.note).split(' | fonte:')[0].replace(/^fonte:.*$/i, ''), nota = L.s($('gvNota').value);
+    var r = document.querySelector('input[name=gvStato]:checked'); if (r && r.value !== u.stato) ch.stato = r.value;
+    Giacenze.VAR_F.forEach(function (f) {
+      var e = $('gv_' + f[0]); if (!e) return; var v = L.s(e.value);
+      if (/^(seriale|pn|tipo|magazzino)$/.test(f[0])) v = v.toUpperCase(); if (f[0] === 'fr' && v) v = L.frKey(v);
+      if (v !== L.s(u[f[0]])) ch[f[0]] = v;
+    });
+    if (nota !== notaOld) { var fonte = L.s(u.note).indexOf(' | fonte:') >= 0 ? L.s(u.note).slice(L.s(u.note).indexOf(' | fonte:')) : ''; ch.note = nota + fonte; }
+    if (!Object.keys(ch).length) { Modal.close(); return; }
+    var variati = Object.keys(ch).filter(function (k) { return k !== 'stato' && k !== 'note'; });
+    if ((ch.stato && ch.stato !== 'IN_GIACENZA' || variati.length) && !motivo) { err('Scrivi il motivo'); $('gvMotivo').focus(); return; }
+    if ('seriale' in ch && !ch.seriale) { err('Il seriale non può essere vuoto'); return; }
+    if (ch.fr && !/^\d+$/.test(ch.fr)) { err('FR deve essere un numero'); return; }
+    if ('seriale' in ch) { var dup = tU.rows.find(function (x) { return x !== u && Giacenze.A_MAG.indexOf(x.stato) >= 0 && L.up(x.seriale) === ch.seriale; }); if (dup) { err('Seriale già in giacenza (' + dup.id_unita + ')'); return; } }
+    Modal.progress('Salvataggio…');
+    try {
+      var last = L.colLetter(tU.header.length - 1);
+      var cur = (await API.batchGet(DB.id, [API.q('UNITA') + '!A' + u._r + ':' + last + u._r]))[0][0] || [];
+      if (L.s(cur[tU.idx.id_unita]) !== u.id_unita) throw new Error('la riga non è più al suo posto: premi Aggiorna e riprova');
+      if (L.s(cur[tU.idx.rev]) !== L.s(u.rev)) throw new Error('la scheda è stata modificata da un altro utente: premi Aggiorna e riprova');
+      var now = L.nowStamp(), prima = {}, upd = [], all = Object.assign({}, ch, { modificato_il: now, modificato_da: Auth.email, rev: (parseInt(u.rev, 10) || 1) + 1 });
+      Object.keys(all).forEach(function (h) { if (h in tU.idx) { prima[h] = u[h]; upd.push({ range: tU.cell(h, u._r), values: [[String(all[h])]] }); } });
+      // movimento interno: causale principale + descrizione prima → dopo
+      var caus = ch.stato === 'BLOCCATO' ? 'BLOCCO' : ch.stato === 'IN_ATTESA' ? 'ATTESA' : (ch.stato === 'IN_GIACENZA' ? 'SBLOCCO' : (variati.length ? 'VARIAZIONE' : 'NOTA'));
+      var desc = Object.keys(ch).filter(function (k) { return k !== 'note'; }).map(function (k) { return k + ': ' + (L.s(u[k]) || '—') + ' → ' + (L.s(ch[k]) || '—'); });
+      if ('note' in ch) desc.push('nota: ' + nota);
+      var testo = (motivo ? motivo + ' · ' : '') + desc.join(' · ');
+      var H = await Ingresso.heads(), tM = H.MOVIMENTI, x = Object.assign({}, u, ch);
+      var mov = { data_ora: now, direzione: 'INT', causale: caus, id_unita: u.id_unita, seriale: x.seriale, pn: x.pn, mnft: x.mnft, tipo: x.tipo, fr: x.fr, rma: x.rma, riparatore: x.riparatore, ubicazione_da: u.ubicazione, ubicazione_a: x.ubicazione, operatore: Auth.email, operatore_sigla: App.me.sigla || '', note: testo, origine: 'APP' };
+      var res = await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'MOVIMENTI', [tM.toRow(mov)]), API.append(DB.id, 'LOG', [H.LOG.toRow({ data_ora: now, utente: Auth.email, azione: 'GESTIONE_' + caus, foglio: 'UNITA', id_record: u.id_unita, dettaglio: JSON.stringify({ motivo: motivo, prima: prima, dopo: ch }) })])]);
+      var rM = res[1], base = parseInt(DB.param('mov_id_base', ''), 10) || 0;
+      if (rM) { mov.id_mov = 'MV' + (base + rM); await API.batchUpdate(DB.id, [{ range: tM.cell('id_mov', rM), values: [[mov.id_mov]] }]).catch(function () { }); }
+      Object.keys(all).forEach(function (h) { u[h] = String(all[h]); });
+      if (Sto.dati.cur) { Sto.COLS.forEach(function (c) { if (!(c in mov)) mov[c] = ''; }); Sto.dati.cur.push(mov); }
+      Modal.close(); toast(u.id_unita + ': ' + caus.toLowerCase() + ' salvato', 'ok'); Giacenze.render();
+    } catch (e) { Modal.progress(''); err('Non salvato: ' + e.message); }
   }
 };
 
@@ -1542,7 +1764,8 @@ var Drive = {
     if (!f) f = await API.call('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id', { method: 'POST', body: JSON.stringify({ name: 'STORICO DDT', mimeType: 'application/vnd.google-apps.folder', parents: [CFG.FOLDER_ID] }) });
     Drive._f = f.id; return f.id;
   },
-  upload: async function (name, blob) {
+  upload: function (name, blob) { return Busy.wrap(Drive._upload(name, blob)); },
+  _upload: async function (name, blob) {
     var folder = await Drive.folder();
     var go = function () {
       var fd = new FormData();
@@ -1561,7 +1784,25 @@ var Drive = {
 function Grid(name, o) {
   this.name = name; this.o = o; this.sort = o.sort || null; this.dir = o.dir || 1; this.f = {}; this.limit = o.limit || 500; Grid.all[name] = this;
   this.w = {}; try { this.w = JSON.parse(localStorage.getItem('gw_' + name) || '{}') || {}; } catch (x) { }
+  var h = null; try { h = JSON.parse(localStorage.getItem('gh_' + name) || 'null'); } catch (x) { }
+  this.hid = {}; (h || o.hidden || []).forEach(function (k) { this.hid[k] = 1; }, this);
 }
+// colonne visibili (mostra/nascondi colonne, scelta salvata per utente/browser)
+Grid.prototype.vc = function () { var self = this; return this.o.cols.filter(function (c) { return !self.hid[c.k]; }); };
+Grid.prototype.scegli = function () {
+  var self = this, g = 'Grid.all[\'' + this.name + '\']';
+  Modal.html('Colonne da mostrare', '<div class="hint" style="margin-bottom:8px">Spunta le colonne che vuoi vedere. La scelta resta salvata su questo browser.</div><div class="col-pick">' +
+    this.o.cols.map(function (c) { return '<label><input type="checkbox" data-k="' + esc(c.k) + '"' + (self.hid[c.k] ? '' : ' checked') + '> ' + esc(c.label || c.k) + '</label>'; }).join('') + '</div>' +
+    '<div style="margin-top:10px;display:flex;gap:8px"><button class="btn ghost sm" onclick="document.querySelectorAll(\'.col-pick input\').forEach(function(i){i.checked=true})">Tutte</button><button class="btn ghost sm" onclick="' + g + '.predef()">Predefinite</button></div>',
+    [{ label: 'Annulla', cls: 'ghost' }, { label: 'Applica', fn: function () {
+      var hid = {}; document.querySelectorAll('.col-pick input').forEach(function (i) { if (!i.checked) hid[i.dataset.k] = 1; });
+      if (Object.keys(hid).length >= self.o.cols.length) { toast('Lascia almeno una colonna', 'ko'); return; }
+      Object.keys(hid).forEach(function (k) { delete self.f[k]; });
+      self.hid = hid; try { localStorage.setItem('gh_' + self.name, JSON.stringify(Object.keys(hid))); } catch (x) { }
+      self.render(true);
+    } }]);
+};
+Grid.prototype.predef = function () { var d = {}; (this.o.hidden || []).forEach(function (k) { d[k] = 1; }); document.querySelectorAll('.col-pick input').forEach(function (i) { i.checked = !d[i.dataset.k]; }); };
 Grid.all = {};
 // larghezza colonne: trascina il bordo destro dell'intestazione; doppio clic = torna automatica (salvata per utente/browser)
 Grid.stile = function (w) { return w ? ' style="width:' + w + 'px;min-width:' + w + 'px;max-width:' + w + 'px"' : ''; };
@@ -1596,12 +1837,12 @@ Grid.prototype.cmp = function (a, b) {
 };
 Grid.prototype.head = function () {
   var self = this, g = 'Grid.all[\'' + this.name + '\']';
-  var h1 = '<tr>' + this.o.cols.map(function (c) {
+  var h1 = '<tr>' + this.vc().map(function (c) {
     var ar = self.sort === c.k ? (self.dir > 0 ? ' ▲' : ' ▼') : '';
     return '<th class="g-th' + (self.sort === c.k ? ' g-sorted' : '') + '"' + Grid.stile(self.w[c.k]) + ' onclick="' + g + '.ordina(\'' + c.k + '\')" title="Clicca per ordinare">' + esc(c.label) + ar +
       '<span class="g-rs" title="Trascina per allargare · doppio clic: automatica" onclick="event.stopPropagation()" onmousedown="Grid.rs(event,\'' + self.name + '\',\'' + c.k + '\')" ondblclick="Grid.rsReset(event,\'' + self.name + '\',\'' + c.k + '\')"></span></th>';
   }).join('') + '</tr>';
-  var h2 = '<tr class="g-filters">' + this.o.cols.map(function (c) {
+  var h2 = '<tr class="g-filters">' + this.vc().map(function (c) {
     if (c.filter === 'select') return '<th><select class="g-f" id="gf_' + self.name + '_' + c.k + '" onchange="' + g + '.filtra(\'' + c.k + '\',this.value)"></select></th>';
     if (c.filter === 'text') return '<th><input class="g-f" id="gf_' + self.name + '_' + c.k + '" value="' + esc(self.f[c.k] || '') + '" placeholder="filtra" oninput="' + g + '.filtraT(\'' + c.k + '\',this.value)"></th>';
     return '<th></th>';
@@ -1630,9 +1871,10 @@ Grid.prototype.render = function (rifaiTesta) {
     e.classList.toggle('g-on', !!cur);
   });
   o.cols.forEach(function (c) { if (c.filter === 'text') { var e = $('gf_' + self.name + '_' + c.k); if (e) e.classList.toggle('g-on', !!self.f[c.k]); } });
+  var vis = this.vc();
   tb.innerHTML = list.length ? list.slice(0, this.limit).map(function (r) {
-    return '<tr' + (o.rowAttr ? ' ' + o.rowAttr(r) : '') + '>' + o.cols.map(function (c) { return '<td' + (c.cls ? ' class="' + c.cls + '"' : '') + Grid.stile(self.w[c.k]) + '>' + (c.html ? c.html(r) : esc(self.val(c, r))) + '</td>'; }).join('') + '</tr>';
-  }).join('') : '<tr><td colspan="' + o.cols.length + '" class="empty">' + esc(o.empty || 'Nessuna riga') + '</td></tr>';
+    return '<tr' + (o.rowAttr ? ' ' + o.rowAttr(r) : '') + '>' + vis.map(function (c) { return '<td' + (c.cls ? ' class="' + c.cls + '"' : '') + Grid.stile(self.w[c.k]) + '>' + (c.html ? c.html(r) : esc(self.val(c, r))) + '</td>'; }).join('') + '</tr>';
+  }).join('') : '<tr><td colspan="' + vis.length + '" class="empty">' + esc(o.empty || 'Nessuna riga') + '</td></tr>';
   var nf = Object.keys(this.f).length;
   if (o.foot && $(o.foot)) $(o.foot).innerHTML = list.length + ' righe' + (list.length !== all.length ? ' su ' + all.length : '') +
     (list.length > this.limit ? ' · mostrate ' + this.limit + ' <a class="mail" href="javascript:Grid.all[\'' + this.name + '\'].altri()">mostra altre</a>' : '') +
@@ -1905,7 +2147,7 @@ var Ack = {
     var byFr = {}, bySer = {}, byId = {};
     DB.t.UNITA.rows.forEach(function (u) {
       byId[u.id_unita] = u;
-      if (u.stato !== 'IN_GIACENZA' && u.stato !== 'IN_LAVORAZIONE') return;
+      if (Giacenze.A_MAG.indexOf(u.stato) < 0) return;   // anche bloccati / in attesa: compaiono ma non si spuntano
       if (u.fr) byFr[u.fr] = u; var s = L.up(u.seriale); if (s) { bySer[s] = u; bySer[L.up(L.afterSpace(s))] = bySer[L.up(L.afterSpace(s))] || u; }
     });
     return { fr: byFr, ser: bySer, id: byId };
@@ -1969,6 +2211,7 @@ var Ack = {
     clearTimeout(Ack._qt);
     Ack._fl = (async function () {
       await null;   // il corpo parte dopo l'assegnazione di Ack._fl
+      Busy.muto++;
       try {
         while (Ack.q.length || Ack.qA.length) {
           var u = Ack.q.splice(0);
@@ -1983,7 +2226,7 @@ var Ack = {
           }
         }
       } catch (e) { toast('Spunta non ancora salvata, riprovo: ' + e.message, 'ko'); Ack._qt = setTimeout(Ack.flush, 5000); }
-      finally { Ack._fl = null; Ack.qInfo(); }
+      finally { Busy.muto--; Ack._fl = null; Ack.qInfo(); }
     })();
     return Ack._fl;
   },
@@ -2038,6 +2281,7 @@ var Ack = {
     if (r) {
       if (r.esito === 'ESCLUSO_BAN') { Ack.fb('⚠ FR ' + r.fr + ' è BAN: NON va spedito, mettilo da parte', 'err'); }
       else if (r.esito === 'SPUNTATO') { Ack.fb('FR ' + r.fr + ' già spuntato', 'warn'); }
+      else if (Giacenze.bloccato(r.id_unita)) { var bu = Giacenze.bloccato(r.id_unita); Ack.fb('⛔ FR ' + r.fr + ' è ' + (bu.stato === 'BLOCCATO' ? 'BLOCCATO' : 'IN ATTESA') + ' in giacenza: non spedire (sbloccalo da Giacenze)', 'err'); }
       else { Ack.setR(r, 'SPUNTATO'); Ack.fb('✓ FR ' + r.fr + ' · ' + r.seriale + (r.flag_vlt === 'AS' ? ' · AS' : ''), 'ok'); }
     } else {
       // SPARE FALSE: letto ma non nella lista ACK del giorno
@@ -2192,7 +2436,7 @@ var Ack = {
       var ix = Ack.idxU(), rp = Ack.rip(s.destinatario), mnft = rp.mnft_default || rp.codice || s.destinatario;
       var mObjs = R.map(function (r) {
         var u = ix.id[r.id_unita] || null, v = DB.vltMap[r.fr];
-        return { data_ora: oggi, direzione: 'OUT', causale: 'ACK', id_unita: r.id_unita, seriale: r.seriale, pn: r.pn, mnft: mnft, tipo: 'FAULTY', fr: r.fr, rma: r.rma, controparte: s.destinatario,
+        return { data_ora: oggi + ' ' + L.nowStamp().slice(11), direzione: 'OUT', causale: 'ACK', id_unita: r.id_unita, seriale: r.seriale, pn: r.pn, mnft: mnft, tipo: 'FAULTY', fr: r.fr, rma: r.rma, controparte: s.destinatario,
           awb: s.awb, vettore: s.vettore, ddt: nDdt, id_spedizione: id, riparatore: v ? v.riparatore : (u ? u.riparatore : ''), ubicazione_da: u ? u.ubicazione : '',
           operatore: me, operatore_sigla: sigla, note: r.flag_vlt, origine: 'APP' };
       });
@@ -2857,7 +3101,7 @@ var Rma = {
     var tR = DB.t.SPEDIZIONI_RIGHE;
     var righe = P.map(function (p) { return { id_spedizione: id, id_unita: p.u.id_unita, seriale: p.u.seriale, pn: p.u.pn, fr: p.u.fr, rma: p.rma, esito: 'SPUNTATO', spuntato_da: me, spuntato_il: now, note: p.fonte }; });
     var mObjs = P.map(function (p) {
-      return { data_ora: oggi, direzione: 'OUT', causale: p.causale, id_unita: p.u.id_unita, seriale: p.u.seriale, pn: p.u.pn, mnft: p.u.mnft, tipo: p.u.tipo, fr: p.u.fr, rma: p.rma, po_mrn: p.po || '',
+      return { data_ora: oggi + ' ' + L.nowStamp().slice(11), direzione: 'OUT', causale: p.causale, id_unita: p.u.id_unita, seriale: p.u.seriale, pn: p.u.pn, mnft: p.u.mnft, tipo: p.u.tipo, fr: p.u.fr, rma: p.rma, po_mrn: p.po || '',
         controparte: s.destinatario, awb: s.awb, vettore: s.vettore, ddt: nDdt, id_spedizione: id, riparatore: p.u.riparatore, ubicazione_da: p.u.ubicazione, operatore: me, operatore_sigla: sigla, note: p.fonte, origine: 'APP' };
     });
     var rr = await Promise.all([API.append(DB.id, 'SPEDIZIONI_RIGHE', righe.map(function (o) { return tR.toRow(o); })), API.append(DB.id, 'MOVIMENTI', mObjs.map(function (o) { return tM.toRow(o); }))]);
@@ -3171,8 +3415,10 @@ var Vlt = {
 
 // ───────────────────────── STORICO MOVIMENTI (anno in corso + archivi) ─────────────────────────
 var Sto = {
-  fonte: 'cur', dati: {}, grid: null,
-  COLS: ['id_mov', 'data_ora', 'direzione', 'causale', 'seriale', 'pn', 'mnft', 'tipo', 'fr', 'rma', 'po_mrn', 'controparte', 'awb', 'vettore', 'ddt', 'riparatore', 'operatore_sigla', 'operatore', 'note'],
+  fonte: 'cur', dati: {}, sez: 'IN', grids: {},
+  COLS: ['id_mov', 'data_ora', 'data_registrazione_vlt', 'data_in_merci', 'direzione', 'causale', 'id_unita', 'seriale', 'pn', 'mnft', 'tipo', 'fr', 'rma', 'po_mrn', 'controparte', 'awb', 'vettore', 'ddt',
+    'id_ricezione', 'id_spedizione', 'riparatore', 'ubicazione_da', 'ubicazione_a', 'posizione_note', 'operatore', 'operatore_sigla', 'note', 'anomalia', 'origine'],
+  SEZ: { IN: 'Inbound', OUT: 'Outbound', INT: 'Interni (note, blocchi, variazioni)', ALL: 'Tutti' },
   colsSafe: async function (ss, sheet) {
     var h = ((await API.batchGet(ss, [API.q(sheet) + '!1:1']))[0][0] || []).map(L.s);
     var have = Sto.COLS.filter(function (c) { return h.indexOf(c) >= 0; });
@@ -3196,26 +3442,103 @@ var Sto = {
     }
     return Sto.dati[f];
   },
-  show: async function () {
-    if (!Sto.grid) Sto.grid = new Grid('sto', {
-      thead: 'stoHead', tbody: 'stoRows', foot: 'stoFoot', sort: 'data_ora', dir: -1, limit: 300, empty: 'Nessun movimento',
-      rows: function () {
-        var q = L.up($('stoQ').value), R = Sto.dati[Sto.fonte] || [];
-        return q ? R.filter(function (r) { return [r.seriale, r.fr, r.rma, r.ddt, r.awb, r.id_mov, r.pn, r.po_mrn].some(function (x) { return L.up(x).indexOf(q) >= 0; }); }) : R;
-      },
-      cols: [
-        { k: 'id_mov', label: 'ID', cls: 'mono' }, { k: 'data_ora', label: 'Data', cls: 'mono', get: function (r) { return L.normDate(r.data_ora); } },
-        { k: 'direzione', label: 'Dir.', filter: 'select' }, { k: 'causale', label: 'Causale', filter: 'select' }, { k: 'tipo', label: 'Tipo', filter: 'select', html: function (r) { return r.tipo ? Pill.tipo(r.tipo) : ''; } },
-        { k: 'seriale', label: 'Seriale', filter: 'text', cls: 'mono' }, { k: 'pn', label: 'P/N', filter: 'text', cls: 'mono' }, { k: 'fr', label: 'FR', filter: 'text', cls: 'mono' }, { k: 'rma', label: 'RMA', filter: 'text', cls: 'mono' },
-        { k: 'controparte', label: 'Controparte', filter: 'select' }, { k: 'awb', label: 'AWB', filter: 'text', cls: 'mono' }, { k: 'ddt', label: 'DDT', filter: 'text', cls: 'mono' },
-        { k: 'op', label: 'Op.', filter: 'select', get: function (r) { return r.operatore_sigla || L.s(r.operatore).split('@')[0]; } }, { k: 'note', label: 'Note', filter: 'text' }
-      ]
-    });
-    try { await Sto.carica(false); Sto.grid.render(true); } catch (e) { $('stoRows').innerHTML = '<tr><td class="empty">Errore: ' + esc(e.message) + '</td></tr>'; }
+  // data e ora leggibili: "13/10/2026 12:41" (i movimenti migrati hanno solo la data)
+  dataOra: function (v) { v = L.s(v); var g = L.normDate(v), t = /(\d{1,2}:\d{2})/.exec(v.slice(10)); return g ? L.itDate(g) + (t ? ' ' + t[1] : '') : v; },
+  op: function (r) { return r.operatore_sigla || L.s(r.operatore).split('@')[0]; },
+  dir: function (r) { return r.direzione === 'IN' || r.direzione === 'OUT' ? r.direzione : 'INT'; },
+  periodo: function () { return [$('stoDa').value || '0000-00-00', $('stoA').value || '9999-99-99']; },
+  nelPeriodo: function (r) { var g = L.normDate(r.data_ora), p = Sto.periodo(); return !g || (g >= p[0] && g <= p[1]); },
+  cerca_: function (r, q) { return [r.seriale, r.fr, r.rma, r.ddt, r.awb, r.id_mov, r.pn, r.po_mrn, r.controparte, r.id_unita].some(function (x) { return L.up(x).indexOf(q) >= 0; }); },
+  righe: function (sez) {
+    var q = L.up($('stoQ').value), R = Sto.dati[Sto.fonte] || [];
+    return R.filter(function (r) { return (sez === 'ALL' || Sto.dir(r) === sez) && Sto.nelPeriodo(r) && (!q || Sto.cerca_(r, q)); });
   },
-  cambia: function (f) { Sto.fonte = f; Sto.grid && (Sto.grid.f = {}); Sto.show(); },
-  cerca: function () { clearTimeout(Sto._t); Sto._t = setTimeout(function () { Sto.grid.limit = 300; Sto.grid.render(); }, 250); },
-  ricarica: async function () { try { await Sto.carica(true); Sto.grid.render(); } catch (e) { toast(e.message, 'ko'); } }
+  // colonne nell'ordine dell'Easyloader
+  colonne: function (sez) {
+    var C = {
+      id: { k: 'id_mov', label: sez === 'IN' ? 'GES' : 'ID', cls: 'mono' },
+      tipo: { k: 'tipo', label: 'Type', filter: 'select', html: function (r) { return r.tipo ? Pill.tipo(r.tipo) : ''; } },
+      fr: { k: 'fr', label: 'FR', filter: 'text', cls: 'mono' },
+      rma: { k: 'rma', label: sez === 'IN' ? 'RMA balancing' : 'RMA', filter: 'text', cls: 'mono' },
+      data: { k: 'data_ora', label: sez === 'OUT' ? 'Data out' : (sez === 'IN' ? 'Data in hub' : 'Data'), cls: 'mono nw', get: function (r) { return L.s(r.data_ora); }, html: function (r) { return esc(Sto.dataOra(r.data_ora)); } },
+      vlt: { k: 'data_registrazione_vlt', label: 'Data received and verify (reg. VLT)', cls: 'mono', get: function (r) { return L.normDate(r.data_registrazione_vlt); } },
+      po: { k: 'po_mrn', label: sez === 'OUT' ? 'PO new / MRN' : 'PO/MRN', filter: 'text', cls: 'mono' },
+      cp: { k: 'controparte', label: sez === 'OUT' ? 'Destino' : (sez === 'IN' ? 'Mittente' : 'Controparte'), filter: 'select' },
+      awb: { k: 'awb', label: 'AWB', filter: 'text', cls: 'mono' },
+      vet: { k: 'vettore', label: 'Carrier', filter: 'select' },
+      ddt: { k: 'ddt', label: 'DDT', filter: 'text', cls: 'mono' },
+      op: { k: 'op', label: 'OP', filter: 'select', get: Sto.op },
+      mnft: { k: 'mnft', label: 'MNFT', filter: 'select' },
+      ser: { k: 'seriale', label: 'Serial No.', filter: 'text', cls: 'mono' },
+      pn: { k: 'pn', label: 'Product No.', filter: 'text', cls: 'mono' },
+      rip: { k: 'riparatore', label: sez === 'OUT' ? 'Repair' : 'Repairer', filter: 'select' },
+      note: { k: 'note', label: 'Note', filter: 'text' },
+      pos: { k: 'posizione_note', label: 'Posizione e note new/reuse', filter: 'text' },
+      merci: { k: 'data_in_merci', label: 'Data in merci', cls: 'mono', get: function (r) { return L.normDate(r.data_in_merci); } },
+      anom: { k: 'anomalia', label: 'Anomalia', filter: 'text' },
+      caus: { k: 'causale', label: 'Causale', filter: 'select' },
+      dirz: { k: 'direzione', label: 'Dir.', filter: 'select', get: Sto.dir },
+      uid: { k: 'id_unita', label: 'ID unità', filter: 'text', cls: 'mono' },
+      ric: { k: 'id_ricezione', label: 'ID ricezione', cls: 'mono' },
+      sped: { k: 'id_spedizione', label: 'ID spedizione', cls: 'mono' },
+      ubda: { k: 'ubicazione_da', label: 'Ubicazione da', filter: 'text' },
+      uba: { k: 'ubicazione_a', label: 'Ubicazione a', filter: 'text' },
+      orig: { k: 'origine', label: 'Origine', filter: 'select' }
+    };
+    var ord = {
+      IN: ['id', 'tipo', 'fr', 'rma', 'data', 'vlt', 'po', 'cp', 'awb', 'vet', 'ddt', 'op', 'mnft', 'ser', 'pn', 'rip', 'note', 'pos', 'merci', 'anom', 'caus', 'uid', 'ric', 'uba', 'orig'],
+      OUT: ['id', 'tipo', 'fr', 'po', 'rma', 'cp', 'data', 'awb', 'vet', 'ddt', 'op', 'mnft', 'ser', 'pn', 'rip', 'note', 'caus', 'uid', 'sped', 'ubda', 'orig'],
+      INT: ['id', 'data', 'caus', 'tipo', 'ser', 'fr', 'pn', 'rip', 'uid', 'note', 'op'],
+      ALL: ['id', 'data', 'dirz', 'caus', 'tipo', 'fr', 'rma', 'ser', 'pn', 'mnft', 'cp', 'awb', 'vet', 'ddt', 'po', 'rip', 'op', 'note', 'uid', 'orig']
+    }[sez];
+    return ord.map(function (k) { return C[k]; });
+  },
+  grid: function (sez) {
+    if (Sto.grids[sez]) return Sto.grids[sez];
+    var hid = { IN: ['causale', 'id_unita', 'id_ricezione', 'ubicazione_a', 'origine'], OUT: ['causale', 'id_unita', 'id_spedizione', 'ubicazione_da', 'origine'], INT: [], ALL: ['id_unita', 'origine'] }[sez];
+    return Sto.grids[sez] = new Grid('mov' + sez, {
+      thead: 'stoHead', tbody: 'stoRows', foot: 'stoFoot', sort: 'data_ora', dir: -1, limit: 300, empty: 'Nessun movimento nel periodo',
+      hidden: hid, rows: function () { return Sto.righe(sez); }, cols: Sto.colonne(sez)
+    });
+  },
+  init: function () {
+    if (Sto._init) return; Sto._init = true;
+    var d = new Date(); $('stoA').value = L.isoToday(d); d.setDate(d.getDate() - 29); $('stoDa').value = L.isoToday(d);
+  },
+  show: async function () {
+    Sto.init(); Sto.tabs();
+    try { await Sto.carica(false); Sto.render(true); } catch (e) { $('stoRows').innerHTML = '<tr><td class="empty">Errore: ' + esc(e.message) + '</td></tr>'; }
+  },
+  tabs: function () {
+    var R = Sto.dati[Sto.fonte] || [], q = L.up($('stoQ').value), n = { IN: 0, OUT: 0, INT: 0, ALL: 0 };
+    R.forEach(function (r) { if (!Sto.nelPeriodo(r) || (q && !Sto.cerca_(r, q))) return; n[Sto.dir(r)]++; n.ALL++; });
+    $('stoTabs').innerHTML = Object.keys(Sto.SEZ).map(function (k) { return '<span class="subtab' + (Sto.sez === k ? ' active' : '') + '" onclick="Sto.apri(\'' + k + '\')">' + esc(Sto.SEZ[k]) + ' <b class="mono" style="margin-left:4px">' + n[k] + '</b></span>'; }).join('');
+  },
+  render: function (rifai) {
+    var g = Sto.grid(Sto.sez);
+    if (rifai || Sto._last !== Sto.sez) { $('stoHead').dataset.g = ''; Sto._last = Sto.sez; }
+    g.limit = 300; g.render(); Sto.tabs();
+  },
+  apri: function (k) { Sto.sez = k; Sto.render(true); },
+  cambia: function (f) { Sto.fonte = f; Object.keys(Sto.grids).forEach(function (k) { Sto.grids[k].f = {}; }); if (f !== 'cur') { $('stoDa').value = f + '-01-01'; $('stoA').value = f + '-12-31'; } Sto.show(); },
+  cerca: function () { clearTimeout(Sto._t); Sto._t = setTimeout(function () { Sto.render(); }, 250); },
+  ricarica: async function () { try { await Sto.carica(true); Sto.render(); } catch (e) { toast(e.message, 'ko'); } },
+  colonneScegli: function () { Sto.grid(Sto.sez).scegli(); },
+  excelVista: function () { var p = Sto.periodo(); Sto.grid(Sto.sez).excel('Movimenti_' + Sto.sez + '_' + p[0] + '_' + p[1]); },
+  // Excel come l'Easyloader: foglio INBOUND e foglio OUTBOUND con le colonne originali, per il periodo scelto
+  excelEasyloader: function () {
+    var p = Sto.periodo(), q = L.up($('stoQ').value), R = (Sto.dati[Sto.fonte] || []).filter(function (r) { return Sto.nelPeriodo(r) && (!q || Sto.cerca_(r, q)); });
+    var ord = function (a, b) { return L.s(a.data_ora).localeCompare(L.s(b.data_ora)) || L.s(a.id_mov).localeCompare(L.s(b.id_mov)); };
+    var IN = R.filter(function (r) { return r.direzione === 'IN' && r.causale !== 'INGRESSO_ANNULLATO'; }).sort(ord), OUT = R.filter(function (r) { return r.direzione === 'OUT'; }).sort(ord);
+    var dt = function (v) { return Sto.dataOra(v); }, d = function (v) { return L.normDate(v) ? L.itDate(L.normDate(v)) : L.s(v); };
+    Xls.scarica('EASYLOADER_' + (p[0] === '0000-00-00' ? 'inizio' : p[0]) + '_' + (p[1] === '9999-99-99' ? 'oggi' : p[1]), [
+      { nome: 'INBOUND', headers: ['GES', 'TYPE', 'FR', 'RMA BALANCING', 'DATA IN HUB', 'DATA RECEIVED AND VERIFY (REGISTRAZIONE VLT)', 'PO/MRN', 'MITTENTE', '#AWB1-3', 'CARRIER', 'DDT', 'OP', 'MNFT', 'SERIAL No.', 'PRODUCT No.', 'REPAIRER', 'NOTE ', 'POSIZIONE E NOTE NEW E REUSE - NOTE BUG SISTEMA', 'DATA IN MERCI', 'ANOMALIA'],
+        rows: IN.map(function (r) { return [r.id_mov, r.tipo, r.fr, r.rma, dt(r.data_ora), d(r.data_registrazione_vlt), r.po_mrn, r.controparte, r.awb, r.vettore, r.ddt, Sto.op(r), r.mnft, r.seriale, r.pn, r.riparatore, r.note, r.posizione_note, d(r.data_in_merci), r.anomalia]; }) },
+      { nome: 'OUTBOUND', headers: ['ID', 'TYPE', 'FR', 'PO NEW / MRN', 'RMA', 'DESTINO', 'data out', '#AWB2-4', 'DDT', 'OP', 'MNFT', 'SERIAL No.', 'PRODUCT No.', 'REPAIR', 'NOTE'],
+        rows: OUT.map(function (r) { return [r.id_mov, r.tipo, r.fr, r.po_mrn, r.rma, r.controparte, dt(r.data_ora), r.awb, r.ddt, Sto.op(r), r.mnft, r.seriale, r.pn, r.riparatore, r.note]; }) }
+    ]);
+    toast('Easyloader: ' + IN.length + ' inbound, ' + OUT.length + ' outbound', 'ok');
+  }
 };
 
 // ───────────────────────── EXPORT EXCEL (ogni tab) ─────────────────────────
@@ -3238,7 +3561,7 @@ var Xls = {
 };
 // la griglia esporta le righe filtrate e ordinate (tutte, non solo quelle mostrate)
 Grid.prototype.excel = function (file) {
-  var self = this, list = this.visibili || this.render(), cols = this.o.cols.filter(function (c) { return c.label; });
+  var self = this, list = this.visibili || this.render(), cols = this.vc().filter(function (c) { return c.label && !c.noXls; });
   Xls.scarica(file, [{ nome: file, headers: cols.map(function (c) { return c.label; }), rows: list.map(function (r) { return cols.map(function (c) { return self.val(c, r); }); }) }]);
 };
 
@@ -3362,7 +3685,7 @@ var Dash = {
     ev.forEach(function (e) {
       var p = per[e.op] = per[e.op] || { op: e.op, in: 0, ack: 0, rma: 0, spunte: 0, tot: 0, giorni: {} };
       p[e.k]++; if (e.k !== 'spunte') p.tot++; p.giorni[e.g] = 1;
-      if ((!Dash.op || Dash.op === e.op) && (met === 'tot' ? e.k !== 'spunte' : e.k === met)) giorni[e.g] = (giorni[e.g] || 0) + 1;
+      if ((!Dash.op || Dash.op === e.op) && (met === 'tot' ? e.k !== 'spunte' : e.k === met)) { var G = giorni[e.g] = giorni[e.g] || { tot: 0 }; G.tot++; G[e.op] = (G[e.op] || 0) + 1; }
     });
     var ops = Object.keys(per).map(function (k) { return per[k]; }).sort(function (a, b) { return b[met] - a[met] || a.op.localeCompare(b.op); });
     var tot = function (k) { return ops.reduce(function (a, p) { return a + p[k]; }, 0); };
@@ -3370,22 +3693,28 @@ var Dash = {
     var gg = [], d0 = new Date(iv[0] + 'T00:00:00'), d1 = new Date(iv[1] + 'T00:00:00');
     for (var d = new Date(d0); d <= d1 && gg.length < 400; d.setDate(d.getDate() + 1)) gg.push(L.isoToday(d));
     var maxB = Math.max.apply(null, ops.map(function (p) { return p[met]; }).concat([1]));
-    var maxG = Math.max.apply(null, gg.map(function (g) { return giorni[g] || 0; }).concat([1]));
+    var maxG = Math.max.apply(null, gg.map(function (g) { return giorni[g] ? giorni[g].tot : 0; }).concat([1]));
+    // colore = operatore (ordine alfabetico, stabile al cambio di misura); oltre 7 operatori → "Altri"
+    var nomi = Object.keys(per).sort(function (a, b) { return a.localeCompare(b); }), col = {};
+    nomi.forEach(function (n, i) { col[n] = i < 7 ? 'var(--s' + (i + 1) + ')' : 'var(--s-altri)'; });
+    var serie = nomi.filter(function (n) { return gg.some(function (g) { return giorni[g] && giorni[g][n]; }); });
     var html = '<div class="stats">' + ['tot', 'in', 'ack', 'rma', 'spunte'].map(function (k) { return '<div class="stat"><b>' + tot(k) + '</b><span>' + esc(Dash.MET[k]) + '</span></div>'; }).join('') +
       '<div class="stat"><b>' + ops.length + '</b><span>operatori attivi</span></div></div>';
     html += '<div class="dash-grid"><div class="card"><div class="card-t" style="font-size:15px;margin-bottom:10px">' + esc(Dash.MET[met]) + ' per operatore</div>' +
       (ops.length ? ops.map(function (p) {
         var v = p[met], w = Math.max(v ? 1.5 : 0, v / maxB * 100);
         return '<div class="dash-row' + (Dash.op === p.op ? ' on' : '') + '" onclick="Dash.op=Dash.op===\'' + esc(p.op) + '\'?\'\':\'' + esc(p.op) + '\';Dash.render()" title="' + esc(p.op) + ': ' + v + ' · clic per vedere solo il suo andamento">' +
-          '<span class="dash-lab">' + esc(p.op) + '</span><span class="dash-track"><span class="dash-bar" style="width:' + w + '%"></span></span><span class="dash-val">' + v + '</span></div>';
+          '<span class="dash-lab"><i class="dash-sw" style="background:' + col[p.op] + '"></i>' + esc(p.op) + '</span><span class="dash-track"><span class="dash-bar" style="width:' + w + '%;background:' + col[p.op] + '"></span></span><span class="dash-val">' + v + '</span></div>';
       }).join('') : '<div class="empty">Nessuna operazione nel periodo</div>') + '</div>';
-    // andamento giornaliero: barre verticali, una tinta
-    var bw = Math.max(3, Math.min(26, Math.floor(640 / Math.max(1, gg.length)) - 2));
-    html += '<div class="card"><div class="card-t" style="font-size:15px;margin-bottom:10px">Andamento giornaliero · ' + esc(Dash.MET[met]) + (Dash.op ? ' · ' + esc(Dash.op) : ' · tutti') + '</div>' +
-      '<div class="dash-trend">' + gg.map(function (g) {
-        var v = giorni[g] || 0, h = v / maxG * 100, we = [0, 6].indexOf(new Date(g + 'T00:00:00').getDay()) >= 0;
-        return '<span class="dash-col' + (we ? ' we' : '') + '" style="width:' + bw + 'px" title="' + esc(L.itDate(g)) + ': ' + v + '"><span class="dash-cbar" style="height:' + h + '%"></span></span>';
-      }).join('') + '</div><div class="dash-axis"><span>' + esc(L.itDate(gg[0])) + '</span><span>max ' + maxG + '/giorno</span><span>' + esc(L.itDate(gg[gg.length - 1])) + '</span></div></div></div>';
+    // andamento giornaliero: barre impilate per operatore (stesso colore della lista a sinistra)
+    html += '<div class="card"><div class="card-t" style="font-size:15px;margin-bottom:8px">Andamento giornaliero · ' + esc(Dash.MET[met]) + (Dash.op ? ' · ' + esc(Dash.op) : ' · per operatore') + '</div>' +
+      '<div class="dash-leg">' + serie.map(function (n) { return '<span' + (Dash.op === n ? ' class="on"' : '') + ' onclick="Dash.op=Dash.op===\'' + esc(n) + '\'?\'\':\'' + esc(n) + '\';Dash.render()"><i class="dash-sw" style="background:' + col[n] + '"></i>' + esc(n) + '</span>'; }).join('') + '</div>' +
+      '<div class="dash-trend" style="gap:' + (gg.length > 60 ? 0 : 2) + 'px">' + gg.map(function (g) {
+        var G = giorni[g] || { tot: 0 }, we = [0, 6].indexOf(new Date(g + 'T00:00:00').getDay()) >= 0;
+        var tip = L.itDate(g) + ' · totale ' + G.tot + serie.filter(function (n) { return G[n]; }).map(function (n) { return '\n' + n + ': ' + G[n]; }).join('');
+        var seg = serie.filter(function (n) { return G[n]; }).map(function (n) { return '<span class="dash-seg" style="height:' + (G[n] / maxG * 100) + '%;background:' + col[n] + '"></span>'; }).join('');
+        return '<span class="dash-col' + (we ? ' we' : '') + '" title="' + esc(tip) + '"><span class="dash-stack">' + seg + '</span></span>';
+      }).join('') + '</div><div class="dash-axis"><span>' + esc(L.itDate(gg[0])) + '</span><span>max ' + maxG + '/giorno · weekend in grigio</span><span>' + esc(L.itDate(gg[gg.length - 1])) + '</span></div></div></div>';
     // tabella (vista accessibile e base dell'Excel)
     Dash.tabella = ops.map(function (p) { var ng = Object.keys(p.giorni).length; return [p.op, p.in, p.ack, p.rma, p.spunte, p.tot, ng, ng ? Math.round(p.tot / ng * 10) / 10 : 0]; });
     html += '<div class="tbl-wrap"><table><thead><tr><th>Operatore</th><th>Ingressi</th><th>Uscite ACK</th><th>Uscite RMA/bal.</th><th>Spunte ACK</th><th>Totale</th><th>Giorni attivi</th><th>Media/giorno</th></tr></thead><tbody>' +
