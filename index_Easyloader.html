@@ -16,7 +16,16 @@
   --text:#e2e8f0;--muted:#64748b;--subtle:#94a3b8;
   --ff-sans:'IBM Plex Sans',sans-serif;--ff-mono:'IBM Plex Mono',monospace;--ff-cond:'Barlow Condensed',sans-serif;
 }
-body.theme-light{--bg:#f1f5f9;--surface:#ffffff;--card:#f8fafc;--border:#e2e8f0;--text:#1e293b;--muted:#94a3b8;--subtle:#64748b;}
+/* ── TEMI (come il tool Presenze) ── scuri */
+body.theme-dim{--bg:#1e2433;--surface:#252d3d;--card:#2d3748;--border:#3d4f6b;--text:#cbd5e1;--muted:#7a8fa8;--subtle:#94a3b8}
+body.theme-grafite{--bg:#1a1c20;--surface:#22252b;--card:#2a2e36;--border:#3a3f4a;--text:#d8dce4;--muted:#6e7480;--subtle:#9098a8;--blue:#5a9cf5;--teal:#40b8c0;--green:#50c878;--amber:#e0a030;--red:#d45050}
+body.theme-sap{--bg:#0a1628;--surface:#0f2040;--card:#162a52;--border:#1e3d6e;--text:#e8eef8;--muted:#6a8ab0;--subtle:#9ab0cc;--blue:#4a9fd4;--teal:#3ab0c8;--green:#5ab878;--amber:#e8a030;--red:#d45050}
+body.theme-oceano{--bg:#030b18;--surface:#071828;--card:#0a2038;--border:#1a4a6a;--text:#e0f0ff;--muted:#5a9fc8;--subtle:#90c0e8;--blue:#38bdf8;--teal:#22d3ee}
+/* chiari: meno abbagliante di prima (niente bianco puro), testi e colori più scuri per il contrasto */
+body.theme-light{--bg:#dfe5ec;--surface:#ebeff4;--card:#e2e8ef;--border:#bfc9d5;--text:#1b2433;--muted:#5d6b7e;--subtle:#3f4c5e;--blue:#2563eb;--green:#047857;--red:#c62828;--amber:#b45309;--teal:#0f766e;--violet:#6d28d9}
+body.theme-avorio{--bg:#f5f0e8;--surface:#ede8df;--card:#e5dfd3;--border:#c9bfaf;--text:#100a02;--muted:#6a5a48;--subtle:#3e3020;--blue:#3b6fa0;--teal:#2a7d5f;--green:#2d7a3a;--amber:#b5620a;--red:#b53030;--violet:#6b4fa0}
+body.theme-salvia{--bg:#f0f5ee;--surface:#e8f0e4;--card:#ddebd6;--border:#aac4a2;--text:#1a2818;--muted:#4a5e48;--subtle:#2e4028;--blue:#2d6e8a;--teal:#2a6e50;--green:#2e6e2e;--amber:#8a5c0a;--red:#8a2e2e;--violet:#5a3e8a}
+body.theme-rovere{--bg:#f2ebe0;--surface:#ebe2d4;--card:#e0d4c0;--border:#bfad95;--text:#1e140a;--muted:#6a5a40;--subtle:#4a3a20;--blue:#5a6e9a;--teal:#5a7a5a;--green:#4a6e3a;--amber:#8a6a1a;--red:#8a3a2a;--violet:#6a4a7a}
 *{box-sizing:border-box;margin:0;padding:0}
 html,body{height:100%;overflow:hidden}
 body{background:var(--bg);color:var(--text);font-family:var(--ff-sans);font-size:14px}
@@ -177,7 +186,7 @@ td[style*="max-width"]{overflow:hidden;text-overflow:ellipsis}
 .col-pick{display:grid;grid-template-columns:repeat(auto-fill,minmax(180px,1fr));gap:4px 12px;font-size:13px}
 .col-pick label{display:flex;align-items:center;gap:6px;cursor:pointer;padding:2px 0}
 #appShell{--viz-1:#3987e5;--viz-track:rgba(148,163,184,.12);--s1:#3987e5;--s2:#d95926;--s3:#199e70;--s4:#c98500;--s5:#d55181;--s6:#008300;--s7:#9085e9;--s-altri:#64748b}
-body.theme-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#6250d6;--s-altri:#94a3b8}
+body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#2a78d6;--s2:#eb6834;--s3:#1baf7a;--s4:#eda100;--s5:#e87ba4;--s6:#008300;--s7:#6250d6;--s-altri:#94a3b8}
 .dash-grid{display:grid;grid-template-columns:minmax(320px,1fr) minmax(360px,1.4fr);gap:14px}
 @media (max-width:1000px){.dash-grid{grid-template-columns:1fr}}
 .dash-row{display:flex;align-items:center;gap:10px;padding:4px 6px;border-radius:6px;cursor:pointer}
@@ -231,7 +240,7 @@ body.theme-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s
       <span class="sync" id="syncInfo"></span>
       <button class="btn ghost sm" onclick="App.reload()" title="Ricarica i dati dal database">↻ Aggiorna</button>
       <select class="fc" style="width:auto;padding:5px 8px;font-size:11px" id="themeSel" onchange="App.setTheme(this.value)">
-        <option value="">Scuro</option><option value="theme-light">Chiaro</option>
+        <option value="">🌙 Scuro</option><option value="theme-dim">🌗 Dim</option><option value="theme-grafite">🩶 Grafite</option><option value="theme-sap">🔵 SAP</option><option value="theme-oceano">🌊 Oceano</option><option value="theme-light">☀️ Chiaro</option><option value="theme-avorio">🤍 Avorio</option><option value="theme-salvia">🌿 Salvia</option><option value="theme-rovere">🪵 Rovere</option>
       </select>
       <div class="user-badge"><div class="user-av" id="uAv">?</div><span id="uName"></span><span class="role-tag" id="uRole"></span></div>
     </div>
@@ -980,7 +989,13 @@ var App = {
     if (t.k === 'storico') Sto.show();
     if (t.k === 'dashboard') Dash.show();
   },
-  setTheme: function (th) { document.body.className = th || ''; lsS('theme', th); },
+  TEMI: ['theme-dim', 'theme-grafite', 'theme-sap', 'theme-oceano', 'theme-light', 'theme-avorio', 'theme-salvia', 'theme-rovere'],
+  setTheme: function (th) {
+    var b = document.body.classList; App.TEMI.concat(['is-light']).forEach(function (t) { b.remove(t); });
+    if (App.TEMI.indexOf(th) < 0) th = ''; if (th) b.add(th);
+    if (/theme-(light|avorio|salvia|rovere)/.test(th)) b.add('is-light');
+    lsS('theme', th);
+  },
   syncInfo: function () { $('syncInfo').textContent = 'VLT ' + (DB.vlt ? new Date(DB.vlt.ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—') + ' · Huawei ' + Object.keys(DB.huaweiFr).length + ' seriali · giacenza ' + DB.t.UNITA.rows.length + (window.Sync && Sync.ultimo ? ' · agg. auto ' + Sync.ultimo.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : ''); },
   fillLists: function () {
     var cp = DB.t.CONTROPARTI.rows.map(function (r) { return r.codice; }).filter(Boolean);
