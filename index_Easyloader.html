@@ -497,7 +497,7 @@ L.pickFr = function (list, closed) {
 // date: accetta 2026-10-12, 12/10/2026, 12/10/2026 08:10:16 → 2026-10-12
 L.normDate = function (d) {
   d = L.s(d); var m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(d); if (m) return m[1] + '-' + L.pad(m[2], 2) + '-' + L.pad(m[3], 2);
-  m = /^(\d{1,2})\/(\d{1,2})\/(\d{4})/.exec(d); if (m) return m[3] + '-' + L.pad(m[2], 2) + '-' + L.pad(m[1], 2);
+  m = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})/.exec(d); if (m) return m[3] + '-' + L.pad(m[2], 2) + '-' + L.pad(m[1], 2);
   return d;
 };
 L.itDate = function (d) { d = L.normDate(d); var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d); return m ? m[3] + '/' + m[2] + '/' + m[1] : d; };
@@ -2345,8 +2345,20 @@ var Rma = {
   etichette: function () {
     var by = {}; Rma.daSpedire().forEach(function (x) { by[x.u.id_unita] = x; });
     var vis = (Rma.grids.inv && Rma.grids.inv.visibili) || [];
-    Etichette.rma(vis.filter(function (u) { return by[u.id_unita]; }).map(function (u) {
-      var x = by[u.id_unita], prima = L.up(x.dest) !== L.up(u.destinazione_prevista) ? u.destinazione_prevista : '';
+    // solo le schede con variazione di destino (come la colonna "Var. destino"), non tutte quelle con RMA
+    // destinazione d'origine = deposito VLT da cui è partito l'FR (resta valida anche dopo una modifica manuale della destinazione)
+    var origine = function (u) {
+      var v = DB.vltMap && DB.vltMap[u.fr], dep = v && DB.t.DEPOT_VLT.rows.find(function (d) { return d.depot_vlt === v.depot_origine; });
+      return dep ? [L.s(dep.destinazione), L.s(dep.destinazione_conversione)].filter(Boolean) : [];
+    };
+    var info = function (u) {
+      var x = by[u.id_unita], a = (Rma.abb || {})[u.id_unita], prev = L.s(u.destinazione_prevista), o = origine(u), D = L.up(x.dest);
+      if (o.length && o.every(function (n) { return L.up(n) !== D; })) return o[0];
+      if (a && a.variazione) return prev;
+      return prev && L.up(prev) !== D ? prev : null;
+    };
+    Etichette.rma(vis.filter(function (u) { return by[u.id_unita] && info(u) !== null; }).map(function (u) {
+      var x = by[u.id_unita], prima = info(u) || '';
       return { rma: x.rma, dest: x.dest, prima: prima, idScheda: Etichette.idScheda(u), idUnita: u.id_unita, seriale: u.seriale };
     }));
   },
@@ -2393,7 +2405,7 @@ var Rma = {
     var imp = '<label class="btn ghost sm" style="cursor:pointer" title="CSV esportato da VLT: Ritorni in giacenza">⬆ Importa CSV ritorni<input type="file" accept=".csv,.txt" style="display:none" onchange="Rma.importa(this)"></label>';
     var info = '<div class="hint" style="margin-top:8px">' + (ult ? 'Ultimo import ritorni: ' + esc(ult) + ' · ' + Rma.attivi().length + ' RMA aperte dal ' + esc(L.itDate(DB.dataInizio())) : 'Nessun import ritorni: carica il CSV esportato da VLT.') + '</div>';
     var xl = ' <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button>';
-    if (s === 'inv') return '<div class="row">' + imp + xl + ' <button class="btn ghost sm" onclick="Rma.etichette()" title="Etichetta 10x5 con la destinazione di uscita e l\'ID scheda, per le righe filtrate con un RMA">🏷 Etichette RMA</button><div class="spacer"></div><button class="btn sm" ' + (nD ? '' : 'disabled') + ' onclick="Rma.salva()">Salva modifiche' + (nD ? ' (' + nD + ')' : '') + '</button></div>' + info;
+    if (s === 'inv') return '<div class="row">' + imp + xl + ' <button class="btn ghost sm" onclick="Rma.etichette()" title="Etichetta 10x5 solo per le schede con variazione di destino (tra le righe filtrate)">🏷 Etichette RMA</button><div class="spacer"></div><button class="btn sm" ' + (nD ? '' : 'disabled') + ' onclick="Rma.salva()">Salva modifiche' + (nD ? ' (' + nD + ')' : '') + '</button></div>' + info;
     if (s === 'rit') return '<div class="row">' + imp + xl + '</div>' + info;
     if (s === 'car') return '<div class="row">' +
       '<div class="fg" style="width:240px"><span class="fl">Seriale *</span><input class="fc mono" id="carSer" autocomplete="off" placeholder="spara il seriale" onkeydown="if(event.key===\'Enter\'){event.preventDefault();$(\'carRma\').focus()}" oninput="Rma.carInfo()"><span class="hint" id="carHint"></span></div>' +
@@ -2540,17 +2552,21 @@ var Rma = {
   // ─ import del CSV "Ritorni in giacenza" esportato da VLT
   importa: async function (inp) {
     var f = inp.files && inp.files[0]; inp.value = ''; if (!f) return;
-    var rows = L.parseCsv(await f.text());
+    // export VLT: può essere Windows-1252 (accenti) e "combinato" (intestazione ripetuta tra un blocco e l'altro)
+    var buf = await f.arrayBuffer(), txt;
+    try { txt = new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch (x) { txt = new TextDecoder('windows-1252').decode(buf); }
+    var rows = L.parseCsv(txt.replace(/^\uFEFF/, ''));
     if (rows.length < 2) { Modal.open('Import ritorni', 'Il file è vuoto.'); return; }
     var h = rows[0].map(L.s), idx = {};
     Object.keys(Rma.RIT_MAP).forEach(function (c) { var i = h.indexOf(c); if (i >= 0) idx[Rma.RIT_MAP[c]] = i; });
     var manc = ['Id', 'Material', 'Deposito Destinazione RMA'].filter(function (c) { return h.indexOf(c) < 0; });
     if (manc.length) { Modal.open('Import ritorni', 'Colonne mancanti nel CSV: ' + manc.join(', ') + '\n\nIntestazioni trovate:\n' + h.join(' | ')); return; }
     function dt(v) { v = L.s(v); var t = /(\d{1,2}:\d{2}(:\d{2})?)/.exec(v); return L.normDate(v) + (t ? ' ' + t[1] : ''); }
-    var now = L.nowStamp(), gg = parseInt(DB.param('rma_giorni_scadenza', '4'), 10) || 4, recs = [];
+    var now = L.nowStamp(), gg = parseInt(DB.param('rma_giorni_scadenza', '4'), 10) || 4, recs = [], seen = {};
     rows.slice(1).forEach(function (r) {
       var o = {}; Object.keys(idx).forEach(function (k) { o[k] = L.s(r[idx[k]]); });
-      o.id_rma = o.id_rma.replace(/\.0$/, ''); if (!/^\d+$/.test(o.id_rma)) return;
+      o.id_rma = o.id_rma.replace(/\.0$/, '').replace(/^RMA\s*/i, ''); if (!/^\d+$/.test(o.id_rma)) return;   // "RMA212793" → 212793; righe di intestazione ripetute scartate
+      if (seen[o.id_rma]) return; seen[o.id_rma] = 1;
       o.data_apertura = dt(o.data_apertura); o.data_ultima_modifica = dt(o.data_ultima_modifica);
       o.data_scadenza = L.workday(o.data_apertura, gg); o.importato_il = now; o.importato_da = Auth.email;
       recs.push(o);
