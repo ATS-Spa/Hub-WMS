@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ATS FLM → VLT · Chiusure
 // @namespace    ats-spa.flm
-// @version      1.0.0
+// @version      1.0.1
 // @description  Chiude su VLT ingressi del giorno (op. linea), ACK, RMA e spare ferme in HUB con i dati dell'app "ATS - Fastweb FLM". Sostituisce i 4 script con i CSV.
 // @match        https://logistictoolvf.net.vodafone.it/*
 // @match        https://ats-spa.github.io/*
@@ -26,7 +26,7 @@
 */
 (function () {
   'use strict';
-  var VER = '1.0.0';
+  var VER = '1.0.1';
   var VLT_HOST = 'logistictoolvf.net.vodafone.it';
   var K = { CODA: 'ats_coda', STATO: 'ats_stato_', PEND: 'ats_esiti_pending', RICH: 'ats_richiesta', APP: 'ats_app_url', VIVO: 'ats_vlt_vivo', RUN: 'ats_run', UI: 'ats_ui', RICEVUTI: 'ats_esiti_ricevuti' };
   // esiti da consegnare = scritti da VLT (PEND) meno quelli già confermati dall'app (RICEVUTI): ognuno scrive solo la sua chiave
@@ -59,7 +59,8 @@
     var pronto = function () { post({ tipo: 'ready', ver: VER, coda: riassunto(get(K.CODA, null)), richiesta: get(K.RICH, null) }); };
     var pendenti = function () { var p = daConsegnare(); if (p.length) post({ tipo: 'esiti', esiti: p }); };
     window.addEventListener('message', function (ev) {
-      var m = ev.data; if (ev.source !== window || !m || m.src !== 'ATS-VLT-APP') return;
+      // niente confronto ev.source === window: in Tampermonkey "window" è un involucro e il confronto fallisce sempre
+      var m = ev.data; if (!m || m.src !== 'ATS-VLT-APP' || (dest !== '*' && ev.origin !== location.origin)) return;
       if (m.tipo === 'ping') { pronto(); pendenti(); }
       else if (m.tipo === 'coda' && m.coda) {
         var c = m.coda; set(K.STATO + c.id, {}); set(K.CODA, c);
@@ -78,7 +79,8 @@
       GM_addValueChangeListener(K.RICH, function (k, o, n, remoto) { if (remoto && n) post({ tipo: 'richiesta', richiesta: n }); });
       GM_addValueChangeListener(K.CODA, function (k, o, n, remoto) { if (remoto) pronto(); });
     } catch (e) { }
-    pronto(); pendenti();
+    document.documentElement.setAttribute('data-ats-vlt', VER);
+    pronto(); pendenti(); setTimeout(pronto, 2000); setTimeout(pronto, 6000);
   }
 
   // ═══════════════════════════ LATO VLT ═══════════════════════════
