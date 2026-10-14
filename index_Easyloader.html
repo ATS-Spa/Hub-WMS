@@ -4343,7 +4343,7 @@ var Sto = {
   dir: function (r) { return r.direzione === 'IN' || r.direzione === 'OUT' ? r.direzione : 'INT'; },
   periodo: function () { return [$('stoDa').value || '0000-00-00', $('stoA').value || '9999-99-99']; },
   nelPeriodo: function (r) { var g = L.normDate(r.data_ora), p = Sto.periodo(); return !g || (g >= p[0] && g <= p[1]); },
-  cerca_: function (r, q) { return [r.seriale, r.fr, r.rma, r.ddt, r.awb, r.id_mov, r.pn, r.po_mrn, r.controparte, r.id_unita].some(function (x) { return L.up(x).indexOf(q) >= 0; }); },
+  cerca_: function (r, q) { return [r.seriale, r.fr, r.rma, r.ddt, r.awb, r.id_mov, r.pn, r.po_mrn, r.controparte, r.id_unita, Sto.dir(r) === 'INT' ? r.note : ''].some(function (x) { return L.up(x).indexOf(q) >= 0; }); },
   righe: function (sez) {
     var q = L.up($('stoQ').value), R = Sto.dati[Sto.fonte] || [];
     return R.filter(function (r) { return (sez === 'ALL' || Sto.dir(r) === sez) && Sto.nelPeriodo(r) && (!q || Sto.cerca_(r, q)); });
