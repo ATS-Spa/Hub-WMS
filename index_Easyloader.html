@@ -271,6 +271,33 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
   #toast{max-width:94vw;bottom:14px}
   .user-menu{right:0;min-width:200px}
 }
+
+/* smartphone: tabelle a schede (classe mc messa dallo script solo sotto i 760px) */
+.mc-sw{display:none}
+@media (max-width:760px){
+  .mc-sw{display:flex;justify-content:flex-end;margin:0 0 6px}
+  .tbl-wrap.mc{border:0;max-height:none;overflow:visible;border-radius:0}
+  .tbl-wrap.mc table{width:100%;min-width:0;display:block}
+  .tbl-wrap.mc thead{display:none}
+  .tbl-wrap.mc tbody{display:block}
+  .tbl-wrap.mc tr{display:block;position:relative;background:var(--card);border:1px solid var(--border);border-radius:10px;margin:0 0 8px;padding:9px 30px 9px 12px;cursor:pointer}
+  .tbl-wrap.mc tr:not(.mc-vuoto)::after{content:'›';position:absolute;right:11px;top:50%;transform:translateY(-50%);color:var(--muted);font-size:22px}
+  .tbl-wrap.mc tr.r-err{border-left:4px solid var(--red)} .tbl-wrap.mc tr.r-warn{border-left:4px solid var(--amber)}
+  .tbl-wrap.mc tr.r-ok{border-left:4px solid var(--green)} .tbl-wrap.mc tr.r-var{border-left:4px solid var(--violet)}
+  .tbl-wrap.mc tr.r-off{opacity:.55}
+  .tbl-wrap.mc td{display:none;border:0;padding:2px 0;background:none!important;box-shadow:none!important;white-space:normal!important;max-width:none!important;font-size:13px}
+  .tbl-wrap.mc td.mc-k{display:flex;gap:10px;align-items:baseline}
+  .tbl-wrap.mc td.mc-k::before{content:attr(data-l);flex:0 0 74px;font-size:9.5px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted)}
+  .tbl-wrap.mc td.mc-1{font-weight:600;font-size:15px}
+  .tbl-wrap.mc td.mc-k .edit-cell{width:100%!important;min-width:0}
+  .tbl-wrap.mc td.mc-a{display:block;position:absolute;top:6px;right:30px;padding:0}
+  .mc-det .edit-cell{border:1px solid var(--border);background:var(--card);padding:8px 10px}
+  .tbl-wrap.mc tr.mc-vuoto{cursor:default;padding:0;background:none;border:0}
+  .tbl-wrap.mc tr.mc-vuoto td{display:block}
+  .mc-det .mc-r{display:flex;gap:10px;padding:7px 0;border-bottom:1px solid var(--border);font-size:14px;color:var(--text)}
+  .mc-det .mc-r>span{flex:0 0 96px;font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);padding-top:3px}
+  .mc-det .mc-r>div{flex:1;min-width:0;word-break:break-word}
+}
 </style>
 </head>
 <body>
@@ -1724,7 +1751,7 @@ var Giacenze = {
         { k: 'stato', label: 'Stato', filter: 'select', html: function (u) { var x = STATO[u.stato] || ['', u.stato]; return '<span class="pill ' + x[0] + '">' + esc(x[1]) + '</span>'; } },
         { k: 'magazzino', label: 'Mag.', filter: 'select' },
         { k: 'fr', label: 'FR', filter: 'text', cls: 'mono' },
-        { k: 'stato_vlt', label: 'Stato VLT', filter: 'select', get: function (u) { var v = u.fr && DB.vltMap[u.fr]; return v ? L.s(v.stato) : (u.fr ? '— non in VLT' : ''); } },
+        { k: 'stato_vlt', label: 'Stato VLT', filter: 'select', cls: 'nw', get: function (u) { var v = u.fr && DB.vltMap[u.fr]; return v ? L.s(v.stato) : (u.fr ? '— non in VLT' : ''); } },
         { k: 'rma', label: 'RMA', filter: 'text', cls: 'mono' },
         { k: 'data_in', label: 'Data in hub', cls: 'mono nw', get: function (u) { return L.s(mi(u).data_ora) || L.s(u.data_in); }, html: function (u) { return esc(Sto.dataOra(mi(u).data_ora || u.data_in)); } },
         { k: 'data_vlt', label: 'Data reg. VLT', cls: 'mono', get: function (u) { return L.normDate(mi(u).data_registrazione_vlt); } },
@@ -4917,6 +4944,97 @@ var Accessi = {
   }
 };
 
+// ───────────────────────── SMARTPHONE / PALMARE: TABELLE A SCHEDE ─────────────────────────
+// Solo sotto i 760px: ogni riga diventa una scheda con i dati essenziali; toccandola si apre il dettaglio
+// (con i campi modificabili della riga, o la modifica già prevista: es. ingressi di oggi, ✎ in giacenze).
+// Su PC non cambia nulla. Il pulsante "Vista tabella" sopra ogni elenco torna alla tabella completa.
+var Mob = {
+  MQ: null, on: false,
+  PRI: ['FR', 'SERIALE', 'SERIAL NO.', 'TIPO', 'TYPE', 'STATO', 'P/N', 'PRODUCT NO.', 'CONTROLLI', 'ESITO', 'SCHEDA', 'RMA', 'STATO VLT', 'DESTINAZIONE', 'DESTINAZIONE / UBICAZIONE', 'DESTINO', 'MITTENTE', 'NOTA', 'NOTE', 'DATA IN HUB', 'DATA OUT', 'DATA', 'ORA', 'ID', 'GES'],
+  MAX: 5,
+  init: function () {
+    Mob.MQ = window.matchMedia('(max-width:760px)');
+    var set = function () { Mob.on = Mob.MQ.matches; document.body.classList.toggle('is-mob', Mob.on); Mob.tutte(); };
+    if (Mob.MQ.addEventListener) Mob.MQ.addEventListener('change', set); else if (Mob.MQ.addListener) Mob.MQ.addListener(set);
+    var main = document.querySelector('.main');
+    if (main) new MutationObserver(function () { if (!Mob.on || Mob._p) return; Mob._p = requestAnimationFrame(function () { Mob._p = null; Mob.tutte(); }); }).observe(main, { childList: true, subtree: true });
+    document.addEventListener('click', Mob.tocco);
+    set();
+  },
+  chiave: function (w, i) { var t = w.querySelector('tbody'), h = w.querySelector('thead'); return (t && t.id) || (h && h.id) || ('t' + i); },
+  tutte: function () {
+    Array.prototype.forEach.call(document.querySelectorAll('.main .tbl-wrap'), function (w, i) {
+      if (w.closest('.modal')) return;
+      var k = Mob.chiave(w, i), off = lsG('mc_off_' + k);
+      if (!w.previousElementSibling || !w.previousElementSibling.classList.contains('mc-sw')) {
+        var d = document.createElement('div'); d.className = 'mc-sw'; d.innerHTML = '<button class="btn ghost sm" type="button"></button>';
+        d.firstChild.onclick = function () { lsS('mc_off_' + k, !lsG('mc_off_' + k)); Mob.tutte(); };
+        w.parentNode.insertBefore(d, w);
+      }
+      w.previousElementSibling.firstChild.textContent = off ? '☰ Vista a schede' : '▦ Vista tabella';
+      w.classList.toggle('mc', Mob.on && !off);
+      if (Mob.on && !off) Mob.tabella(w);
+    });
+  },
+  intest: function (w) {
+    var rows = w.querySelectorAll('thead tr'), best = null;
+    Array.prototype.forEach.call(rows, function (r) { if (!r.classList.contains('g-filters') && (!best || r.children.length > best.children.length)) best = r; });
+    return best ? Array.prototype.map.call(best.children, function (th) { return L.s(th.textContent).replace(/[▲▼↑↓]/g, '').trim(); }) : [];
+  },
+  tabella: function (w) {
+    var tb = w.querySelector('tbody'); if (!tb) return;
+    var lab = Mob.intest(w), sig = lab.join('|');
+    var rifai = tb.dataset.mcSig !== sig; tb.dataset.mcSig = sig;
+    // colonne essenziali: le più importanti per nome, mostrate nell'ordine della tabella
+    var rank = lab.map(function (l, i) { var p = Mob.PRI.indexOf(l.toUpperCase()); return { i: i, p: p < 0 ? 999 : p }; }).filter(function (x) { return x.p < 999; }).sort(function (a, b) { return a.p - b.p; }).slice(0, Mob.MAX).map(function (x) { return x.i; });
+    if (rank.length < 2) rank = lab.map(function (l, i) { return i; }).filter(function (i) { return lab[i]; }).slice(0, 4);
+    var ess = {}; rank.forEach(function (i) { ess[i] = 1; });
+    Array.prototype.forEach.call(tb.children, function (tr) {
+      if (tr.dataset.mc && !rifai) return; tr.dataset.mc = '1';
+      var tds = tr.children;
+      if (tds.length === 1 && tds[0].colSpan > 1) { tr.classList.add('mc-vuoto'); return; }
+      var primo = true;
+      Array.prototype.forEach.call(tds, function (td, i) {
+        td.classList.remove('mc-k', 'mc-a', 'mc-1');
+        td.setAttribute('data-l', lab[i] || '');
+        var campo = td.querySelector('input,select,textarea');
+        if (!campo && td.querySelector('button') && !lab[i]) { td.classList.add('mc-a'); return; }
+        if (ess[i] && (campo || L.s(td.textContent))) { td.classList.add('mc-k'); if (primo) { td.classList.add('mc-1'); primo = false; } }
+      });
+    });
+  },
+  tocco: function (e) {
+    if (!Mob.on) return;
+    var tr = e.target.closest && e.target.closest('.tbl-wrap.mc tbody tr');
+    if (!tr || tr.classList.contains('mc-vuoto') || e.target.closest('button,a,input,select,textarea,label')) return;
+    if (tr.getAttribute('onclick')) return;   // la riga ha già la sua modifica (es. ingressi di oggi)
+    Mob.dettaglio(tr);
+  },
+  dettaglio: function (tr) {
+    var w = tr.closest('.tbl-wrap'), lab = Mob.intest(w), edit = null, html = '<div class="mc-det">';
+    Array.prototype.forEach.call(tr.children, function (td, i) {
+      var c = td.querySelector('input:not([type=checkbox]):not([id]),select:not([id]),textarea:not([id])');
+      var bt = td.querySelector('button');
+      if (bt && !lab[i] && !c) { if (/✎/.test(bt.textContent)) edit = bt; return; }
+      var t = L.s(td.innerText || td.textContent);
+      if (!c && !t) return;
+      html += '<div class="mc-r"><span>' + esc(lab[i] || '') + '</span><div data-i="' + i + '">' + (c ? '' : esc(t).replace(/\n/g, '<br>')) + '</div></div>';
+    });
+    html += '</div>';
+    var btn = [{ label: 'Chiudi', cls: 'ghost' }];
+    if (edit) btn.push({ label: '✎ Modifica', fn: function () { edit.click(); } });
+    Modal.html('Dettaglio', html, btn);
+    // campi modificabili della riga: copie che usano gli stessi comandi della tabella
+    var box = document.querySelector('.mc-det');
+    Array.prototype.forEach.call(tr.children, function (td, i) {
+      var c = td.querySelector('input:not([type=checkbox]):not([id]),select:not([id]),textarea:not([id])'), dst = box && box.querySelector('[data-i="' + i + '"]');
+      if (!c || !dst) return;
+      var k = c.cloneNode(true); k.value = c.value; k.style.width = '100%'; k.classList.add('fc'); dst.appendChild(k);
+    });
+  }
+};
+
+window.addEventListener('load', function () { try { Mob.init(); } catch (e) { } });
 window.addEventListener('load', Auth.init);
 </script>
 </body>
