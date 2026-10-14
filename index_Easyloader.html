@@ -2092,7 +2092,7 @@ var Chv = {
       (p.scarti.length ? '<div class="hint warn" style="margin-top:8px">Non inviabili: ' + p.scarti.map(function (s) { return esc(s.motivo); }).join(' · ') + '</div>' : ''), [{ label: 'Chiudi', cls: 'ghost' }], true);
   },
   show: async function () {
-    Chv.init(); Chv.ping();
+    Chv.init(); Chv.ping(); setTimeout(function () { if (App.tab === 'chiusure') Chv.render(); }, 1200);
     if (!$('chvData').value) $('chvData').value = L.isoToday();
     try { await Chv.tab(); } catch (e) { $('chvBox').innerHTML = '<div class="empty">Errore: ' + esc(e.message) + '</div>'; return; }
     Chv.render();
@@ -2102,7 +2102,8 @@ var Chv = {
     var box = $('chvBox'); if (!box) return;
     var b = Chv.bridge, giorno = Chv.giorno();
     $('chvBridge').innerHTML = b ? '<span class="pill p-green">● script VLT attivo · v' + esc(b.ver) + '</span>' + (b.coda ? ' <span class="hint">ultima coda: ' + esc(b.coda.nome) + ' · ' + esc(b.coda.n) + ' schede · ' + esc(b.coda.fatte) + ' fatte</span>' : '')
-      : '<span class="pill p-amber">● script VLT non rilevato</span> <span class="hint">installalo in Tampermonkey e ricarica la pagina</span>';
+      : (document.documentElement.getAttribute('data-ats-vlt') ? '<span class="pill p-amber">● script VLT presente ma non risponde</span> <span class="hint">aggiorna lo script all\'ultima versione e ricarica la pagina</span>'
+        : '<span class="pill p-amber">● script VLT non rilevato</span> <span class="hint">installalo (o aggiornalo) in Tampermonkey e ricarica la pagina; nell\'Hub lo script deve poter girare nei frame</span>');
     var es = ((DB.t.VLT_CHIUSURE || {}).rows || []).filter(function (r) { return r.giorno === giorno; });
     var html = '<div class="ack-grid">';
     Object.keys(Chv.PROC).forEach(function (p) {
