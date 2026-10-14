@@ -2551,6 +2551,33 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
   <div class="mbtns"><button class="mbtn cancel" onclick="mClose('moCommessa')">Annulla</button><button class="mbtn ok" onclick="commessaConfirm()">Salva</button></div>
 </div></div>
 
+<div id="moSiglaEdit" class="mo hide"><div class="mc" style="width:420px">
+  <div class="mt" id="sgTitle">Nuova Sigla</div>
+  <div class="ms">La sigla compare nei pannelli di inserimento, nei totali, nella legenda e nel report Excel.</div>
+  <div style="display:flex;flex-direction:column;gap:10px;margin-top:4px">
+    <div style="display:flex;gap:10px">
+      <div class="fg" style="width:110px"><div class="fl">Codice *</div><input class="mi" id="sgCode" type="text" maxlength="6" placeholder="Es. FS" style="text-transform:uppercase;font-family:var(--ffc);font-weight:700" autocomplete="off"></div>
+      <div class="fg" style="flex:1"><div class="fl">Descrizione *</div><input class="mi" id="sgLabel" type="text" maxlength="24" placeholder="Es. Formazione esterna" autocomplete="off"></div>
+      <div class="fg" style="width:60px"><div class="fl">Colore</div><input class="mi" id="sgColor" type="color" value="#22d3ee" style="padding:2px;height:36px"></div>
+    </div>
+    <div class="fg"><div class="fl">Comportamento</div>
+      <select class="mi" id="sgTipo" onchange="sgTipoHint()">
+        <option value="giornata">Assenza a giornata</option>
+        <option value="orario">Presenza con orario</option>
+        <option value="ore">Permesso a ore</option>
+        <option value="contatore">Solo contatore</option>
+      </select>
+      <div id="sgTipoHint" style="font-size:11px;color:var(--muted);margin-top:4px"></div>
+    </div>
+    <div style="display:flex;gap:16px;font-size:12px">
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="conf-cb" id="sgAts" checked> Selezionabile in ATS</label>
+      <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="conf-cb" id="sgCoop"> Selezionabile in Coop</label>
+    </div>
+  </div>
+  <div class="merr" id="sgErr"></div>
+  <div class="mbtns"><button class="mbtn cancel" onclick="mClose('moSiglaEdit')">Annulla</button><button class="mbtn ok" onclick="siglaConfirm()">Salva</button></div>
+</div></div>
+
 <div id="moAddEmp" class="mo hide"><div class="mc" style="width:420px">
   <div class="mt" id="aeTitle">➕ Nuovo Dipendente</div>
   <div class="ms">Aggiunge al registro del mese correntemente selezionato</div>
@@ -2672,6 +2699,9 @@ var ATS_EXCL_CODES = ['1/2F','PLT']; // PLT solo Coop
 
 var SIGLE_NO_ORARIO=['F','M','CP','104','PE','Lutto','R'];
 var SIGLE_COTTIMO=['PLT']; // sigle a cottimo: IN=quantità, OUT=ore
+var SIGLE_ORARIO=['X','SW','TFS'];      // presenza con orario: generano ORD/STR
+var SIGLE_ORE=['HP','H104','HPVM'];     // permesso a ore: la quantità scala le ore lavorate
+var SIGLE_ATS_PICK=null;                // sigle selezionabili in ATS (null = tutte)
 
 // ═══════════════════════════════════════════════════════════
 //  STATE
@@ -2973,6 +3003,7 @@ function loadConfig(){
   });
   var p2=loadUserConfig();
   Promise.all([p1,p2]).then(function(){
+    applySigleConfig();
     applyPerm();
     loadAllFiles();
   }).catch(function(){
@@ -3274,7 +3305,8 @@ function renderSection(sec, emps, data, opts){
   var dates=data?data.dates:getDates(y,m);
   var _td=new Date(),_todayDay=(_td.getFullYear()===y&&_td.getMonth()+1===m)?_td.getDate():-1;
 
-  var T={X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,R:0,HPVM:0,ord:0,str:0,fest:0,week:0,P:0};
+  var T={X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,R:0,HPVM:0,PLT:0,ord:0,str:0,fest:0,week:0,P:0};
+  sigleCustom().forEach(function(c){T[c.code]=0;});
   var T_rngMin=0;
   emps.forEach(function(e){
     var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
@@ -3294,6 +3326,7 @@ function renderSection(sec, emps, data, opts){
     {l:'H.Dom',v:fmtOre(T.week),c:'var(--purple)'},{l:'H.Fest.',v:fmtOre(T.fest),c:'var(--red)'},
     {l:'RNG (h)',v:fmtRng(T_rngMin),c:'var(--red)'}
   ];
+  sigleCustom().forEach(function(c){statDefs.push({l:c.code,v:T[c.code]||0,c:c.color});});
   sb.innerHTML=statDefs.filter(function(d){return d.v!==0&&d.v!=='0'&&d.v!=='';})
     .map(function(d){return '<div class="stat" style="border-top:2px solid '+d.c+'"><div class="sl">'+d.l+'</div><div class="sv" style="color:'+d.c+'">'+d.v+'</div></div>';}).join('');
 
@@ -3309,10 +3342,14 @@ function renderSection(sec, emps, data, opts){
     {l:'DOM',c:'var(--purple)',k:'week'},{l:'FEST',c:'var(--red)',k:'fest'},
     {l:'RNG',c:'var(--red)',k:'rng'}
   ];
+  sigleCustom().forEach(function(c){ALL_TOT_HDRS.splice(ALL_TOT_HDRS.length-5,0,{l:c.code,c:c.color,k:c.code});});
   var SIGLA_TO_TOT={X:'X',F:'F','1/2F':'F',M:'M',HP:'HP',H104:'H104','104':'104',CP:'CP',HPE:'HPE',PE:'PE',SW:'SW',Lutto:'Lutto',TFS:'TFS',R:'R',HPVM:'HPVM'};
   var activeSiglaCodes=isAts?SIGLE.filter(function(s){return ATS_EXCL_CODES.indexOf(s.code)===-1;}).map(function(s){return s.code;}):COOP_SIGLE_CODES;
   var activeTotKeys=['ord','str','week','fest','P','rng'];
+  sigleCustom().forEach(function(c){SIGLA_TO_TOT[c.code]=c.code;});
   activeSiglaCodes.forEach(function(code){var k=SIGLA_TO_TOT[code];if(k&&activeTotKeys.indexOf(k)===-1)activeTotKeys.push(k);});
+  // sigla disattivata ma presente nei dati del mese: la colonna resta, per non nascondere ore/giorni registrati
+  Object.keys(SIGLA_TO_TOT).forEach(function(code){var k=SIGLA_TO_TOT[code];if(T[k]>0&&activeTotKeys.indexOf(k)===-1)activeTotKeys.push(k);});
   var totHdrs=ALL_TOT_HDRS.filter(function(th){return activeTotKeys.indexOf(th.k)!==-1;});
   var NCOLS_TOT=totHdrs.length;
   var totClass=isAts?'ats-tot-th':'coop-tot-th';
@@ -3342,9 +3379,9 @@ function renderSection(sec, emps, data, opts){
       var sg=xSig((emp.sigla||[])[di]||'');
       var ing=(emp.ingresso||[])[di]||'',usc2=(emp.uscita||[])[di]||'';
       var ph=getPausaDip(emp,di);
-      if(sg==='X'||sg==='SW'||sg==='TFS'){
+      if(SIGLE_ORARIO.indexOf(sg)!==-1){
         return ing&&usc2?calcOreGiorno(ing,usc2,ph):null;
-      } else if(sg==='HP'||sg==='H104'||sg==='HPVM'){
+      } else if(SIGLE_ORE.indexOf(sg)!==-1){
         // Usa orari reali o default
         var i2=ing||wmsConfig.ingresso||'08:00';
         var u2=usc2||wmsConfig.uscita||'18:00';
@@ -3797,7 +3834,7 @@ function cSave(){
 function buildLegendSheet(sec){
   var sigleList=sec==='coop'
     ?SIGLE.filter(function(s){return COOP_SIGLE_CODES.indexOf(s.code)!==-1;})
-    :SIGLE;
+    :SIGLE.filter(function(s){return ATS_EXCL_CODES.indexOf(s.code)===-1;});
   var rows=[
     ['Legenda Sigle Presenze — '+(sec==='coop'?'Cooperativa':'Dipendenti')],
     [],
@@ -3867,6 +3904,7 @@ function coopExport(){
   var COOP_REP=[
     {l:'P',k:'P'},{l:'F',k:'F'},{l:'M',k:'M'},{l:'HP',k:'HP'},{l:'PLT',k:'PLT'},{l:'PLT.ORE',k:'PLT_ore'},{l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'DOM',k:'week'},{l:'H.FEST',k:'fest'},{l:'RNG',k:'rng'}
   ];
+  sigleCustom('coop').forEach(function(c){COOP_REP.splice(COOP_REP.findIndex(function(x){return x.k==='ord';}),0,{l:c.code,k:c.code});});
   var repHdr=['Ext SAP','Nominativo','Resp.','Plant'].concat(COOP_REP.map(function(c){return c.l;}));
   var repRows=[repHdr];
   coopEmps.forEach(function(e){
@@ -4233,6 +4271,7 @@ function atsExport(){
     {l:'SW',k:'SW'},{l:'Lutto',k:'Lutto'},{l:'TFS',k:'TFS'},{l:'R',k:'R'},{l:'HPVM',k:'HPVM'},
     {l:'ORD',k:'ord'},{l:'STR',k:'str'},{l:'WEEK',k:'week'},{l:'H.FEST',k:'fest'},{l:'RNG',k:'rng'}
   ];
+  sigleCustom('ats').forEach(function(c){ATS_REP.splice(ATS_REP.findIndex(function(x){return x.k==='ord';}),0,{l:c.code,k:c.code});});
   var atsRepHdr=['Ext SAP','Nominativo','Resp.','Plant'].concat(ATS_REP.map(function(c){return c.l;}));
   var repRows=[atsRepHdr];
   atsEmps.forEach(function(e){
@@ -4345,7 +4384,7 @@ function openPickerGeneric(mode,ri,di){
   // ── FIX 1: filtra le sigle in base alla sezione ──
   var siglaList = mode==='coop'
     ? SIGLE.filter(function(s){ return COOP_SIGLE_CODES.indexOf(s.code)!==-1; })
-    : SIGLE;
+    : sigleAtsPick();
 
   siglaList.forEach(function(s){
     var el=document.createElement('div');el.className='sopt'+(xSig(cs)===s.code?' sel':'');
@@ -4355,7 +4394,7 @@ function openPickerGeneric(mode,ri,di){
       g.querySelectorAll('.sopt').forEach(function(x){x.classList.remove('sel');x.style.borderColor='';});
       el.classList.add('sel');el.style.borderColor=s.border;spSigla=s.code;
       document.getElementById('spQty').style.display=s.hasQty?'flex':'none';
-      document.getElementById('spHpNote').style.display=s.hasQty?'':'none';
+      document.getElementById('spHpNote').style.display=s.hasQty&&SIGLE_NO_ORARIO.indexOf(s.code)===-1?'':'none';
       var isCottimo=SIGLE_COTTIMO.indexOf(s.code)!==-1;
       var showOr=SIGLE_NO_ORARIO.indexOf(s.code)===-1&&!isCottimo;
       document.getElementById('spOrariWrap').style.display=showOr||isCottimo?'':'none';
@@ -4537,7 +4576,7 @@ function spCalcLive(){
   // di permesso usciva "7 ord + 2 str" (9h totali, sbagliato) invece di
   // "7 ord + 0 str" (7h, le uniche realmente residue).
   var ord=o.ord, str=o.str;
-  if(sig==='HP'||sig==='H104'||sig==='HPVM'){
+  if(SIGLE_ORE.indexOf(sig)!==-1){
     var qty=parseFloat(document.getElementById('spQtyV').value)||0.5;
     var restante=Math.max(0,o.eff-qty);
     ord=Math.min(8,restante);
@@ -5281,6 +5320,7 @@ function fmtOre(h){if(!h)return '';var i=Math.floor(h),f=h-i;return i+(f===0.5?'
 var PRESENCE_CODES=['X','HP','H104','104','HPE','PE','CP','SW','TFS','Lutto','PLT','HPVM'];
 function calcTots(sig,ingresso,uscita,pause,dates,month,year){
   var r={X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,PLT:0,PLT_ore:0,R:0,HPVM:0,ord:0,str:0,fest:0,week:0,P:0};
+  sigleCustom().forEach(function(c){if(!r.hasOwnProperty(c.code))r[c.code]=0;});
   (sig||[]).forEach(function(v,di){
     if(!v)return;
     var sg=xSig(v);
@@ -5294,7 +5334,7 @@ function calcTots(sig,ingresso,uscita,pause,dates,month,year){
       var oreStr=(uscita||[])[di]||'';
       r.PLT+=qta;
       if(oreStr){var om=oreStr.match(/^(\d+):(\d+)/);if(om)r.PLT_ore+=parseInt(om[1])+(parseInt(om[2])/60);}
-    } else if(sg==='X'||sg==='SW'||sg==='TFS'){
+    } else if(SIGLE_ORARIO.indexOf(sg)!==-1){
       var ing=(ingresso||[])[di]||'',usc2=(uscita||[])[di]||'';
       var ps=(pause||[])[di];var ph=parsePausaVal(ps!==null&&ps!==undefined?ps:null);if(ph===null)ph=getPausaDefaultGlobal();
       var hol=d&&month&&year&&isHoliday(d.day,month,year);
@@ -5305,7 +5345,7 @@ function calcTots(sig,ingresso,uscita,pause,dates,month,year){
         else if(isWe){r.week+=o.ord+o.str;}
         else{r.ord+=o.ord;r.str+=o.str;}
       }
-    } else if(sg==='HP'||sg==='H104'||sg==='HPVM'){
+    } else if(SIGLE_ORE.indexOf(sg)!==-1){
       var ing2=(ingresso||[])[di]||'',usc3=(uscita||[])[di]||'';
       var ps2=(pause||[])[di];var ph2=parsePausaVal(ps2!==null&&ps2!==undefined?ps2:null);if(ph2===null)ph2=getPausaDefaultGlobal();
       if(!ing2)ing2=wmsConfig.ingresso||'08:00';
@@ -5375,6 +5415,7 @@ function renderPermPanel(){
   var def=permConfig.default||{};var dsecs=def.sections||[];
   h+='<div style="font-size:13px;color:var(--subtle);margin-bottom:10px">Accesso per chi non è in lista: '+(dsecs.length?dsecs.map(function(s){return '<strong style="color:var(--teal)">'+s+'</strong>';}).join(', '):'<strong style="color:var(--red)">Negato</strong>')+'</div>';
   h+='<div style="display:flex;gap:10px;flex-wrap:wrap"><label class="sc-item"><input type="checkbox" id="defCoop"'+(dsecs.indexOf('coop')!==-1?' checked':'')+' onchange="updateDefault()"> Cooperativa</label><label class="sc-item"><input type="checkbox" id="defAts"'+(dsecs.indexOf('ats')!==-1?' checked':'')+' onchange="updateDefault()"> Dipendenti</label><label class="sc-item"><input type="checkbox" id="defFerie"'+(dsecs.indexOf('ferie')!==-1?' checked':'')+' onchange="updateDefault()"> Piano Ferie</label><label class="sc-item"><input type="checkbox" id="defRich"'+(dsecs.indexOf('rich')!==-1?' checked':'')+' onchange="updateDefault()"> Richieste</label></div></div></div>';
+  h+=renderSiglePanelSection();
   // Sezione Commesse
   var commesse=permConfig.commesse||[];
   h+='<div class="perm-section"><div class="perm-section-header"><div class="perm-section-title">🏭 Commesse per Plant</div><button class="ba bteal" style="padding:6px 12px;font-size:12px" onclick="openCommessaEdit(null)">＋ Nuova</button></div><div class="perm-section-body">';
@@ -5495,6 +5536,167 @@ function getContratto(sap){
 //  COMMESSE CONFIG
 // ═══════════════════════════════════════════════════════════
 var commEditIdx=null;
+// ═══════════════════════════════════════════════════════════
+//  SIGLE CONFIGURABILI (pannello Permessi → permConfig.sigle_cfg)
+// ═══════════════════════════════════════════════════════════
+// sigle_cfg = {
+//   ats:  [codici selezionabili in ATS]  (assente = tutte, come prima)
+//   coop: [codici selezionabili in Coop] (assente = X, F, PLT)
+//   custom: [{code,label,color,tipo}]    tipo: giornata | orario | ore | contatore
+// }
+// Disattivare una sigla la toglie solo dai pannelli di inserimento: i dati
+// già registrati restano visibili e conteggiati (la colonna totali compare se
+// nel mese ci sono valori).
+var _SIG_BASE=null;
+var SIGLA_TIPI={
+  giornata:{l:'Assenza a giornata',d:'Niente orario, conta i giorni (come F, M, Lutto)'},
+  orario:{l:'Presenza con orario',d:'Orario + pausa, genera ORD/STR, ammette commesse (come X, SW)'},
+  ore:{l:'Permesso a ore',d:'Quantità ore che scala le ore lavorate (come HP, H104)'},
+  contatore:{l:'Solo contatore',d:'Niente orario, nessun effetto sulle ore, quantità opzionale (es. 2XYZ)'}
+};
+function sigleCustom(sec){
+  var cfg=(permConfig&&permConfig.sigle_cfg)||{};
+  var list=cfg.custom||[];
+  if(!sec)return list;
+  var arr=sec==='coop'?COOP_SIGLE_CODES:(SIGLE_ATS_PICK||SIGLE.map(function(s){return s.code;}));
+  return list.filter(function(c){return arr.indexOf(c.code)!==-1||sigleUsate(sec)[c.code];});
+}
+// codici presenti nei dati caricati (per non perdere colonne di sigle disattivate)
+function sigleUsate(sec){
+  var out={};var emps=sec==='coop'?coopEmps:atsEmps;
+  (emps||[]).forEach(function(e){(e.sigla||[]).forEach(function(v){if(v)out[xSig(v)]=true;});});
+  return out;
+}
+function sigleAtsPick(){
+  return SIGLE.filter(function(s){return !SIGLE_ATS_PICK||SIGLE_ATS_PICK.indexOf(s.code)!==-1;});
+}
+function _hexRgba(hex,a){
+  var m=/^#?([0-9a-f]{6})$/i.exec(hex||'');if(!m)return 'rgba(148,163,184,'+a+')';
+  var n=parseInt(m[1],16);return 'rgba('+(n>>16&255)+','+(n>>8&255)+','+(n&255)+','+a+')';
+}
+function applySigleConfig(){
+  if(!_SIG_BASE){
+    _SIG_BASE={sigle:SIGLE.slice(),coop:COOP_SIGLE_CODES.slice(),excl:ATS_EXCL_CODES.slice(),
+      noOr:SIGLE_NO_ORARIO.slice(),orario:SIGLE_ORARIO.slice(),ore:SIGLE_ORE.slice(),
+      comm:SIGLE_COMMESSE.slice(),pres:PRESENCE_CODES.slice()};
+  }
+  var B=_SIG_BASE;
+  var cfg=(permConfig&&permConfig.sigle_cfg)||{};
+  var custom=(cfg.custom||[]).filter(function(c){return c&&c.code&&!B.sigle.some(function(s){return s.code===c.code;});});
+  SIGLE=B.sigle.concat(custom.map(function(c){
+    return{code:c.code,label:c.label||c.code,cls:'s-'+c.code,color:c.color||'#94a3b8',
+      bg:_hexRgba(c.color,.12),border:_hexRgba(c.color,.35),hasQty:c.tipo==='ore'||c.tipo==='contatore',custom:true,tipo:c.tipo};
+  }));
+  SM={};SIGLE.forEach(function(s){SM[s.code]=s;});
+  // gruppi di comportamento
+  SIGLE_NO_ORARIO=B.noOr.concat(custom.filter(function(c){return c.tipo==='giornata'||c.tipo==='contatore';}).map(function(c){return c.code;}));
+  SIGLE_ORARIO=B.orario.concat(custom.filter(function(c){return c.tipo==='orario';}).map(function(c){return c.code;}));
+  SIGLE_ORE=B.ore.concat(custom.filter(function(c){return c.tipo==='ore';}).map(function(c){return c.code;}));
+  var lav=custom.filter(function(c){return c.tipo==='orario'||c.tipo==='ore';}).map(function(c){return c.code;});
+  SIGLE_COMMESSE=B.comm.concat(lav);
+  PRESENCE_CODES=B.pres.concat(lav);
+  // sezioni
+  var all=SIGLE.map(function(s){return s.code;});
+  SIGLE_ATS_PICK=cfg.ats?cfg.ats.filter(function(c){return all.indexOf(c)!==-1;}):null;
+  COOP_SIGLE_CODES=cfg.coop?cfg.coop.filter(function(c){return all.indexOf(c)!==-1;}):B.coop.slice();
+  // ATS_EXCL_CODES governa legenda/totali ATS: esclusioni storiche + sigle non selezionabili
+  ATS_EXCL_CODES=B.excl.concat(SIGLE_ATS_PICK?all.filter(function(c){return SIGLE_ATS_PICK.indexOf(c)===-1;}):[]);
+  // colori celle per le sigle personalizzate
+  var st=document.getElementById('sigleCustomCss');
+  if(!st){st=document.createElement('style');st.id='sigleCustomCss';document.head.appendChild(st);}
+  st.textContent=custom.map(function(c){return '.s-'+c.code+'{color:'+(c.color||'#94a3b8')+'}';}).join('\n');
+  if(typeof buildLegend==='function')buildLegend();
+}
+function _sigCfg(){
+  if(!permConfig.sigle_cfg)permConfig.sigle_cfg={};
+  var cfg=permConfig.sigle_cfg;
+  if(!cfg.ats)cfg.ats=sigleAtsPick().map(function(s){return s.code;});
+  if(!cfg.coop)cfg.coop=COOP_SIGLE_CODES.slice();
+  if(!cfg.custom)cfg.custom=[];
+  return cfg;
+}
+function sigleToggle(code,sec,on){
+  var cfg=_sigCfg();var arr=cfg[sec];
+  var i=arr.indexOf(code);
+  if(on&&i===-1)arr.push(code);
+  if(!on&&i!==-1)arr.splice(i,1);
+  applySigleConfig();renderPermPanel();
+  toast('✓ '+code+(on?' attivata':' disattivata')+' in '+(sec==='ats'?'ATS':'Coop')+' — premi Salva Config');
+}
+function renderSiglePanelSection(){
+  var cfg=(permConfig&&permConfig.sigle_cfg)||{};
+  var atsArr=SIGLE_ATS_PICK||SIGLE.map(function(s){return s.code;});
+  var h='<div class="perm-section"><div class="perm-section-header"><div class="perm-section-title">🏷️ Sigle presenze</div><button class="ba bteal" style="padding:6px 12px;font-size:12px" onclick="openSiglaEdit(null)">＋ Nuova</button></div><div class="perm-section-body">';
+  h+='<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Spunta in quali sezioni la sigla è selezionabile. Disattivarla non cancella i dati già inseriti.</div>';
+  h+='<div style="display:flex;flex-direction:column;gap:4px">';
+  SIGLE.forEach(function(s){
+    var tipo=s.custom?(SIGLA_TIPI[s.tipo]||{}).l:'Predefinita';
+    h+='<div style="display:flex;align-items:center;gap:10px;padding:6px 10px;background:var(--card);border:1px solid var(--border);border-radius:7px">'
+      +'<span style="min-width:56px;text-align:center;font-family:var(--ffc);font-weight:800;font-size:13px;color:'+s.color+';background:'+s.bg+';border:1px solid '+s.border+';border-radius:5px;padding:2px 6px">'+esc(s.code)+'</span>'
+      +'<div style="flex:1;min-width:0"><div style="font-size:12px;font-weight:600">'+esc(s.label)+'</div><div style="font-size:10px;color:var(--muted)">'+esc(tipo)+'</div></div>'
+      +'<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer"><input type="checkbox" class="conf-cb" '+(atsArr.indexOf(s.code)!==-1?'checked':'')+' onchange="sigleToggle(\''+s.code+'\',\'ats\',this.checked)">ATS</label>'
+      +'<label style="display:flex;align-items:center;gap:4px;font-size:11px;cursor:pointer"><input type="checkbox" class="conf-cb" '+(COOP_SIGLE_CODES.indexOf(s.code)!==-1?'checked':'')+' onchange="sigleToggle(\''+s.code+'\',\'coop\',this.checked)">Coop</label>'
+      +(s.custom?'<button class="icon-btn" onclick="openSiglaEdit(\''+s.code+'\')" title="Modifica">✏️</button><button class="icon-btn del" onclick="delSigla(\''+s.code+'\')" title="Elimina">🗑</button>':'<span style="width:56px"></span>')
+      +'</div>';
+  });
+  h+='</div></div></div>';
+  return h;
+}
+var siglaEditCode=null;
+function openSiglaEdit(code){
+  siglaEditCode=code;
+  var c=code?((_sigCfg().custom.find(function(x){return x.code===code;}))||{}):{};
+  document.getElementById('sgTitle').textContent=code?'Modifica Sigla':'Nuova Sigla';
+  var ci=document.getElementById('sgCode');ci.value=c.code||'';ci.disabled=!!code;
+  document.getElementById('sgLabel').value=c.label||'';
+  document.getElementById('sgColor').value=c.color||'#22d3ee';
+  document.getElementById('sgTipo').value=c.tipo||'giornata';
+  document.getElementById('sgAts').checked=code?(SIGLE_ATS_PICK||[]).indexOf(code)!==-1:true;
+  document.getElementById('sgCoop').checked=code?COOP_SIGLE_CODES.indexOf(code)!==-1:false;
+  document.getElementById('sgErr').classList.remove('show');
+  sgTipoHint();
+  mOpen('moSiglaEdit');
+  if(!code)setTimeout(function(){ci.focus();},120);
+}
+function sgTipoHint(){
+  var t=SIGLA_TIPI[document.getElementById('sgTipo').value];
+  document.getElementById('sgTipoHint').textContent=t?t.d:'';
+}
+function siglaConfirm(){
+  var err=document.getElementById('sgErr');
+  var code=document.getElementById('sgCode').value.trim().toUpperCase();
+  var label=document.getElementById('sgLabel').value.trim();
+  var fail=function(m){err.textContent=m;err.classList.add('show');};
+  if(!siglaEditCode){
+    // Lettera iniziale obbligatoria: un numero davanti è la quantità (es. 2HP)
+    if(!/^[A-Z][A-Z0-9]{0,5}$/.test(code))return fail('Codice: da 1 a 6 caratteri, lettere/numeri, deve iniziare con una lettera.');
+    if(SM[code])return fail('La sigla '+code+' esiste già.');
+    if(['P','RNG','ORD','STR','DOM','FEST','WEEK'].indexOf(code)!==-1)return fail('Codice riservato ai totali: scegline un altro.');
+  }
+  if(!label)return fail('Inserisci una descrizione.');
+  var cfg=_sigCfg();
+  var obj={code:siglaEditCode||code,label:label,color:document.getElementById('sgColor').value,tipo:document.getElementById('sgTipo').value};
+  var idx=cfg.custom.findIndex(function(x){return x.code===obj.code;});
+  if(idx!==-1)cfg.custom[idx]=obj;else cfg.custom.push(obj);
+  ['ats','coop'].forEach(function(sec){
+    var on=document.getElementById(sec==='ats'?'sgAts':'sgCoop').checked;
+    var arr=cfg[sec],i=arr.indexOf(obj.code);
+    if(on&&i===-1)arr.push(obj.code);if(!on&&i!==-1)arr.splice(i,1);
+  });
+  applySigleConfig();mClose('moSiglaEdit');renderPermPanel();
+  if(typeof atsRender==='function'&&atsData)atsRender();
+  if(typeof coopRender==='function'&&coopData)coopRender();
+  toast('✓ Sigla '+obj.code+' salvata — premi Salva Config');
+}
+function delSigla(code){
+  showConf('Elimina sigla','Eliminare la sigla "'+code+'"? Le celle già compilate con questa sigla resteranno nel foglio ma non verranno più conteggiate nei totali.',function(){
+    var cfg=_sigCfg();
+    cfg.custom=cfg.custom.filter(function(x){return x.code!==code;});
+    ['ats','coop'].forEach(function(sec){var i=cfg[sec].indexOf(code);if(i!==-1)cfg[sec].splice(i,1);});
+    applySigleConfig();renderPermPanel();
+    toast('✓ Sigla rimossa — premi Salva Config');
+  });
+}
 function getCommesse(plant){
   var all=(permConfig&&permConfig.commesse)||[];
   if(!plant)return all;
@@ -5550,7 +5752,7 @@ function calcOreDisponibili(sigla, ing, usc, pausa, qty){
   var eff=o.eff||0;
   var sg=xSig(sigla||'');
   // Sottrai ore permesso/104
-  if(sg==='HP'||sg==='H104'||sg==='HPVM'){
+  if(SIGLE_ORE.indexOf(sg)!==-1){
     // qty esplicita (campo Quantità) ha priorità; altrimenti prefisso sigla ("3HP" → 3)
     var qtyH=(qty!=null&&qty>0)?qty:(parseFloat((String(sigla||'').match(/^[\d.]*/)||['1'])[0])||1);
     eff=Math.max(0,eff-qtyH);
@@ -5902,7 +6104,7 @@ function openBulkPresenza(mode){
   var g=document.getElementById('bulkGrid');g.innerHTML='';
   var siglaList=mode==='coop'
     ?SIGLE.filter(function(s){return COOP_SIGLE_CODES.indexOf(s.code)!==-1;})
-    :SIGLE;
+    :sigleAtsPick();
   siglaList.forEach(function(s){
     var el=document.createElement('div');el.className='sopt';
     el.style.cssText='color:'+s.color;
@@ -6168,7 +6370,7 @@ function openMassivo(mode){
   var g=document.getElementById('massGrid');g.innerHTML='';
   var siglaList=mode==='coop'
     ?SIGLE.filter(function(s){return COOP_SIGLE_CODES.indexOf(s.code)!==-1;})
-    :SIGLE;
+    :sigleAtsPick();
   siglaList.forEach(function(s){
     var el=document.createElement('div');el.className='sopt';
     el.style.cssText='color:'+s.color;
