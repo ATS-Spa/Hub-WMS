@@ -275,7 +275,8 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
           <div class="fg"><span class="fl" id="lblFr">FR</span><input class="fc mono" id="scFr" autocomplete="off" placeholder="si compila dal seriale"><span class="hint" id="hFr"></span></div>
           <div class="fg"><span class="fl">Barcode seriale</span><input class="fc mono" id="scBc" autocomplete="off" placeholder="spara qui il seriale"><span class="hint" id="hBc"></span></div>
           <div class="fg" id="wrapPn"><span class="fl">P/N (NEW/REUSE, resta fisso)</span><input class="fc mono" id="scPn" autocomplete="off" placeholder="vuoto = dal barcode" onchange="Ingresso.pnFisso()"><span class="hint" id="hPn"></span></div>
-          <div class="fg" id="wrapUbi"><span class="fl">Ubicazione (NEW/REUSE)</span><input class="fc mono" id="scUbi" list="dlUbicazioni" autocomplete="off"></div>
+          <div class="fg" id="wrapUbi"><span class="fl">Ubicazione (NEW/REUSE)</span><input class="fc mono" id="scUbi" list="dlUbicazioni" autocomplete="off" placeholder="es. AB07CY"></div>
+          <div class="fg" id="wrapPlt"><span class="fl">Pallet</span><div style="display:flex;gap:6px"><input class="fc mono" id="scPlt" style="width:110px" autocomplete="off" placeholder="—" onchange="Pallet.imposta(this.value)"><button class="btn ghost sm" type="button" onclick="Pallet.nuovo()" title="Assegna il prossimo numero pallet (FLM …): l'ubicazione va riscritta">＋ Nuovo pallet</button></div></div>
           <button class="btn" id="btnAgg" onclick="Ingresso.aggiungi()">Aggiungi</button>
         </div>
       </div>
@@ -1063,7 +1064,7 @@ var Ingresso = {
       else if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); clearTimeout(tB); Ingresso.anteprima('fr'); bc.focus(); bc.select(); }
     });
     ub.addEventListener('keydown', function (e) { nextOn(e, function () { Ingresso.aggiungi(); }); });
-    $('scPn').value = lsG('pn_fisso') || ''; Ingresso.pnFisso(true); if (Ingresso.needUbi()) $('scUbi').value = lsG('ubi_fissa') || '';
+    $('scPn').value = lsG('pn_fisso') || ''; Ingresso.pnFisso(true); $('scUbi').value = lsG('ubi_fissa') || ''; $('scPlt').value = lsG('plt_fisso') || '';
     ub.addEventListener('change', function () { ub.value = L.up(ub.value); lsS('ubi_fissa', ub.value); });
     Ingresso.lockScan(); Ingresso.ricalcola(); Ingresso.renderOggi();
   },
@@ -1087,12 +1088,6 @@ var Ingresso = {
   pnFisso: function (avvio) {
     var v = L.up($('scPn').value), prima = L.up(lsG('pn_fisso') || '');
     $('scPn').value = v; lsS('pn_fisso', v);
-    // l'ubicazione resta la stessa finché non cambi P/N: al cambio riprende quella già usata per quel P/N, altrimenti va scritta
-    if (!avvio && v !== prima) {
-      var u = ''; Ingresso.rows.forEach(function (r) { if (L.up(r.man.pn) === v && r.ubi) u = r.ubi; });
-      $('scUbi').value = u; lsS('ubi_fissa', u);
-      if (!u && v) setTimeout(function () { $('scUbi').focus(); }, 30);
-    }
     $('hPn').innerHTML = !v ? '' : (App.pnEsiste(v) ? '<span style="color:var(--green)">✓ in anagrafica</span>' : '<span style="color:var(--amber)">⚠ non in anagrafica</span>');
   },
   // campo Mittente largo quanto il testo (minimo 210 px, massimo 560 px)
@@ -1106,7 +1101,7 @@ var Ingresso = {
   // senza Tipo non si legge nulla
   lockScan: function () {
     var ok = !!$('inTipo').value;
-    ['scFr', 'scBc', 'scUbi', 'scPn'].forEach(function (id) { $(id).disabled = !ok; });
+    ['scFr', 'scBc', 'scUbi', 'scPn', 'scPlt'].forEach(function (id) { $(id).disabled = !ok; });
     $('btnAgg').disabled = !ok;
     $('scBc').placeholder = ok ? 'spara qui il seriale' : 'seleziona prima il Tipo';
     $('scFr').placeholder = ok ? 'si compila dal seriale' : 'seleziona prima il Tipo';
@@ -1122,8 +1117,9 @@ var Ingresso = {
     if (frAuto && bcAuto) { fr = L.s($('scFr').value); }
     if (!bc && !fr) { toast('Spara il seriale (oppure scrivi l\'FR)', 'ko'); $('scBc').focus(); return; }
     if (fr && !/^\d+$/.test(fr)) { toast('FR/RMA deve essere un numero', 'ko'); $('scFr').focus(); return; }
-    var pnF = Ingresso.needUbi() ? L.up($('scPn').value) : '';
-    Ingresso.rows.push({ fr: fr, bc: bc, ubi: ub, ser: '', pn: '', man: pnF ? { pn: pnF } : {} });
+    var pnF = Ingresso.needUbi() ? L.up($('scPn').value) : '', plt = Ingresso.needUbi() ? L.s($('scPlt').value) : '';
+    if (Ingresso.needUbi() && !plt) { Pallet.nuovo(function () { Ingresso.aggiungi(); }); return; }   // primo pezzo: il pallet si crea da solo
+    Ingresso.rows.push({ fr: fr, bc: bc, ubi: ub, plt: plt, ser: '', pn: '', man: pnF ? { pn: pnF } : {} });
     $('scFr').value = ''; $('scBc').value = ''; $('scFr').dataset.auto = '0'; $('scBc').dataset.auto = '0'; $('hFr').textContent = ''; $('hBc').textContent = '';
     if (!Ingresso.needUbi()) $('scUbi').value = '';
     Ingresso.fitScan(); Ingresso.ricalcola(); Ingresso.save(); $('scBc').focus();
@@ -1197,7 +1193,7 @@ var Ingresso = {
     var ser0 = r.bc ? Ingresso.pulisci(r.bc, '').ser : '';
     // lettura dal seriale: l'FR si cerca da solo (stessa logica dell'anteprima)
     if (!frIn && r.bc) { var tf = Ingresso.trovaFr(r.bc, T.tipo); frIn = tf.fr; frOrig = tf.origine; pick = tf.pick; }
-    var o = { fr: frIn, rma: '', bc: r.bc, msgs: [], err: false, warn: false, tipo: T.tipo, ubicazione: r.ubi, destinazione: '', statoVlt: '', nota: '', mail: null };
+    var o = { fr: frIn, rma: '', bc: r.bc, msgs: [], err: false, warn: false, tipo: T.tipo, ubicazione: r.ubi, plt: r.plt || '', destinazione: '', statoVlt: '', nota: '', mail: null };
     var v = frIn ? DB.vltMap[frIn] : null;
     // balancing: con il flag attivo, un numero digitato che non è un FR è l'RMA della balancing
     if ((T.bal || T.tipo === 'BALANCING') && r.fr && !v) { o.tipo = 'BALANCING'; o.rma = r.fr; o.fr = ''; }
@@ -1316,7 +1312,7 @@ var Ingresso = {
       return '<tr class="' + cls + '"><td>' + (i + 1) + '</td><td class="mono">' + esc(c.fr) + '</td><td class="mono">' + esc(c.rma) + '</td>' +
         '<td class="nw">' + ed('ser', c.ser, 12) + '</td><td class="nw">' + ed('pn', c.pn, 8) + (c.pn && c.pnAnag !== undefined ? (c.pnAnag ? ' <span title="P/N presente in anagrafica articoli" style="color:var(--green)">✓</span>' : ' <span title="P/N NON presente in anagrafica articoli' + (c.pnSimile ? ' (simile: ' + esc(c.pnSimile) + ')' : '') + '" style="color:var(--amber)">✗</span>') : '') + '</td><td class="nw">' + ed('mnft', c.mnft, 6) + '</td>' +
         '<td>' + esc(c.rip) + '</td><td style="font-size:11.5px;color:var(--subtle)">' + esc(c.statoVlt) + '</td>' +
-        '<td>' + ed('nota', c.nota, 10) + '</td><td>' + (c.tipo === 'NEW' || c.tipo === 'REUSE' ? '<input class="edit-cell edit-vis mono" style="width:calc(' + Math.max(12, Math.min(40, L.s(c.ubicazione).length + 2)) + 'ch + 16px)" list="dlUbicazioni" value="' + esc(c.ubicazione) + '" placeholder="✎ ubicazione" onchange="Ingresso.editUbi(' + i + ',this.value)">' : esc(c.destinazione)) + '</td>' +
+        '<td>' + ed('nota', c.nota, 10) + '</td><td>' + (c.tipo === 'NEW' || c.tipo === 'REUSE' ? '<input class="edit-cell edit-vis mono" style="width:calc(' + Math.max(12, Math.min(40, L.s(c.ubicazione).length + 2)) + 'ch + 16px)" list="dlUbicazioni" value="' + esc(c.ubicazione) + '" placeholder="✎ ubicazione" onchange="Ingresso.editUbi(' + i + ',this.value)">' + (c.plt ? '<div class="hint mono" style="font-size:10.5px">' + esc(c.plt) + '</div>' : '') : esc(c.destinazione)) + '</td>' +
         '<td><div class="msgs">' + m + mail + '</div></td><td><button class="ico-btn" title="Elimina" onclick="Ingresso.del(' + i + ')">✕</button></td></tr>';
     }).join('');
     var nErr = C.filter(function (c) { return c.err; }).length, nWarn = C.filter(function (c) { return c.warn && !c.err; }).length;
@@ -1326,7 +1322,7 @@ var Ingresso = {
     $('btnCarica').disabled = !C.length || nErr > 0;
     $('btnCarica').title = nErr ? 'Correggi le righe in rosso' : '';
     $('wrapUbi').style.visibility = Ingresso.needUbi() ? 'visible' : 'hidden';
-    $('wrapPn').style.display = Ingresso.needUbi() ? '' : 'none';
+    $('wrapPn').style.display = Ingresso.needUbi() ? '' : 'none'; $('wrapPlt').style.display = Ingresso.needUbi() ? '' : 'none';
   },
   validaTestata: function (T) {
     var e = [];
@@ -1374,11 +1370,11 @@ var Ingresso = {
     var rObj = { data_arrivo: T.data, mittente: T.mittente, awb: T.awb, vettore: T.vettore, ddt_mittente: T.ddt, po_mrn: T.po, tipo: T.tipo, flag_balancing: T.bal ? 'SI' : 'NO', n_pezzi: n, stato: 'CHIUSA', note: '', creato_il: now, creato_da: me };
     var uObjs = C.map(function (c) {
       return { seriale: c.ser, barcode_letto: c.bc, pn: c.pn, mnft: c.mnft, tipo: c.tipo, fr: c.fr, rma: c.rma, riparatore: c.rip, magazzino: mag(c.tipo),
-        ubicazione: (c.tipo === 'NEW' || c.tipo === 'REUSE') ? c.ubicazione : '', stato: 'IN_GIACENZA', destinazione_prevista: c.destinazione,
+        ubicazione: (c.tipo === 'NEW' || c.tipo === 'REUSE') ? c.ubicazione : '', n_plt: (c.tipo === 'NEW' || c.tipo === 'REUSE') ? c.plt : '', stato: 'IN_GIACENZA', destinazione_prevista: c.destinazione,
         data_in: T.data, note: c.nota, rev: 1, creato_il: now, creato_da: me };
     });
     var mObjs = C.map(function (c, i) {
-      return { data_ora: T.data + ' ' + now.slice(11), data_registrazione_vlt: L.isoToday(), posizione_note: uObjs[i].ubicazione, direzione: 'IN', causale: 'INGRESSO', seriale: c.ser, pn: c.pn, mnft: c.mnft, tipo: c.tipo, fr: c.fr, rma: c.rma,
+      return { data_ora: T.data + ' ' + now.slice(11), data_registrazione_vlt: L.isoToday(), posizione_note: [uObjs[i].ubicazione, uObjs[i].n_plt].filter(Boolean).join(' / '), direzione: 'IN', causale: 'INGRESSO', seriale: c.ser, pn: c.pn, mnft: c.mnft, tipo: c.tipo, fr: c.fr, rma: c.rma,
         po_mrn: T.po, controparte: T.mittente, awb: T.awb, vettore: T.vettore, ddt: T.ddt, riparatore: c.rip, ubicazione_a: uObjs[i].ubicazione,
         operatore: me, operatore_sigla: sigla, note: c.nota, origine: 'APP' };
     });
@@ -1538,7 +1534,7 @@ var Ingresso = {
   },
   cedolinoLetti: function () {
     var T = Ingresso.T();
-    Cedolino.stampa([{ testa: { mittente: T.mittente, po: T.po, ddt: T.ddt, tipo: T.tipo, data: T.data }, pezzi: Ingresso.computed.map(function (c) { return { pn: c.pn, ubicazione: c.ubicazione, nota: c.nota }; }) }]);
+    Cedolino.stampa([{ testa: { mittente: T.mittente, po: T.po, ddt: T.ddt, tipo: T.tipo, data: T.data }, pezzi: Ingresso.computed.map(function (c) { return { pn: c.pn, ubicazione: c.ubicazione, nota: c.nota, plt: c.plt }; }) }]);
   },
   cedolinoOggi: async function () {
     if (!Nr.loaded) { try { await Nr.load(); } catch (e) { } }
@@ -1548,7 +1544,7 @@ var Ingresso = {
     R.forEach(function (u) { var k = u.id_ricezione || '-'; if (!g[k]) { g[k] = []; ord.push(k); } g[k].push(u); });
     Cedolino.stampa(ord.map(function (k) {
       var r = ric[k] || {}, nr = Nr.loaded ? Nr.t().rows.find(function (p) { return p.id_ricezione === k; }) : null, x = r.mittente ? r : (nr || {});
-      return { testa: { mittente: x.mittente, po: x.po_mrn, ddt: x.ddt_mittente || x.ddt, tipo: g[k][0].tipo, data: g[k][0].data_in }, pezzi: g[k].map(function (u) { return { pn: u.pn, ubicazione: u.ubicazione, nota: Rma.nota(u.note) }; }) };
+      return { testa: { mittente: x.mittente, po: x.po_mrn, ddt: x.ddt_mittente || x.ddt, tipo: g[k][0].tipo, data: g[k][0].data_in }, pezzi: g[k].map(function (u) { return { pn: u.pn, ubicazione: u.ubicazione, nota: Rma.nota(u.note), plt: u.n_plt }; }) };
     }));
   },
   etichetteOggi: function () { Etichette.pezzi((Ingresso._oggi || []).map(Etichette.daUnita)); },
@@ -1608,7 +1604,7 @@ var Giacenze = {
     var st = $('gStato').value, tipo = $('gTipo').value, mag = $('gMag').value, q = L.up($('gQ').value);
     if (st === 'A_MAG' ? Giacenze.A_MAG.indexOf(u.stato) < 0 : (st && u.stato !== st)) return false;
     if (mag && u.magazzino !== mag) return false;
-    if (q) { var m = Giacenze.movIn(u); if (![u.seriale, u.pn, u.fr, u.rma, u.ubicazione, u.material, u.note, u.id_unita, u.destinazione_prevista, u.bin_vlt, m.awb, m.ddt, m.controparte, m.po_mrn].some(function (x) { return L.up(x).indexOf(q) >= 0; })) return false; }
+    if (q) { var m = Giacenze.movIn(u); if (![u.seriale, u.pn, u.fr, u.rma, u.ubicazione, u.n_plt, u.material, u.note, u.id_unita, u.destinazione_prevista, u.bin_vlt, m.awb, m.ddt, m.controparte, m.po_mrn].some(function (x) { return L.up(x).indexOf(q) >= 0; })) return false; }
     return !tipo || u.tipo === tipo;
   },
   grid: function () {
@@ -1617,7 +1613,7 @@ var Giacenze = {
     var STATO = { IN_GIACENZA: ['p-green', 'in giacenza'], IN_LAVORAZIONE: ['p-blue', 'in lavorazione'], BLOCCATO: ['p-red', '⛔ bloccato'], IN_ATTESA: ['p-amber', '⏸ in attesa'], USCITO: ['', 'uscito'], ANNULLATO: ['', 'annullato'] };
     return Giacenze.g = new Grid('giac', {
       thead: 'gHead', tbody: 'gRows', foot: 'gHint', limit: 500, sort: 'data_in', dir: -1, empty: 'Nessun risultato',
-      hidden: ['barcode_letto', 'sap_code_ats', 'descrizione', 'bin_vlt', 'n_plt', 'id_ricezione', 'id_mov_in', 'id_spedizione', 'data_out', 'data_vlt', 'creato_da', 'modificato', 'vettore', 'po'],
+      hidden: ['barcode_letto', 'sap_code_ats', 'descrizione', 'bin_vlt', 'id_ricezione', 'id_mov_in', 'id_spedizione', 'data_out', 'data_vlt', 'creato_da', 'modificato', 'vettore', 'po'],
       rowAttr: function (u) { return u.stato === 'BLOCCATO' ? 'class="r-err"' : (u.stato === 'IN_ATTESA' ? 'class="r-warn"' : ''); },
       rows: function () { Giacenze.indice(); return DB.t.UNITA.rows.filter(Giacenze.filtra); },
       cols: [
@@ -1650,7 +1646,7 @@ var Giacenze = {
         { k: 'sap_code_ats', label: 'SAP code', cls: 'mono' },
         { k: 'descrizione', label: 'Descrizione' },
         { k: 'bin_vlt', label: 'Bin VLT', cls: 'mono' },
-        { k: 'n_plt', label: 'N. PLT', cls: 'mono' },
+        { k: 'n_plt', label: 'Pallet', filter: 'text', cls: 'mono' },
         { k: 'id_ricezione', label: 'ID ricezione', cls: 'mono' },
         { k: 'id_mov_in', label: 'ID mov. IN', cls: 'mono' },
         { k: 'id_spedizione', label: 'ID spedizione', cls: 'mono' },
@@ -2775,6 +2771,28 @@ var Rma = {
     var d = DB.t.DEPOT_VLT.rows.find(function (x) { return x.depot_vlt === r.deposito_dest_rma; });
     return d ? d.destinazione : r.deposito_dest_rma;
   },
+  annullaImport: function () {
+    var att = Rma.attivi(), ids = {}; att.forEach(function (r) { ids[r.id_rma] = 1; });
+    var ass = Rma.inventario().filter(function (u) { return L.s(u.rma) && ids[L.s(u.rma)]; });
+    Modal.html('Annulla import ritorni',
+      '<div style="font-size:13px;line-height:1.6">Annullo i <b>' + att.length + '</b> RMA dell\'ultimo import (' + esc(Rma.ultimoImport()) + ').<br>Non saranno più proposti come RMA giacenza; restano nel foglio come ANNULLATI e tornano attivi se li reimporti.</div>' +
+      (ass.length ? '<label style="display:flex;gap:8px;align-items:center;margin-top:10px;font-size:13px"><input type="checkbox" id="annAss" checked> togli anche l\'RMA creato da <b>' + ass.length + '</b> GOOD associate a questi ritorni (torna la destinazione d\'origine)</label>' : ''),
+      [{ label: 'Chiudi', cls: 'ghost' }, { label: '🗑 Annulla import', cls: 'red', keep: true, fn: function () { Rma.annullaScrivi(att, $('annAss') && $('annAss').checked ? ass : []); } }]);
+  },
+  annullaScrivi: async function (att, ass) {
+    Modal.progress('Annullo…');
+    try {
+      var t = DB.t.RMA_RITORNI, tU = DB.t.UNITA, now = L.nowStamp(), upd = [];
+      att.forEach(function (r) { r.stato = 'ANNULLATO'; upd.push({ range: t.cell('stato', r._r), values: [['ANNULLATO']] }); });
+      ass.forEach(function (u) {
+        var o = Rma.origine(u), c = { rma: '', modificato_il: now, modificato_da: Auth.email, rev: (parseInt(u.rev, 10) || 1) + 1 };
+        if (o.length) c.destinazione_prevista = o[0];
+        Object.keys(c).forEach(function (h) { u[h] = String(c[h]); upd.push({ range: tU.cell(h, u._r), values: [[u[h]]] }); });
+      });
+      await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', [App.log('ANNULLA_IMPORT_RITORNI', 'RMA_RITORNI', '', { rma: att.length, rma_creati_tolti: ass.map(function (u) { return u.id_unita; }) })])]);
+      Modal.close(); toast(att.length + ' ritorni annullati' + (ass.length ? ' · ' + ass.length + ' RMA creati tolti' : '') + ': ora puoi importare il file corretto', 'ok'); Rma.render();
+    } catch (e) { Modal.progress(''); toast('Non annullato: ' + e.message, 'ko'); }
+  },
   ultimoImport: function () { var m = ''; DB.t.RMA_RITORNI.rows.forEach(function (r) { if (r.importato_il > m) m = r.importato_il; }); return m; },
   // RMA aperte dell'ultimo import, dalla data di inizio operativa in poi
   attivi: function () {
@@ -2844,7 +2862,7 @@ var Rma = {
     var info = '<div class="hint" style="margin-top:8px">' + (ult ? 'Ultimo import ritorni: ' + esc(ult) + ' · ' + Rma.attivi().length + ' RMA aperte dal ' + esc(L.itDate(DB.dataInizio())) : 'Nessun import ritorni: carica il CSV esportato da VLT.') + '</div>';
     var xl = ' <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button>';
     if (s === 'inv') return '<div class="row">' + imp + xl + ' <button class="btn ghost sm" onclick="Rma.etichette()" title="Etichetta 10x5 solo per le schede con variazione di destino (tra le righe filtrate)">🏷 Etichette RMA</button>' + (Rma.ieri().length ? ' <button class="btn sm" onclick="Rma.associaIeri()" title="Gli RMA giacenza aperti ieri diventano RMA creato; i più vecchi li controlla il Service Desk">✓ Associa RMA di ieri (' + Rma.ieri().length + ')</button>' : '') + '<div class="spacer"></div><button class="btn sm" ' + (nD ? '' : 'disabled') + ' onclick="Rma.salva()">Salva modifiche' + (nD ? ' (' + nD + ')' : '') + '</button></div>' + info;
-    if (s === 'rit') return '<div class="row">' + imp + xl + '</div>' + info;
+    if (s === 'rit') return '<div class="row">' + imp + xl + (Rma.attivi().length ? ' <button class="btn ghost sm" onclick="Rma.annullaImport()" title="Annulla i ritorni dell\'ultimo import (es. file sbagliato): poi puoi caricarne uno nuovo">🗑 Annulla import ritorni</button>' : '') + '</div>' + info;
     if (s === 'car') return '<div class="row">' +
       '<div class="fg" style="width:240px"><span class="fl">Seriale *</span><input class="fc mono" id="carSer" autocomplete="off" placeholder="spara il seriale" onkeydown="if(event.key===\'Enter\'){event.preventDefault();$(\'carRma\').focus()}" oninput="Rma.carInfo()"><span class="hint" id="carHint"></span></div>' +
       '<div class="fg" style="width:120px"><span class="fl">RMA *</span><input class="fc mono" id="carRma" autocomplete="off"></div>' +
@@ -3020,7 +3038,7 @@ var Rma = {
       var upd = [], nuove = [], last = L.colLetter(t.header.length - 1);
       recs.forEach(function (o) {
         var ex = byId[o.id_rma];
-        if (ex) { Object.keys(o).forEach(function (k) { ex[k] = o[k]; }); upd.push({ range: API.q(t.name) + '!A' + ex._r + ':' + last + ex._r, values: [t.toRow(ex)] }); }
+        if (ex) { if (ex.stato === 'ANNULLATO') o.stato = 'DA_EVADERE'; Object.keys(o).forEach(function (k) { ex[k] = o[k]; }); upd.push({ range: API.q(t.name) + '!A' + ex._r + ':' + last + ex._r, values: [t.toRow(ex)] }); }
         else { o.stato = 'DA_EVADERE'; o.rev = 1; nuove.push(o); }
       });
       if (upd.length) await API.batchUpdate(DB.id, upd);
@@ -3736,7 +3754,7 @@ var Nr = {
   cedolino: function (id) {
     var p = Nr.t().rows.find(function (x) { return x.id_pratica === id; }), P = Nr.pezziRic(p.id_ricezione);
     if (!P.length) { toast('Nessun pezzo trovato per questa pratica', 'ko'); return; }
-    Cedolino.stampa([{ testa: { mittente: p.mittente, po: p.po_mrn, ddt: p.ddt, tipo: p.tipo, data: p.data }, pezzi: P.map(function (u) { return { pn: u.pn, ubicazione: u.ubicazione, nota: Rma.nota(u.note) }; }) }]);
+    Cedolino.stampa([{ testa: { mittente: p.mittente, po: p.po_mrn, ddt: p.ddt, tipo: p.tipo, data: p.data }, pezzi: P.map(function (u) { return { pn: u.pn, ubicazione: u.ubicazione, nota: Rma.nota(u.note), plt: u.n_plt }; }) }]);
   },
   // eliminazione (solo admin + password): la riga resta nel foglio come ELIMINATA (numerazione e LOG intatti), i file vanno nel cestino di Drive
   PWD: 'bb985ec2df22f2e51fffedd7146341658b596985d77fb4071d70e5c4f0767466',
@@ -4107,6 +4125,47 @@ var Etichette = {
 // ID scheda = parte numerica dell'ID unità assegnato dall'app (U0001120 → 1120), per riconoscere al volo la scheda
 Etichette.idScheda = function (u) { var id = L.s(u.id_unita), m = /^[A-Z]*0*(\d+)$/i.exec(id); return m ? m[1] : id; };
 
+// ───────────────────────── PALLET (numero progressivo FLM, uguale per NEW e REUSE) ─────────────────────────
+// numerazione atomica come i DDT: si aggiunge una riga a PALLET_REGISTRO e il numero = base + posizione della riga
+var Pallet = {
+  H: ['codice', 'numero', 'data', 'operatore', 'note'],
+  PREF: function () { return L.s(DB.param('pallet_prefisso', 'FLM')) || 'FLM'; },
+  // ultimo numero già usato nelle ubicazioni / pallet in giacenza ("… / FLM 218")
+  maxEsistente: function () {
+    var re = new RegExp(Pallet.PREF() + '\\s*0*(\\d+)', 'i'), m = 0;
+    DB.t.UNITA.rows.forEach(function (u) { [u.n_plt, u.ubicazione].forEach(function (x) { var k = re.exec(L.s(x)); if (k) m = Math.max(m, +k[1]); }); });
+    return m;
+  },
+  nuovo: async function (poi) {
+    if (Pallet._busy) return; Pallet._busy = true;
+    try {
+      await DB.ensureSheet('PALLET_REGISTRO', Pallet.H);
+      if (!DB.t.PALLET_REGISTRO) await DB.loadTables(['PALLET_REGISTRO']);
+      var t = DB.t.PALLET_REGISTRO;
+      var base = await API.batchGet(DB.id, [API.q('PALLET_REGISTRO') + '!A2:B2']);
+      if (!base[0] || !base[0][0] || L.s(base[0][0][0]) !== 'BASE') {   // prima volta: la base riparte dall'ultimo FLM usato
+        await API.append(DB.id, 'PALLET_REGISTRO', [t.toRow({ codice: 'BASE', numero: String(Pallet.maxEsistente()), data: L.nowStamp(), operatore: Auth.email, note: 'numero = base + (riga - 2)' })]);
+        base = await API.batchGet(DB.id, [API.q('PALLET_REGISTRO') + '!A2:B2']);
+      }
+      var b = parseInt(base[0][0][1], 10) || 0;
+      var r = await API.append(DB.id, 'PALLET_REGISTRO', [t.toRow({ data: L.nowStamp(), operatore: Auth.email })]);
+      var n = b + (r - 2), cod = Pallet.PREF() + ' ' + n;
+      await API.batchUpdate(DB.id, [{ range: API.q('PALLET_REGISTRO') + '!A' + r + ':B' + r, values: [[cod, String(n)]] }]);
+      Pallet.imposta(cod, !poi);   // dal pulsante: ubicazione da riscrivere; automatico al primo pezzo: tiene quella scritta
+      toast('Nuovo pallet ' + cod + (poi ? '' : ': scrivi l\'ubicazione'), 'ok');
+      if (poi) poi();
+    } catch (e) { toast('Numero pallet non assegnato: ' + e.message, 'ko'); }
+    finally { Pallet._busy = false; }
+  },
+  // cambio pallet = l'ubicazione va riscritta (resta uguale finché non cambi pallet)
+  imposta: function (cod, nuovo) {
+    cod = L.up(cod).replace(/\s+/g, ' '); $('scPlt').value = cod; lsS('plt_fisso', cod);
+    var u = ''; Ingresso.rows.forEach(function (r) { if (r.plt === cod && r.ubi) u = r.ubi; });
+    if (nuovo || u) { $('scUbi').value = u; lsS('ubi_fissa', u); }
+    if (!u) setTimeout(function () { $('scUbi').focus(); }, 30);
+  }
+};
+
 // ───────────────────────── CEDOLINO NEW/REUSE (come il foglio STAMPA CEDOLINO) ─────────────────────────
 // un'etichetta 10x5 per P/N e posizione: TPN, quantità, posizione e barcode Code39 dei primi 5 caratteri della posizione (*AB07C*)
 var Cedolino = {
@@ -4139,45 +4198,54 @@ var Cedolino = {
       [{ label: 'Annulla', cls: 'ghost' }, { label: 'A5' + (f === 'A5' ? ' ✓' : ''), cls: f === 'A5' ? '' : 'ghost', fn: function () { lsS('cedolino_formato', 'A5'); Cedolino.pdf(gruppi, 'A5'); } },
        { label: 'A4' + (f === 'A4' ? ' ✓' : ''), cls: f === 'A4' ? '' : 'ghost', fn: function () { lsS('cedolino_formato', 'A4'); Cedolino.pdf(gruppi, 'A4'); } }]);
   },
+  // gruppi: [{ testa: { mittente, po, ddt, tipo, data }, pezzi: [{ pn, ubicazione, nota, plt }] }] → un cedolino per pallet
   pdf: async function (gruppi, formato) {
     var pagine = [];
     gruppi.forEach(function (g) {
-      var m = {}, ord = [];
-      g.pezzi.forEach(function (p) { var k = L.up(p.pn) + '|' + L.up(p.ubicazione); if (!m[k]) { m[k] = { pn: L.up(p.pn), pos: L.up(p.ubicazione), q: 0, note: [] }; ord.push(k); } m[k].q++; if (L.s(p.nota) && m[k].note.indexOf(L.s(p.nota)) < 0) m[k].note.push(L.s(p.nota)); });
-      ord.sort(function (a, b) { return a.localeCompare(b); });
-      if (ord.length) pagine.push({ t: g.testa, righe: ord.map(function (k) { return m[k]; }), tot: g.pezzi.length });
+      var perPlt = {}, ordP = [];
+      g.pezzi.forEach(function (p) { var k = L.up(p.plt) || L.up(p.ubicazione) || '-'; if (!perPlt[k]) { perPlt[k] = []; ordP.push(k); } perPlt[k].push(p); });
+      ordP.forEach(function (k) {
+        var P = perPlt[k], m = {}, ord = [], ubi = [];
+        P.forEach(function (p) { var u = L.up(p.ubicazione); if (u && ubi.indexOf(u) < 0) ubi.push(u); var c = L.up(p.pn); if (!m[c]) { m[c] = { pn: c, q: 0, note: [] }; ord.push(c); } m[c].q++; if (L.s(p.nota) && m[c].note.indexOf(L.s(p.nota)) < 0) m[c].note.push(L.s(p.nota)); });
+        ord.sort();
+        pagine.push({ t: g.testa, plt: L.up(P[0].plt), ubi: ubi, righe: ord.map(function (c) { return m[c]; }), tot: P.length });
+      });
     });
     if (!pagine.length) { toast('Nessun pezzo per il cedolino', 'ko'); return; }
     var w = window.open('', '_blank');
     try {
-      await Ack.loghi();
+      await Ack.loghi(); await Lib.qr();
       var A4 = formato === 'A4', J = window.jspdf.jsPDF, d = new J({ unit: 'mm', format: 'a' + (A4 ? 4 : 5), orientation: A4 ? 'portrait' : 'landscape' });
-      var W = 210, H = A4 ? 297 : 148, logo = (Ack._lg || {}).sx, rh = 14, first = true;
-      var X = { tpn: 10, note: 50, q: 88, pos: 98, bin: 127, bc: 167 };
+      var W = 210, H = A4 ? 297 : 148, logo = (Ack._lg || {}).sx, first = true, FONDO = H - 8, X = { tpn: 10, note: 70, q: W - 12 };
       var testata = function (pg, cont) {
-        if (logo) { try { var wl = Math.min(34, 9 * logo.w / logo.h); d.addImage(logo.url, 'PNG', 10, 8, wl, wl * logo.h / logo.w); } catch (x) { } }
-        d.setTextColor(0); d.setFont('helvetica', 'bold'); d.setFontSize(15); d.text('CEDOLINO ' + L.s(pg.t.tipo) + (cont ? ' (segue)' : ''), W - 10, 14, { align: 'right' });
-        d.setFont('helvetica', 'normal'); d.setFontSize(9);
-        d.text([pg.t.mittente ? 'Mittente: ' + pg.t.mittente : '', pg.t.po ? 'PO/MRN: ' + pg.t.po : '', pg.t.ddt ? 'DDT: ' + pg.t.ddt : '', pg.t.data ? 'Data: ' + L.itDate(pg.t.data) : '', 'Pezzi: ' + pg.tot].filter(Boolean).join('   ·   '), 10, 23);
-        d.setDrawColor(120); d.line(10, 26, W - 10, 26);
-        d.setFont('helvetica', 'bold'); d.setFontSize(8); d.setTextColor(90);
-        d.text('TPN', X.tpn, 31); d.text('NOTE', X.note, 31); d.text('Q', X.q, 31); d.text('POS.', X.pos, 31); d.text('BIN EFFETTIVO', X.bin, 31); d.text('BARCODE POS.', X.bc, 31);
-        d.setTextColor(0); d.setDrawColor(200); d.line(10, 33, W - 10, 33);
-        return 35;
+        var ps = pg.ubi.map(Cedolino.pos), bin = (ps.find(function (x) { return x[1]; }) || ['', ''])[1];
+        if (logo) { try { var wl = Math.min(30, 8 * logo.w / logo.h); d.addImage(logo.url, 'PNG', 10, 7, wl, wl * logo.h / logo.w); } catch (x) { } }
+        d.setTextColor(0); d.setFont('helvetica', 'bold'); d.setFontSize(11); d.text('CEDOLINO ' + L.s(pg.t.tipo) + (cont ? ' (segue)' : ''), 48, 12);
+        d.setFont('helvetica', 'normal'); d.setFontSize(8);
+        d.text([pg.t.mittente, pg.t.po ? 'PO/MRN ' + pg.t.po : '', pg.t.ddt ? 'DDT ' + pg.t.ddt : '', pg.t.data ? L.itDate(pg.t.data) : '', 'Pezzi ' + pg.tot].filter(Boolean).join('  ·  '), 48, 17);
+        // QR = solo il bin effettivo
+        var qs = 26; if (bin) { Etichette.qr(d, bin, W - 10 - qs, 6, qs); }
+        var xr = bin ? W - 14 - qs : W - 10;
+        d.setTextColor(110); d.setFont('helvetica', 'bold'); d.setFontSize(7.5); d.text('PALLET', 10, 25); d.text('POS. / BIN', 62, 25);
+        d.setTextColor(0); Etichette.fit(d, pg.plt || '—', 10, 34, 48, 24, 12);
+        Etichette.fit(d, ps.length ? ps.map(function (x) { return [x[0], x[1]].filter(Boolean).join(' / '); }).join('  ·  ') : '—', 62, 34, xr - 62, 16, 8);
+        d.setDrawColor(120); d.line(10, 38, W - 10, 38);
+        d.setFont('helvetica', 'bold'); d.setFontSize(7.5); d.setTextColor(90);
+        d.text('TPN', X.tpn, 42.5); d.text('NOTE', X.note, 42.5); d.text('Q', X.q, 42.5, { align: 'right' });
+        d.setTextColor(0); d.setDrawColor(200); d.line(10, 44, W - 10, 44);
+        return 45;
       };
       pagine.forEach(function (pg) {
+        var n = pg.righe.length, rh = Math.max(6.5, Math.min(10, (FONDO - 45) / Math.max(1, n)));
         if (!first) d.addPage(); first = false;
         var y = testata(pg, false);
         pg.righe.forEach(function (r) {
-          if (y + rh > H - 12) { d.addPage(); y = testata(pg, true); }
-          var ps = Cedolino.pos(r.pos), cod = L.up(ps[0]).replace(/[^0-9A-Z\-. ]/g, '').slice(0, 5);
-          d.setFont('helvetica', 'bold'); Etichette.fit(d, r.pn || '—', X.tpn, y + 6, 40, 12, 7);
-          d.setFont('helvetica', 'normal'); var nt = d.splitTextToSize(r.note.join(' · '), 38); d.setFontSize(7.5); d.text(nt.slice(0, 2), X.note, y + 4.5);
-          d.setFont('helvetica', 'bold'); d.setFontSize(14); d.text(String(r.q), X.q, y + 6.5);
-          d.setFontSize(9); d.text(d.splitTextToSize(ps[0] || '—', 27).slice(0, 2), X.pos, y + 4.5);
-          d.setFont('helvetica', 'normal'); Etichette.fit(d, ps[1] || '—', X.bin, y + 5, 38, 8.5, 6);
-          if (cod) { Cedolino.barcode(d, cod, X.bc, y + 0.5, 8.5, 0.3); d.setFontSize(6.5); d.text('*' + cod + '*', X.bc, y + 11.5); }
-          d.setDrawColor(225); d.line(10, y + rh - 1, W - 10, y + rh - 1);
+          if (y + rh > FONDO) { d.addPage(); y = testata(pg, true); }
+          var mid = y + rh / 2 + 1.3;
+          d.setFont('helvetica', 'bold'); Etichette.fit(d, r.pn || '—', X.tpn, mid, 58, 11, 7);
+          d.setFont('helvetica', 'normal'); Etichette.fit(d, r.note.join(' · '), X.note, mid, X.q - X.note - 14, 8, 5.5);
+          d.setFont('helvetica', 'bold'); d.setFontSize(Math.min(13, rh + 2)); d.text(String(r.q), X.q, mid + 0.3, { align: 'right' });
+          d.setDrawColor(225); d.line(10, y + rh, W - 10, y + rh);
           y += rh;
         });
       });
