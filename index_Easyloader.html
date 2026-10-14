@@ -1790,7 +1790,7 @@ var Giacenze = {
         '<div class="hint" style="margin-bottom:8px">Stato ' + esc(u.stato) + ': blocco e attesa non disponibili.</div>') +
       '<div class="fg" style="margin-top:8px"><span class="fl">Motivo / nota del cambio <span class="hint">(obbligatorio per blocco, attesa e variazioni)</span></span><input class="fc" id="gvMotivo" autocomplete="off" placeholder="es. in attesa conferma SD, seriale da verificare…"></div>' +
       '<div class="fg" style="margin-top:8px"><span class="fl">Nota della scheda</span><input class="fc" id="gvNota" value="' + esc(nota) + '"></div>' +
-      '<details style="margin-top:10px"' + '><summary style="cursor:pointer;font-size:13px">Varia i dati della scheda</summary><div class="g-var">' +
+      '<details open style="margin-top:10px"><summary style="cursor:pointer;font-size:13px">Varia i dati della scheda <span class="hint">(es. FR aborted: cambia solo il numero; seriale, P/N, tipo, FR, RMA e riparatore si aggiornano anche nei movimenti)</span></summary><div class="g-var">' +
       Giacenze.VAR_F.map(function (f) { return '<div class="fg"><span class="fl">' + f[1] + '</span>' + campo(f) + '</div>'; }).join('') + '</div></details>' +
       '<div class="hint" id="gvErr" style="margin-top:8px"></div>',
       [{ label: 'Annulla', cls: 'ghost' }, { label: 'Salva', keep: true, fn: function () { Giacenze.salva(id); } }], true);
@@ -1819,6 +1819,19 @@ var Giacenze = {
       if (L.s(cur[tU.idx.rev]) !== L.s(u.rev)) throw new Error('la scheda è stata modificata da un altro utente: premi Aggiorna e riprova');
       var now = L.nowStamp(), prima = {}, upd = [], all = Object.assign({}, ch, { modificato_il: now, modificato_da: Auth.email, rev: (parseInt(u.rev, 10) || 1) + 1 });
       Object.keys(all).forEach(function (h) { if (h in tU.idx) { prima[h] = u[h]; upd.push({ range: tU.cell(h, u._r), values: [[String(all[h])]] }); } });
+      // specchio: stessi cambi nei movimenti IN/OUT della scheda e nelle righe di spedizione; la nota nel movimento di ingresso
+      var cambi = {}; Object.keys(ch).forEach(function (k) { if (Spec.CAMPI.indexOf(k) >= 0) cambi[k] = [L.s(u[k]), L.s(ch[k])]; });
+      var spM = { upd: [], loc: [] }, spS = { upd: [], loc: [] };
+      if (Object.keys(cambi).length || 'note' in ch) {
+        await Spec.mov(); var tM0 = (await Ingresso.heads()).MOVIMENTI, mr = await Spec.righe(tM0);
+        spM = Spec.movimenti(tM0, mr, u.id_unita, cambi, null);
+        if ('note' in ch && u.id_mov_in && ('note' in tM0.idx)) {
+          var mi = Sto.dati.cur.find(function (m) { return m.id_mov === u.id_mov_in; });
+          if (mi && mr[mi.id_mov] && (!L.s(mi.note) || L.s(mi.note) === notaOld)) { spM.upd.push({ range: tM0.cell('note', mr[mi.id_mov]), values: [[nota]] }); spM.loc.push([mi, 'note', nota]); }
+        }
+        spS = await Spec.spedizioni(u.id_unita, cambi);
+        upd = upd.concat(spM.upd, spS.upd);
+      }
       // movimento interno: causale principale + descrizione prima → dopo
       var caus = ch.stato === 'BLOCCATO' ? 'BLOCCO' : ch.stato === 'IN_ATTESA' ? 'ATTESA' : (ch.stato === 'IN_GIACENZA' ? 'SBLOCCO' : (variati.length ? 'VARIAZIONE' : 'NOTA'));
       var desc = Object.keys(ch).filter(function (k) { return k !== 'note'; }).map(function (k) { return k + ': ' + (L.s(u[k]) || '—') + ' → ' + (L.s(ch[k]) || '—'); });
@@ -1830,8 +1843,134 @@ var Giacenze = {
       var rM = res[1], base = parseInt(DB.param('mov_id_base', ''), 10) || 0;
       if (rM) { mov.id_mov = 'MV' + (base + rM); await API.batchUpdate(DB.id, [{ range: tM.cell('id_mov', rM), values: [[mov.id_mov]] }]).catch(function () { }); }
       Object.keys(all).forEach(function (h) { u[h] = String(all[h]); });
+      Spec.applica(spM.loc.concat(spS.loc));
       if (Sto.dati.cur) { Sto.COLS.forEach(function (c) { if (!(c in mov)) mov[c] = ''; }); Sto.dati.cur.push(mov); }
-      Modal.close(); toast(u.id_unita + ': ' + caus.toLowerCase() + ' salvato', 'ok'); Giacenze.render();
+      Modal.close(); toast(u.id_unita + ': ' + caus.toLowerCase() + ' salvato' + (spM.loc.length ? ' · aggiornati anche ' + spM.loc.length + ' campi nei movimenti' : ''), 'ok'); Giacenze.render();
+    } catch (e) { Modal.progress(''); err('Non salvato: ' + e.message); }
+  }
+};
+
+// ───────────────────────── SPECCHIO GIACENZE ⇄ MOVIMENTI ─────────────────────────
+// Un dato cambiato su una scheda (es. FR sostituito perché aborted) cambia uguale nei suoi movimenti IN/OUT
+// e nelle righe di spedizione, e viceversa. Si sostituisce solo il valore uguale a quello vecchio; i movimenti
+// interni (INT) restano come storico, e ogni modifica lascia un movimento VARIAZIONE + LOG.
+var Spec = {
+  CAMPI: ['seriale', 'pn', 'mnft', 'tipo', 'fr', 'rma', 'riparatore'],
+  SPED: ['seriale', 'pn', 'fr', 'rma'],
+  pulita: function (n) { return L.s(n).split(' | fonte:')[0].replace(/^fonte:.*$/i, ''); },
+  fonte: function (n) { n = L.s(n); var i = n.indexOf(' | fonte:'); return i >= 0 ? n.slice(i) : ''; },
+  mov: async function () { if (!Sto.dati.cur) Sto.dati.cur = await Sto.colsSafe(DB.id, 'MOVIMENTI'); return Sto.dati.cur; },
+  // id_mov → riga del foglio (letto al momento: le righe aggiunte da altri utenti spostano niente, ma così è sicuro)
+  righe: async function (tM) {
+    var c = tM.col('id_mov'), v = (await API.batchGet(DB.id, [API.q('MOVIMENTI') + '!' + c + '2:' + c]))[0] || [], m = {};
+    v.forEach(function (x, i) { var k = L.s(x && x[0]); if (k) m[k] = i + 2; }); return m;
+  },
+  // cambi = { campo: [vecchio, nuovo] } → aggiornamenti dei movimenti IN/OUT della scheda (escluso quello già modificato)
+  movimenti: function (tM, mr, idU, cambi, escludi) {
+    var upd = [], loc = [];
+    (Sto.dati.cur || []).forEach(function (m) {
+      if (m === escludi || m.id_unita !== idU || (m.direzione !== 'IN' && m.direzione !== 'OUT')) return;
+      Object.keys(cambi).forEach(function (c) {
+        if (Spec.CAMPI.indexOf(c) < 0 || !(c in tM.idx) || L.s(m[c]) !== L.s(cambi[c][0])) return;
+        var r = mr[m.id_mov]; if (!r) return;
+        upd.push({ range: tM.cell(c, r), values: [[cambi[c][1]]] }); loc.push([m, c, cambi[c][1]]);
+      });
+    });
+    return { upd: upd, loc: loc };
+  },
+  spedizioni: async function (idU, cambi) {
+    var cs = Object.keys(cambi).filter(function (c) { return Spec.SPED.indexOf(c) >= 0; }), upd = [], loc = [];
+    if (!cs.length) return { upd: upd, loc: loc };
+    await DB.loadTables(['SPEDIZIONI_RIGHE']);
+    var t = DB.t.SPEDIZIONI_RIGHE;
+    t.rows.forEach(function (r) {
+      if (r.id_unita !== idU) return;
+      cs.forEach(function (c) { if ((c in t.idx) && L.s(r[c]) === L.s(cambi[c][0])) { upd.push({ range: t.cell(c, r._r), values: [[cambi[c][1]]] }); loc.push([r, c, cambi[c][1]]); } });
+    });
+    return { upd: upd, loc: loc };
+  },
+  applica: function (loc) { loc.forEach(function (x) { x[0][x[1]] = x[2]; }); },
+  // movimento VARIAZIONE (INT) + LOG, come la gestione in giacenza
+  traccia: async function (H, u, testo, logDet, azione, foglio, rec) {
+    var now = L.nowStamp(), tM = H.MOVIMENTI, x = u || {};
+    var mov = { data_ora: now, direzione: 'INT', causale: 'VARIAZIONE', id_unita: x.id_unita || '', seriale: x.seriale || '', pn: x.pn || '', mnft: x.mnft || '', tipo: x.tipo || '', fr: x.fr || '', rma: x.rma || '', riparatore: x.riparatore || '', operatore: Auth.email, operatore_sigla: App.me.sigla || '', note: testo, origine: 'APP' };
+    var res = await Promise.all([API.append(DB.id, 'MOVIMENTI', [tM.toRow(mov)]), API.append(DB.id, 'LOG', [H.LOG.toRow({ data_ora: now, utente: Auth.email, azione: azione, foglio: foglio, id_record: rec, dettaglio: JSON.stringify(logDet) })])]);
+    var rM = res[0], base = parseInt(DB.param('mov_id_base', ''), 10) || 0;
+    if (rM) { mov.id_mov = 'MV' + (base + rM); await API.batchUpdate(DB.id, [{ range: tM.cell('id_mov', rM), values: [[mov.id_mov]] }]).catch(function () { }); }
+    if (Sto.dati.cur) { Sto.COLS.forEach(function (c) { if (!(c in mov)) mov[c] = ''; }); Sto.dati.cur.push(mov); }
+    return mov;
+  }
+};
+
+// ─ modifica di un movimento dal tab Movimenti (si riflette sulla scheda in giacenza)
+var MovEd = {
+  campi: function (r) {
+    var IN = r.direzione === 'IN';
+    return [['tipo', 'Tipo'], ['fr', 'FR'], ['rma', IN ? 'RMA balancing' : 'RMA'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['mnft', 'MNFT'], ['riparatore', IN ? 'Repairer' : 'Repair'], ['po_mrn', 'PO/MRN'],
+      ['controparte', IN ? 'Mittente' : 'Destino'], ['awb', 'AWB'], ['vettore', 'Carrier'], ['ddt', 'DDT']]
+      .concat(IN ? [['data_registrazione_vlt', 'Data reg. VLT'], ['posizione_note', 'Posizione e note new/reuse'], ['anomalia', 'Anomalia']] : [])
+      .concat([['note', 'Note']]);
+  },
+  apri: function (idMov) {
+    var r = (Sto.dati.cur || []).find(function (x) { return x.id_mov === idMov; }); if (!r) return;
+    var u = r.id_unita && DB.t.UNITA.rows.find(function (x) { return x.id_unita === r.id_unita; });
+    var campo = function (f) {
+      var k = f[0], v = L.s(r[k]);
+      if (k === 'tipo') return '<select class="fc" id="mv_tipo">' + TIPI.concat(v && TIPI.indexOf(v) < 0 ? [v] : []).map(function (x) { return '<option' + (x === v ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select>';
+      return '<input class="fc' + (/seriale|pn|fr|rma|awb|ddt|po_mrn/.test(k) ? ' mono' : '') + '" id="mv_' + k + '" value="' + esc(v) + '"' + (k === 'controparte' ? ' list="dlControparti"' : (k === 'vettore' ? ' list="dlVettori"' : '')) + '>';
+    };
+    Modal.html('Modifica movimento ' + r.id_mov,
+      '<div style="font-size:12.5px;color:var(--subtle);margin-bottom:10px">' + esc(r.direzione) + ' · ' + esc(r.causale) + ' · ' + esc(Sto.dataOra(r.data_ora)) + (u ? ' · scheda <b>' + esc(u.id_unita) + '</b> (' + esc(u.stato) + ')' : ' · nessuna scheda collegata') + '</div>' +
+      '<div class="fg"><span class="fl">Motivo della modifica *</span><input class="fc" id="mvMotivo" autocomplete="off" placeholder="es. FR aborted, sostituito con il nuovo"></div>' +
+      '<div class="g-var">' + MovEd.campi(r).map(function (f) { return '<div class="fg"><span class="fl">' + esc(f[1]) + '</span>' + campo(f) + '</div>'; }).join('') + '</div>' +
+      '<div class="hint" style="margin-top:8px">' + (u ? 'Seriale, P/N, MNFT, tipo, FR, RMA e riparatore si aggiornano anche sulla scheda in Giacenze e negli altri suoi movimenti' + (u.id_mov_in === r.id_mov ? '; la nota anche sulla scheda.' : '.') : 'Movimento senza scheda: cambia solo questa riga.') + '</div>' +
+      '<div class="hint" id="mvErr" style="margin-top:6px"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Salva', keep: true, fn: function () { MovEd.salva(idMov); } }], true);
+  },
+  salva: async function (idMov) {
+    var r = (Sto.dati.cur || []).find(function (x) { return x.id_mov === idMov; }), err = function (t) { $('mvErr').textContent = t; $('mvErr').className = 'hint err'; };
+    if (!r) return;
+    var ch = {}, motivo = L.s($('mvMotivo').value);
+    MovEd.campi(r).forEach(function (f) {
+      var e = $('mv_' + f[0]); if (!e) return; var v = L.s(e.value);
+      if (/^(seriale|pn|tipo|mnft)$/.test(f[0])) v = v.toUpperCase(); if (f[0] === 'fr' && v) v = L.frKey(v);
+      if (v !== L.s(r[f[0]])) ch[f[0]] = v;
+    });
+    if (!Object.keys(ch).length) { Modal.close(); return; }
+    if (!motivo) { err('Scrivi il motivo'); $('mvMotivo').focus(); return; }
+    if ('seriale' in ch && !ch.seriale) { err('Il seriale non può essere vuoto'); return; }
+    if (ch.fr && !/^\d+$/.test(ch.fr)) { err('FR deve essere un numero'); return; }
+    var tU = DB.t.UNITA, u = r.id_unita ? tU.rows.find(function (x) { return x.id_unita === r.id_unita; }) : null;
+    if (u && 'seriale' in ch && L.s(u.seriale) === L.s(r.seriale)) { var dup = tU.rows.find(function (x) { return x !== u && Giacenze.A_MAG.indexOf(x.stato) >= 0 && L.up(x.seriale) === ch.seriale; }); if (dup) { err('Seriale già in giacenza (' + dup.id_unita + ')'); return; } }
+    Modal.progress('Salvataggio…');
+    try {
+      var H = await Ingresso.heads(), tM = H.MOVIMENTI, mr = await Spec.righe(tM), row = mr[r.id_mov];
+      if (!row) throw new Error('movimento non trovato nel foglio: premi Aggiorna e riprova');
+      var upd = [], prima = {}, loc = [];
+      Object.keys(ch).forEach(function (k) { if (!(k in tM.idx)) return; prima[k] = r[k]; upd.push({ range: tM.cell(k, row), values: [[ch[k]]] }); loc.push([r, k, ch[k]]); });
+      var cambi = {}; Object.keys(ch).forEach(function (k) { if (Spec.CAMPI.indexOf(k) >= 0) cambi[k] = [L.s(r[k]), ch[k]]; });
+      var uCh = {}, altri = { upd: [], loc: [] }, sp = { upd: [], loc: [] };
+      if (u) {
+        Object.keys(cambi).forEach(function (k) { if ((k in tU.idx) && L.s(u[k]) === cambi[k][0]) uCh[k] = cambi[k][1]; });
+        if ('note' in ch && u.id_mov_in === r.id_mov) { var cl = Spec.pulita(u.note); if (!cl || cl === L.s(r.note)) uCh.note = ch.note + Spec.fonte(u.note); }
+        if (Object.keys(uCh).length) {
+          var last = L.colLetter(tU.header.length - 1), cur = (await API.batchGet(DB.id, [API.q('UNITA') + '!A' + u._r + ':' + last + u._r]))[0][0] || [];
+          if (L.s(cur[tU.idx.id_unita]) !== u.id_unita) throw new Error('la scheda non è più al suo posto: premi Aggiorna e riprova');
+          if (L.s(cur[tU.idx.rev]) !== L.s(u.rev)) throw new Error('la scheda è stata modificata da un altro utente: premi Aggiorna e riprova');
+          Object.assign(uCh, { modificato_il: L.nowStamp(), modificato_da: Auth.email, rev: String((parseInt(u.rev, 10) || 1) + 1) });
+          Object.keys(uCh).forEach(function (h) { if (h in tU.idx) upd.push({ range: tU.cell(h, u._r), values: [[String(uCh[h])]] }); });
+        }
+        altri = Spec.movimenti(tM, mr, u.id_unita, cambi, r);
+        sp = await Spec.spedizioni(u.id_unita, cambi);
+      }
+      await API.batchUpdate(DB.id, upd.concat(altri.upd, sp.upd));
+      Spec.applica(loc.concat(altri.loc, sp.loc));
+      if (u) Object.keys(uCh).forEach(function (h) { u[h] = String(uCh[h]); });
+      var desc = Object.keys(ch).map(function (k) { return k + ': ' + (L.s(prima[k]) || '—') + ' → ' + (ch[k] || '—'); }).join(' · ');
+      await Spec.traccia(H, u || r, motivo + ' · mov ' + r.id_mov + ' · ' + desc, { motivo: motivo, movimento: r.id_mov, prima: prima, dopo: ch, scheda: u ? u.id_unita : '', altri_movimenti: altri.loc.length, righe_spedizione: sp.loc.length }, 'MODIFICA_MOVIMENTO', 'MOVIMENTI', r.id_mov).catch(function () { });
+      Modal.close();
+      toast(r.id_mov + ' salvato' + (u && Object.keys(uCh).length ? ' · aggiornata anche la scheda ' + u.id_unita : '') + (altri.loc.length ? ' · ' + altri.loc.length + ' altri movimenti' : ''), 'ok');
+      Sto.render(); if (App.tab === 'giacenze') Giacenze.render();
     } catch (e) { Modal.progress(''); err('Non salvato: ' + e.message); }
   }
 };
@@ -4179,7 +4318,7 @@ var Sto = {
     var h = ((await API.batchGet(ss, [API.q(sheet) + '!1:1']))[0][0] || []).map(L.s);
     var have = Sto.COLS.filter(function (c) { return h.indexOf(c) >= 0; });
     var rows = await DB.loadCols(ss, sheet, have);
-    rows.forEach(function (r) { Sto.COLS.forEach(function (c) { if (!(c in r)) r[c] = ''; }); });
+    rows.forEach(function (r, i) { r._r = i + 2; Sto.COLS.forEach(function (c) { if (!(c in r)) r[c] = ''; }); });
     return rows.filter(function (r) { return r.id_mov || r.seriale; });
   },
   carica: async function (forza) {
@@ -4212,6 +4351,7 @@ var Sto = {
   // colonne nell'ordine dell'Easyloader
   colonne: function (sez) {
     var C = {
+      az: { k: 'az', label: '', noXls: true, html: function (r) { return Sto.fonte === 'cur' && r.id_mov && (r.direzione === 'IN' || r.direzione === 'OUT') ? '<button class="btn ghost sm" style="padding:2px 8px" title="Modifica (si riflette sulla scheda in Giacenze)" onclick="MovEd.apri(\'' + esc(r.id_mov) + '\')">✎</button>' : ''; } },
       id: { k: 'id_mov', label: sez === 'IN' ? 'GES' : 'ID', cls: 'mono' },
       tipo: { k: 'tipo', label: 'Type', filter: 'select', html: function (r) { return r.tipo ? Pill.tipo(r.tipo) : ''; } },
       fr: { k: 'fr', label: 'FR', filter: 'text', cls: 'mono' },
@@ -4242,10 +4382,10 @@ var Sto = {
       orig: { k: 'origine', label: 'Origine', filter: 'select' }
     };
     var ord = {
-      IN: ['id', 'tipo', 'fr', 'rma', 'data', 'vlt', 'po', 'cp', 'awb', 'vet', 'ddt', 'op', 'mnft', 'ser', 'pn', 'rip', 'note', 'pos', 'merci', 'anom', 'caus', 'uid', 'ric', 'uba', 'orig'],
-      OUT: ['id', 'tipo', 'fr', 'po', 'rma', 'cp', 'data', 'awb', 'vet', 'ddt', 'op', 'mnft', 'ser', 'pn', 'rip', 'note', 'caus', 'uid', 'sped', 'ubda', 'orig'],
+      IN: ['az', 'id', 'tipo', 'fr', 'rma', 'data', 'vlt', 'po', 'cp', 'awb', 'vet', 'ddt', 'op', 'mnft', 'ser', 'pn', 'rip', 'note', 'pos', 'merci', 'anom', 'caus', 'uid', 'ric', 'uba', 'orig'],
+      OUT: ['az', 'id', 'tipo', 'fr', 'po', 'rma', 'cp', 'data', 'awb', 'vet', 'ddt', 'op', 'mnft', 'ser', 'pn', 'rip', 'note', 'caus', 'uid', 'sped', 'ubda', 'orig'],
       INT: ['id', 'data', 'caus', 'tipo', 'ser', 'fr', 'pn', 'rip', 'uid', 'note', 'op'],
-      ALL: ['id', 'data', 'dirz', 'caus', 'tipo', 'fr', 'rma', 'ser', 'pn', 'mnft', 'cp', 'awb', 'vet', 'ddt', 'po', 'rip', 'op', 'note', 'uid', 'orig']
+      ALL: ['az', 'id', 'data', 'dirz', 'caus', 'tipo', 'fr', 'rma', 'ser', 'pn', 'mnft', 'cp', 'awb', 'vet', 'ddt', 'po', 'rip', 'op', 'note', 'uid', 'orig']
     }[sez];
     return ord.map(function (k) { return C[k]; });
   },
