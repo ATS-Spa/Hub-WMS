@@ -50,6 +50,11 @@ button{font-family:var(--ff-sans)}
 .topbar-logo span{color:var(--subtle);font-weight:600}
 .topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
 .sync{font-size:11px;color:var(--muted);font-family:var(--ff-mono)}
+.user-wrap{position:relative}
+.user-menu{display:none;position:absolute;right:0;top:calc(100% + 6px);background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.3);min-width:220px;z-index:250;padding:4px 0}
+.user-menu.show{display:block}
+.user-menu button{display:block;width:100%;text-align:left;background:none;border:0;color:var(--text);padding:8px 12px;font-size:13px;cursor:pointer}
+.user-menu button:hover{background:var(--card)}
 .user-badge{display:flex;align-items:center;gap:8px;background:var(--card);border:1px solid var(--border);border-radius:20px;padding:4px 12px 4px 6px;font-size:12px;color:var(--subtle)}
 .user-av{width:24px;height:24px;border-radius:50%;background:var(--blue);color:#fff;display:flex;align-items:center;justify-content:center;font-weight:700;font-size:11px}
 .role-tag{font-size:10px;font-weight:700;letter-spacing:.5px;text-transform:uppercase;padding:2px 8px;border-radius:10px;background:rgba(59,130,246,.15);color:var(--blue)}
@@ -242,7 +247,8 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
       <select class="fc" style="width:auto;padding:5px 8px;font-size:11px" id="themeSel" onchange="App.setTheme(this.value)">
         <option value="">🌙 Scuro</option><option value="theme-dim">🌗 Dim</option><option value="theme-grafite">🩶 Grafite</option><option value="theme-sap">🔵 SAP</option><option value="theme-oceano">🌊 Oceano</option><option value="theme-light">☀️ Chiaro</option><option value="theme-avorio">🤍 Avorio</option><option value="theme-salvia">🌿 Salvia</option><option value="theme-rovere">🪵 Rovere</option>
       </select>
-      <div class="user-badge"><div class="user-av" id="uAv">?</div><span id="uName"></span><span class="role-tag" id="uRole"></span></div>
+      <div class="user-wrap"><div class="user-badge" style="cursor:pointer" title="Account" onclick="App.menuUtente(event)"><div class="user-av" id="uAv">?</div><span id="uName"></span><span class="role-tag" id="uRole"></span><span style="font-size:10px">▾</span></div>
+        <div class="user-menu" id="userMenu"><div class="hint" id="uMail" style="padding:6px 12px"></div><button onclick="Auth.esci(true)">🔄 Cambia account</button><button onclick="Auth.esci(false)">⎋ Esci</button></div></div>
     </div>
   </div>
   <div class="tabbar" id="tabbar"></div>
@@ -715,10 +721,21 @@ var Auth = {
       error_callback: function (e) { if (Auth._resolve) { Auth._resolve(false); Auth._resolve = null; } if (!Auth.token && e && e.type !== 'popup_closed') { $('loginErr').textContent = 'Clicca "Accedi con Google" (' + (e.type || 'errore') + ')'; $('loginErr').style.display = 'block'; } } });
     var hub = window._HUB_USER || null;
     var sess = lsG('sess');
-    if (sess && sess.email) Auth.tc.requestAccessToken({ prompt: '', login_hint: sess.email });
+    var stop = lsG('no_auto');   // dopo "Esci" o "Cambia account" non si rientra in automatico
+    if (stop) { $('loginErr').textContent = stop === 'scegli' ? 'Clicca "Accedi con Google" e scegli l\'account.' : 'Sei uscito. Clicca "Accedi con Google" per entrare.'; $('loginErr').style.display = 'block'; }
+    else if (sess && sess.email) Auth.tc.requestAccessToken({ prompt: '', login_hint: sess.email });
     else if (hub && hub.email) Auth.tc.requestAccessToken({ prompt: '', login_hint: hub.email });
   },
-  signIn: function () { $('loginErr').style.display = 'none'; Auth.tc.requestAccessToken({ prompt: 'select_account' }); },
+  signIn: function () { $('loginErr').style.display = 'none'; lsS('no_auto', null); Auth.tc.requestAccessToken({ prompt: 'select_account' }); },
+  // esci / cambia account: salva le spunte in coda, revoca il token e torna al login senza rientrare in automatico
+  esci: async function (cambia) {
+    $('userMenu').classList.remove('show');
+    var ingr = Ingresso.rows && Ingresso.rows.length;
+    if (!(await Modal.confirm(cambia ? 'Cambia account' : 'Esci', 'Esci da ' + Auth.email + '?' + (ingr ? '\n\nI ' + ingr + ' pezzi letti non caricati restano salvati su questo PC per questo account.' : '')))) return;
+    try { if (Ack.q && (Ack.q.length || Ack.qA.length)) await Ack.flush(); } catch (e) { }
+    try { google.accounts.oauth2.revoke(Auth.token, function () { }); } catch (e) { }
+    Auth.token = null; lsS('sess', null); lsS('no_auto', cambia ? 'scegli' : 'esci'); location.reload();
+  },
   signOut: function () {
     try { google.accounts.oauth2.revoke(Auth.token, function () { }); } catch (e) { }
     Auth.token = null; lsS('sess', null); location.reload();
@@ -952,7 +969,8 @@ var App = {
       var me = DB.t.OPERATORI.rows.find(function (o) { return L.s(o.email).toLowerCase() === Auth.email; });
       // admin = editor dei fogli protetti (deciso da Google); super admin = proprietario del file
       var ps = await Prot.stato(), owner = !!ps.owner && ps.owner === Auth.email;
-      if (!Prot.attive() && (owner || (ps.driveCondiviso && me && L.up(me.ruolo) === 'ADMIN'))) { try { await Prot.attiva(); toast('Protezione della configurazione attivata', 'ok'); } catch (e) { toast('Protezione non attivata: ' + e.message, 'ko'); } }
+      var avvioAdmin = !Prot.attive() && (owner || (me ? L.up(me.ruolo) === 'ADMIN' : ps.canEdit));
+      if (avvioAdmin) { try { await Prot.attiva(); toast('Protezione della configurazione attivata', 'ok'); } catch (e) { toast('Protezione non attivata: ' + e.message, 'ko'); } }
       else if (Prot.puoModificare()) { try { await Prot.completa(); } catch (e) { } }
       var sup = owner || Prot.puoModificare();
       if (!sup && (!me || L.up(me.attivo) === 'NO')) {
@@ -1012,6 +1030,11 @@ var App = {
     if (t.k === 'dashboard') Dash.show();
   },
   TEMI: ['theme-dim', 'theme-grafite', 'theme-sap', 'theme-oceano', 'theme-light', 'theme-avorio', 'theme-salvia', 'theme-rovere'],
+  menuUtente: function (e) {
+    e.stopPropagation(); var m = $('userMenu'); $('uMail').textContent = Auth.email + (App.isOwner ? ' · super admin' : (App.isAdmin ? ' · admin' : ''));
+    m.classList.toggle('show');
+    if (!App._mc) { App._mc = 1; document.addEventListener('click', function (ev) { if (!ev.target.closest || !ev.target.closest('.user-wrap')) $('userMenu').classList.remove('show'); }); }
+  },
   setTheme: function (th) {
     var b = document.body.classList; App.TEMI.concat(['is-light']).forEach(function (t) { b.remove(t); });
     if (App.TEMI.indexOf(th) < 0) th = ''; if (th) b.add(th);
@@ -1814,6 +1837,7 @@ var Admin = {
     ['admAdd', 'admQ', 'admSave', 'admXls'].forEach(function (id) { $(id).style.display = acc ? 'none' : ''; });
     $('admCal').style.display = Admin.sez === 'CALENDARIO_USCITE' ? '' : 'none';
     if (acc) { document.querySelectorAll('#admTabs .subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-ACCESSI'); }); Accessi.render(); return; }
+    if ($('accSuperBox')) $('accSuperBox').style.display = 'none';
     var c = Admin.CONF[Admin.sez], t = DB.t[Admin.sez];
     document.querySelectorAll('.subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-' + Admin.sez); });
     $('admTitle').textContent = c.title; $('admHint').textContent = c.hint;
@@ -4354,9 +4378,13 @@ var Prot = {
       (sh.protectedRanges || []).forEach(function (p) { if (p.description === Prot.TAG) { p.titolo = sh.properties.title; s.prot.push(p); } });
     });
     try {
-      var f = await API.call('https://www.googleapis.com/drive/v3/files/' + DB.id + '?supportsAllDrives=true&fields=owners(emailAddress),driveId');
-      s.owner = f.owners && f.owners[0] ? L.s(f.owners[0].emailAddress).toLowerCase() : ''; s.driveCondiviso = !!f.driveId;
+      var f = await API.call('https://www.googleapis.com/drive/v3/files/' + DB.id + '?supportsAllDrives=true&fields=owners(emailAddress),driveId,capabilities(canEdit,canShare)');
+      s.owner = f.owners && f.owners[0] ? L.s(f.owners[0].emailAddress).toLowerCase() : ''; s.driveCondiviso = !!f.driveId; s.canEdit = !!(f.capabilities && f.capabilities.canEdit);
     } catch (e) { s.owner = ''; }
+    try {
+      var pj = await API.call('https://www.googleapis.com/drive/v3/files/' + DB.id + '/permissions?supportsAllDrives=true&fields=permissions(id,emailAddress,role,pendingOwner)');
+      s.perm = (pj.permissions || []).map(function (x) { return { id: x.id, email: L.s(x.emailAddress).toLowerCase(), role: x.role, pending: !!x.pendingOwner }; });
+    } catch (e) { s.perm = []; }
     Prot.s = s; return s;
   },
   attive: function () { return Prot.s && Prot.s.prot.length > 0; },
@@ -4414,13 +4442,60 @@ var Accessi = {
     $('admHint').textContent = Prot.attive() ? 'Admin = può modificare i fogli di configurazione (protezione Google). Super admin = proprietario del file' + (Prot.s.owner ? ' (' + Prot.s.owner + ')' : '') + ': si cambia da Drive → Condividi → Trasferisci proprietà. Valgono al prossimo accesso.' : 'Protezione non ancora attiva: la attiva il proprietario del file al suo primo accesso.';
     $('admAdd').style.display = 'none'; $('admQ').style.display = 'none';
     $('admHead').innerHTML = '<tr><th>Email</th><th>Nome</th><th>Sigla</th><th>Attivo</th><th>Admin</th></tr>';
-    var own = Prot.s && Prot.s.owner, ownRiga = own && !R.some(function (o) { return L.s(o.email).toLowerCase() === own; }) ?
-      '<tr><td class="mono">' + esc(own) + '</td><td colspan="2" class="hint">non è in Operatori: aggiungilo con nome e sigla per vederlo nei movimenti</td><td>—</td><td><span class="pill p-blue">super admin (proprietario)</span></td></tr>' : '';
+    Accessi.superBox();
+    var adm0 = Prot.attive() ? Prot.admins() : {}, extra = Object.keys(adm0).filter(function (e) { return e !== (Prot.s && Prot.s.owner) && !R.some(function (o) { return L.s(o.email).toLowerCase() === e; }); });
+    var own = Prot.s && Prot.s.owner, ownRiga = (own && !R.some(function (o) { return L.s(o.email).toLowerCase() === own; }) ?
+      '<tr><td class="mono">' + esc(own) + '</td><td colspan="2" class="hint">non è in Operatori: aggiungilo con nome e sigla per vederlo nei movimenti</td><td>—</td><td><span class="pill p-blue">super admin (proprietario)</span></td></tr>' : '') +
+      extra.map(function (e) { return '<tr><td class="mono">' + esc(e) + '</td><td colspan="2" class="hint">admin non registrato in Operatori</td><td>—</td><td><label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox" checked onchange="Accessi.setEmail(\'' + esc(e) + '\',this.checked)"> admin</label></td></tr>'; }).join('');
     $('admRows').innerHTML = ownRiga + R.map(function (o, i) {
       var em = L.s(o.email).toLowerCase(), adm = Prot.attive() ? !!Prot.admins()[em] : L.up(o.ruolo) === 'ADMIN', sup = !!Prot.s && Prot.s.owner === em;
       return '<tr><td class="mono">' + esc(o.email || '(senza email)') + '</td><td>' + esc(o.nome) + '</td><td>' + esc(o.sigla) + '</td><td>' + esc(o.attivo) + '</td><td>' +
         (sup ? '<span class="pill p-blue">super admin (proprietario)</span>' : '<label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox"' + (adm ? ' checked' : '') + (o.email ? '' : ' disabled title="Serve l\'email"') + ' onchange="Accessi.set(' + i + ',this.checked)"> admin</label>') + '</td></tr>';
     }).join('') + '<tr><td colspan="5"><div class="row"><input class="fc mono" id="accEmail" placeholder="nuova email admin (es. nome@gmail.com)" style="width:320px"><input class="fc" id="accNome" placeholder="nome" style="width:180px"><button class="btn sm" onclick="Accessi.aggiungi()">Dai accesso admin</button></div></td></tr>';
+  },
+  setEmail: async function (em, on) {
+    if (!on && em === Auth.email && !confirm('Ti stai togliendo l\'accesso admin: confermi?')) { Accessi.render(); return; }
+    try { await Prot.setAdmin(em, on); await API.append(DB.id, 'LOG', [App.log('ACCESSO_ADMIN', 'PROTEZIONE', em, { admin: on })]); toast((on ? 'Admin: ' : 'Non più admin: ') + em, 'ok'); } catch (e) { toast('Errore: ' + Prot.msg(e), 'ko'); }
+    Accessi.render();
+  },
+  // riquadro super admin: chi è, passaggio di proprietà del file database (Drive), accettazione da parte del nuovo
+  superBox: function () {
+    var s = Prot.s || {}, me = (s.perm || []).find(function (x) { return x.email === Auth.email; }), pend = (s.perm || []).filter(function (x) { return x.pending; });
+    var h = '<div class="card" style="margin-bottom:10px"><div class="row" style="align-items:center">' +
+      '<div><div class="fl">Super admin (proprietario del file database)</div><div class="mono" style="font-size:15px;font-weight:600">' + esc(s.owner || (s.driveCondiviso ? 'Drive condiviso: gestori del Drive' : 'non rilevato')) + '</div>' +
+      (pend.length ? '<div class="hint">In attesa di accettare: ' + pend.map(function (x) { return esc(x.email); }).join(', ') + '</div>' : '') + '</div><div class="spacer"></div>';
+    if (me && me.pending) h += '<button class="btn green sm" onclick="Accessi.accettaSuper()">✓ Accetta: diventa super admin</button>';
+    else if (App.isOwner && !s.driveCondiviso) h += '<input class="fc mono" id="accSuper" placeholder="email del nuovo super admin" style="width:280px"> <button class="btn ghost sm" onclick="Accessi.cambiaSuper()">Passa il ruolo di super admin</button>';
+    else if (!App.isOwner) h += '<span class="hint">Solo il super admin può passare il ruolo.</span>';
+    h += '</div></div>';
+    var box = $('accSuperBox'); if (!box) { box = document.createElement('div'); box.id = 'accSuperBox'; var tw = $('admRows').closest('.tbl-wrap'); tw.parentNode.insertBefore(box, tw); }
+    box.style.display = ''; box.innerHTML = h;
+  },
+  cambiaSuper: async function () {
+    var em = L.s($('accSuper').value).toLowerCase();
+    if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { toast('Email non valida', 'ko'); return; }
+    if (!(await Modal.confirm('Passa il ruolo di super admin', 'Il file database passerà di proprietà a ' + em + '.\nTu resti editor e admin. Se è un account Gmail, ' + em + ' dovrà accettare: lo trova qui in Accessi admin al suo prossimo accesso (o nell\'email di Google).'))) return;
+    var D = 'https://www.googleapis.com/drive/v3/files/' + DB.id + '/permissions';
+    try {
+      var p = (Prot.s.perm || []).find(function (x) { return x.email === em; });
+      try {   // stesso dominio aziendale: passaggio diretto
+        await API.call(D + '?transferOwnership=true&supportsAllDrives=true&sendNotificationEmail=true', { method: 'POST', body: JSON.stringify({ role: 'owner', type: 'user', emailAddress: em }) });
+      } catch (e1) {   // account Gmail: richiesta di proprietà da accettare
+        if (!p) p = await API.call(D + '?supportsAllDrives=true&sendNotificationEmail=false&fields=id', { method: 'POST', body: JSON.stringify({ role: 'writer', type: 'user', emailAddress: em }) });
+        await API.call(D + '/' + p.id + '?supportsAllDrives=true', { method: 'PATCH', body: JSON.stringify({ role: 'writer', pendingOwner: true }) });
+      }
+      if (Prot.attive()) await Prot.setAdmin(em, true);
+      await API.append(DB.id, 'LOG', [App.log('SUPER_ADMIN_PROPOSTO', 'DATABASE', em, { da: Auth.email })]);
+      await Prot.stato(); toast('Richiesta inviata a ' + em, 'ok'); Accessi.render();
+    } catch (e) { Modal.open('Passaggio non riuscito', e.message); }
+  },
+  accettaSuper: async function () {
+    var me = (Prot.s.perm || []).find(function (x) { return x.email === Auth.email; });
+    try {
+      await API.call('https://www.googleapis.com/drive/v3/files/' + DB.id + '/permissions/' + me.id + '?transferOwnership=true&supportsAllDrives=true', { method: 'PATCH', body: JSON.stringify({ role: 'owner' }) });
+      await API.append(DB.id, 'LOG', [App.log('SUPER_ADMIN_ACCETTATO', 'DATABASE', Auth.email, {})]);
+      await Prot.stato(); App.isOwner = true; toast('Ora sei il super admin', 'ok'); Accessi.render();
+    } catch (e) { Modal.open('Accettazione non riuscita', e.message); }
   },
   scrivi: async function (o, ruolo) {
     if (Prot.attive()) await Prot.setAdmin(o.email, ruolo === 'ADMIN');   // il permesso vero è sulla protezione Google
