@@ -1724,6 +1724,7 @@ var Giacenze = {
         { k: 'stato', label: 'Stato', filter: 'select', html: function (u) { var x = STATO[u.stato] || ['', u.stato]; return '<span class="pill ' + x[0] + '">' + esc(x[1]) + '</span>'; } },
         { k: 'magazzino', label: 'Mag.', filter: 'select' },
         { k: 'fr', label: 'FR', filter: 'text', cls: 'mono' },
+        { k: 'stato_vlt', label: 'Stato VLT', filter: 'select', get: function (u) { var v = u.fr && DB.vltMap[u.fr]; return v ? L.s(v.stato) : (u.fr ? '— non in VLT' : ''); } },
         { k: 'rma', label: 'RMA', filter: 'text', cls: 'mono' },
         { k: 'data_in', label: 'Data in hub', cls: 'mono nw', get: function (u) { return L.s(mi(u).data_ora) || L.s(u.data_in); }, html: function (u) { return esc(Sto.dataOra(mi(u).data_ora || u.data_in)); } },
         { k: 'data_vlt', label: 'Data reg. VLT', cls: 'mono', get: function (u) { return L.normDate(mi(u).data_registrazione_vlt); } },
