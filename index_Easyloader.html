@@ -772,9 +772,13 @@ var Busy = {
 // ogni minuto legge solo le righe nuove del LOG (pochi byte): se un altro utente ha scritto qualcosa, ricarica
 // la giacenza e le tabelle del modulo aperto. VLT, Huawei e configurazione restano manuali (pulsante Aggiorna).
 var Sync = {
-  n: 0, ogni: 60, ultimo: null,
+  n: 0, ogni: 60, ultimo: null, check: null, stato: 'off',
+  hm: function (d) { return d ? d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—'; },
+  etichetta: function () { return ' · ' + (Sync.stato === 'off' ? '⚠ agg. auto spento' : (Sync.stato === 'pausa' ? '⏸ agg. auto in pausa' : '⟳ dati ' + Sync.hm(Sync.check))) + (Sync.ultimo ? ' (ricaricati ' + Sync.hm(Sync.ultimo) + ')' : ''); },
+  tooltip: function () { return 'Aggiornamento automatico ogni ' + Sync.ogni + ' s: controlla se altri operatori hanno salvato qualcosa.\nUltimo controllo: ' + Sync.hm(Sync.check) + (Sync.ultimo ? '\nUltimo ricaricamento per modifiche di altri: ' + Sync.hm(Sync.ultimo) : '\nNessuna modifica di altri finora') + (Sync.stato === 'pausa' ? '\nIn pausa: hai una finestra aperta o modifiche non salvate' : ''); },
   avvia: async function () {
-    try { var r = (await API.batchGet(DB.id, [API.q('LOG') + '!A1:A']))[0]; Sync.n = r.length; } catch (e) { return; }
+    try { var r = (await API.batchGet(DB.id, [API.q('LOG') + '!A1:A']))[0]; Sync.n = r.length; } catch (e) { Sync.stato = 'off'; App.syncInfo(); return; }
+    Sync.stato = 'on'; Sync.check = new Date(); App.syncInfo();
     Sync.ogni = Math.max(30, parseInt(DB.param('aggiornamento_auto_sec', '60'), 10) || 60);
     clearInterval(Sync._i); Sync._i = setInterval(Sync.giro, Sync.ogni * 1000);
     document.addEventListener('visibilitychange', function () { if (!document.hidden && Sync.dovuto) Sync.giro(); });
@@ -788,10 +792,11 @@ var Sync = {
   giro: async function () {
     if (!DB.id || !Auth.token) return;
     if (Sync._run) return;
-    if (document.hidden || Sync.occupato()) { Sync.dovuto = true; return; }
-    Sync._run = true; Sync.dovuto = false;
+    if (document.hidden || Sync.occupato()) { Sync.dovuto = true; if (!document.hidden) { Sync.stato = 'pausa'; App.syncInfo(); } return; }
+    Sync._run = true; Sync.dovuto = false; Sync.stato = 'on';
     try {
       var r = (await API.batchGet(DB.id, [API.q('LOG') + '!A' + (Sync.n + 1) + ':E' + (Sync.n + 500)]))[0];
+      Sync.check = new Date(); App.syncInfo();
       if (!r.length) return;
       Sync.n += r.length;
       var altri = r.filter(function (x) { return L.s(x[1]).toLowerCase() !== Auth.email; });
@@ -1041,7 +1046,7 @@ var App = {
     if (/theme-(light|avorio|salvia|rovere)/.test(th)) b.add('is-light');
     lsS('theme', th);
   },
-  syncInfo: function () { $('syncInfo').textContent = 'VLT ' + (DB.vlt ? new Date(DB.vlt.ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—') + ' · Huawei ' + Object.keys(DB.huaweiFr).length + ' seriali · giacenza ' + DB.t.UNITA.rows.length + (window.Sync && Sync.ultimo ? ' · agg. auto ' + Sync.ultimo.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : ''); },
+  syncInfo: function () { $('syncInfo').textContent = 'VLT ' + (DB.vlt ? new Date(DB.vlt.ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—') + ' · Huawei ' + Object.keys(DB.huaweiFr).length + ' seriali · giacenza ' + DB.t.UNITA.rows.length + (window.Sync ? Sync.etichetta() : ''); $('syncInfo').title = window.Sync ? Sync.tooltip() : ''; },
   fillLists: function () {
     var cp = DB.t.CONTROPARTI.rows.map(function (r) { return r.codice; }).filter(Boolean);
     DB.t.RIPARATORI.rows.forEach(function (r) { if (r.codice && cp.indexOf(r.codice) < 0) cp.push(r.codice); });
@@ -1812,8 +1817,12 @@ var Cal = {
 // ───────────────────────── ADMIN ─────────────────────────
 var Admin = {
   sez: 'OPERATORI', dirty: {},
+  // campi a scelta fissa (menu a tendina, sempre lo stesso testo)
+  OPZ: { ruolo: ['OPERATORE', 'ADMIN'], attivo: ['SI', 'NO'], ack_include_as: ['NO', 'SI'],
+    stato: { CALENDARIO_USCITE: ['PIANIFICATA', 'IN_CORSO', 'CHIUSA', 'ANNULLATA'] }, tipo: { CONTROPARTI: ['DESTINAZIONE', 'MITTENTE', 'MITTENTE,DESTINAZIONE'] } },
+  opz: function (h) { var o = Admin.OPZ[h]; return !o ? null : (Array.isArray(o) ? o : (o[Admin.sez] || null)); },
   CONF: {
-    OPERATORI: { title: 'Operatori', hint: 'Email Gmail di accesso per ogni sigla. Ruolo ADMIN = vede questo tab.', cols: ['email', 'nome', 'sigla', 'ruolo', 'attivo'], add: true },
+    OPERATORI: { title: 'Operatori', hint: 'Email Gmail di accesso per ogni sigla. Ruolo ADMIN = può modificare la configurazione e vede Admin e Dashboard (salvando si aggiorna anche la protezione Google). Attivo NO = non entra.', cols: ['email', 'nome', 'sigla', 'ruolo', 'attivo'], add: true },
     RIPARATORI: { title: 'Riparatori', hint: 'Dati stampati sul DDT ACK. ack_include_as = SI fa entrare gli AS nell\'ACK del giorno.', cols: ['codice', 'ragione_sociale', 'indirizzo', 'ack_include_as', 'mnft_default', 'attivo', 'note'], add: true },
     RIPARATORI_ALIAS: { title: 'Alias riparatori VLT', hint: 'Nome riparatore come scritto in VLT → codice riparatore.', cols: ['nome_vlt', 'codice_riparatore'], add: true },
     DEPOT_VLT: { title: 'Depositi VLT', hint: 'Codice deposito VLT → destinazione: usato per mittente e destinazione GOOD.', cols: ['depot_vlt', 'destinazione', 'sigla', 'destinazione_conversione'], add: true },
@@ -1848,6 +1857,9 @@ var Admin = {
       return '<tr>' + c.cols.map(function (h) {
         var d = Admin.dirty[i] && Admin.dirty[i][h] !== undefined;
         var v = d ? Admin.dirty[i][h] : r[h];
+        var op = Admin.opz(h);
+        if (op) { var lst = op.indexOf(L.s(v)) < 0 && L.s(v) ? [L.s(v)].concat(op) : op;
+          return '<td><select class="edit-cell' + (d ? ' dirty' : '') + '" onchange="Admin.set(' + i + ',\'' + h + '\',this.value)">' + (L.s(v) ? '' : '<option value=""></option>') + lst.map(function (x) { return '<option' + (x === L.s(v) ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></td>'; }
         return '<td><input class="edit-cell' + (d ? ' dirty' : '') + '" value="' + esc(v) + '" onchange="Admin.set(' + i + ',\'' + h + '\',this.value)"></td>';
       }).join('') + '</tr>';
     }).join('');
@@ -1867,6 +1879,10 @@ var Admin = {
         else { upd.push({ range: API.q(t.name) + '!A' + r._r + ':' + L.colLetter(t.header.length - 1) + r._r, values: [t.toRow(r)] }); }
         logs.push(App.log(r._new ? 'CREA' : 'MODIFICA', t.name, r[t.header[0]], { prima: prima, dopo: ch }));
       });
+      if (Admin.sez === 'OPERATORI' && Prot.attive()) {
+        for (var q = 0; q < keys.length; q++) { var ro = t.rows[keys[q]], cr = Admin.dirty[keys[q]];
+          if (ro.email && ('ruolo' in cr || 'email' in cr)) await Prot.setAdmin(ro.email, L.up(ro.ruolo) === 'ADMIN'); }
+      }
       if (upd.length) await API.batchUpdate(DB.id, upd);
       if (nuove.length) { var rr = await API.append(DB.id, t.name, nuove.map(function (r) { return t.toRow(r); })); nuove.forEach(function (r, i) { r._r = rr + i; delete r._new; }); }
       await API.append(DB.id, 'LOG', logs);
@@ -4369,7 +4385,8 @@ var Dash = {
 var Prot = {
   TAG: 'EASYLOADER_ADMIN',
   extra: ['ARTICOLI', 'ANAGRAFICA_PN', 'EQUIVALENTI'],
-  fogli: function () { return Object.keys(Admin.CONF).concat(Prot.extra); },
+  // il calendario resta scrivibile dagli operatori: l'ACK ne aggiorna lo stato (IN_CORSO / CHIUSA)
+  fogli: function () { return Object.keys(Admin.CONF).filter(function (k) { return k !== 'CALENDARIO_USCITE'; }).concat(Prot.extra); },
   stato: async function () {
     var js = await API.call(API.S + DB.id + '?fields=' + encodeURIComponent('sheets(properties(sheetId,title),protectedRanges(protectedRangeId,description,requestingUserCanEdit,editors,range))'));
     var s = { sheets: {}, prot: [] };
