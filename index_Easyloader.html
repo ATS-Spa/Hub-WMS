@@ -4,6 +4,7 @@
 <meta charset="UTF-8">
 <meta name="viewport" content="width=device-width, initial-scale=1.0">
 <title>ATS - Fastweb FLM</title>
+<meta name="ats-vlt-bridge" content="1">
 <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📦</text></svg>">
 <link rel="preconnect" href="https://fonts.googleapis.com">
 <link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Sans:wght@300;400;500;600&family=IBM+Plex+Mono:wght@400;500&family=Barlow+Condensed:wght@600;700;800&display=swap" rel="stylesheet">
@@ -89,6 +90,7 @@ button{font-family:var(--ff-sans)}
 .hint.warn{color:var(--amber)} .hint.err{color:var(--red)}
 .btn{background:var(--blue);border:none;border-radius:7px;padding:8px 16px;color:#fff;font-size:13px;font-weight:600;cursor:pointer;white-space:nowrap}
 .btn:hover{filter:brightness(1.1)}
+a.btn{text-decoration:none;display:inline-block}
 .btn:disabled{opacity:.45;cursor:not-allowed;filter:none}
 .btn.ghost{background:none;border:1px solid var(--border);color:var(--subtle)}
 .btn.ghost:hover{border-color:var(--blue);color:var(--blue)}
@@ -213,6 +215,62 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
 .dash-sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;flex-shrink:0}
 .dash-axis{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px}
 .progress{font-family:var(--ff-mono);font-size:12px;color:var(--subtle);margin-top:10px;white-space:pre-line}
+.usc-grid{grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr))}
+.ack-grid{grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr))}
+/* ── SMARTPHONE / PALMARE ── */
+@media (max-width:760px){
+  .topbar{height:auto;flex-wrap:wrap;padding:6px 10px 6px 56px;gap:4px 8px}
+  .topbar-logo{font-size:17px;letter-spacing:1px}
+  .topbar-logo span{display:none}
+  .topbar-right{display:contents}
+  .user-wrap{margin-left:auto;order:1}
+  .topbar::after{content:'';order:1;flex-basis:100%;height:0}
+  .sync{order:2;flex:1 1 0;min-width:0;font-size:10px;line-height:1.35;white-space:normal}
+  .topbar-right>.btn,#themeSel{order:2;flex-shrink:0}
+  .topbar .lbl{display:none}
+  #themeSel{width:54px!important;padding:6px 4px!important}
+  .scan-row #wrapUbi[style*="hidden"]{display:none}
+  #uName{max-width:90px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap}
+  .tabbar{padding:0 6px;scrollbar-width:none}
+  .tab-btn{padding:11px 10px;font-size:13.5px}
+  .main{padding:10px 8px 70px}
+  .card{padding:12px;border-radius:10px;margin-bottom:10px}
+  .card-h{flex-wrap:wrap;gap:6px 8px}
+  .card-h .spacer{flex-basis:100%;height:0}
+  .card-t{font-size:17px}
+  .hdr .fg,.hdr .fg.mid{width:calc(50% - 6px)}
+  .hdr .fg.auto{width:100%}
+  .scan-row{grid-template-columns:1fr;gap:8px}
+  .scan-row .btn{margin-top:0;width:100%;padding:12px}
+  /* niente zoom automatico di iOS sugli input e tasti più grandi per il touch */
+  .fc,.g-f,.edit-cell{font-size:16px}
+  .fc{padding:9px 10px}
+  .btn{padding:10px 14px}
+  .btn.sm{padding:8px 11px;font-size:13px}
+  .row{gap:8px}
+  .row>.fg[style*="width"]{width:100%!important;min-width:0!important;flex:1 1 100%!important}
+  .row .spacer{flex-basis:100%;height:0}
+  .stats{gap:6px}
+  .stat{min-width:0;flex:1 1 calc(33% - 6px);padding:6px 10px}
+  .stat b{font-size:18px}
+  .stat span{font-size:9px}
+  .tbl-wrap{max-height:70vh;border-radius:8px}
+  table{font-size:12px;width:max-content;min-width:100%}
+  td .edit-cell{min-width:96px}
+  td select.edit-cell{min-width:110px}
+  th{padding:7px 8px}
+  td{padding:7px 8px}
+  .ack-card .t{font-size:18px}
+  .modal{padding:16px 14px;width:96%;max-height:92vh;overflow:auto}
+  .modal.wide{width:98%}
+  .modal-scroll{max-height:56vh}
+  .modal .row{justify-content:stretch}
+  .modal .row .btn{flex:1}
+  .dash-lab{width:84px}
+  .login-card{padding:32px 22px}
+  #toast{max-width:94vw;bottom:14px}
+  .user-menu{right:0;min-width:200px}
+}
 </style>
 </head>
 <body>
@@ -243,7 +301,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
     <div class="topbar-logo">ATS <span>· FASTWEB FLM</span></div>
     <div class="topbar-right">
       <span class="sync" id="syncInfo"></span>
-      <button class="btn ghost sm" onclick="App.reload()" title="Ricarica i dati dal database">↻ Aggiorna</button>
+      <button class="btn ghost sm" onclick="App.reload()" title="Ricarica i dati dal database">↻<span class="lbl"> Aggiorna</span></button>
       <select class="fc" style="width:auto;padding:5px 8px;font-size:11px" id="themeSel" onchange="App.setTheme(this.value)">
         <option value="">🌙 Scuro</option><option value="theme-dim">🌗 Dim</option><option value="theme-grafite">🩶 Grafite</option><option value="theme-sap">🔵 SAP</option><option value="theme-oceano">🌊 Oceano</option><option value="theme-light">☀️ Chiaro</option><option value="theme-avorio">🤍 Avorio</option><option value="theme-salvia">🌿 Salvia</option><option value="theme-rovere">🪵 Rovere</option>
       </select>
@@ -406,6 +464,20 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
         <label style="font-size:12px;color:var(--subtle);display:flex;gap:6px;align-items:center"><input type="checkbox" onchange="Vlt.tutte=this.checked;Vlt.render()"> anche gli anni precedenti</label>
       </div><div class="hint" id="vltInfo" style="margin-top:8px"></div></div>
       <div class="tbl-wrap"><table><thead id="vltHead"></thead><tbody id="vltRows"></tbody></table></div><div class="hint" id="vltFoot" style="margin-top:6px"></div>
+    </div>
+
+    <!-- CHIUSURE VLT -->
+    <div class="view" id="view-chiusure">
+      <div class="card"><div class="row">
+        <div class="fg" style="width:170px"><span class="fl">Giorno</span><input class="fc" type="date" id="chvData" onchange="Chv.render()"></div>
+        <label style="font-size:12px;color:var(--subtle);display:flex;gap:6px;align-items:center"><input type="checkbox" onchange="Chv.anche=this.checked"> rimanda anche quelle già chiuse</label>
+        <div class="spacer"></div>
+        <a class="btn ghost sm" href="ATS_FLM_VLT_Chiusure.user.js" target="_blank" title="Tampermonkey propone l'installazione o l'aggiornamento">📥 Installa script</a>
+        <a class="btn ghost sm" href="https://logistictoolvf.net.vodafone.it/" target="vlt">↗ Apri VLT</a>
+      </div>
+      <div style="margin-top:8px" id="chvBridge"></div>
+      <div class="hint" style="margin-top:6px;line-height:1.5">Premi ▶ Invia a VLT: la coda passa allo script, che sulla scheda VLT mostra il riquadro <b>ATS</b> con ▶ Avvia. Puoi anche partire da VLT con "Prendi dati da ATS". Gli esiti tornano qui da soli; le schede già chiuse non vengono rimandate.</div></div>
+      <div id="chvBox"></div>
     </div>
 
     <!-- STORICO -->
@@ -956,7 +1028,7 @@ var DB = {
 var TABS = [
   { k: 'ingresso', label: 'Ingresso' },
   { k: 'ack', label: 'ACK' }, { k: 'rma', label: 'RMA' }, { k: 'balancing', label: 'Balancing' },
-  { k: 'newreuse', label: 'Carichi NEW/REUSE' }, { k: 'juniper', label: 'Juniper' }, { k: 'giacenze', label: 'Giacenze' }, { k: 'vlt', label: 'VLT' },
+  { k: 'newreuse', label: 'Carichi NEW/REUSE' }, { k: 'juniper', label: 'Juniper' }, { k: 'giacenze', label: 'Giacenze' }, { k: 'vlt', label: 'VLT' }, { k: 'chiusure', label: 'Chiusure VLT' },
   { k: 'storico', label: 'Movimenti' }, { k: 'dashboard', label: 'Dashboard', admin: true }, { k: 'admin', label: 'Admin', admin: true }
 ];
 var App = {
@@ -1012,7 +1084,7 @@ var App = {
     App.fillLists(); App.syncInfo();
     Ingresso.init(); Giacenze.init(); Ack.init(); if (App.isAdmin) Admin.init();
     App.go(lsG('tab') || 'ingresso');
-    Sync.avvia();
+    Sync.avvia(); Chv.init();
   },
   go: function (k) {
     var t = TABS.find(function (x) { return x.k === k; }) || TABS[0];
@@ -1031,6 +1103,7 @@ var App = {
     if (t.k === 'balancing') Bal.show();
     if (t.k === 'juniper') Jun.show();
     if (t.k === 'vlt') Vlt.show();
+    if (t.k === 'chiusure') Chv.show();
     if (t.k === 'storico') Sto.show();
     if (t.k === 'dashboard') Dash.show();
   },
@@ -1890,6 +1963,165 @@ var Admin = {
       await API.append(DB.id, 'LOG', logs);
       Admin.dirty = {}; Admin.render(); App.fillLists(); toast('Salvato', 'ok');
     } catch (e) { toast('Errore salvataggio: ' + Prot.msg(e), 'ko'); }
+  }
+};
+
+// ───────────────────────── CHIUSURE VLT (ponte con lo script Tampermonkey "ATS FLM → VLT") ─────────────────────────
+// L'app prepara la coda dal database e la passa allo script (postMessage → memoria di Tampermonkey).
+// Lo script, sulla pagina VLT, chiude le schede e rimanda gli esiti, che finiscono nel foglio VLT_CHIUSURE.
+var Chv = {
+  H: ['id_esito', 'data_ora', 'giorno', 'procedura', 'chiave', 'esito', 'stato_prima', 'stato_dopo', 'dettaglio', 'id_coda', 'operatore'],
+  PROC: { INGRESSI: 'Ingressi del giorno (op. linea)', ACK: 'ACK del giorno', RMA: 'RMA del giorno', FERME: 'Spare ferme in HUB' },
+  DESC: {
+    INGRESSI: 'FR delle schede registrate in ingresso nel giorno: received and verify, poi Pending Service Desk (con nota), Close for Scrap (nota SCRAP) o Failure Report Sent; GOOD di ritorno → Good Material Received.',
+    ACK: 'FR spuntati negli ACK con DDT del giorno → Failed Material sent to Repairer con l\'AWB dell\'ACK.',
+    RMA: 'RMA usciti con DDT del giorno → Shipped From CW, deposito HUB_, AWB. Semi-automatico: controlli i seriali e salvi tu.',
+    FERME: 'FAULTY in giacenza con stato VLT tra quelli del parametro vlt_stati_fr_da_chiudere (stessa regola di EXPORT_FR_DA_CHIUDERE).'
+  },
+  FATTO: { OK: 1, GIA_FATTO: 1 },
+  bridge: null, inited: false, anche: false, _q: Promise.resolve(), _serviti: {},
+  init: function () {
+    if (Chv.inited) return; Chv.inited = true;
+    window.addEventListener('message', Chv.onMsg);
+    Chv.ping(); setTimeout(Chv.ping, 1500);
+  },
+  post: function (m) { m.src = 'ATS-VLT-APP'; window.postMessage(m, location.origin === 'null' || location.protocol === 'file:' ? '*' : location.origin); },
+  ping: function () { Chv.post({ tipo: 'ping' }); },
+  onMsg: function (ev) {
+    var m = ev.data; if (ev.source !== window || !m || m.src !== 'ATS-VLT-TM') return;
+    if (m.tipo === 'ready') { Chv.bridge = { ver: m.ver, coda: m.coda || null }; if (m.richiesta) Chv.servi(m.richiesta); if (App.tab === 'chiusure') Chv.render(); }
+    else if (m.tipo === 'richiesta') Chv.servi(m.richiesta);
+    else if (m.tipo === 'coda_ok') { if (Chv.bridge) Chv.bridge.coda = m.coda; if (App.tab === 'chiusure') Chv.render(); }
+    else if (m.tipo === 'esiti') Chv.ricevi(m.esiti || []);
+  },
+  tab: async function () { if (!DB.t.VLT_CHIUSURE || !DB.t.VLT_CHIUSURE.header.length) await DB.ensureSheet('VLT_CHIUSURE', Chv.H); return DB.t.VLT_CHIUSURE; },
+  // esiti dallo script: scritti una volta sola (id_esito), poi lo script li toglie dalla sua memoria
+  ricevi: function (esiti) {
+    Chv._q = Chv._q.then(async function () {
+      if (!esiti.length) return;
+      var t = await Chv.tab(), ci = {};
+      t.rows.forEach(function (r) { ci[r.id_esito] = 1; });
+      var nuovi = esiti.filter(function (e) { return e && e.id_esito && !ci[e.id_esito]; });
+      if (nuovi.length) {
+        var objs = nuovi.map(function (e) { var o = {}; Chv.H.forEach(function (h) { o[h] = e[h] === undefined ? '' : String(e[h]); }); o.operatore = Auth.email; return o; });
+        var r = await API.append(DB.id, 'VLT_CHIUSURE', objs.map(function (o) { return t.toRow(o); }));
+        objs.forEach(function (o, i) { o._r = r + i; t.rows.push(o); });
+      }
+      Chv.post({ tipo: 'esiti_ok', ids: esiti.map(function (e) { return e && e.id_esito; }) });
+      if (nuovi.length) { var ko = nuovi.filter(function (e) { return e.esito === 'ERRORE'; }).length; toast('VLT: ' + nuovi.length + ' esiti registrati' + (ko ? ' · ' + ko + ' errori' : ''), ko ? 'ko' : 'ok'); }
+      if (App.tab === 'chiusure') Chv.render();
+    }).catch(function (e) { toast('Esiti VLT non salvati (riprovo al prossimo invio): ' + e.message, 'ko'); });
+    return Chv._q;
+  },
+  nota: function (x) { var n = L.s(x).split(' | fonte:')[0]; return /^fonte/i.test(n) ? '' : L.s(n); },
+  fatti: function (proc, giorno) {
+    var f = {}; ((DB.t.VLT_CHIUSURE || {}).rows || []).forEach(function (r) { if (r.procedura === proc && r.giorno === giorno) f[r.chiave] = r.esito; });
+    return f; // ultimo esito per chiave (le righe sono in ordine di scrittura)
+  },
+  // ── code dal database ──
+  costruisci: async function (proc, giorno) {
+    var items = [], scarti = [], visti = {};
+    var add = function (it) { if (visti[it.k]) return; visti[it.k] = 1; items.push(it); };
+    if (proc === 'INGRESSI') {
+      DB.t.UNITA.rows.forEach(function (u) {
+        if (L.s(u.creato_il).slice(0, 10) !== giorno || u.creato_da === 'MIGRAZIONE' || u.stato === 'ANNULLATO') return;
+        if (!L.s(u.fr) || ['NEW', 'REUSE', 'BALANCING'].indexOf(u.tipo) >= 0) return;
+        var v = DB.vltMap[u.fr];
+        if (!v) scarti.push({ k: 'IN:' + u.fr, motivo: 'FR non presente nel file VLT (lo script legge comunque lo stato vero su VLT)' });
+        add({ k: 'IN:' + u.fr, fr: u.fr, tipo: u.tipo, note: Chv.nota(u.note), stato_file: v ? v.stato : '', conf_serial: u.seriale, conf_tmpn: u.pn, seriale: u.seriale });
+      });
+    } else if (proc === 'FERME') {
+      Export.righe().forEach(function (r) { add({ k: 'HUB:' + r[0], fr: r[0], seriale: r[1], conf_serial: r[1], conf_tmpn: r[2], note: r[3], stato_file: r[4] }); });
+    } else {
+      await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_RIGHE']);
+      var sp = DB.t.SPEDIZIONI.rows.filter(function (s) { return s.tipo === proc && L.s(s.n_ddt) && (L.s(s.data_ddt) || L.s(s.data)).slice(0, 10) === giorno && s.stato !== 'ANNULLATA'; });
+      var byId = {}; sp.forEach(function (s) { byId[s.id_spedizione] = s; });
+      var righe = DB.t.SPEDIZIONI_RIGHE.rows.filter(function (r) { return byId[r.id_spedizione] && r.esito === 'SPUNTATO'; });
+      if (proc === 'ACK') {
+        righe.forEach(function (r) {
+          var s = byId[r.id_spedizione];
+          if (!L.s(r.fr)) { scarti.push({ k: 'ACK:' + r.seriale, motivo: 'riga senza FR (' + r.seriale + ')' }); return; }
+          if (!L.s(s.awb)) { scarti.push({ k: 'ACK:' + r.fr, motivo: 'ACK ' + s.destinatario + ' senza AWB' }); return; }
+          add({ k: 'ACK:' + r.fr, fr: r.fr, awb: L.s(s.awb), seriale: r.seriale, dest: s.destinatario, ddt: s.n_ddt });
+        });
+      } else {
+        var g = {}, ord = [];
+        righe.forEach(function (r) {
+          var s = byId[r.id_spedizione], rma = L.s(r.rma);
+          if (!rma) { scarti.push({ k: 'RMA:' + r.seriale, motivo: 'pezzo senza RMA (' + r.seriale + ')' }); return; }
+          if (!g[rma]) { g[rma] = { k: 'RMA:' + rma, rma: rma, awb: L.s(s.awb), dest: s.destinatario, ddt: s.n_ddt, note: Chv.notaRma(s), serials: [] }; ord.push(rma); }
+          if (L.s(r.seriale) && g[rma].serials.indexOf(r.seriale) < 0) g[rma].serials.push(r.seriale);
+        });
+        ord.forEach(function (k) { add(g[k]); });
+      }
+    }
+    return { items: items, scarti: scarti };
+  },
+  // nota RMA da PARAMETRI vlt_nota_rma: {DDT} {DEST} {AWB}; vuoto = il campo note su VLT non si tocca
+  notaRma: function (s) { return L.s(DB.param('vlt_nota_rma', '')).replace(/\{DDT\}/g, L.s(s.n_ddt)).replace(/\{DEST\}/g, L.s(s.destinatario)).replace(/\{AWB\}/g, L.s(s.awb)); },
+  giorno: function () { return ($('chvData') && $('chvData').value) || L.isoToday(); },
+  prepara: async function (proc, giorno) {
+    await Chv.tab();
+    var c = await Chv.costruisci(proc, giorno), f = Chv.fatti(proc, giorno);
+    var da = c.items.filter(function (it) { return Chv.anche || !Chv.FATTO[f[it.k]]; });
+    return { tutti: c.items, da: da, gia: c.items.length - da.length, scarti: c.scarti };
+  },
+  invia: async function (proc, auto) {
+    if (!Chv.bridge) { Modal.open('Script VLT non attivo', 'Lo script Tampermonkey "ATS FLM → VLT" non risponde su questa pagina.\n\n1. Installa lo script in Tampermonkey (pulsante "Installa script").\n2. Ricarica questa pagina.\n\nSenza script l\'app non può passare i dati a VLT.'); return; }
+    var giorno = auto && auto.giorno ? auto.giorno : Chv.giorno(), p;
+    try { p = await Busy.wrap(Chv.prepara(proc, giorno)); } catch (e) { Modal.open('Coda non preparata', e.message); return; }
+    if (!auto) {
+      var testo = Chv.PROC[proc] + ' · ' + L.itDate(giorno) + '\n\nDa chiudere su VLT: ' + p.da.length + (p.gia ? '\nGià chiuse (escluse): ' + p.gia : '') + (p.scarti.length ? '\nNon inviabili: ' + p.scarti.length + '\n' + p.scarti.slice(0, 8).map(function (s) { return '  • ' + s.motivo; }).join('\n') : '') + '\n\nLa coda va allo script: apri la scheda VLT e premi ▶ Avvia nel riquadro ATS.';
+      if (!p.da.length) { Modal.open('Niente da inviare', testo); return; }
+      if (!(await Modal.confirm('Invia a VLT', testo))) return;
+    }
+    var coda = { id: 'C' + Date.now().toString(36).toUpperCase(), proc: proc, nome: Chv.PROC[proc], giorno: giorno, creata: L.nowStamp(), da: App.me.sigla || Auth.email, items: p.da };
+    Chv.post({ tipo: 'coda', coda: coda, richiesta: !!auto, apri: !auto });
+    toast('Coda inviata allo script VLT: ' + p.da.length + ' ' + (proc === 'RMA' ? 'RMA' : 'FR'), 'ok');
+  },
+  // "Prendi dati da ATS" premuto su VLT: la richiesta arriva qui, rispondo con la coda del giorno
+  servi: function (rq) {
+    if (!rq || !rq.proc || !Chv.PROC[rq.proc] || (Date.now() - (rq.ts || 0)) > 180000 || Chv._serviti[rq.ts]) return;
+    Chv._serviti[rq.ts] = 1; Chv.invia(rq.proc, { giorno: rq.giorno || L.isoToday() });
+  },
+  vedi: async function (proc) {
+    var p; try { p = await Busy.wrap(Chv.prepara(proc, Chv.giorno())); } catch (e) { Modal.open('Errore', e.message); return; }
+    var f = Chv.fatti(proc, Chv.giorno());
+    var rows = p.tutti.map(function (it) { var e = f[it.k]; return '<tr' + (Chv.FATTO[e] ? ' class="r-off"' : (e === 'ERRORE' ? ' class="r-err"' : '')) + '><td class="mono">' + esc(it.fr || it.rma) + '</td><td class="mono">' + esc(it.seriale || (it.serials || []).join(' ')) + '</td><td>' + esc(it.stato_file || it.dest || '') + '</td><td>' + esc(it.note || it.awb || '') + '</td><td>' + esc(e || 'da fare') + '</td></tr>'; }).join('');
+    Modal.html(Chv.PROC[proc] + ' · ' + L.itDate(Chv.giorno()), '<div class="tbl-wrap modal-scroll"><table><thead><tr><th>' + (proc === 'RMA' ? 'RMA' : 'FR') + '</th><th>Seriale</th><th>' + (proc === 'ACK' || proc === 'RMA' ? 'Destinazione' : 'Stato VLT (file)') + '</th><th>' + (proc === 'ACK' || proc === 'RMA' ? 'AWB' : 'Nota') + '</th><th>Esito</th></tr></thead><tbody>' + (rows || '<tr><td colspan="5" class="empty">Nessuna scheda</td></tr>') + '</tbody></table></div>' +
+      (p.scarti.length ? '<div class="hint warn" style="margin-top:8px">Non inviabili: ' + p.scarti.map(function (s) { return esc(s.motivo); }).join(' · ') + '</div>' : ''), [{ label: 'Chiudi', cls: 'ghost' }], true);
+  },
+  show: async function () {
+    Chv.init(); Chv.ping();
+    if (!$('chvData').value) $('chvData').value = L.isoToday();
+    try { await Chv.tab(); } catch (e) { $('chvBox').innerHTML = '<div class="empty">Errore: ' + esc(e.message) + '</div>'; return; }
+    Chv.render();
+  },
+  ricarica: async function () { try { await DB.loadTables(['VLT_CHIUSURE']); } catch (e) { } Chv.render(); },
+  render: async function () {
+    var box = $('chvBox'); if (!box) return;
+    var b = Chv.bridge, giorno = Chv.giorno();
+    $('chvBridge').innerHTML = b ? '<span class="pill p-green">● script VLT attivo · v' + esc(b.ver) + '</span>' + (b.coda ? ' <span class="hint">ultima coda: ' + esc(b.coda.nome) + ' · ' + esc(b.coda.n) + ' schede · ' + esc(b.coda.fatte) + ' fatte</span>' : '')
+      : '<span class="pill p-amber">● script VLT non rilevato</span> <span class="hint">installalo in Tampermonkey e ricarica la pagina</span>';
+    var es = ((DB.t.VLT_CHIUSURE || {}).rows || []).filter(function (r) { return r.giorno === giorno; });
+    var html = '<div class="ack-grid">';
+    Object.keys(Chv.PROC).forEach(function (p) {
+      var mine = es.filter(function (r) { return r.procedura === p; }), last = {};
+      mine.forEach(function (r) { last[r.chiave] = r.esito; });
+      var n = { OK: 0, GIA_FATTO: 0, ERRORE: 0, SALTATO: 0 }; Object.keys(last).forEach(function (k) { n[last[k]] = (n[last[k]] || 0) + 1; });
+      html += '<div class="ack-card"><div class="t">' + esc(Chv.PROC[p]) + '</div><div class="hint">' + esc(Chv.DESC[p]) + '</div>' +
+        '<div class="ack-nums"><span>chiuse <b>' + n.OK + '</b></span><span>già a posto <b>' + n.GIA_FATTO + '</b></span><span' + (n.ERRORE ? ' style="border-color:var(--red)"' : '') + '>errori <b>' + n.ERRORE + '</b></span><span>saltate <b>' + n.SALTATO + '</b></span></div>' +
+        '<div class="row"><button class="btn sm" onclick="Chv.invia(\'' + p + '\')"' + (b ? '' : ' disabled') + '>▶ Invia a VLT</button><button class="btn ghost sm" onclick="Chv.vedi(\'' + p + '\')">👁 Vedi coda</button></div></div>';
+    });
+    html += '</div>';
+    var ult = es.slice(-400).reverse();
+    html += '<div class="card"><div class="card-h"><div class="card-t">Esiti del ' + esc(L.itDate(giorno)) + '</div><div class="spacer"></div><button class="btn ghost sm" onclick="Chv.ricarica()">↻</button></div>' +
+      '<div class="tbl-wrap" style="max-height:50vh"><table><thead><tr><th>Ora</th><th>Procedura</th><th>Scheda</th><th>Esito</th><th>Stato prima</th><th>Stato dopo</th><th>Dettaglio</th></tr></thead><tbody>' +
+      (ult.length ? ult.map(function (r) {
+        var c = { OK: 'p-green', GIA_FATTO: 'p-teal', ERRORE: 'p-red', SALTATO: 'p-amber' }[r.esito] || '';
+        return '<tr' + (r.esito === 'ERRORE' ? ' class="r-err"' : '') + '><td class="mono">' + esc(L.s(r.data_ora).slice(11, 16)) + '</td><td>' + esc(r.procedura) + '</td><td class="mono">' + esc(L.s(r.chiave).replace(/^\w+:/, '')) + '</td><td><span class="pill ' + c + '">' + esc(r.esito) + '</span></td><td>' + esc(r.stato_prima) + '</td><td>' + esc(r.stato_dopo) + '</td><td>' + esc(r.dettaglio) + '</td></tr>';
+      }).join('') : '<tr><td colspan="7" class="empty">Nessun esito per questo giorno</td></tr>') + '</tbody></table></div></div>';
+    box.innerHTML = html;
   }
 };
 
