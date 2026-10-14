@@ -276,7 +276,13 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
 .mc-sw{display:none}
 @media (max-width:760px){
   .mc-sw{display:flex;justify-content:flex-end;margin:0 0 6px}
-  .tbl-wrap.mc{border:0;max-height:none;overflow:visible;border-radius:0}
+  .tbl-wrap.mc{border:0;max-height:none!important;overflow:visible;border-radius:0}
+  :not(.tbl-wrap)>table th{position:static}
+  .tbl-x{overflow-x:auto;max-width:100%}
+  .tbl-x td,.tbl-x th{padding:6px 4px}
+  .tbl-x select.fc{width:78px!important}
+  .tbl-x input.fc{width:112px!important}
+  .tbl-x input.fc[inputmode]{width:66px!important}
   .tbl-wrap.mc table{width:100%;min-width:0;display:block}
   .tbl-wrap.mc thead{display:none}
   .tbl-wrap.mc tbody{display:block}
@@ -3134,13 +3140,13 @@ var Ack = {
     var col = edit ? (Ack.colli[s.id_spedizione] || []) : Ack.colliDb(s.id_spedizione).map(function (c) { return { tipo: c.tipo_collo, misura: [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X'), peso: c.peso_kg }; });
     var tot = col.reduce(function (a, c) { return a + (parseFloat(String(c.peso).replace(',', '.')) || 0); }, 0);
     html += '<div class="card-h" style="margin-top:14px"><div class="card-t" style="font-size:15px">Colli e peso</div><span class="hint">' + col.length + ' colli · ' + Math.round(tot * 100) / 100 + ' kg</span>' + (edit ? '<button class="btn ghost sm" onclick="Ack.collo(0,\'add\')">+ Collo</button>' : '') + '</div>' +
-      '<table style="width:auto"><thead><tr><th>#</th><th>Tipo</th><th>Misura (cm)</th><th>Peso kg</th><th></th></tr></thead><tbody>' +
+      '<div class="tbl-x"><table style="width:auto"><thead><tr><th>#</th><th>Tipo</th><th>Misura (cm)</th><th>Peso kg</th><th></th></tr></thead><tbody>' +
       col.map(function (c, i) {
         if (!edit) return '<tr><td>' + (i + 1) + '</td><td>' + esc(c.tipo) + '</td><td class="mono">' + esc(c.misura) + '</td><td class="mono">' + esc(c.peso) + '</td><td></td></tr>';
         return '<tr><td>' + (i + 1) + '</td><td><select class="fc" style="width:90px" onchange="Ack.collo(' + i + ',\'tipo\',this.value)"><option' + (c.tipo === 'PLT' ? ' selected' : '') + '>PLT</option><option' + (c.tipo === 'COLLO' ? ' selected' : '') + '>COLLO</option></select></td>' +
           '<td><input class="fc mono' + (c.misura && !L.misura(c.misura) ? ' err' : '') + '" style="width:150px" list="dlMisure" value="' + esc(c.misura) + '" placeholder="120X80X100" onchange="Ack.collo(' + i + ',\'misura\',this.value)"></td>' +
           '<td><input class="fc mono" style="width:90px" inputmode="decimal" value="' + esc(c.peso) + '" onchange="Ack.collo(' + i + ',\'peso\',this.value)"></td><td><button class="ico-btn" onclick="Ack.collo(' + i + ',\'del\')">✕</button></td></tr>';
-      }).join('') + '</tbody></table>';
+      }).join('') + '</tbody></table></div>';
     if (!edit) html += '<div class="hint" style="margin-top:10px">' + (s.stato === 'PRONTA' ? (L.s(s.awb) ? 'AWB presente: premi "Genera DDT" se il DDT non è partito da solo.' : 'Spunta chiusa: il DDT si genera quando il Service Desk inserisce l\'AWB.') : 'Spedita · DDT ' + esc(s.n_ddt) + ' del ' + esc(L.itDate(s.data_ddt))) + '</div>';
     html += '</div>';
     var foc = document.activeElement && document.activeElement.id === 'ackScan';
@@ -4950,8 +4956,9 @@ var Accessi = {
 // Su PC non cambia nulla. Il pulsante "Vista tabella" sopra ogni elenco torna alla tabella completa.
 var Mob = {
   MQ: null, on: false,
-  PRI: ['FR', 'SERIALE', 'SERIAL NO.', 'TIPO', 'TYPE', 'STATO', 'P/N', 'PRODUCT NO.', 'CONTROLLI', 'ESITO', 'SCHEDA', 'RMA', 'STATO VLT', 'DESTINAZIONE', 'DESTINAZIONE / UBICAZIONE', 'DESTINO', 'MITTENTE', 'NOTA', 'NOTE', 'DATA IN HUB', 'DATA OUT', 'DATA', 'ORA', 'ID', 'GES'],
-  MAX: 5,
+  // anteprima: FR, seriale ed esito/stato; il resto nel dettaglio
+  PRI: ['FR', 'SERIALE', 'SERIAL NO.', 'ESITO', 'CONTROLLI', 'STATO', 'SCHEDA', 'TIPO', 'TYPE', 'RMA', 'P/N', 'PRODUCT NO.', 'STATO VLT', 'DESTINAZIONE', 'DESTINO', 'MITTENTE', 'NOTA', 'NOTE', 'DATA', 'ORA', 'ID', 'GES'],
+  MAX: 3,
   init: function () {
     Mob.MQ = window.matchMedia('(max-width:760px)');
     var set = function () { Mob.on = Mob.MQ.matches; document.body.classList.toggle('is-mob', Mob.on); Mob.tutte(); };
