@@ -1820,9 +1820,11 @@ var Admin = {
   // campi a scelta fissa (menu a tendina, sempre lo stesso testo)
   OPZ: { ruolo: ['OPERATORE', 'ADMIN'], attivo: ['SI', 'NO'], ack_include_as: ['NO', 'SI'],
     stato: { CALENDARIO_USCITE: ['PIANIFICATA', 'IN_CORSO', 'CHIUSA', 'ANNULLATA'] }, tipo: { CONTROPARTI: ['DESTINAZIONE', 'MITTENTE', 'MITTENTE,DESTINAZIONE'] } },
-  opz: function (h) { var o = Admin.OPZ[h]; return !o ? null : (Array.isArray(o) ? o : (o[Admin.sez] || null)); },
+  opz: function (h) { if (h === 'ruolo') return Admin.ruoli(); var o = Admin.OPZ[h]; return !o ? null : (Array.isArray(o) ? o : (o[Admin.sez] || null)); },
+  // ruoli: OPERATORE e ADMIN sempre presenti; gli altri da PARAMETRI 'ruoli' (separati da ; o ,), per ora solo descrittivi
+  ruoli: function () { var a = Admin.OPZ.ruolo.slice(); L.s(DB.param('ruoli', '')).split(/[;,]/).forEach(function (x) { x = L.up(L.s(x)); if (x && a.indexOf(x) < 0) a.push(x); }); return a; },
   CONF: {
-    OPERATORI: { title: 'Operatori', hint: 'Email Gmail di accesso per ogni sigla. Ruolo ADMIN = può modificare la configurazione e vede Admin e Dashboard (salvando si aggiorna anche la protezione Google). Attivo NO = non entra.', cols: ['email', 'nome', 'sigla', 'ruolo', 'attivo'], add: true },
+    OPERATORI: { title: 'Operatori', hint: 'Email Gmail di accesso per ogni sigla. Ruolo ADMIN = può modificare la configurazione e vede Admin e Dashboard (salvando si aggiorna anche la protezione Google). Altri ruoli (da Parametri → ruoli) sono per ora solo descrittivi: valgono come OPERATORE. Attivo NO = non entra.', cols: ['email', 'nome', 'sigla', 'ruolo', 'attivo'], add: true },
     RIPARATORI: { title: 'Riparatori', hint: 'Dati stampati sul DDT ACK. ack_include_as = SI fa entrare gli AS nell\'ACK del giorno.', cols: ['codice', 'ragione_sociale', 'indirizzo', 'ack_include_as', 'mnft_default', 'attivo', 'note'], add: true },
     RIPARATORI_ALIAS: { title: 'Alias riparatori VLT', hint: 'Nome riparatore come scritto in VLT → codice riparatore.', cols: ['nome_vlt', 'codice_riparatore'], add: true },
     DEPOT_VLT: { title: 'Depositi VLT', hint: 'Codice deposito VLT → destinazione: usato per mittente e destinazione GOOD.', cols: ['depot_vlt', 'destinazione', 'sigla', 'destinazione_conversione'], add: true },
