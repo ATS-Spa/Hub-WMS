@@ -274,6 +274,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
         <div class="scan-row">
           <div class="fg"><span class="fl" id="lblFr">FR</span><input class="fc mono" id="scFr" autocomplete="off" placeholder="si compila dal seriale"><span class="hint" id="hFr"></span></div>
           <div class="fg"><span class="fl">Barcode seriale</span><input class="fc mono" id="scBc" autocomplete="off" placeholder="spara qui il seriale"><span class="hint" id="hBc"></span></div>
+          <div class="fg" id="wrapPn"><span class="fl">P/N (NEW/REUSE, resta fisso)</span><input class="fc mono" id="scPn" autocomplete="off" placeholder="vuoto = dal barcode" onchange="Ingresso.pnFisso()"><span class="hint" id="hPn"></span></div>
           <div class="fg" id="wrapUbi"><span class="fl">Ubicazione (NEW/REUSE)</span><input class="fc mono" id="scUbi" list="dlUbicazioni" autocomplete="off"></div>
           <button class="btn" id="btnAgg" onclick="Ingresso.aggiungi()">Aggiungi</button>
         </div>
@@ -283,7 +284,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
         <div class="card-h"><div class="card-t">Pezzi letti</div>
           <div class="stats" style="margin:0 0 0 8px" id="inStats"></div>
           <div class="spacer"></div>
-          <button class="btn ghost sm" onclick="Ingresso.excelLetti()">⬇ Excel</button> <button class="btn ghost sm" onclick="Ingresso.etichetteLetti()">🏷 Etichette</button>
+          <button class="btn ghost sm" onclick="Ingresso.excelLetti()">⬇ Excel</button> <button class="btn ghost sm" onclick="Ingresso.etichetteLetti()">🏷 Etichette</button> <button class="btn ghost sm" onclick="Ingresso.cedolinoLetti()" title="Cedolino per P/N: quantità e posizione (NEW/REUSE)">📋 Cedolino</button>
           <button class="btn green" id="btnCarica" onclick="Ingresso.carica()">Carica dati</button></div>
         <div class="tbl-wrap"><table>
           <thead><tr><th>#</th><th>FR</th><th>RMA</th><th>Seriale</th><th>P/N</th><th>MNFT</th><th>Riparatore</th><th>Stato VLT</th><th>Nota</th><th>Destinazione / Ubicazione</th><th>Controlli</th><th></th></tr></thead>
@@ -293,7 +294,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
 
       <div class="card">
         <div class="card-h"><div class="card-t">Ingressi di oggi</div>
-          <label style="font-size:12px;color:var(--subtle);display:flex;gap:6px;align-items:center"><input type="checkbox" id="oggiTutti" onchange="Ingresso.renderOggi()"> tutti gli operatori</label><div class="spacer"></div><button class="btn ghost sm" onclick="Ingresso.excelOggi()">⬇ Excel</button> <button class="btn ghost sm" onclick="Ingresso.etichetteOggi()">🏷 Etichette</button></div>
+          <label style="font-size:12px;color:var(--subtle);display:flex;gap:6px;align-items:center"><input type="checkbox" id="oggiTutti" onchange="Ingresso.renderOggi()"> tutti gli operatori</label><div class="spacer"></div><button class="btn ghost sm" onclick="Ingresso.excelOggi()">⬇ Excel</button> <button class="btn ghost sm" onclick="Ingresso.etichetteOggi()">🏷 Etichette</button> <button class="btn ghost sm" onclick="Ingresso.cedolinoOggi()" title="Cedolino per P/N degli ingressi NEW/REUSE mostrati">📋 Cedolino</button></div>
         <div class="stats" id="oggiStats"></div>
         <div class="tbl-wrap" style="max-height:40vh"><table>
           <thead><tr><th>ID</th><th>Tipo</th><th>FR</th><th>RMA</th><th>Seriale</th><th>P/N</th><th>Riparatore</th><th>Nota</th><th>Operatore</th><th></th></tr></thead>
@@ -674,7 +675,6 @@ var CFG = {
   HUAWEI_ID: '1oorvMVY8DIfBfVl2Bdi4EmL7C3swNgijOdP9sOEFskQ',
   ASSETS: 'https://ats-spa.github.io/Hub-WMS/',   // loghi del DDT: stessa repository dell'Hub
   HUAWEI_RANGE: "'CERCA FR HUAWEI ASSOCIATO'!F2:I",   // F = seriale, I = FR (come la funzione con nome del prototipo)
-  SUPER_USERS: ['daniele.izzo.ats@gmail.com'],
   VLT_REFRESH_HOUR: 8          // dopo questa ora la cache VLT del giorno prima viene ricaricata
 };
 var TIPI = ['FAULTY', 'GOOD', 'REUSE', 'NEW', 'BALANCING', 'RESO', 'SCRAP'];
@@ -948,14 +948,19 @@ var App = {
       await DB.loadTables(DB.SMALL); stepDone(s2, true);
       // accesso
       var me = DB.t.OPERATORI.rows.find(function (o) { return L.s(o.email).toLowerCase() === Auth.email; });
-      var sup = CFG.SUPER_USERS.indexOf(Auth.email) >= 0;
+      // admin = editor dei fogli protetti (deciso da Google); super admin = proprietario del file
+      var ps = await Prot.stato(), owner = !!ps.owner && ps.owner === Auth.email;
+      if (!Prot.attive() && (owner || (ps.driveCondiviso && me && L.up(me.ruolo) === 'ADMIN'))) { try { await Prot.attiva(); toast('Protezione della configurazione attivata', 'ok'); } catch (e) { toast('Protezione non attivata: ' + e.message, 'ko'); } }
+      else if (Prot.puoModificare()) { try { await Prot.completa(); } catch (e) { } }
+      var sup = owner || Prot.puoModificare();
       if (!sup && (!me || L.up(me.attivo) === 'NO')) {
         $('loginScreen').classList.remove('show'); $('deniedScreen').classList.add('show');
         $('deniedMsg').textContent = Auth.email + ' non è tra gli operatori attivi. Chiedi all\'amministratore di inserire la tua email nelle impostazioni Admin.';
         return;
       }
       App.me = me || { email: Auth.email, nome: Auth.name, sigla: 'ADM', ruolo: 'ADMIN' };
-      App.isAdmin = sup || L.up(App.me.ruolo) === 'ADMIN';
+      App.isOwner = owner;
+      App.isAdmin = Prot.attive() ? Prot.puoModificare() : (owner || L.up(App.me.ruolo) === 'ADMIN');
       var s3 = step('Carico giacenza (UNITA)');
       await DB.loadTables(['UNITA']); stepDone(s3, true, 'Giacenza: ' + DB.t.UNITA.rows.length + ' righe');
       var s4 = step('Carico dati VLT (cache giornaliera)');
@@ -1057,6 +1062,7 @@ var Ingresso = {
       else if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); clearTimeout(tB); Ingresso.anteprima('fr'); bc.focus(); bc.select(); }
     });
     ub.addEventListener('keydown', function (e) { nextOn(e, function () { Ingresso.aggiungi(); }); });
+    $('scPn').value = lsG('pn_fisso') || ''; Ingresso.pnFisso();
     Ingresso.lockScan(); Ingresso.ricalcola(); Ingresso.renderOggi();
   },
   T: function () {
@@ -1075,6 +1081,11 @@ var Ingresso = {
   },
   save: function () { lsS('draft_' + Auth.email, Ingresso.rows.length ? { testata: Ingresso.T(), rows: Ingresso.rows } : null); },
   needUbi: function () { var t = $('inTipo').value; return t === 'NEW' || t === 'REUSE'; },
+  // P/N fisso per i carichi NEW/REUSE: vale per tutti i pezzi letti dopo, finché non lo cambi (resta anche se ricarichi la pagina)
+  pnFisso: function () {
+    var v = L.up($('scPn').value); $('scPn').value = v; lsS('pn_fisso', v);
+    $('hPn').innerHTML = !v ? '' : (App.pnEsiste(v) ? '<span style="color:var(--green)">✓ in anagrafica</span>' : '<span style="color:var(--amber)">⚠ non in anagrafica</span>');
+  },
   // campo Mittente largo quanto il testo (minimo 210 px, massimo 560 px)
   fitMitt: function () {
     var e = $('inMittente'); if (!e) return;
@@ -1086,7 +1097,7 @@ var Ingresso = {
   // senza Tipo non si legge nulla
   lockScan: function () {
     var ok = !!$('inTipo').value;
-    ['scFr', 'scBc', 'scUbi'].forEach(function (id) { $(id).disabled = !ok; });
+    ['scFr', 'scBc', 'scUbi', 'scPn'].forEach(function (id) { $(id).disabled = !ok; });
     $('btnAgg').disabled = !ok;
     $('scBc').placeholder = ok ? 'spara qui il seriale' : 'seleziona prima il Tipo';
     $('scFr').placeholder = ok ? 'si compila dal seriale' : 'seleziona prima il Tipo';
@@ -1102,13 +1113,15 @@ var Ingresso = {
     if (frAuto && bcAuto) { fr = L.s($('scFr').value); }
     if (!bc && !fr) { toast('Spara il seriale (oppure scrivi l\'FR)', 'ko'); $('scBc').focus(); return; }
     if (fr && !/^\d+$/.test(fr)) { toast('FR/RMA deve essere un numero', 'ko'); $('scFr').focus(); return; }
-    Ingresso.rows.push({ fr: fr, bc: bc, ubi: ub, ser: '', pn: '', man: {} });
+    var pnF = Ingresso.needUbi() ? L.up($('scPn').value) : '';
+    Ingresso.rows.push({ fr: fr, bc: bc, ubi: ub, ser: '', pn: '', man: pnF ? { pn: pnF } : {} });
     $('scFr').value = ''; $('scBc').value = ''; $('scFr').dataset.auto = '0'; $('scBc').dataset.auto = '0'; $('hFr').textContent = ''; $('hBc').textContent = '';
     if (!Ingresso.needUbi()) $('scUbi').value = '';
     Ingresso.fitScan(); Ingresso.ricalcola(); Ingresso.save(); $('scBc').focus();
   },
   del: function (i) { Ingresso.rows.splice(i, 1); Ingresso.ricalcola(); Ingresso.save(); },
   edit: function (i, f, v) { var r = Ingresso.rows[i]; r.man[f] = L.s(v); Ingresso.ricalcola(); Ingresso.save(); },
+  editUbi: function (i, v) { Ingresso.rows[i].ubi = L.up(v); Ingresso.ricalcola(); Ingresso.save(); },
   // PULIZIA: 1) script pulizia con P/N in anagrafica · 2) regole barcode con P/N in anagrafica · 3) casi fissi dello script · 4) prima regola barcode
   pulisci: function (bc, rip) {
     bc = L.s(bc); if (!bc) return { ser: '', pn: '', fonte: '' };
@@ -1294,7 +1307,7 @@ var Ingresso = {
       return '<tr class="' + cls + '"><td>' + (i + 1) + '</td><td class="mono">' + esc(c.fr) + '</td><td class="mono">' + esc(c.rma) + '</td>' +
         '<td class="nw">' + ed('ser', c.ser, 12) + '</td><td class="nw">' + ed('pn', c.pn, 8) + (c.pn && c.pnAnag !== undefined ? (c.pnAnag ? ' <span title="P/N presente in anagrafica articoli" style="color:var(--green)">✓</span>' : ' <span title="P/N NON presente in anagrafica articoli' + (c.pnSimile ? ' (simile: ' + esc(c.pnSimile) + ')' : '') + '" style="color:var(--amber)">✗</span>') : '') + '</td><td class="nw">' + ed('mnft', c.mnft, 6) + '</td>' +
         '<td>' + esc(c.rip) + '</td><td style="font-size:11.5px;color:var(--subtle)">' + esc(c.statoVlt) + '</td>' +
-        '<td>' + ed('nota', c.nota, 10) + '</td><td>' + esc(c.tipo === 'NEW' || c.tipo === 'REUSE' ? c.ubicazione : c.destinazione) + '</td>' +
+        '<td>' + ed('nota', c.nota, 10) + '</td><td>' + (c.tipo === 'NEW' || c.tipo === 'REUSE' ? '<input class="edit-cell edit-vis mono" style="width:calc(' + Math.max(12, Math.min(40, L.s(c.ubicazione).length + 2)) + 'ch + 16px)" list="dlUbicazioni" value="' + esc(c.ubicazione) + '" placeholder="✎ ubicazione" onchange="Ingresso.editUbi(' + i + ',this.value)">' : esc(c.destinazione)) + '</td>' +
         '<td><div class="msgs">' + m + mail + '</div></td><td><button class="ico-btn" title="Elimina" onclick="Ingresso.del(' + i + ')">✕</button></td></tr>';
     }).join('');
     var nErr = C.filter(function (c) { return c.err; }).length, nWarn = C.filter(function (c) { return c.warn && !c.err; }).length;
@@ -1304,6 +1317,7 @@ var Ingresso = {
     $('btnCarica').disabled = !C.length || nErr > 0;
     $('btnCarica').title = nErr ? 'Correggi le righe in rosso' : '';
     $('wrapUbi').style.visibility = Ingresso.needUbi() ? 'visible' : 'hidden';
+    $('wrapPn').style.display = Ingresso.needUbi() ? '' : 'none';
   },
   validaTestata: function (T) {
     var e = [];
@@ -1512,6 +1526,21 @@ var Ingresso = {
   excelOggi: function () {
     var U = Ingresso._oggi || [];
     Xls.scarica('Ingressi_di_oggi', [Object.assign({ nome: 'Ingressi di oggi' }, Xls.oggetti(U, [['id_unita', 'ID'], ['tipo', 'Tipo'], ['fr', 'FR'], ['rma', 'RMA'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['mnft', 'MNFT'], ['riparatore', 'Riparatore'], ['destinazione_prevista', 'Destinazione'], ['ubicazione', 'Ubicazione'], ['note', 'Nota'], ['data_in', 'Data ingresso'], ['id_mov_in', 'Movimento'], ['creato_da', 'Operatore'], ['creato_il', 'Registrato il']]))]);
+  },
+  cedolinoLetti: function () {
+    var T = Ingresso.T();
+    Cedolino.stampa([{ testa: { mittente: T.mittente, po: T.po, ddt: T.ddt, tipo: T.tipo, data: T.data }, pezzi: Ingresso.computed.map(function (c) { return { pn: c.pn, ubicazione: c.ubicazione, nota: c.nota }; }) }]);
+  },
+  cedolinoOggi: async function () {
+    if (!Nr.loaded) { try { await Nr.load(); } catch (e) { } }
+    var R = (Ingresso._oggi || []).filter(function (u) { return u.tipo === 'NEW' || u.tipo === 'REUSE'; }), g = {}, ord = [];
+    if (!R.length) { toast('Nessun ingresso NEW/REUSE tra quelli mostrati', 'ko'); return; }
+    var ric = {}; (DB.t.RICEZIONI ? DB.t.RICEZIONI.rows : []).forEach(function (r) { ric[r.id_ricezione] = r; });
+    R.forEach(function (u) { var k = u.id_ricezione || '-'; if (!g[k]) { g[k] = []; ord.push(k); } g[k].push(u); });
+    Cedolino.stampa(ord.map(function (k) {
+      var r = ric[k] || {}, nr = Nr.loaded ? Nr.t().rows.find(function (p) { return p.id_ricezione === k; }) : null, x = r.mittente ? r : (nr || {});
+      return { testa: { mittente: x.mittente, po: x.po_mrn, ddt: x.ddt_mittente || x.ddt, tipo: g[k][0].tipo, data: g[k][0].data_in }, pezzi: g[k].map(function (u) { return { pn: u.pn, ubicazione: u.ubicazione, nota: Rma.nota(u.note) }; }) };
+    }));
   },
   etichetteOggi: function () { Etichette.pezzi((Ingresso._oggi || []).map(Etichette.daUnita)); },
   renderOggi: function () {
@@ -1748,7 +1777,7 @@ var Cal = {
       await API.append(DB.id, 'LOG', [App.log('IMPORT_CALENDARIO', 'CALENDARIO_USCITE', nome, { righe_prima: n0, righe_dopo: nuove.length, dal: nuove[0].data, al: nuove[nuove.length - 1].data })]);
       await DB.loadTables(['CALENDARIO_USCITE']);
       Modal.close(); toast('Calendario sostituito: ' + nuove.length + ' uscite', 'ok'); Admin.render(); if (Ack.loaded) Ack.render();
-    } catch (e) { Modal.progress(''); Modal.open('Calendario non importato', e.message + '\n\nPremi Aggiorna e controlla il calendario prima di riprovare.'); }
+    } catch (e) { Modal.progress(''); Modal.open('Calendario non importato', Prot.msg(e) + '\n\nPremi Aggiorna e controlla il calendario prima di riprovare.'); }
   }
 };
 
@@ -1813,7 +1842,7 @@ var Admin = {
       if (nuove.length) { var rr = await API.append(DB.id, t.name, nuove.map(function (r) { return t.toRow(r); })); nuove.forEach(function (r, i) { r._r = rr + i; delete r._new; }); }
       await API.append(DB.id, 'LOG', logs);
       Admin.dirty = {}; Admin.render(); App.fillLists(); toast('Salvato', 'ok');
-    } catch (e) { toast('Errore salvataggio: ' + e.message, 'ko'); }
+    } catch (e) { toast('Errore salvataggio: ' + Prot.msg(e), 'ko'); }
   }
 };
 
@@ -3025,6 +3054,7 @@ var Rma = {
     var upd = [{ range: t.cell('id_carico', r) + ':' + t.col('id_carico') + (r + objs.length - 1), values: objs.map(function (o) { return [o.id_carico]; }) }];
     lista.forEach(function (x) {
       var c = { stato: 'IN_LAVORAZIONE', rma: x.rma, destinazione_prevista: x.destinazione, modificato_il: now, modificato_da: Auth.email, rev: (parseInt(x.u.rev, 10) || 1) + 1 };
+      if (L.s(x.material)) c.material = L.s(x.material);   // Material SAP Code compilato dal cliente
       Object.keys(c).forEach(function (h) { x.u[h] = String(c[h]); upd.push({ range: tU.cell(h, x.u._r), values: [[x.u[h]]] }); });
     });
     await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', [App.log('CARICO_RMA', 'CARICHI_RMA', objs[0].id_carico + (objs.length > 1 ? '…' + objs[objs.length - 1].id_carico : ''), { pezzi: objs.length })])]);
@@ -3052,13 +3082,14 @@ var Rma = {
     var f = { name: titolo };
     var visti = {}, righe = rows.map(function (r) {
       var o = { seriale: campo(r, ['SERIALE', 'SERIAL', 'SERIAL NO.', 'SN', 'S/N']), rma: L.frKey(campo(r, ['RMA'])), destinazione: campo(r, ['DESTINAZIONE', 'PV DESTINO', 'DESTINO', 'DESTINAZIONE INTERA']),
-        po_mrn: campo(r, ['PO', 'P.O', 'PO / MRN', 'PO/MRN', 'MRN', 'PO NEW / MRN']), note: campo(r, ['NOTE', 'NOTE SD / FR', 'NOTE SD']) };
+        po_mrn: campo(r, ['PO', 'P.O', 'PO / MRN', 'PO/MRN', 'MRN', 'PO NEW / MRN']), note: campo(r, ['NOTE', 'NOTE SD / FR', 'NOTE SD']),
+        material: campo(r, ['MATERIAL SAP CODE', 'MATERIAL SAPCODE', 'SAP CODE', 'MATERIAL']) };
       var v = Rma.carValida(o, visti); if (v.u && !v.err) visti[v.u.id_unita] = 1; o.u = v.u; o.err = v.err; return o;
     }).filter(function (o) { return o.seriale || o.rma; });
     var ok = righe.filter(function (o) { return !o.err; }), ko = righe.filter(function (o) { return o.err; });
     var html = '<div style="font-size:13px;margin-bottom:8px">' + ok.length + ' righe valide' + (ko.length ? ', <b style="color:var(--red)">' + ko.length + ' con errori (non verranno caricate)</b>' : '') + '</div>' +
-      '<div class="tbl-wrap modal-scroll"><table><thead><tr><th>Seriale</th><th>Tipo</th><th>P/N</th><th>RMA</th><th>Destinazione</th><th>PO</th><th>Note</th><th>Esito</th></tr></thead><tbody>' +
-      righe.map(function (o) { return '<tr class="' + (o.err ? 'r-err' : '') + '"><td class="mono">' + esc(o.seriale) + '</td><td>' + esc(o.u ? o.u.tipo : '') + '</td><td class="mono">' + esc(o.u ? o.u.pn : '') + '</td><td class="mono">' + esc(o.rma) + '</td><td>' + esc(o.destinazione) + '</td><td class="mono">' + esc(o.po_mrn) + '</td><td>' + esc(o.note) + '</td><td style="font-size:11.5px;color:' + (o.err ? 'var(--red)' : 'var(--green)') + '">' + esc(o.err || 'ok') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+      '<div class="tbl-wrap modal-scroll"><table><thead><tr><th>Seriale</th><th>Tipo</th><th>P/N</th><th>RMA</th><th>Destinazione</th><th>PO</th><th>Material SAP</th><th>Note</th><th>Esito</th></tr></thead><tbody>' +
+      righe.map(function (o) { return '<tr class="' + (o.err ? 'r-err' : '') + '"><td class="mono">' + esc(o.seriale) + '</td><td>' + esc(o.u ? o.u.tipo : '') + '</td><td class="mono">' + esc(o.u ? o.u.pn : '') + '</td><td class="mono">' + esc(o.rma) + '</td><td>' + esc(o.destinazione) + '</td><td class="mono">' + esc(o.po_mrn) + '</td><td class="mono">' + esc(o.material) + '</td><td>' + esc(o.note) + '</td><td style="font-size:11.5px;color:' + (o.err ? 'var(--red)' : 'var(--green)') + '">' + esc(o.err || 'ok') + '</td></tr>'; }).join('') + '</tbody></table></div>';
     Modal.html('Import carichi NEW/REUSE · ' + f.name, html, [{ label: 'Annulla', cls: 'ghost' }].concat(ok.length ? [{ label: 'Carica ' + ok.length + ' righe', cls: 'green', fn: async function () {
       Modal.open('Import carichi', 'Salvo ' + ok.length + ' carichi…', []);
       try { await Rma.carScrivi(ok); Modal.close(); toast(ok.length + ' carichi importati', 'ok'); Rma.render(); if (dopo) await dopo(ok.length); } catch (e) { Modal.open('Import non riuscito', e.message); }
@@ -3598,12 +3629,12 @@ var Nr = {
   nomeFile: function (p) { return (L.s(p.mittente) + ' ' + L.s(p.po_mrn) + ' | ' + L.s(p.ddt)).replace(/[\\/:*?"<>]/g, '_') + '.xlsx'; },
   crea: async function (p, pezzi) {
     await Lib.xlsx();
-    var a = [['S/N', 'P/N', 'POSITION', 'NOTE', 'MITTENTE', 'PO/MRN', 'PL']];
-    pezzi.forEach(function (u, i) { a.push([u.seriale, u.pn, u.ubicazione || '', Rma.nota(u.note), i ? '' : p.mittente, i ? '' : p.po_mrn, i ? '' : p.ddt]); });
+    var a = [['S/N', 'P/N', 'POSITION', 'NOTE', 'MITTENTE', 'PO/MRN', 'PL', 'MATERIAL SAP CODE']];
+    pezzi.forEach(function (u, i) { a.push([u.seriale, u.pn, u.ubicazione || '', Rma.nota(u.note), i ? '' : p.mittente, i ? '' : p.po_mrn, i ? '' : p.ddt, '']); });
     var g = {}, ord = []; pezzi.forEach(function (u) { var k = L.s(u.pn); if (!g[k]) { g[k] = { q: 0, pos: [] }; ord.push(k); } g[k].q++; if (u.ubicazione && g[k].pos.indexOf(u.ubicazione) < 0) g[k].pos.push(u.ubicazione); });
     var c = [['TPN', 'NOTE', 'Q', 'POS.']].concat(ord.map(function (k) { return [k, '', g[k].q, g[k].pos.join(' / ')]; }));
     var wb = XLSX.utils.book_new(), w1 = XLSX.utils.aoa_to_sheet(a), w2 = XLSX.utils.aoa_to_sheet(c);
-    w1['!cols'] = [{ wch: 26 }, { wch: 18 }, { wch: 18 }, { wch: 30 }, { wch: 24 }, { wch: 16 }, { wch: 22 }]; w2['!cols'] = [{ wch: 22 }, { wch: 20 }, { wch: 6 }, { wch: 40 }];
+    w1['!cols'] = [{ wch: 26 }, { wch: 18 }, { wch: 18 }, { wch: 30 }, { wch: 24 }, { wch: 16 }, { wch: 22 }, { wch: 22 }]; w2['!cols'] = [{ wch: 22 }, { wch: 20 }, { wch: 6 }, { wch: 40 }];
     XLSX.utils.book_append_sheet(wb, w1, 'CREAZIONE FILE NEW & REUSE'); XLSX.utils.book_append_sheet(wb, w2, 'STAMPA CEDOLINO');
     return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
   },
@@ -3693,6 +3724,34 @@ var Nr = {
       }
     } catch (e) { }
   },
+  cedolino: function (id) {
+    var p = Nr.t().rows.find(function (x) { return x.id_pratica === id; }), P = Nr.pezziRic(p.id_ricezione);
+    if (!P.length) { toast('Nessun pezzo trovato per questa pratica', 'ko'); return; }
+    Cedolino.stampa([{ testa: { mittente: p.mittente, po: p.po_mrn, ddt: p.ddt, tipo: p.tipo, data: p.data }, pezzi: P.map(function (u) { return { pn: u.pn, ubicazione: u.ubicazione, nota: Rma.nota(u.note) }; }) }]);
+  },
+  // eliminazione (solo admin + password): la riga resta nel foglio come ELIMINATA (numerazione e LOG intatti), i file vanno nel cestino di Drive
+  PWD: 'bb985ec2df22f2e51fffedd7146341658b596985d77fb4071d70e5c4f0767466',
+  chiediElimina: function (id) {
+    if (!App.isAdmin) { toast('Solo gli admin possono eliminare', 'ko'); return; }
+    var p = Nr.t().rows.find(function (x) { return x.id_pratica === id; });
+    Modal.html('Elimina pratica ' + id,
+      '<div style="font-size:13px;line-height:1.6;margin-bottom:10px">' + esc(p.file_nome || '') + '<br>La pratica sparisce dall\'elenco e il file (con l\'eventuale originale) va nel cestino di Drive. I pezzi restano in giacenza.</div>' +
+      '<div class="fg"><span class="fl">Password *</span><input class="fc" type="password" id="nrPwd" autocomplete="new-password"></div><div class="hint" id="nrPwdErr" style="margin-top:6px"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: '🗑 Elimina', cls: 'red', keep: true, fn: function () { Nr.elimina(id); } }]);
+    setTimeout(function () { $('nrPwd').focus(); }, 50);
+  },
+  sha: async function (t) { var b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)); return Array.prototype.map.call(new Uint8Array(b), function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); },
+  elimina: async function (id) {
+    var p = Nr.t().rows.find(function (x) { return x.id_pratica === id; }), err = function (m) { $('nrPwdErr').textContent = m; $('nrPwdErr').className = 'hint err'; };
+    if ((await Nr.sha($('nrPwd').value)) !== Nr.PWD) { err('Password errata'); return; }
+    Modal.progress('Elimino…');
+    try {
+      var cestino = function (fid) { return L.s(fid) ? API.call('https://www.googleapis.com/drive/v3/files/' + fid + '?supportsAllDrives=true', { method: 'PATCH', body: JSON.stringify({ trashed: true }) }).catch(function (e) { return e; }) : null; };
+      await Promise.all([cestino(p.file_id), cestino(p.file_originale_id)]);
+      await Nr.set(p, { stato: 'ELIMINATA', note: (L.s(p.note) ? L.s(p.note) + ' | ' : '') + 'eliminata da ' + Auth.email + ' il ' + L.nowStamp() }, 'NR_ELIMINATA');
+      Modal.close(); toast('Pratica ' + id + ' eliminata', 'ok');
+    } catch (e) { Modal.progress(''); err('Non eliminata: ' + e.message); }
+  },
   ricrea: async function (id) {
     var p = Nr.t().rows.find(function (x) { return x.id_pratica === id; }), P = Nr.pezziRic(p.id_ricezione);
     if (!P.length) { toast('Nessun pezzo trovato per la ricezione ' + p.id_ricezione, 'ko'); return; }
@@ -3705,7 +3764,7 @@ var Nr = {
     if (!Nr.loaded) return;
     if (!Nr.grid) Nr.grid = new Grid('nr', {
       thead: 'nrHead', tbody: 'nrRows', foot: 'nrFoot', sort: 'id_pratica', dir: -1, empty: 'Nessuna pratica: si creano da sole con gli ingressi NEW/REUSE',
-      rows: function () { return Nr.t().rows.filter(function (p) { return $('nrTutte').checked || p.stato !== 'SPEDITA'; }); },
+      rows: function () { return Nr.t().rows.filter(function (p) { return p.stato !== 'ELIMINATA' && ($('nrTutte').checked || p.stato !== 'SPEDITA'); }); },
       cols: [
         { k: 'id_pratica', label: 'ID', cls: 'mono' },
         { k: 'data', label: 'Data', cls: 'mono', get: function (p) { return L.normDate(p.data); } },
@@ -3722,7 +3781,9 @@ var Nr = {
           return '<span class="nw">' + b('⬇', 'Nr.scarica(\'' + id + '\')', 'Scarica il file') + (p.file_link ? '<a class="btn ghost sm" style="padding:3px 8px" target="_blank" href="' + esc(p.file_link) + '" title="Apri su Drive">↗</a> ' : '') +
             b('✉', 'Nr.mail(\'' + id + '\')', 'Mail al Service Desk con il link al file') +
             '<label class="btn ghost sm" style="padding:3px 8px;cursor:pointer" title="Carica il file lavorato dal cliente (sostituisce quello su Drive)">⬆<input type="file" accept=".xlsx,.xls" style="display:none" onchange="Nr.ricarica(\'' + id + '\',this)"></label> ' +
-            (p.stato === 'LAVORATA' || p.stato === 'INVIATA' ? b('📦 Uscita RMA', 'Nr.inUscita(\'' + id + '\')', 'Metti tutto il file in uscita RMA', p.stato === 'LAVORATA' ? '' : 'ghost') : '') + '</span>';
+            (p.stato === 'LAVORATA' ? b('📦 Uscita RMA', 'Nr.inUscita(\'' + id + '\')', 'Metti tutto il file in uscita RMA', '') : '') +
+            b('📋', 'Nr.cedolino(\'' + id + '\')', 'Stampa cedolino (P/N, quantità, posizione)') +
+            (App.isAdmin ? b('🗑', 'Nr.chiediElimina(\'' + id + '\')', 'Elimina pratica e file (solo admin, con password)') : '') + '</span>';
         } },
         { k: 'note', label: 'Note', filter: 'text' }
       ]
@@ -4035,6 +4096,57 @@ var Etichette = {
 // ID scheda = parte numerica dell'ID unità assegnato dall'app (U0001120 → 1120), per riconoscere al volo la scheda
 Etichette.idScheda = function (u) { var id = L.s(u.id_unita), m = /^[A-Z]*0*(\d+)$/i.exec(id); return m ? m[1] : id; };
 
+// ───────────────────────── CEDOLINO NEW/REUSE (come il foglio STAMPA CEDOLINO) ─────────────────────────
+// un'etichetta 10x5 per P/N e posizione: TPN, quantità, posizione e barcode Code39 dei primi 5 caratteri della posizione (*AB07C*)
+var Cedolino = {
+  C39: { '0': 'nnnwwnwnn', '1': 'wnnwnnnnw', '2': 'nnwwnnnnw', '3': 'wnwwnnnnn', '4': 'nnnwwnnnw', '5': 'wnnwwnnnn', '6': 'nnwwwnnnn', '7': 'nnnwnnwnw', '8': 'wnnwnnwnn', '9': 'nnwwnnwnn',
+    'A': 'wnnnnwnnw', 'B': 'nnwnnwnnw', 'C': 'wnwnnwnnn', 'D': 'nnnnwwnnw', 'E': 'wnnnwwnnn', 'F': 'nnwnwwnnn', 'G': 'nnnnnwwnw', 'H': 'wnnnnwwnn', 'I': 'nnwnnwwnn', 'J': 'nnnnwwwnn',
+    'K': 'wnnnnnnww', 'L': 'nnwnnnnww', 'M': 'wnwnnnnwn', 'N': 'nnnnwnnww', 'O': 'wnnnwnnwn', 'P': 'nnwnwnnwn', 'Q': 'nnnnnnwww', 'R': 'wnnnnnwwn', 'S': 'nnwnnnwwn', 'T': 'nnnnwnwwn',
+    'U': 'wwnnnnnnw', 'V': 'nwwnnnnnw', 'W': 'wwwnnnnnn', 'X': 'nwnnwnnnw', 'Y': 'wwnnwnnnn', 'Z': 'nwwnwnnnn', '-': 'nwnnnnwnw', '.': 'wwnnnnwnn', ' ': 'nwwnnnwnn', '*': 'nwnnwnwnn' },
+  // disegna un Code39 (con * di inizio/fine); restituisce la larghezza usata
+  barcode: function (d, testo, x, y, h, n) {
+    var s = '*' + testo + '*', w = n * 2.5, cx = x;
+    d.setFillColor(0, 0, 0);
+    for (var i = 0; i < s.length; i++) {
+      var p = Cedolino.C39[s[i]]; if (!p) continue;
+      for (var j = 0; j < 9; j++) { var lw = p[j] === 'w' ? w : n; if (j % 2 === 0) d.rect(cx, y, lw, h, 'F'); cx += lw; }
+      cx += n;
+    }
+    return cx - x;
+  },
+  // gruppi: [{ testa: { mittente, po, ddt, tipo, data }, pezzi: [{ pn, ubicazione, nota }] }]
+  stampa: async function (gruppi) {
+    var lab = [];
+    gruppi.forEach(function (g) {
+      var m = {}, ord = [];
+      g.pezzi.forEach(function (p) { var k = L.up(p.pn) + '|' + L.up(p.ubicazione); if (!m[k]) { m[k] = { pn: L.up(p.pn), pos: L.up(p.ubicazione), q: 0, note: [] }; ord.push(k); } m[k].q++; if (L.s(p.nota) && m[k].note.indexOf(L.s(p.nota)) < 0) m[k].note.push(L.s(p.nota)); });
+      ord.forEach(function (k) { lab.push(Object.assign({ t: g.testa }, m[k])); });
+    });
+    if (!lab.length) { toast('Nessun pezzo per il cedolino', 'ko'); return; }
+    var w = window.open('', '_blank');
+    try {
+      await Ack.loghi();
+      var J = window.jspdf.jsPDF, d = new J({ unit: 'mm', format: [100, 50], orientation: 'landscape' }), logo = (Ack._lg || {}).sx;
+      lab.forEach(function (e, i) {
+        if (i) d.addPage([100, 50], 'landscape');
+        Etichette.testata(d, logo, 'CEDOLINO ' + L.s(e.t.tipo));
+        d.setTextColor(110); d.setFont('helvetica', 'bold'); d.setFontSize(7); d.text('TPN', 3, 15.5); d.text('Q', 97, 15.5, { align: 'right' });
+        d.setTextColor(0); Etichette.fit(d, e.pn || '—', 3, 23, 72, 20, 9);
+        d.setFontSize(22); d.text(String(e.q), 97, 23.5, { align: 'right' });
+        d.setTextColor(110); d.setFontSize(7); d.text('POS.', 3, 28.5);
+        d.setTextColor(0); d.setFont('helvetica', 'bold'); Etichette.fit(d, e.pos || '—', 12, 28.8, 85, 11, 7);
+        var cod = e.pos.replace(/[^0-9A-Z\-. ]/g, '').slice(0, 5);
+        if (cod) { Cedolino.barcode(d, cod, 3, 31, 9, 0.38); d.setFont('helvetica', 'normal'); d.setFontSize(7); d.text('*' + cod + '*', 3, 43); }
+        d.setFont('helvetica', 'normal'); d.setTextColor(60);
+        Etichette.fit(d, [e.t.mittente, e.t.po ? 'PO ' + e.t.po : '', e.t.ddt ? 'DDT ' + e.t.ddt : '', e.t.data ? L.itDate(e.t.data) : ''].filter(Boolean).join(' · '), 97, 47.5, cod ? 60 : 94, 8, 5.5, 'right');
+        if (e.note.length) Etichette.fit(d, e.note.join(' · '), 97, 43, cod ? 60 : 94, 8, 5.5, 'right');
+        d.setTextColor(0);
+      });
+      Ddt.apri(d, w);
+    } catch (er) { if (w) w.close(); Modal.open('Cedolino', er.message); }
+  }
+};
+
 // ───────────────────────── DASHBOARD OPERATORI (solo admin) ─────────────────────────
 var Dash = {
   periodo: '30', metrica: 'tot', op: '', dati: null,
@@ -4120,27 +4232,98 @@ var Dash = {
 };
 
 // ───────────────────────── ACCESSI ADMIN ─────────────────────────
+// ───────────────────────── PROTEZIONE CONFIGURAZIONE (livello 1) ─────────────────────────
+// Chi è admin lo decide Google: i fogli di configurazione sono protetti e modificabili solo dagli editor della protezione.
+// Super admin = proprietario del file database su Drive (per cambiarlo: Drive → Condividi → Trasferisci proprietà).
+var Prot = {
+  TAG: 'EASYLOADER_ADMIN',
+  extra: ['ARTICOLI', 'ANAGRAFICA_PN', 'EQUIVALENTI'],
+  fogli: function () { return Object.keys(Admin.CONF).concat(Prot.extra); },
+  stato: async function () {
+    var js = await API.call(API.S + DB.id + '?fields=' + encodeURIComponent('sheets(properties(sheetId,title),protectedRanges(protectedRangeId,description,requestingUserCanEdit,editors,range))'));
+    var s = { sheets: {}, prot: [] };
+    (js.sheets || []).forEach(function (sh) {
+      s.sheets[sh.properties.title] = sh.properties.sheetId;
+      (sh.protectedRanges || []).forEach(function (p) { if (p.description === Prot.TAG) { p.titolo = sh.properties.title; s.prot.push(p); } });
+    });
+    try {
+      var f = await API.call('https://www.googleapis.com/drive/v3/files/' + DB.id + '?supportsAllDrives=true&fields=owners(emailAddress),driveId');
+      s.owner = f.owners && f.owners[0] ? L.s(f.owners[0].emailAddress).toLowerCase() : ''; s.driveCondiviso = !!f.driveId;
+    } catch (e) { s.owner = ''; }
+    Prot.s = s; return s;
+  },
+  attive: function () { return Prot.s && Prot.s.prot.length > 0; },
+  puoModificare: function () { return Prot.attive() && Prot.s.prot.every(function (p) { return p.requestingUserCanEdit; }); },
+  admins: function () {   // email degli admin (visibile solo a chi è admin)
+    var e = {}; ((Prot.s && Prot.s.prot[0] && Prot.s.prot[0].editors && Prot.s.prot[0].editors.users) || []).forEach(function (u) { e[L.s(u).toLowerCase()] = 1; }); return e;
+  },
+  // prima attivazione (solo il proprietario): crea le protezioni e i parametri che altrimenti gli operatori scriverebbero da soli
+  attiva: async function () {
+    var s = Prot.s, ed = Object.keys(DB.t.OPERATORI.rows.filter(function (o) { return L.up(o.ruolo) === 'ADMIN' && L.s(o.email); }).reduce(function (a, o) { a[L.s(o.email).toLowerCase()] = 1; return a; }, {}));
+    if (s.owner && ed.indexOf(s.owner) < 0) ed.push(s.owner); if (ed.indexOf(Auth.email) < 0) ed.push(Auth.email);
+    await Prot.parametri();
+    var req = Prot.fogli().filter(function (n) { return s.sheets[n] !== undefined && !s.prot.some(function (p) { return p.titolo === n; }); })
+      .map(function (n) { return { addProtectedRange: { protectedRange: { range: { sheetId: s.sheets[n] }, description: Prot.TAG, warningOnly: false, editors: { users: ed } } } }; });
+    if (req.length) await API.call(API.S + DB.id + ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: req }) });
+    await API.append(DB.id, 'LOG', [App.log('PROTEZIONE_ATTIVATA', 'DATABASE', '', { fogli: req.length, admin: ed })]);
+    return Prot.stato();
+  },
+  // mov_id_base / mov_out_id_base: calcolati ora dall'admin (PARAMETRI sarà protetto)
+  parametri: async function () {
+    var P = DB.t.PARAMETRI, add = [];
+    var need = [['mov_id_base', 'id_in_prossimo', 'ID movimento = prefisso IN/OUT + (mov_id_base + riga in MOVIMENTI).'], ['mov_out_id_base', 'id_out_prossimo', 'ID uscita = OUT + (mov_out_id_base + riga in MOVIMENTI).']]
+      .filter(function (x) { return isNaN(parseInt(DB.param(x[0], ''), 10)); });
+    if (!need.length) return;
+    var n = ((await API.batchGet(DB.id, [API.q('MOVIMENTI') + '!A:A']))[0] || []).length, prossimaRiga = n + 1;
+    need.forEach(function (x) { var b = (parseInt(DB.param(x[1], '0'), 10) || 0) - prossimaRiga; add.push({ chiave: x[0], valore: String(b), descrizione: x[2] + ' Impostato all\'attivazione della protezione.' }); });
+    await API.append(DB.id, 'PARAMETRI', add.map(function (o) { return P.toRow(o); })); add.forEach(function (o) { P.rows.push(o); });
+  },
+  // nuovi fogli di configurazione (es. dopo un aggiornamento): li protegge con gli stessi admin
+  completa: async function () {
+    var s = Prot.s, ed = (s.prot[0].editors && s.prot[0].editors.users) || [];
+    var req = Prot.fogli().filter(function (n) { return s.sheets[n] !== undefined && !s.prot.some(function (p) { return p.titolo === n; }); })
+      .map(function (n) { return { addProtectedRange: { protectedRange: { range: { sheetId: s.sheets[n] }, description: Prot.TAG, warningOnly: false, editors: { users: ed } } } }; });
+    if (req.length) { await API.call(API.S + DB.id + ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: req }) }); await Prot.stato(); }
+  },
+  // dà / toglie admin a un'email su tutte le protezioni
+  setAdmin: async function (email, on) {
+    email = L.s(email).toLowerCase();
+    var req = Prot.s.prot.map(function (p) {
+      var u = ((p.editors && p.editors.users) || []).map(function (x) { return L.s(x).toLowerCase(); }).filter(function (x) { return x !== email; });
+      if (on) u.push(email);
+      return { updateProtectedRange: { protectedRange: { protectedRangeId: p.protectedRangeId, editors: { users: u } }, fields: 'editors' } };
+    });
+    await API.call(API.S + DB.id + ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: req }) });
+    await Prot.stato();
+  },
+  // messaggio chiaro quando Google rifiuta una modifica ai fogli protetti
+  msg: function (e) { var m = L.s(e && e.message); return /protect|protett/i.test(m) ? 'Solo gli admin possono modificare la configurazione (foglio protetto).' : m; }
+};
+
 var Accessi = {
   render: function () {
     var R = DB.t.OPERATORI.rows;
     $('admTitle').textContent = 'Accessi admin';
-    $('admHint').textContent = 'Spunta chi può vedere Admin e Dashboard. Le modifiche valgono al prossimo accesso della persona.';
+    $('admHint').textContent = Prot.attive() ? 'Admin = può modificare i fogli di configurazione (protezione Google). Super admin = proprietario del file' + (Prot.s.owner ? ' (' + Prot.s.owner + ')' : '') + ': si cambia da Drive → Condividi → Trasferisci proprietà. Valgono al prossimo accesso.' : 'Protezione non ancora attiva: la attiva il proprietario del file al suo primo accesso.';
     $('admAdd').style.display = 'none'; $('admQ').style.display = 'none';
     $('admHead').innerHTML = '<tr><th>Email</th><th>Nome</th><th>Sigla</th><th>Attivo</th><th>Admin</th></tr>';
-    $('admRows').innerHTML = R.map(function (o, i) {
-      var adm = L.up(o.ruolo) === 'ADMIN', sup = CFG.SUPER_USERS.indexOf(L.s(o.email).toLowerCase()) >= 0;
+    var own = Prot.s && Prot.s.owner, ownRiga = own && !R.some(function (o) { return L.s(o.email).toLowerCase() === own; }) ?
+      '<tr><td class="mono">' + esc(own) + '</td><td colspan="2" class="hint">non è in Operatori: aggiungilo con nome e sigla per vederlo nei movimenti</td><td>—</td><td><span class="pill p-blue">super admin (proprietario)</span></td></tr>' : '';
+    $('admRows').innerHTML = ownRiga + R.map(function (o, i) {
+      var em = L.s(o.email).toLowerCase(), adm = Prot.attive() ? !!Prot.admins()[em] : L.up(o.ruolo) === 'ADMIN', sup = !!Prot.s && Prot.s.owner === em;
       return '<tr><td class="mono">' + esc(o.email || '(senza email)') + '</td><td>' + esc(o.nome) + '</td><td>' + esc(o.sigla) + '</td><td>' + esc(o.attivo) + '</td><td>' +
-        (sup ? '<span class="pill p-blue">sempre</span>' : '<label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox"' + (adm ? ' checked' : '') + (o.email ? '' : ' disabled title="Serve l\'email"') + ' onchange="Accessi.set(' + i + ',this.checked)"> admin</label>') + '</td></tr>';
+        (sup ? '<span class="pill p-blue">super admin (proprietario)</span>' : '<label style="display:flex;gap:6px;align-items:center;cursor:pointer"><input type="checkbox"' + (adm ? ' checked' : '') + (o.email ? '' : ' disabled title="Serve l\'email"') + ' onchange="Accessi.set(' + i + ',this.checked)"> admin</label>') + '</td></tr>';
     }).join('') + '<tr><td colspan="5"><div class="row"><input class="fc mono" id="accEmail" placeholder="nuova email admin (es. nome@gmail.com)" style="width:320px"><input class="fc" id="accNome" placeholder="nome" style="width:180px"><button class="btn sm" onclick="Accessi.aggiungi()">Dai accesso admin</button></div></td></tr>';
   },
   scrivi: async function (o, ruolo) {
+    if (Prot.attive()) await Prot.setAdmin(o.email, ruolo === 'ADMIN');   // il permesso vero è sulla protezione Google
     var t = DB.t.OPERATORI, prima = o.ruolo; o.ruolo = ruolo;
     await Promise.all([API.batchUpdate(DB.id, [{ range: t.cell('ruolo', o._r), values: [[ruolo]] }]), API.append(DB.id, 'LOG', [App.log('ACCESSO_ADMIN', 'OPERATORI', o.email, { prima: prima, dopo: ruolo })])]);
   },
   set: async function (i, on) {
     var o = DB.t.OPERATORI.rows[i];
     if (!on && L.s(o.email).toLowerCase() === Auth.email && !confirm('Ti stai togliendo l\'accesso admin: confermi?')) { Accessi.render(); return; }
-    try { await Accessi.scrivi(o, on ? 'ADMIN' : 'OPERATORE'); toast((on ? 'Admin: ' : 'Non più admin: ') + o.email, 'ok'); } catch (e) { toast('Errore: ' + e.message, 'ko'); }
+    try { await Accessi.scrivi(o, on ? 'ADMIN' : 'OPERATORE'); toast((on ? 'Admin: ' : 'Non più admin: ') + o.email, 'ok'); } catch (e) { toast('Errore: ' + Prot.msg(e), 'ko'); }
     Accessi.render();
   },
   aggiungi: async function () {
@@ -4150,6 +4333,7 @@ var Accessi = {
     try {
       if (o) await Accessi.scrivi(o, 'ADMIN');
       else {
+        if (Prot.attive()) await Prot.setAdmin(em, true);
         var n = { email: em, nome: nome, sigla: '', ruolo: 'ADMIN', attivo: 'SI' }, r = await API.append(DB.id, 'OPERATORI', [t.toRow(n)]);
         Ack.pushRow(t, n, r); await API.append(DB.id, 'LOG', [App.log('ACCESSO_ADMIN', 'OPERATORI', em, { nuovo: true })]);
       }
