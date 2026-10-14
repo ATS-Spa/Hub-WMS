@@ -913,18 +913,19 @@ var DB = {
   },
   loadLookups: async function (force) {
     var c = force ? null : await DB.cacheGet('lookups');
-    if (!c || !c.anag || (Date.now() - c.ts) > 24 * 3600 * 1000) {
+    if (!c || !c.anag || !c.ubv || (Date.now() - c.ts) > 24 * 3600 * 1000) {
       var art = await DB.loadCols(DB.id, 'ARTICOLI', ['pn', 'mnft']);
       var anag = []; try { anag = await DB.loadCols(DB.id, 'ANAGRAFICA_PN', ['pn', 'mnft']); } catch (e) { console.warn('ANAGRAFICA_PN non disponibile: ' + e.message); }
       var ser = await DB.loadCols(DB.id, 'SERIALI_NOTI', ['seriale', 'pn', 'mnft']);
-      var ub = await DB.loadCols(DB.id, 'UBICAZIONI', ['codice']);
-      c = { ts: Date.now(), art: art, anag: anag, ser: ser, ub: ub.map(function (x) { return x.codice; }) }; await DB.cacheSet('lookups', c);
+      var ub = await DB.loadCols(DB.id, 'UBICAZIONI', ['codice', 'codice_vlt']);
+      c = { ts: Date.now(), art: art, anag: anag, ser: ser, ub: ub.map(function (x) { return x.codice; }), ubv: ub.map(function (x) { return [x.codice, x.codice_vlt]; }) }; await DB.cacheSet('lookups', c);
     }
     // P/N noti = ARTICOLI + ANAGRAFICA_PN (CSV GitHub); valgono anche senza produttore, come nello script di pulizia
     App._pnKeys = null; DB.artPn = {}; DB.pnSet = {};
     c.art.concat(c.anag || []).forEach(function (a) { var k = L.up(a.pn); if (!k) return; DB.pnSet[k] = 1; if (a.mnft && !DB.artPn[k]) DB.artPn[k] = a.mnft; });
     DB.serNoti = {}; c.ser.forEach(function (s) { if (s.seriale) DB.serNoti[L.up(s.seriale)] = s; });
     DB.ubicazioni = c.ub;
+    DB.ubBin = {}; DB.ubVlt = {}; (c.ubv || []).forEach(function (x) { var b = L.up(x[0]), v = L.up(x[1]); if (v && !DB.ubBin[v]) DB.ubBin[v] = b; if (b) DB.ubVlt[b] = v; });
   }
 };
 
@@ -1062,7 +1063,8 @@ var Ingresso = {
       else if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); clearTimeout(tB); Ingresso.anteprima('fr'); bc.focus(); bc.select(); }
     });
     ub.addEventListener('keydown', function (e) { nextOn(e, function () { Ingresso.aggiungi(); }); });
-    $('scPn').value = lsG('pn_fisso') || ''; Ingresso.pnFisso();
+    $('scPn').value = lsG('pn_fisso') || ''; Ingresso.pnFisso(true); if (Ingresso.needUbi()) $('scUbi').value = lsG('ubi_fissa') || '';
+    ub.addEventListener('change', function () { ub.value = L.up(ub.value); lsS('ubi_fissa', ub.value); });
     Ingresso.lockScan(); Ingresso.ricalcola(); Ingresso.renderOggi();
   },
   T: function () {
@@ -1082,8 +1084,15 @@ var Ingresso = {
   save: function () { lsS('draft_' + Auth.email, Ingresso.rows.length ? { testata: Ingresso.T(), rows: Ingresso.rows } : null); },
   needUbi: function () { var t = $('inTipo').value; return t === 'NEW' || t === 'REUSE'; },
   // P/N fisso per i carichi NEW/REUSE: vale per tutti i pezzi letti dopo, finché non lo cambi (resta anche se ricarichi la pagina)
-  pnFisso: function () {
-    var v = L.up($('scPn').value); $('scPn').value = v; lsS('pn_fisso', v);
+  pnFisso: function (avvio) {
+    var v = L.up($('scPn').value), prima = L.up(lsG('pn_fisso') || '');
+    $('scPn').value = v; lsS('pn_fisso', v);
+    // l'ubicazione resta la stessa finché non cambi P/N: al cambio riprende quella già usata per quel P/N, altrimenti va scritta
+    if (!avvio && v !== prima) {
+      var u = ''; Ingresso.rows.forEach(function (r) { if (L.up(r.man.pn) === v && r.ubi) u = r.ubi; });
+      $('scUbi').value = u; lsS('ubi_fissa', u);
+      if (!u && v) setTimeout(function () { $('scUbi').focus(); }, 30);
+    }
     $('hPn').innerHTML = !v ? '' : (App.pnEsiste(v) ? '<span style="color:var(--green)">✓ in anagrafica</span>' : '<span style="color:var(--amber)">⚠ non in anagrafica</span>');
   },
   // campo Mittente largo quanto il testo (minimo 210 px, massimo 560 px)
@@ -3743,7 +3752,9 @@ var Nr = {
   sha: async function (t) { var b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)); return Array.prototype.map.call(new Uint8Array(b), function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); },
   elimina: async function (id) {
     var p = Nr.t().rows.find(function (x) { return x.id_pratica === id; }), err = function (m) { $('nrPwdErr').textContent = m; $('nrPwdErr').className = 'hint err'; };
-    if ((await Nr.sha($('nrPwd').value)) !== Nr.PWD) { err('Password errata'); return; }
+    var pw = $('nrPwd').value, par = L.s(DB.param('password_eliminazione', ''));
+    var ok = par ? (/^sha256:/i.test(par) ? (await Nr.sha(pw)) === par.slice(7).toLowerCase() : pw === par) : (await Nr.sha(pw)) === Nr.PWD;
+    if (!ok) { err('Password errata'); return; }
     Modal.progress('Elimino…');
     try {
       var cestino = function (fid) { return L.s(fid) ? API.call('https://www.googleapis.com/drive/v3/files/' + fid + '?supportsAllDrives=true', { method: 'PATCH', body: JSON.stringify({ trashed: true }) }).catch(function (e) { return e; }) : null; };
@@ -4114,33 +4125,61 @@ var Cedolino = {
     }
     return cx - x;
   },
+  // posizione → [codice transcodifica VLT, bin effettivo]
+  pos: function (p) {
+    p = L.up(p); if (!p) return ['', ''];
+    if (DB.ubVlt && DB.ubVlt[p] !== undefined) return [DB.ubVlt[p] || '', p];
+    var t = p.split(/[\s\/]+/)[0], v = t.slice(0, 6);
+    return [p, (DB.ubBin && (DB.ubBin[t] || DB.ubBin[v])) || ''];
+  },
   // gruppi: [{ testa: { mittente, po, ddt, tipo, data }, pezzi: [{ pn, ubicazione, nota }] }]
-  stampa: async function (gruppi) {
-    var lab = [];
+  stampa: function (gruppi) {
+    var f = lsG('cedolino_formato') || 'A5';
+    Modal.html('Stampa cedolino', '<div style="font-size:13px">Formato del foglio:</div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'A5' + (f === 'A5' ? ' ✓' : ''), cls: f === 'A5' ? '' : 'ghost', fn: function () { lsS('cedolino_formato', 'A5'); Cedolino.pdf(gruppi, 'A5'); } },
+       { label: 'A4' + (f === 'A4' ? ' ✓' : ''), cls: f === 'A4' ? '' : 'ghost', fn: function () { lsS('cedolino_formato', 'A4'); Cedolino.pdf(gruppi, 'A4'); } }]);
+  },
+  pdf: async function (gruppi, formato) {
+    var pagine = [];
     gruppi.forEach(function (g) {
       var m = {}, ord = [];
       g.pezzi.forEach(function (p) { var k = L.up(p.pn) + '|' + L.up(p.ubicazione); if (!m[k]) { m[k] = { pn: L.up(p.pn), pos: L.up(p.ubicazione), q: 0, note: [] }; ord.push(k); } m[k].q++; if (L.s(p.nota) && m[k].note.indexOf(L.s(p.nota)) < 0) m[k].note.push(L.s(p.nota)); });
-      ord.forEach(function (k) { lab.push(Object.assign({ t: g.testa }, m[k])); });
+      ord.sort(function (a, b) { return a.localeCompare(b); });
+      if (ord.length) pagine.push({ t: g.testa, righe: ord.map(function (k) { return m[k]; }), tot: g.pezzi.length });
     });
-    if (!lab.length) { toast('Nessun pezzo per il cedolino', 'ko'); return; }
+    if (!pagine.length) { toast('Nessun pezzo per il cedolino', 'ko'); return; }
     var w = window.open('', '_blank');
     try {
       await Ack.loghi();
-      var J = window.jspdf.jsPDF, d = new J({ unit: 'mm', format: [100, 50], orientation: 'landscape' }), logo = (Ack._lg || {}).sx;
-      lab.forEach(function (e, i) {
-        if (i) d.addPage([100, 50], 'landscape');
-        Etichette.testata(d, logo, 'CEDOLINO ' + L.s(e.t.tipo));
-        d.setTextColor(110); d.setFont('helvetica', 'bold'); d.setFontSize(7); d.text('TPN', 3, 15.5); d.text('Q', 97, 15.5, { align: 'right' });
-        d.setTextColor(0); Etichette.fit(d, e.pn || '—', 3, 23, 72, 20, 9);
-        d.setFontSize(22); d.text(String(e.q), 97, 23.5, { align: 'right' });
-        d.setTextColor(110); d.setFontSize(7); d.text('POS.', 3, 28.5);
-        d.setTextColor(0); d.setFont('helvetica', 'bold'); Etichette.fit(d, e.pos || '—', 12, 28.8, 85, 11, 7);
-        var cod = e.pos.replace(/[^0-9A-Z\-. ]/g, '').slice(0, 5);
-        if (cod) { Cedolino.barcode(d, cod, 3, 31, 9, 0.38); d.setFont('helvetica', 'normal'); d.setFontSize(7); d.text('*' + cod + '*', 3, 43); }
-        d.setFont('helvetica', 'normal'); d.setTextColor(60);
-        Etichette.fit(d, [e.t.mittente, e.t.po ? 'PO ' + e.t.po : '', e.t.ddt ? 'DDT ' + e.t.ddt : '', e.t.data ? L.itDate(e.t.data) : ''].filter(Boolean).join(' · '), 97, 47.5, cod ? 60 : 94, 8, 5.5, 'right');
-        if (e.note.length) Etichette.fit(d, e.note.join(' · '), 97, 43, cod ? 60 : 94, 8, 5.5, 'right');
-        d.setTextColor(0);
+      var A4 = formato === 'A4', J = window.jspdf.jsPDF, d = new J({ unit: 'mm', format: 'a' + (A4 ? 4 : 5), orientation: A4 ? 'portrait' : 'landscape' });
+      var W = 210, H = A4 ? 297 : 148, logo = (Ack._lg || {}).sx, rh = 14, first = true;
+      var X = { tpn: 10, note: 50, q: 88, pos: 98, bin: 127, bc: 167 };
+      var testata = function (pg, cont) {
+        if (logo) { try { var wl = Math.min(34, 9 * logo.w / logo.h); d.addImage(logo.url, 'PNG', 10, 8, wl, wl * logo.h / logo.w); } catch (x) { } }
+        d.setTextColor(0); d.setFont('helvetica', 'bold'); d.setFontSize(15); d.text('CEDOLINO ' + L.s(pg.t.tipo) + (cont ? ' (segue)' : ''), W - 10, 14, { align: 'right' });
+        d.setFont('helvetica', 'normal'); d.setFontSize(9);
+        d.text([pg.t.mittente ? 'Mittente: ' + pg.t.mittente : '', pg.t.po ? 'PO/MRN: ' + pg.t.po : '', pg.t.ddt ? 'DDT: ' + pg.t.ddt : '', pg.t.data ? 'Data: ' + L.itDate(pg.t.data) : '', 'Pezzi: ' + pg.tot].filter(Boolean).join('   ·   '), 10, 23);
+        d.setDrawColor(120); d.line(10, 26, W - 10, 26);
+        d.setFont('helvetica', 'bold'); d.setFontSize(8); d.setTextColor(90);
+        d.text('TPN', X.tpn, 31); d.text('NOTE', X.note, 31); d.text('Q', X.q, 31); d.text('POS.', X.pos, 31); d.text('BIN EFFETTIVO', X.bin, 31); d.text('BARCODE POS.', X.bc, 31);
+        d.setTextColor(0); d.setDrawColor(200); d.line(10, 33, W - 10, 33);
+        return 35;
+      };
+      pagine.forEach(function (pg) {
+        if (!first) d.addPage(); first = false;
+        var y = testata(pg, false);
+        pg.righe.forEach(function (r) {
+          if (y + rh > H - 12) { d.addPage(); y = testata(pg, true); }
+          var ps = Cedolino.pos(r.pos), cod = L.up(ps[0]).replace(/[^0-9A-Z\-. ]/g, '').slice(0, 5);
+          d.setFont('helvetica', 'bold'); Etichette.fit(d, r.pn || '—', X.tpn, y + 6, 40, 12, 7);
+          d.setFont('helvetica', 'normal'); var nt = d.splitTextToSize(r.note.join(' · '), 38); d.setFontSize(7.5); d.text(nt.slice(0, 2), X.note, y + 4.5);
+          d.setFont('helvetica', 'bold'); d.setFontSize(14); d.text(String(r.q), X.q, y + 6.5);
+          d.setFontSize(9); d.text(d.splitTextToSize(ps[0] || '—', 27).slice(0, 2), X.pos, y + 4.5);
+          d.setFont('helvetica', 'normal'); Etichette.fit(d, ps[1] || '—', X.bin, y + 5, 38, 8.5, 6);
+          if (cod) { Cedolino.barcode(d, cod, X.bc, y + 0.5, 8.5, 0.3); d.setFontSize(6.5); d.text('*' + cod + '*', X.bc, y + 11.5); }
+          d.setDrawColor(225); d.line(10, y + rh - 1, W - 10, y + rh - 1);
+          y += rh;
+        });
       });
       Ddt.apri(d, w);
     } catch (er) { if (w) w.close(); Modal.open('Cedolino', er.message); }
