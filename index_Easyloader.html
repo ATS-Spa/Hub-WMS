@@ -219,7 +219,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
 .usc-lista{max-height:260px;overflow-y:auto;margin-top:6px}
 .usc-p{display:flex;gap:8px;align-items:flex-start;padding:5px 2px;border-bottom:1px solid var(--border);font-size:12.5px}
 .usc-p.off{opacity:.5}.usc-p.manca{background:rgba(245,158,11,.06)}
-.usc-p input{margin-top:3px}.usc-pi{min-width:0;word-break:break-all}.usc-pd{font-size:11.5px;color:var(--subtle)}
+.usc-p input{margin-top:2px}.usc-pi{min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px}.usc-pd{font-size:11.5px;color:var(--subtle);white-space:nowrap}
 .usc-grid .ack-card table{max-width:100%}
 .ack-grid{grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr))}
 /* ── SMARTPHONE / PALMARE ── */
@@ -510,6 +510,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
         <div class="fg" style="width:170px"><span class="fl">Giorno</span><input class="fc" type="date" id="chvData" onchange="Chv.render()"></div>
         <label style="font-size:12px;color:var(--subtle);display:flex;gap:6px;align-items:center"><input type="checkbox" onchange="Chv.anche=this.checked"> rimanda anche quelle già chiuse</label>
         <div class="spacer"></div>
+        <button class="btn ghost sm" onclick="Chv.excel()" title="Tutte le code del giorno, un foglio per procedura">⬇ Excel tutte le code</button>
         <a class="btn ghost sm" href="ATS_FLM_VLT_Chiusure.user.js" target="_blank" title="Tampermonkey propone l'installazione o l'aggiornamento">📥 Installa script</a>
         <a class="btn ghost sm" href="https://logistictoolvf.net.vodafone.it/" target="vlt">↗ Apri VLT</a>
       </div>
@@ -2205,7 +2206,6 @@ var Chv = {
         if (L.s(u.creato_il).slice(0, 10) !== giorno || u.creato_da === 'MIGRAZIONE' || u.stato === 'ANNULLATO') return;
         if (!L.s(u.fr) || ['NEW', 'REUSE', 'BALANCING'].indexOf(u.tipo) >= 0) return;
         var v = DB.vltMap[u.fr];
-        if (!v) scarti.push({ k: 'IN:' + u.fr, motivo: 'FR non presente nel file VLT (lo script legge comunque lo stato vero su VLT)' });
         add({ k: 'IN:' + u.fr, fr: u.fr, tipo: u.tipo, note: Chv.nota(u.note), stato_file: v ? v.stato : '', conf_serial: u.seriale, conf_tmpn: u.pn, seriale: u.seriale });
       });
     } else if (proc === 'FERME') {
@@ -2262,12 +2262,38 @@ var Chv = {
     if (!rq || !rq.proc || !Chv.PROC[rq.proc] || (Date.now() - (rq.ts || 0)) > 180000 || Chv._serviti[rq.ts]) return;
     Chv._serviti[rq.ts] = 1; Chv.invia(rq.proc, { giorno: rq.giorno || L.isoToday() });
   },
+  // Excel delle code: un foglio per procedura (o solo quella scelta), con l'esito di oggi di ogni scheda
+  excel: async function (proc) {
+    var giorno = Chv.giorno(), P = proc ? [proc] : Object.keys(Chv.PROC), fogli = [];
+    try {
+      await Busy.wrap((async function () {
+        for (var i = 0; i < P.length; i++) {
+          var x = await Chv.prepara(P[i], giorno), f = Chv.fatti(P[i], giorno), ult = {};
+          ((DB.t.VLT_CHIUSURE || {}).rows || []).forEach(function (r) { if (r.procedura === P[i] && r.giorno === giorno) ult[r.chiave] = r; });
+          var rma = P[i] === 'RMA', fr = P[i] === 'INGRESSI' || P[i] === 'FERME';
+          fogli.push({ nome: Chv.PROC[P[i]].slice(0, 31).replace(/[\/?*\[\]:]/g, ' '),
+            headers: rma ? ['RMA', 'Seriali', 'Destinazione', 'AWB', 'DDT', 'Esito', 'Stato prima', 'Stato dopo', 'Dettaglio', 'Ora']
+              : (fr ? ['FR', 'Seriale', 'P/N conferma', 'Tipo', 'Stato VLT (file)', 'Nota', 'Esito', 'Stato prima', 'Stato dopo', 'Dettaglio', 'Ora']
+                : ['FR', 'Seriale', 'Riparatore', 'AWB', 'DDT', 'Esito', 'Stato prima', 'Stato dopo', 'Dettaglio', 'Ora']),
+            rows: x.tutti.map(function (it) {
+              var e = ult[it.k] || {}, es = [f[it.k] || 'DA FARE', e.stato_prima || '', e.stato_dopo || '', e.dettaglio || '', L.s(e.data_ora).slice(11, 16)];
+              if (rma) return [it.rma, (it.serials || []).join(' '), it.dest, it.awb, it.ddt].concat(es);
+              if (fr) return [it.fr, it.seriale, it.conf_tmpn, it.tipo || 'FAULTY', it.stato_file, it.note].concat(es);
+              return [it.fr, it.seriale, it.dest, it.awb, it.ddt].concat(es);
+            }) });
+          var fo = fogli[fogli.length - 1], iE = fo.headers.indexOf('Esito'), iD = fo.headers.indexOf('Dettaglio');
+          x.scarti.forEach(function (sc) { var r = fo.headers.map(function () { return ''; }); r[0] = L.s(sc.k).replace(/^\w+:/, ''); r[iE] = 'NON INVIABILE'; r[iD] = sc.motivo; fo.rows.push(r); });
+        }
+      })());
+      Xls.scarica('Code_VLT_' + (proc ? proc + '_' : '') + giorno, fogli);
+    } catch (e) { Modal.open('Excel non creato', e.message); }
+  },
   vedi: async function (proc) {
     var p; try { p = await Busy.wrap(Chv.prepara(proc, Chv.giorno())); } catch (e) { Modal.open('Errore', e.message); return; }
     var f = Chv.fatti(proc, Chv.giorno());
     var rows = p.tutti.map(function (it) { var e = f[it.k]; return '<tr' + (Chv.FATTO[e] ? ' class="r-off"' : (e === 'ERRORE' ? ' class="r-err"' : '')) + '><td class="mono">' + esc(it.fr || it.rma) + '</td><td class="mono">' + esc(it.seriale || (it.serials || []).join(' ')) + '</td><td>' + esc(it.stato_file || it.dest || '') + '</td><td>' + esc(it.note || it.awb || '') + '</td><td>' + esc(e || 'da fare') + '</td></tr>'; }).join('');
     Modal.html(Chv.PROC[proc] + ' · ' + L.itDate(Chv.giorno()), '<div class="tbl-wrap modal-scroll"><table><thead><tr><th>' + (proc === 'RMA' ? 'RMA' : 'FR') + '</th><th>Seriale</th><th>' + (proc === 'ACK' || proc === 'RMA' ? 'Destinazione' : 'Stato VLT (file)') + '</th><th>' + (proc === 'ACK' || proc === 'RMA' ? 'AWB' : 'Nota') + '</th><th>Esito</th></tr></thead><tbody>' + (rows || '<tr><td colspan="5" class="empty">Nessuna scheda</td></tr>') + '</tbody></table></div>' +
-      (p.scarti.length ? '<div class="hint warn" style="margin-top:8px">Non inviabili: ' + p.scarti.map(function (s) { return esc(s.motivo); }).join(' · ') + '</div>' : ''), [{ label: 'Chiudi', cls: 'ghost' }], true);
+      (p.scarti.length ? '<div class="hint warn" style="margin-top:8px">Non inviabili: ' + p.scarti.map(function (s) { return esc(s.motivo); }).join(' · ') + '</div>' : ''), [{ label: 'Chiudi', cls: 'ghost' }, { label: '⬇ Excel', fn: function () { Chv.excel(proc); } }], true);
   },
   show: async function () {
     Chv.init(); Chv.ping(); setTimeout(function () { if (App.tab === 'chiusure') Chv.render(); }, 1200);
@@ -2290,7 +2316,7 @@ var Chv = {
       var n = { OK: 0, GIA_FATTO: 0, ERRORE: 0, SALTATO: 0 }; Object.keys(last).forEach(function (k) { n[last[k]] = (n[last[k]] || 0) + 1; });
       html += '<div class="ack-card"><div class="t">' + esc(Chv.PROC[p]) + '</div><div class="hint">' + esc(Chv.DESC[p]) + '</div>' +
         '<div class="ack-nums"><span>chiuse <b>' + n.OK + '</b></span><span>già a posto <b>' + n.GIA_FATTO + '</b></span><span' + (n.ERRORE ? ' style="border-color:var(--red)"' : '') + '>errori <b>' + n.ERRORE + '</b></span><span>saltate <b>' + n.SALTATO + '</b></span></div>' +
-        '<div class="row"><button class="btn sm" onclick="Chv.invia(\'' + p + '\')"' + (b ? '' : ' disabled') + '>▶ Invia a VLT</button><button class="btn ghost sm" onclick="Chv.vedi(\'' + p + '\')">👁 Vedi coda</button></div></div>';
+        '<div class="row"><button class="btn sm" onclick="Chv.invia(\'' + p + '\')"' + (b ? '' : ' disabled') + '>▶ Invia a VLT</button><button class="btn ghost sm" onclick="Chv.vedi(\'' + p + '\')">👁 Vedi coda</button><button class="btn ghost sm" onclick="Chv.excel(\'' + p + '\')">⬇ Excel</button></div></div>';
     });
     html += '</div>';
     var ult = es.slice(-400).reverse();
@@ -3650,7 +3676,7 @@ var Rma = {
         '<div class="usc-lista">' + lista.map(function (p) {
           var off = !done && !p.manca && esc0[p.u.id_unita];
           var cb = done ? '' : (p.manca ? '<input type="checkbox" disabled title="Si spunta da solo quando c\'è l\'RMA">' : '<input type="checkbox"' + (off ? '' : ' checked') + ' title="Togli dall\'uscita di oggi" onchange="Rma.toggle(\'' + p.u.id_unita + '\',this.checked)">');
-          return '<div class="usc-p' + (off ? ' off' : '') + (p.manca ? ' manca' : '') + '">' + cb + '<div class="usc-pi"><div class="mono">' + esc(p.u.seriale) + '</div><div class="usc-pd">' + esc(p.u.pn) + ' · ' + (p.manca ? '<span class="pill p-amber">manca RMA</span>' : 'RMA <b class="mono">' + esc(p.rma) + '</b>') + (p.fonte ? ' · ' + esc(p.fonte) : '') + '</div></div></div>';
+          return '<div class="usc-p' + (off ? ' off' : '') + (p.manca ? ' manca' : '') + '">' + cb + '<div class="usc-pi"><span class="mono">' + esc(p.u.seriale) + '</span><span class="usc-pd">' + esc(p.u.pn) + ' · ' + (p.manca ? '<span class="pill p-amber">manca RMA</span>' : 'RMA <b class="mono">' + esc(p.rma) + '</b>') + (p.fonte ? ' · ' + esc(p.fonte) : '') + '</span></div></div>';
         }).join('') + '</div></details>' +
         '<div style="font-size:12px;color:var(--subtle)">Colli: ' + col.length + ' · ' + Math.round(peso * 100) / 100 + ' kg</div>' +
         (done ? '' : '<table style="width:auto;font-size:12px"><tbody>' + col.map(function (c, i) {
