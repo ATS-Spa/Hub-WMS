@@ -219,7 +219,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
 .usc-lista{max-height:260px;overflow-y:auto;margin-top:6px}
 .usc-p{display:flex;gap:8px;align-items:flex-start;padding:5px 2px;border-bottom:1px solid var(--border);font-size:12.5px}
 .usc-p.off{opacity:.5}.usc-p.manca{background:rgba(245,158,11,.06)}
-.usc-p input{margin-top:2px}.usc-pi{min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 10px}.usc-pd{font-size:11.5px;color:var(--subtle);white-space:nowrap}
+.usc-p input{margin-top:2px}.usc-pi{min-width:0;display:flex;flex-wrap:wrap;align-items:baseline;gap:2px 6px}.usc-pd{font-size:11.5px;color:var(--subtle);white-space:nowrap}
 .usc-grid .ack-card table{max-width:100%}
 .ack-grid{grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr))}
 /* ── SMARTPHONE / PALMARE ── */
@@ -3676,7 +3676,7 @@ var Rma = {
         '<div class="usc-lista">' + lista.map(function (p) {
           var off = !done && !p.manca && esc0[p.u.id_unita];
           var cb = done ? '' : (p.manca ? '<input type="checkbox" disabled title="Si spunta da solo quando c\'è l\'RMA">' : '<input type="checkbox"' + (off ? '' : ' checked') + ' title="Togli dall\'uscita di oggi" onchange="Rma.toggle(\'' + p.u.id_unita + '\',this.checked)">');
-          return '<div class="usc-p' + (off ? ' off' : '') + (p.manca ? ' manca' : '') + '">' + cb + '<div class="usc-pi"><span class="mono">' + esc(p.u.seriale) + '</span><span class="usc-pd">' + esc(p.u.pn) + ' · ' + (p.manca ? '<span class="pill p-amber">manca RMA</span>' : 'RMA <b class="mono">' + esc(p.rma) + '</b>') + (p.fonte ? ' · ' + esc(p.fonte) : '') + '</span></div></div>';
+          return '<div class="usc-p' + (off ? ' off' : '') + (p.manca ? ' manca' : '') + '">' + cb + '<div class="usc-pi"><span class="mono">' + esc(p.u.seriale) + '</span><span class="usc-pd">· ' + esc(p.u.pn) + ' · ' + (p.manca ? '<span class="pill p-amber">manca RMA</span>' : 'RMA <b class="mono">' + esc(p.rma) + '</b>') + (p.fonte ? ' · ' + esc(p.fonte) : '') + '</span></div></div>';
         }).join('') + '</div></details>' +
         '<div style="font-size:12px;color:var(--subtle)">Colli: ' + col.length + ' · ' + Math.round(peso * 100) / 100 + ' kg</div>' +
         (done ? '' : '<table style="width:auto;font-size:12px"><tbody>' + col.map(function (c, i) {
