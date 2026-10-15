@@ -215,7 +215,12 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
 .dash-sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;flex-shrink:0}
 .dash-axis{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px}
 .progress{font-family:var(--ff-mono);font-size:12px;color:var(--subtle);margin-top:10px;white-space:pre-line}
-.usc-grid{grid-template-columns:repeat(auto-fill,minmax(min(380px,100%),1fr))}
+.ack-grid.usc-grid{grid-template-columns:repeat(auto-fill,minmax(min(410px,100%),1fr))}
+.usc-lista{max-height:260px;overflow-y:auto;margin-top:6px}
+.usc-p{display:flex;gap:8px;align-items:flex-start;padding:5px 2px;border-bottom:1px solid var(--border);font-size:12.5px}
+.usc-p.off{opacity:.5}.usc-p.manca{background:rgba(245,158,11,.06)}
+.usc-p input{margin-top:3px}.usc-pi{min-width:0;word-break:break-all}.usc-pd{font-size:11.5px;color:var(--subtle)}
+.usc-grid .ack-card table{max-width:100%}
 .ack-grid{grid-template-columns:repeat(auto-fill,minmax(min(300px,100%),1fr))}
 /* ── SMARTPHONE / PALMARE ── */
 @media (max-width:760px){
@@ -3187,7 +3192,7 @@ var Rma = {
   },
   excel: function () {
     if (Rma.sez !== 'usc') { Rma.grid(Rma.sez).excel({ inv: 'Inventario_giornaliero', rit: 'Ritorni_in_giacenza', car: 'Carichi_NEW_REUSE' }[Rma.sez]); return; }
-    var rows = []; Rma.gruppi().forEach(function (g) { (g.s && g.s.stato === 'SPEDITA' ? [] : g.pezzi).forEach(function (p) { rows.push([g.dest, p.u.seriale, p.u.pn, p.u.tipo, p.rma, p.po || '', p.fonte, Rma.escl()[p.u.id_unita] ? 'ESCLUSO OGGI' : '', g.s ? g.s.stato : 'DA PREPARARE', g.s ? g.s.awb : '', g.s ? g.s.n_ddt : '']); }); });
+    var rows = []; Rma.gruppi().forEach(function (g) { (g.s && g.s.stato === 'SPEDITA' ? [] : g.pezzi).forEach(function (p) { rows.push([g.dest, p.u.seriale, p.u.pn, p.u.tipo, p.rma, p.po || '', p.fonte, p.manca ? 'MANCA RMA' : (Rma.escl()[p.u.id_unita] ? 'ESCLUSO OGGI' : ''), g.s ? g.s.stato : 'DA PREPARARE', g.s ? g.s.awb : '', g.s ? g.s.n_ddt : '']); }); });
     Xls.scarica('Uscite_RMA_' + $('uscData').value, [{ nome: 'Uscite RMA', headers: ['Destinazione', 'Seriale', 'P/N', 'Tipo', 'RMA', 'PO', 'Fonte', 'Escluso', 'Stato', 'AWB', 'DDT'], rows: rows }]);
   },
   // etichette 10x5 per le righe filtrate dell'inventario con un RMA: destinazione di uscita (variazione) e ID scheda
@@ -3197,7 +3202,7 @@ var Rma = {
     // tutte le schede variate tra le righe filtrate (anche se l'RMA non è ancora stato inserito)
     Etichette.rma(vis.filter(function (u) { return Rma.varia(u); }).map(function (u) {
       var v = Rma.varia(u), x = by[u.id_unita], a = (Rma.abb || {})[u.id_unita];
-      var rma = x ? x.rma : (L.s(Rma.dv(u, 'rma')) || (a ? a.rma.id_rma : ''));
+      var rma = x && x.rma ? x.rma : (L.s(Rma.dv(u, 'rma')) || (a ? a.rma.id_rma : ''));
       return { rma: rma, dest: v.nuova, prima: v.prima, idScheda: Etichette.idScheda(u), idUnita: u.id_unita, seriale: u.seriale };
     }));
   },
@@ -3323,7 +3328,7 @@ var Rma = {
       '<div class="hint">Solo pezzi NEW/REUSE in giacenza. Excel: colonne SERIALE, RMA, DESTINAZIONE, PO, NOTE (anche PV DESTINO, P.O, SERIAL).</div>';
     return '<div class="row"><div class="fg" style="width:160px"><span class="fl">Giorno di uscita</span><input class="fc" type="date" id="uscData2" value="' + esc($('uscData').value) + '" onchange="$(\'uscData\').value=this.value;Rma.render()"></div><div class="spacer"></div>' +
       '<button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button> <button class="btn green" id="uscTutti" onclick="Rma.emettiTutti()">Genera i DDT pronti</button></div>' +
-      '<div class="hint" style="margin-top:8px">Un DDT per destinazione (serie RMA). Pronta = colli e peso salvati + AWB. In uscita: GOOD con RMA (creato o giacenza), BALANCING arrivate, carichi NEW/REUSE.</div>';
+      '<div class="hint" style="margin-top:8px">Un DDT per destinazione (serie RMA). Pronta = colli e peso salvati + AWB. Le schede ci sono già per tutte le destinazioni di oggi: puoi mettere colli e AWB subito. I pezzi senza RMA restano non spuntati e si spuntano da soli appena l\'RMA c\'è; se al DDT ne manca qualcuno, l\'app chiede conferma.</div>';
   },
   render: function (rifai) {
     if (!Rma.loaded) return;
@@ -3595,7 +3600,11 @@ var Rma = {
         var a = abb[u.id_unita];
         if (L.s(u.rma)) out.push({ u: u, rma: u.rma, dest: u.destinazione_prevista, fonte: 'RMA creato', causale: 'RMA' });
         else if (a) out.push({ u: u, rma: a.rma.id_rma, dest: a.variazione ? Rma.destRma(a.rma) : u.destinazione_prevista, fonte: 'RMA giacenza', causale: 'RMA', rit: a.rma });
-      } else if (u.tipo === 'BALANCING' && L.s(u.rma)) out.push({ u: u, rma: u.rma, dest: App.destDaSigla(u.destinazione_prevista), fonte: 'Balancing', causale: 'BALANCING' });
+        else out.push({ u: u, rma: '', dest: u.destinazione_prevista, fonte: 'GOOD', causale: 'RMA', manca: true });
+      } else if (u.tipo === 'BALANCING') {
+        if (L.s(u.rma)) out.push({ u: u, rma: u.rma, dest: App.destDaSigla(u.destinazione_prevista), fonte: 'Balancing', causale: 'BALANCING' });
+        else out.push({ u: u, rma: '', dest: App.destDaSigla(u.destinazione_prevista), fonte: 'Balancing', causale: 'BALANCING', manca: true });
+      }
     });
     var U = {}; DB.t.UNITA.rows.forEach(function (u) { U[u.id_unita] = u; });
     Rma.carichi().forEach(function (c) { var u = U[c.id_unita]; if (u && u.stato === 'IN_LAVORAZIONE') out.push({ u: u, rma: c.rma, dest: c.destinazione, po: c.po_mrn, fonte: 'Carico ' + c.tipo, causale: 'RMA', car: c }); });
@@ -3612,15 +3621,17 @@ var Rma = {
     Rma.daSpedire().forEach(function (x) { var k = L.up(x.dest); (g[k] = g[k] || { dest: x.dest, pezzi: [] }).pezzi.push(x); });
     DB.t.SPEDIZIONI.rows.forEach(function (s) { if (s.tipo === 'RMA' && L.normDate(s.data) === d && s.stato !== 'ANNULLATA') { var k = L.up(s.destinatario); g[k] = g[k] || { dest: s.destinatario, pezzi: [] }; } });
     return Object.keys(g).sort().map(function (k) {
-      var x = g[k]; x.s = Rma.sped(d, x.dest); x.attivi = x.pezzi.filter(function (p) { return !esc0[p.u.id_unita]; });
+      var x = g[k]; x.s = Rma.sped(d, x.dest); x.mancanti = x.pezzi.filter(function (p) { return p.manca; });
+      x.pezzi = x.pezzi.filter(function (p) { return !p.manca; }).concat(x.mancanti);
+      x.attivi = x.pezzi.filter(function (p) { return !p.manca && !esc0[p.u.id_unita]; });
       x.pronta = x.s && x.s.stato === 'PRONTA' && L.s(x.s.awb) && x.attivi.length > 0; return x;
     });
   },
   renderUscite: function () {
     var G = Rma.gruppi(), d = $('uscData').value, esc0 = Rma.escl(), nP = G.filter(function (g) { return g.pronta; }).length;
     if ($('uscTutti')) { $('uscTutti').disabled = !nP; $('uscTutti').textContent = 'Genera i DDT pronti' + (nP ? ' (' + nP + ')' : ''); }
-    var tot = G.reduce(function (a, g) { return a + g.attivi.length; }, 0), sped = G.filter(function (g) { return g.s && g.s.stato === 'SPEDITA'; }).length;
-    $('rmaStats').innerHTML = '<div class="stat"><b>' + G.length + '</b><span>destinazioni</span></div><div class="stat"><b>' + tot + '</b><span>pezzi da spedire</span></div><div class="stat"><b style="color:var(--violet)">' + nP + '</b><span>pronte per ddt</span></div><div class="stat"><b style="color:var(--green)">' + sped + '</b><span>spedite</span></div>';
+    var tot = G.reduce(function (a, g) { return a + g.attivi.length; }, 0), nM = G.reduce(function (a, g) { return a + (g.s && g.s.stato === 'SPEDITA' ? 0 : g.mancanti.length); }, 0), sped = G.filter(function (g) { return g.s && g.s.stato === 'SPEDITA'; }).length;
+    $('rmaStats').innerHTML = '<div class="stat"><b>' + G.length + '</b><span>destinazioni</span></div><div class="stat"><b>' + tot + '</b><span>pezzi da spedire</span></div>' + (nM ? '<div class="stat"><b style="color:var(--amber)">' + nM + '</b><span>senza RMA</span></div>' : '') + '<div class="stat"><b style="color:var(--violet)">' + nP + '</b><span>pronte per ddt</span></div><div class="stat"><b style="color:var(--green)">' + sped + '</b><span>spedite</span></div>';
     var PILL = { BOZZA: 'p-blue', PRONTA: 'p-violet', SPEDITA: 'p-green' };
     $('rmaUsc').innerHTML = G.length ? '<div class="ack-grid usc-grid">' + G.map(function (g) {
       var s = g.s, k = Ack.key(g.dest), cp = Rma.cp(g.dest), st = s ? s.stato : 'DA PREPARARE', done = s && s.stato === 'SPEDITA', lock = done ? ' disabled' : '';
@@ -3635,11 +3646,12 @@ var Rma = {
       return '<div class="ack-card">' +
         '<div class="row" style="align-items:center"><span class="t">' + esc(g.dest) + '</span><div class="spacer"></div><span class="pill ' + (PILL[st] || '') + '">' + esc(st) + '</span></div>' +
         '<div class="hint">' + (cp && cp.indirizzo_completo ? esc(cp.indirizzo_completo) : '<span style="color:var(--amber)">indirizzo non in anagrafica CONTROPARTI</span>') + (s && s.n_ddt ? ' · <b>DDT ' + esc(s.n_ddt) + '</b>' : '') + '</div>' +
-        '<details' + (done ? '' : ' open') + '><summary style="cursor:pointer;font-size:12.5px;color:var(--subtle)">' + (done ? lista.length + ' pezzi spediti' : g.attivi.length + ' pezzi in uscita' + (g.pezzi.length - g.attivi.length ? ' · ' + (g.pezzi.length - g.attivi.length) + ' esclusi oggi' : '')) + '</summary>' +
-        '<div style="max-height:220px;overflow:auto;margin-top:6px"><table><tbody>' + lista.map(function (p) {
-          var off = !done && esc0[p.u.id_unita];
-          return '<tr' + (off ? ' class="r-off"' : '') + '>' + (done ? '' : '<td><input type="checkbox"' + (off ? '' : ' checked') + ' title="Togli dall\'uscita di oggi" onchange="Rma.toggle(\'' + p.u.id_unita + '\',this.checked)"></td>') + '<td class="mono">' + esc(p.u.seriale) + '</td><td class="mono">' + esc(p.u.pn) + '</td><td class="mono">' + esc(p.rma) + '</td><td style="font-size:11px">' + esc(p.fonte || '') + '</td></tr>';
-        }).join('') + '</tbody></table></div></details>' +
+        '<details' + (done ? '' : ' open') + '><summary style="cursor:pointer;font-size:12.5px;color:var(--subtle)">' + (done ? lista.length + ' pezzi spediti' : g.attivi.length + ' pezzi in uscita' + (g.pezzi.length - g.attivi.length - g.mancanti.length ? ' · ' + (g.pezzi.length - g.attivi.length - g.mancanti.length) + ' esclusi oggi' : '') + (g.mancanti.length ? ' · <b style="color:var(--amber)">' + g.mancanti.length + ' senza RMA</b>' : '')) + '</summary>' +
+        '<div class="usc-lista">' + lista.map(function (p) {
+          var off = !done && !p.manca && esc0[p.u.id_unita];
+          var cb = done ? '' : (p.manca ? '<input type="checkbox" disabled title="Si spunta da solo quando c\'è l\'RMA">' : '<input type="checkbox"' + (off ? '' : ' checked') + ' title="Togli dall\'uscita di oggi" onchange="Rma.toggle(\'' + p.u.id_unita + '\',this.checked)">');
+          return '<div class="usc-p' + (off ? ' off' : '') + (p.manca ? ' manca' : '') + '">' + cb + '<div class="usc-pi"><div class="mono">' + esc(p.u.seriale) + '</div><div class="usc-pd">' + esc(p.u.pn) + ' · ' + (p.manca ? '<span class="pill p-amber">manca RMA</span>' : 'RMA <b class="mono">' + esc(p.rma) + '</b>') + (p.fonte ? ' · ' + esc(p.fonte) : '') + '</div></div></div>';
+        }).join('') + '</div></details>' +
         '<div style="font-size:12px;color:var(--subtle)">Colli: ' + col.length + ' · ' + Math.round(peso * 100) / 100 + ' kg</div>' +
         (done ? '' : '<table style="width:auto;font-size:12px"><tbody>' + col.map(function (c, i) {
           return '<tr><td><select class="fc" style="width:86px;padding:4px 6px" onchange="Rma.collo(\'' + k + '\',' + i + ',\'tipo\',this.value)"><option' + (c.tipo === 'COLLO' ? ' selected' : '') + '>COLLO</option><option' + (c.tipo === 'PLT' ? ' selected' : '') + '>PLT</option></select></td>' +
@@ -3649,7 +3661,7 @@ var Rma = {
         '<div class="row"><div class="fg" style="flex:1;min-width:130px"><span class="fl">AWB (Service Desk)</span><input class="fc mono" id="uawb_' + k + '" value="' + esc(s ? s.awb : '') + '"' + lock + ' oninput="var v=L.vettoreDaAwb(this.value,DB.t.VETTORI.rows);if(v)$(\'uvet_' + k + '\').value=v"></div>' +
         '<div class="fg" style="width:110px"><span class="fl">Vettore</span><input class="fc" id="uvet_' + k + '" list="dlVettori" value="' + esc(s ? s.vettore : '') + '"' + lock + '></div></div>' +
         '<div class="row" style="align-items:center">' + bt + '</div></div>';
-    }).join('') + '</div>' : '<div class="card empty">Nessun pezzo pronto a uscire: servono GOOD con RMA, BALANCING arrivate o carichi NEW/REUSE.</div>';
+    }).join('') + '</div>' : '<div class="card empty">Nessun pezzo da far uscire: GOOD e BALANCING in giacenza con destinazione, o carichi NEW/REUSE.</div>';
   },
   collo: function (k, i, f, v) { var c = Rma.colli[k] = Rma.colli[k] || []; if (f === 'del') c.splice(i, 1); else if (f === 'add') c.push({ tipo: (c[c.length - 1] || {}).tipo || 'COLLO', misura: '', peso: '' }); else c[i][f] = L.s(v).toUpperCase(); Rma.renderUscite(); },
   salvaDest: async function (dest) {
@@ -3679,8 +3691,17 @@ var Rma = {
     await API.batchUpdate(DB.id, [{ range: t.cell('id_spedizione', r), values: [[o.id_spedizione]] }]);
     return Ack.pushRow(t, o, r);
   },
-  emettiUno: async function (dest) { await Rma.emettiLista([dest]); },
-  emettiTutti: async function () { var G = Rma.gruppi().filter(function (g) { return g.pronta; }); if (!G.length) return; if (!(await Modal.confirm('Genera ' + G.length + ' DDT', G.map(function (g) { return g.dest + ' · ' + g.attivi.length + ' pezzi · AWB ' + g.s.awb; }).join('\n')))) return; await Rma.emettiLista(G.map(function (g) { return g.dest; })); },
+  // pezzi della stessa destinazione ancora senza RMA: si chiede conferma prima di generare il DDT senza di loro
+  mancaRma: function (G) {
+    var m = G.filter(function (g) { return g.mancanti && g.mancanti.length; });
+    return m.length ? '\n\n⚠ RMA NON ANCORA CREATO per pezzi delle stesse destinazioni:\n' + m.map(function (g) { return '• ' + g.dest + ': ' + g.mancanti.map(function (p) { return p.u.seriale; }).join(', '); }).join('\n') + '\n\nSe vai avanti escono senza questi pezzi (restano in giacenza).' : '';
+  },
+  emettiUno: async function (dest) {
+    var g = Rma.gruppi().find(function (x) { return L.up(x.dest) === L.up(dest); }), w = g ? Rma.mancaRma([g]) : '';
+    if (w && !(await Modal.confirm('Manca RMA · ' + dest, 'Genero il DDT per ' + dest + ' con ' + g.attivi.length + ' pezzi.' + w))) return;
+    await Rma.emettiLista([dest]);
+  },
+  emettiTutti: async function () { var G = Rma.gruppi().filter(function (g) { return g.pronta; }); if (!G.length) return; if (!(await Modal.confirm('Genera ' + G.length + ' DDT', G.map(function (g) { return g.dest + ' · ' + g.attivi.length + ' pezzi · AWB ' + g.s.awb; }).join('\n') + Rma.mancaRma(G)))) return; await Rma.emettiLista(G.map(function (g) { return g.dest; })); },
   // DDT multipli: uno per destinazione, numerati in sequenza dalla serie RMA
   emettiLista: async function (dests) {
     if (Rma.busy) return; Rma.busy = true;
