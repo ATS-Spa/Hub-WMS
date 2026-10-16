@@ -819,7 +819,9 @@ var CFG = {
   FOLDER_ID: '1LFGOh_x-SEF_Kf3Uln4UKzpjdrlxApVc',
   DB_MAIN: 'DB_EASYLOADER',
   VLT_ID: '1KxP-nGn6AbenWhZXi1EAPRxSKeCRdEoESH4UzMqqjdk',
-  VLT_SHEET: 'Foglio1',
+  VLT_SHEET: 'FR',            // foglio dei FR (prima si chiamava Foglio1)
+  VLT_GID: 244367079,          // se il nome non c'è lo cerco per gid (il gid non cambia rinominando)
+  RMA_GID: 745113444,          // foglio RMA scritto dal backend fr_rma
   HUAWEI_ID: '1oorvMVY8DIfBfVl2Bdi4EmL7C3swNgijOdP9sOEFskQ',
   ASSETS: 'https://ats-spa.github.io/Hub-WMS/',   // loghi del DDT: stessa repository dell'Hub
   HUAWEI_RANGE: "'CERCA FR HUAWEI ASSOCIATO'!F2:I",   // F = seriale, I = FR (come la funzione con nome del prototipo)
@@ -1051,12 +1053,25 @@ var DB = {
     return d < cut && now >= cut || (now - d) > 24 * 3600 * 1000;
   },
   loadVlt: async function (force) {
+    if (force) DB._vltFogli = null;   // rilegge i nomi dei fogli (se qualcuno li ha rinominati)
     var c = force ? null : await DB.cacheGet('vlt');
     if (!c || DB.vltStale(c.ts) || (c.rows[0] && !('data_apertura' in c.rows[0]))) {
-      var rows = await DB.loadCols(CFG.VLT_ID, CFG.VLT_SHEET, ['fr_id', 'data_apertura', 'depot_origine', 'f_mat_serial_no', 'f_mat_tmpn', 'awb_cw', 'note', 'stato', 'riparatore', 'advanced_swap', 'f_mat_material']);
+      var rows = await DB.loadCols(CFG.VLT_ID, await DB.vltFoglio(CFG.VLT_SHEET, CFG.VLT_GID, 'Foglio1'), ['fr_id', 'data_apertura', 'depot_origine', 'f_mat_serial_no', 'f_mat_tmpn', 'awb_cw', 'note', 'stato', 'riparatore', 'advanced_swap', 'f_mat_material']);
       c = { ts: Date.now(), rows: rows }; await DB.cacheSet('vlt', c);
     }
     DB.vlt = c; DB.indexVlt();
+  },
+  // nome reale di un foglio del file VLT: prima per nome, poi per gid (sopravvive a una rinomina), poi il nome di riserva
+  vltFoglio: async function (nome, gid, riserva) {
+    if (!DB._vltFogli) {
+      try { var js = await API.call(API.S + CFG.VLT_ID + '?fields=' + encodeURIComponent('sheets(properties(sheetId,title))')); DB._vltFogli = (js.sheets || []).map(function (x) { return x.properties; }); }
+      catch (e) { return nome; }
+    }
+    var f = DB._vltFogli, ok = function (t) { return f.some(function (x) { return x.title === t; }); };
+    if (nome && ok(nome)) return nome;
+    var g = f.find(function (x) { return String(x.sheetId) === String(gid); }); if (g) return g.title;
+    if (riserva && ok(riserva)) return riserva;
+    return nome;
   },
   // indici VLT (FR e seriale), dopo aver applicato le rettifiche attive
   indexVlt: function () {
@@ -3622,6 +3637,7 @@ var Rma = {
     if (forza) Modal.progress('Leggo i ritorni da VLT…');
     try {
       var v;
+      fg = await DB.vltFoglio(fg, L.s(DB.param('rma_vlt_gid', '')) || CFG.RMA_GID);
       try { v = (await API.batchGet(CFG.VLT_ID, [API.q(fg) + '!A:Z']))[0] || []; }
       catch (e) { if (forza) throw new Error('foglio "' + fg + '" non trovato nel file VLT: il backend fr_rma non l\'ha ancora scritto'); return; }
       var h = (v[0] || []).map(L.s), ie = h.indexOf('Estratto Il');
