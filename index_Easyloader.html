@@ -3382,6 +3382,13 @@ var Rma = {
     if (a && a.variazione) return { nuova: Rma.destRma(a.rma), prima: cur, da: 'RMA' };
     return null;
   },
+  // ritorno in giacenza della scheda: quello abbinato oppure, se l'RMA creato è già un ritorno (es. associato in automatico), quel ritorno
+  ritDi: function (u) {
+    var a = (Rma.abb || {})[u.id_unita]; if (a) return a;
+    var v = L.s(Rma.dv(u, 'rma')); if (!v || !DB.t.RMA_RITORNI) return null;
+    var r = DB.t.RMA_RITORNI.rows.find(function (x) { return x.id_rma === v && x.stato !== 'ANNULLATO'; });
+    return r ? { rma: r, variazione: false } : null;
+  },
   dv: function (u, f) { var d = Rma.dirty[u.id_unita]; return d && d[f] !== undefined ? d[f] : u[f === 'dest' ? 'destinazione_prevista' : 'rma']; },
   // RMA giacenza aperti "ieri" (dal giorno lavorativo precedente a oggi escluso: il lunedì prende venerdì, sabato e domenica)
   daIeri: function (r) {
@@ -3505,10 +3512,10 @@ var Rma = {
           } },
         { k: 'rma', label: 'RMA creato (SD)', filter: 'text', get: function (u) { return Rma.dv(u, 'rma'); },
           html: function (u) { if (u.tipo === 'BALANCING') return '<span class="mono">' + esc(u.rma) + '</span>'; var d = Rma.dirty[u.id_unita], on = d && d.rma !== undefined; return '<input class="edit-cell mono' + (on ? ' dirty' : '') + '" style="width:11ch" value="' + esc(Rma.dv(u, 'rma')) + '" placeholder="—" onchange="Rma.set(\'' + u.id_unita + '\',\'rma\',this.value)">'; } },
-        { k: 'rmag', label: 'RMA giacenza', filter: 'text', cls: 'mono', get: function (u) { var a = Rma.abb[u.id_unita]; return a ? a.rma.id_rma : ''; }, html: function (u) { var a = Rma.abb[u.id_unita]; return a ? '<span style="color:var(--green)">' + esc(a.rma.id_rma) + '</span>' : ''; } },
-        { k: 'open', label: 'Data open', cls: 'mono', get: function (u) { var a = Rma.abb[u.id_unita]; return a ? a.rma.data_apertura.slice(0, 10) : ''; } },
-        { k: 'scad', label: 'Scadenza', cls: 'mono', get: function (u) { var a = Rma.abb[u.id_unita]; return a ? a.rma.data_scadenza : ''; }, html: function (u) { var a = Rma.abb[u.id_unita], sc = a ? a.rma.data_scadenza : ''; return '<span' + (sc && sc < oggi() ? ' style="color:var(--red)"' : '') + '>' + esc(sc) + '</span>'; } },
-        { k: 'nsd', label: 'Note SD', filter: 'text', get: function (u) { var a = Rma.abb[u.id_unita]; return a && a.rma.failure_report ? 'RITORNO GIACENZA FR ' + a.rma.failure_report : ''; } }
+        { k: 'rmag', label: 'RMA giacenza', filter: 'text', cls: 'mono', get: function (u) { var a = Rma.ritDi(u); return a ? a.rma.id_rma : ''; }, html: function (u) { var a = Rma.ritDi(u); return a ? '<span style="color:var(--green)">' + esc(a.rma.id_rma) + '</span>' : ''; } },
+        { k: 'open', label: 'Data open', cls: 'mono', get: function (u) { var a = Rma.ritDi(u); return a ? a.rma.data_apertura.slice(0, 10) : ''; } },
+        { k: 'scad', label: 'Scadenza', cls: 'mono', get: function (u) { var a = Rma.ritDi(u); return a ? a.rma.data_scadenza : ''; }, html: function (u) { var a = Rma.ritDi(u), sc = a ? a.rma.data_scadenza : ''; return '<span' + (sc && sc < oggi() ? ' style="color:var(--red)"' : '') + '>' + esc(sc) + '</span>'; } },
+        { k: 'nsd', label: 'Note SD', filter: 'text', get: function (u) { var a = Rma.ritDi(u); return a && a.rma.failure_report ? 'RITORNO GIACENZA FR ' + a.rma.failure_report : ''; } }
       ]
     }));
     if (s === 'rit') {
