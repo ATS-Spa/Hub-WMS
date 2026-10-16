@@ -656,6 +656,7 @@ L.vettoreDaAwb = function (awb, vettori) {
   return best;
 };
 // controllo seriale/TPN contro VLT (formula H4 del prototipo)
+L.mat = function (m) { return L.s(m).replace(/\.0$/, '').replace(/^0+/, ''); };
 L.notaControllo = function (seriale, pn, vltSer, vltPn) {
   var s = L.up(seriale), sv = L.up(vltSer);
   var serOk = !sv || s === sv || L.up(L.afterSpace(seriale)) === sv;
@@ -1047,15 +1048,16 @@ var DB = {
   },
   loadLookups: async function (force) {
     var c = force ? null : await DB.cacheGet('lookups');
-    if (!c || !c.anag || !c.ubv || (Date.now() - c.ts) > 24 * 3600 * 1000) {
-      var art = await DB.loadCols(DB.id, 'ARTICOLI', ['pn', 'mnft']);
+    if (!c || !c.anag || !c.ubv || !c.mat || (Date.now() - c.ts) > 24 * 3600 * 1000) {
+      var art; try { art = await DB.loadCols(DB.id, 'ARTICOLI', ['pn', 'mnft', 'material']); } catch (e) { art = await DB.loadCols(DB.id, 'ARTICOLI', ['pn', 'mnft']); }
       var anag = []; try { anag = await DB.loadCols(DB.id, 'ANAGRAFICA_PN', ['pn', 'mnft']); } catch (e) { console.warn('ANAGRAFICA_PN non disponibile: ' + e.message); }
       var ser = await DB.loadCols(DB.id, 'SERIALI_NOTI', ['seriale', 'pn', 'mnft']);
       var ub = await DB.loadCols(DB.id, 'UBICAZIONI', ['codice', 'codice_vlt']);
-      c = { ts: Date.now(), art: art, anag: anag, ser: ser, ub: ub.map(function (x) { return x.codice; }), ubv: ub.map(function (x) { return [x.codice, x.codice_vlt]; }) }; await DB.cacheSet('lookups', c);
+      c = { ts: Date.now(), mat: 1, art: art, anag: anag, ser: ser, ub: ub.map(function (x) { return x.codice; }), ubv: ub.map(function (x) { return [x.codice, x.codice_vlt]; }) }; await DB.cacheSet('lookups', c);
     }
     // P/N noti = ARTICOLI + ANAGRAFICA_PN (CSV GitHub); valgono anche senza produttore, come nello script di pulizia
-    App._pnKeys = null; DB.artPn = {}; DB.pnSet = {};
+    App._pnKeys = null; DB.artPn = {}; DB.pnSet = {}; DB.matPn = {};
+    c.art.forEach(function (a) { var m = L.mat(a.material); if (m && L.s(a.pn) && !DB.matPn[m]) DB.matPn[m] = L.s(a.pn); });
     c.art.concat(c.anag || []).forEach(function (a) { var k = L.up(a.pn); if (!k) return; DB.pnSet[k] = 1; if (a.mnft && !DB.artPn[k]) DB.artPn[k] = a.mnft; });
     DB.serNoti = {}; c.ser.forEach(function (s) { if (s.seriale) DB.serNoti[L.up(s.seriale)] = s; });
     DB.ubicazioni = c.ub;
@@ -1123,7 +1125,7 @@ var App = {
     App.fillLists(); App.syncInfo();
     Ingresso.init(); Giacenze.init(); Ack.init(); if (App.isAdmin) Admin.init();
     App.go(lsG('tab') || 'ingresso');
-    Sync.avvia(); Chv.init(); Jun.tab().catch(function () { });
+    Sync.avvia(); Chv.init(); Jun.tab().catch(function () { }); setTimeout(function () { Spec.mov().then(function () { Ingresso.ricalcola(); }).catch(function () { }); }, 3000);
   },
   go: function (k) {
     var t = TABS.find(function (x) { return x.k === k; }) || TABS[0];
@@ -1353,11 +1355,20 @@ var Ingresso = {
     var sn = DB.serNoti[L.up(o.ser)];
     var scP = r.bc ? Ingresso.pulisci(r.bc, o.rip) : { pn: L.scegliPn(o.ser, o.ser, o.rip, regole, App.pnEsiste).pn, fonte: 'regole barcode' };
     o.pn = r.man.pn || scP.pn || (sn && sn.pn) || (v ? v.f_mat_tmpn : '');
-    if (!r.man.pn && scP.pn && scP.fonte) o.msgs.push(['info', 'P/N da ' + scP.fonte + (scP.scartati && scP.scartati.length ? ' (scartati: ' + scP.scartati.join(', ') + ')' : '')]);
+    // P/N assente su VLT: si propone quello dell'anagrafica per il material dell'FR, e la scheda va in pending con la nota classica
+    if (v && !L.s(v.f_mat_tmpn) && (o.tipo === 'FAULTY' || o.tipo === 'GOOD')) {
+      o.pnVltAssente = true;
+      var pm = DB.matPn && DB.matPn[L.mat(v.f_mat_material)];
+      if (pm && !r.man.pn && (!o.pn || !App.pnEsiste(o.pn))) { o.pn = pm; o.msgs = o.msgs.filter(function (m) { return !/^P\/N da /.test(m[1]); }); o.pnDaMat = true; }
+      if (o.pnDaMat) o.msgs.push(['info', 'P/N da anagrafica per il material ' + L.mat(v.f_mat_material)]);
+      o.msgs.push(['warn', 'P/N assente su VLT' + (o.pn ? (o.tipo === 'FAULTY' ? ': nota pending "INSERIRE TPN CORRETTO"' : '') : (L.s(v.f_mat_material) ? ' e material ' + L.mat(v.f_mat_material) + ' non in anagrafica' : ''))]); o.warn = true;
+    }
+    if (!r.man.pn && scP.pn && scP.fonte && !o.pnDaMat) o.msgs.push(['info', 'P/N da ' + scP.fonte + (scP.scartati && scP.scartati.length ? ' (scartati: ' + scP.scartati.join(', ') + ')' : '')]);
     if (!r.man.ser && scP.sospettoS) o.msgs.push(['info', 'Barcode con prefisso S: senza S sarebbe ' + scP.sospettoS]);   // senza barcode le regole si applicano al seriale VLT
     var rp = DB.t.RIPARATORI.rows.find(function (x) { return L.up(x.codice) === L.up(App.aliasRip(o.rip)); });
     o.mnft = r.man.mnft || DB.artPn[L.up(o.pn)] || (sn && sn.mnft) || (rp && rp.mnft_default) || '';
     if (v) {
+      o.vltStato = L.s(v.stato);
       o.statoVlt = '| ' + v.stato + (v.note ? ' | ' + v.note : '');
       var dep = DB.t.DEPOT_VLT.rows.find(function (d) { return d.depot_vlt === v.depot_origine; });
       o.depDest = dep ? dep.destinazione : '';
@@ -1381,6 +1392,7 @@ var Ingresso = {
       if (frIn === '98787') o.destinazione = 'INGEGNERIA';
       if (v) {
         var auto = L.notaControllo(o.ser, o.pn, v.f_mat_serial_no, v.f_mat_tmpn);
+        if (o.pnVltAssente && o.pn && auto.indexOf('INSERIRE TPN CORRETTO') < 0) auto = (auto ? auto + ' ' : '') + 'INSERIRE TPN CORRETTO : ' + o.pn;
         o.nota = (r.man.nota !== undefined) ? r.man.nota : auto;
         if (auto) { o.msgs.push(['warn', auto]); o.warn = true; o.anomalia = auto; }
         if (L.up(v.stato) === 'OPEN') { o.msgs.push(['warn', 'FR in stato OPEN su VLT: scrivi al Service Desk']); o.warn = true; o.mail = { tipo: 'open' }; }
@@ -1397,9 +1409,13 @@ var Ingresso = {
     ctx.serSeen[key] = ctx.n;
     if (o.fr) { if (ctx.frSeen[o.fr]) { o.msgs.push(['warn', 'FR già letto (riga ' + ctx.frSeen[o.fr] + ')']); o.warn = true; } ctx.frSeen[o.fr] = ctx.n; }
     var g = ctx.giac[key] || ctx.giac[L.up(L.afterSpace(o.ser))];
-    if (g) { o.msgs.push(['err', 'Seriale già in giacenza (' + g.id_unita + ', ' + g.tipo + ', entrato ' + g.data_in + ')']); o.err = true; }
+    if (g) {
+      var mi = (Sto.dati.cur || []).find(function (m) { return m.id_mov === g.id_mov_in; }), sIn = mi ? L.s(mi.stato_vlt) : '', vg = g.fr ? DB.vltMap[g.fr] : null, sNow = vg ? L.s(vg.stato) : '';
+      var ferma = g.tipo === 'FAULTY' && sNow && L.s(DB.param('vlt_stati_fr_da_chiudere', '')).split(';').map(L.s).indexOf(sNow) >= 0;
+      o.msgs.push(['err', 'Seriale già in giacenza (' + g.id_unita + ', ' + g.tipo + ', entrato ' + L.itDate(g.data_in) + (sIn ? ' con stato VLT "' + sIn + '"' : '') + (sNow ? (sIn ? ', ora "' : ', stato VLT ora "') + sNow + '"' : '') + ')' + (ferma ? ': non ricaricarlo, si chiude su VLT con Spare ferme in HUB' : '')]); o.err = true;
+    }
     if (o.bc && L.s(o.bc) !== L.s(o.ser)) o.msgs.push(['info', 'Seriale estratto dal barcode']);
-    if (!o.pn) { o.msgs.push(['warn', 'P/N non ricavato: inseriscilo']); o.warn = true; }
+    if (!o.pn) { o.msgs.push(['err', 'P/N non ricavato: inseriscilo (senza P/N non si carica)']); o.err = true; }
     else if (DB.pnSet && Object.keys(DB.pnSet).length) {
       o.pnAnag = App.pnEsiste(o.pn);
       if (!o.pnAnag) { var sim = App.pnSimile(o.pn); o.pnSimile = sim; o.msgs.push(['warn', 'P/N ' + o.pn + ' non in anagrafica articoli' + (sim ? ' (simile: ' + sim + ')' : '')]); o.warn = true; }
@@ -1504,6 +1520,9 @@ var Ingresso = {
     var N = ['RICEZIONI', 'MOVIMENTI', 'ANOMALIE', 'LOG'];
     var h = await API.batchGet(DB.id, N.map(function (n) { return API.q(n) + '!1:1'; }));
     var o = {}; N.forEach(function (n, i) { o[n] = new Table(n, h[i][0] || []); });
+    if (o.MOVIMENTI.header.length && !('stato_vlt' in o.MOVIMENTI.idx)) {
+      try { await API.batchUpdate(DB.id, [{ range: API.q('MOVIMENTI') + '!' + L.colLetter(o.MOVIMENTI.header.length) + '1', values: [['stato_vlt']] }]); o.MOVIMENTI = new Table('MOVIMENTI', o.MOVIMENTI.header.concat('stato_vlt')); } catch (e) { }
+    }
     Ingresso._heads = o; return o;
   },
   // scrittura in 2-3 giri: (1) ricezione, giacenza e movimenti in parallelo, (2) ID e riferimenti incrociati + log + anomalie in parallelo
@@ -1520,7 +1539,7 @@ var Ingresso = {
     var mObjs = C.map(function (c, i) {
       return { data_ora: T.data + ' ' + now.slice(11), data_registrazione_vlt: L.isoToday(), posizione_note: [uObjs[i].ubicazione, uObjs[i].n_plt].filter(Boolean).join(' / '), direzione: 'IN', causale: 'INGRESSO', seriale: c.ser, pn: c.pn, mnft: c.mnft, tipo: c.tipo, fr: c.fr, rma: c.rma,
         po_mrn: T.po, controparte: T.mittente, awb: T.awb, vettore: T.vettore, ddt: T.ddt, riparatore: c.rip, ubicazione_a: uObjs[i].ubicazione,
-        operatore: me, operatore_sigla: sigla, note: c.nota, origine: 'APP' };
+        operatore: me, operatore_sigla: sigla, note: c.nota, stato_vlt: c.vltStato || '', origine: 'APP' };
     });
     Modal.progress('1/2 ricezione, giacenza e movimenti');
     var res = await Promise.allSettled([
@@ -2159,7 +2178,7 @@ var Chv = {
     INGRESSI: 'FR delle schede registrate in ingresso nel giorno: received and verify, poi Pending Service Desk (con nota), Close for Scrap (nota SCRAP) o Failure Report Sent; GOOD di ritorno → Good Material Received.',
     ACK: 'FR spuntati negli ACK con DDT del giorno → Failed Material sent to Repairer con l\'AWB dell\'ACK.',
     RMA: 'RMA usciti con DDT del giorno → Shipped From CW, deposito HUB_, AWB. Semi-automatico: controlli i seriali e salvi tu.',
-    FERME: 'FAULTY in giacenza con stato VLT tra quelli del parametro vlt_stati_fr_da_chiudere (stessa regola di EXPORT_FR_DA_CHIUDERE).'
+    FERME: 'FAULTY in giacenza con stato VLT tra quelli del parametro vlt_stati_fr_da_chiudere. Se la nota VLT contiene "OK" (bonificata dal SD) la nota si ignora e va in Failure Report Sent.'
   },
   FATTO: { OK: 1, GIA_FATTO: 1 },
   bridge: null, inited: false, anche: false, _q: Promise.resolve(), _serviti: {},
@@ -2213,7 +2232,8 @@ var Chv = {
         add({ k: 'IN:' + u.fr, fr: u.fr, tipo: u.tipo, note: Chv.nota(u.note), stato_file: v ? v.stato : '', conf_serial: u.seriale, conf_tmpn: u.pn, seriale: u.seriale });
       });
     } else if (proc === 'FERME') {
-      Export.righe().forEach(function (r) { add({ k: 'HUB:' + r[0], fr: r[0], seriale: r[1], conf_serial: r[1], conf_tmpn: r[2], note: r[3], stato_file: r[4] }); });
+      // nota VLT con "OK" = bonificata dal Service Desk: la nota si ignora e la scheda si chiude normalmente (Failure Report Sent)
+      Export.righe().forEach(function (r) { var v = DB.vltMap[r[0]], nv = v ? L.s(v.note) : '', ok = /(^|[^A-Z])OK([^A-Z]|$)/i.test(nv); add({ k: 'HUB:' + r[0], fr: r[0], seriale: r[1], conf_serial: r[1], conf_tmpn: r[2], note: r[3], stato_file: r[4], nota_vlt: nv, bonificata: ok }); });
     } else {
       await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_RIGHE']);
       var sp = DB.t.SPEDIZIONI.rows.filter(function (s) { return s.tipo === proc && L.s(s.n_ddt) && (L.s(s.data_ddt) || L.s(s.data)).slice(0, 10) === giorno && s.stato !== 'ANNULLATA'; });
@@ -2282,7 +2302,7 @@ var Chv = {
             rows: x.tutti.map(function (it) {
               var e = ult[it.k] || {}, es = [f[it.k] || 'DA FARE', e.stato_prima || '', e.stato_dopo || '', e.dettaglio || '', L.s(e.data_ora).slice(11, 16)];
               if (rma) return [it.rma, (it.serials || []).join(' '), it.dest, it.awb, it.ddt].concat(es);
-              if (fr) return [it.fr, it.seriale, it.conf_tmpn, it.tipo || 'FAULTY', it.stato_file, it.note].concat(es);
+              if (fr) return [it.fr, it.seriale, it.conf_tmpn, it.tipo || 'FAULTY', it.stato_file, it.note + (it.bonificata ? ' [VLT: OK bonificata → Failure Report Sent]' : '')].concat(es);
               return [it.fr, it.seriale, it.dest, it.awb, it.ddt].concat(es);
             }) });
           var fo = fogli[fogli.length - 1], iE = fo.headers.indexOf('Esito'), iD = fo.headers.indexOf('Dettaglio');
@@ -4459,7 +4479,7 @@ var Vlt = {
 var Sto = {
   fonte: 'cur', dati: {}, sez: 'IN', grids: {},
   COLS: ['id_mov', 'data_ora', 'data_registrazione_vlt', 'data_in_merci', 'direzione', 'causale', 'id_unita', 'seriale', 'pn', 'mnft', 'tipo', 'fr', 'rma', 'po_mrn', 'controparte', 'awb', 'vettore', 'ddt',
-    'id_ricezione', 'id_spedizione', 'riparatore', 'ubicazione_da', 'ubicazione_a', 'posizione_note', 'operatore', 'operatore_sigla', 'note', 'anomalia', 'origine'],
+    'id_ricezione', 'id_spedizione', 'riparatore', 'ubicazione_da', 'ubicazione_a', 'posizione_note', 'operatore', 'operatore_sigla', 'note', 'anomalia', 'origine', 'stato_vlt'],
   SEZ: { IN: 'Inbound', OUT: 'Outbound', INT: 'Interni (note, blocchi, variazioni)', ALL: 'Tutti' },
   colsSafe: async function (ss, sheet) {
     var h = ((await API.batchGet(ss, [API.q(sheet) + '!1:1']))[0][0] || []).map(L.s);
@@ -4526,10 +4546,11 @@ var Sto = {
       sped: { k: 'id_spedizione', label: 'ID spedizione', cls: 'mono' },
       ubda: { k: 'ubicazione_da', label: 'Ubicazione da', filter: 'text' },
       uba: { k: 'ubicazione_a', label: 'Ubicazione a', filter: 'text' },
-      orig: { k: 'origine', label: 'Origine', filter: 'select' }
+      orig: { k: 'origine', label: 'Origine', filter: 'select' },
+      svlt: { k: 'stato_vlt', label: 'Stato VLT all\'ingresso', filter: 'select' }
     };
     var ord = {
-      IN: ['az', 'id', 'tipo', 'fr', 'rma', 'data', 'vlt', 'po', 'cp', 'awb', 'vet', 'ddt', 'op', 'mnft', 'ser', 'pn', 'rip', 'note', 'pos', 'merci', 'anom', 'caus', 'uid', 'ric', 'uba', 'orig'],
+      IN: ['az', 'id', 'tipo', 'fr', 'rma', 'data', 'vlt', 'svlt', 'po', 'cp', 'awb', 'vet', 'ddt', 'op', 'mnft', 'ser', 'pn', 'rip', 'note', 'pos', 'merci', 'anom', 'caus', 'uid', 'ric', 'uba', 'orig'],
       OUT: ['az', 'id', 'tipo', 'fr', 'po', 'rma', 'cp', 'data', 'awb', 'vet', 'ddt', 'op', 'mnft', 'ser', 'pn', 'rip', 'note', 'caus', 'uid', 'sped', 'ubda', 'orig'],
       INT: ['id', 'data', 'caus', 'tipo', 'ser', 'fr', 'pn', 'rip', 'uid', 'note', 'op'],
       ALL: ['az', 'id', 'data', 'dirz', 'caus', 'tipo', 'fr', 'rma', 'ser', 'pn', 'mnft', 'cp', 'awb', 'vet', 'ddt', 'po', 'rip', 'op', 'note', 'uid', 'orig']
