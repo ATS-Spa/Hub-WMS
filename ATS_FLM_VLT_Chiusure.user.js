@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ATS FLM → VLT · Chiusure
 // @namespace    ats-spa.flm
-// @version      1.0.1
+// @version      1.0.2
 // @description  Chiude su VLT ingressi del giorno (op. linea), ACK, RMA e spare ferme in HUB con i dati dell'app "ATS - Fastweb FLM". Sostituisce i 4 script con i CSV.
 // @match        https://logistictoolvf.net.vodafone.it/*
 // @match        https://ats-spa.github.io/*
@@ -26,7 +26,7 @@
 */
 (function () {
   'use strict';
-  var VER = '1.0.1';
+  var VER = '1.0.2';
   var VLT_HOST = 'logistictoolvf.net.vodafone.it';
   var K = { CODA: 'ats_coda', STATO: 'ats_stato_', PEND: 'ats_esiti_pending', RICH: 'ats_richiesta', APP: 'ats_app_url', VIVO: 'ats_vlt_vivo', RUN: 'ats_run', UI: 'ats_ui', RICEVUTI: 'ats_esiti_ricevuti' };
   // esiti da consegnare = scritti da VLT (PEND) meno quelli già confermati dall'app (RICEVUTI): ognuno scrive solo la sua chiave
@@ -229,8 +229,14 @@
     var FINALI = ['close for scrap material', 'good material received', 'pending service desk', 'failure report sent'];
     var NOTI = ['failed material sent', 'failed material received and verify', 'open'];
     var esitoOk = function (prima, dopo, det) { return { esito: 'OK', stato_prima: prima, stato_dopo: dopo, dettaglio: det || '' }; };
-    var chiudiFR = async function (it) {
-      var S0 = await apriFR(it.fr), s = norm(S0), note = String(it.note || '').trim(), scrap = /scrap/i.test(note);
+    var RX_OK = /(^|[^A-Z])OK([^A-Z]|$)/i;
+    var chiudiFR = async function (it, proc) {
+      var S0 = await apriFR(it.fr), s = norm(S0), note = String(it.note || '').trim(), scrap = /scrap/i.test(note), bonif = false;
+      // Spare ferme in HUB: nota VLT con "OK" = bonificata dal Service Desk → la nota si ignora, chiusura normale
+      if (proc === 'FERME' && !scrap) {
+        var nv = $('#field_note'), testoNv = nv ? String(nv.value || '') : '';
+        if (it.bonificata || RX_OK.test(testoNv)) { bonif = true; note = ''; }
+      }
       if (FINALI.indexOf(s) >= 0) return { esito: 'GIA_FATTO', stato_prima: S0, stato_dopo: S0, dettaglio: 'già chiusa su VLT' };
       // GOOD tornata dal riparatore
       if (s === 'failed material sent to repairer') {
@@ -279,7 +285,7 @@
         await salva(RX_FR); return esitoOk(S0, 'Pending Service Desk');
       }
       await scegli('#field_frStatus', 'Failure Report Sent');
-      await salva(RX_FR); return esitoOk(S0, 'Failure Report Sent');
+      await salva(RX_FR); return esitoOk(S0, 'Failure Report Sent', bonif ? 'nota VLT con OK: bonificata' : '');
     };
     var chiudiAck = async function (it) {
       var S0 = await apriFR(it.fr);
@@ -350,7 +356,7 @@
     };
     var PROC = {
       INGRESSI: { nome: 'Ingressi del giorno', fai: chiudiFR },
-      FERME: { nome: 'Spare ferme in HUB', fai: chiudiFR },
+      FERME: { nome: 'Spare ferme in HUB', fai: function (it) { return chiudiFR(it, 'FERME'); } },
       ACK: { nome: 'ACK del giorno', fai: chiudiAck },
       RMA: { nome: 'RMA del giorno', fai: chiudiRma }
     };
