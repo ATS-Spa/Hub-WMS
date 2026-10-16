@@ -4668,10 +4668,35 @@ var LogV = {
     });
     LogV.grid.render();
   },
+  // dettaglio leggibile: "prima / dopo" diventa una tabella Campo · Prima · Dopo, il resto coppie campo → valore
+  et: function (k) { k = String(k).replace(/_/g, ' '); return k.charAt(0).toUpperCase() + k.slice(1); },
+  val: function (v) {
+    if (v === null || v === undefined || v === '') return '<span style="color:var(--muted)">—</span>';
+    if (Array.isArray(v)) return v.length ? '<div>' + v.map(function (x) { return '<div>• ' + (typeof x === 'object' ? LogV.tab(x) : esc(String(x))) + '</div>'; }).join('') + '</div>' : '<span style="color:var(--muted)">—</span>';
+    if (typeof v === 'object') return LogV.tab(v);
+    return '<span class="mono">' + esc(String(v)) + '</span>';
+  },
+  tab: function (o) {
+    return '<table style="width:100%;font-size:12.5px"><tbody>' + Object.keys(o).map(function (k) { return '<tr><td style="width:190px;color:var(--muted);font-size:11px;text-transform:uppercase;letter-spacing:.5px;vertical-align:top">' + esc(LogV.et(k)) + '</td><td>' + LogV.val(o[k]) + '</td></tr>'; }).join('') + '</tbody></table>';
+  },
+  vista: function (o) {
+    if (!o || typeof o !== 'object') return '<div class="mono">' + esc(String(o)) + '</div>';
+    var h = '', pd = o.prima && typeof o.prima === 'object' && o.dopo && typeof o.dopo === 'object';
+    if (pd) {
+      var ks = Object.keys(o.prima).concat(Object.keys(o.dopo).filter(function (k) { return !(k in o.prima); })).filter(function (k) { return !/^(rev|modificato_il|modificato_da|_r)$/.test(k); });
+      h += '<div class="fl" style="margin-bottom:4px">Modifiche</div><div class="tbl-wrap"><table style="font-size:12.5px"><thead><tr><th>Campo</th><th>Prima</th><th>Dopo</th></tr></thead><tbody>' +
+        ks.map(function (k) { var a = o.prima[k], b = o.dopo[k], cambia = k in o.dopo && JSON.stringify(a) !== JSON.stringify(b); return '<tr' + (cambia ? ' class="r-var"' : '') + '><td>' + esc(LogV.et(k)) + '</td><td>' + LogV.val(a) + '</td><td>' + (k in o.dopo ? LogV.val(b) : '<span style="color:var(--muted)">invariato</span>') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+    }
+    var resto = {}; Object.keys(o).forEach(function (k) { if (!pd || (k !== 'prima' && k !== 'dopo')) resto[k] = o[k]; });
+    if (Object.keys(resto).length) h += (pd ? '<div class="fl" style="margin:12px 0 4px">Altri dati</div>' : '') + LogV.tab(resto);
+    return h || '<span style="color:var(--muted)">Nessun dettaglio</span>';
+  },
   apri: function (i) {
     var r = (LogV.rows || []).find(function (x) { return x._i === i; }); if (!r) return;
-    var j = L.s(r.dettaglio); try { j = JSON.stringify(JSON.parse(j), null, 2); } catch (e) { }
-    Modal.html(r.azione + ' · ' + r.foglio + ' ' + r.id_record, '<div style="font-size:12.5px;color:var(--subtle);margin-bottom:8px">' + esc(Sto.dataOra(r.data_ora)) + ' · ' + esc(r.utente) + '</div><pre class="mono" style="white-space:pre-wrap;font-size:12px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;max-height:60vh;overflow:auto">' + esc(j) + '</pre>', [{ label: 'Chiudi', cls: 'ghost' }], true);
+    var j = L.s(r.dettaglio), o = null; try { o = JSON.parse(j); } catch (e) { }
+    var corpo = o !== null ? LogV.vista(o) : '<div class="mono" style="white-space:pre-wrap">' + esc(j) + '</div>';
+    Modal.html(r.azione + ' · ' + r.foglio + ' ' + r.id_record, '<div style="font-size:12.5px;color:var(--subtle);margin-bottom:10px">' + esc(Sto.dataOra(r.data_ora)) + ' · ' + esc(r.utente) + '</div><div style="max-height:62vh;overflow:auto">' + corpo + '</div>' +
+      (o !== null ? '<details style="margin-top:10px"><summary style="cursor:pointer;font-size:12px;color:var(--muted)">Testo originale</summary><pre class="mono" style="white-space:pre-wrap;font-size:11.5px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:8px;max-height:30vh;overflow:auto">' + esc(JSON.stringify(o, null, 2)) + '</pre></details>' : ''), [{ label: 'Chiudi', cls: 'ghost' }], true);
   },
   excel: function () { var p = [$('logDa').value, $('logA').value]; LogV.grid && LogV.grid.excel('LOG_' + p[0] + '_' + p[1]); }
 };
