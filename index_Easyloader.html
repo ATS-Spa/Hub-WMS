@@ -1123,7 +1123,7 @@ var App = {
     App.fillLists(); App.syncInfo();
     Ingresso.init(); Giacenze.init(); Ack.init(); if (App.isAdmin) Admin.init();
     App.go(lsG('tab') || 'ingresso');
-    Sync.avvia(); Chv.init();
+    Sync.avvia(); Chv.init(); Jun.tab().catch(function () { });
   },
   go: function (k) {
     var t = TABS.find(function (x) { return x.k === k; }) || TABS[0];
@@ -1333,6 +1333,8 @@ var Ingresso = {
     var ser0 = r.bc ? Ingresso.pulisci(r.bc, '').ser : '';
     // lettura dal seriale: l'FR si cerca da solo (stessa logica dell'anteprima)
     if (!frIn && r.bc) { var tf = Ingresso.trovaFr(r.bc, T.tipo); frIn = tf.fr; frOrig = tf.origine; pick = tf.pick; }
+    var jg = T.tipo === 'GOOD' && !frIn ? Jun.perGood(ser0 || r.bc) : null;
+    if (jg && L.s(jg.fr)) { frIn = L.s(jg.fr); frOrig = 'JUNIPER'; }
     var o = { fr: frIn, rma: '', bc: r.bc, msgs: [], err: false, warn: false, tipo: T.tipo, ubicazione: r.ubi, plt: r.plt || '', destinazione: '', statoVlt: '', nota: '', mail: null };
     var v = frIn ? DB.vltMap[frIn] : null;
     // balancing: con il flag attivo, un numero digitato che non è un FR è l'RMA della balancing
@@ -1346,6 +1348,7 @@ var Ingresso = {
       if (pick.chiuso) { o.msgs.push(['warn', 'L\'FR più recente di questo seriale è chiuso su VLT (' + pick.row.stato + ')']); o.warn = true; }
     }
     if (frOrig === 'HUAWEI') o.msgs.push(['info', 'FR ricavato dal file Huawei (seriale → FR)']);
+    if (jg) o.msgs.push(['info', 'GOOD Juniper · pratica ' + jg.id_juniper + (L.s(jg.fr) ? ' · FR dalla pratica' : ' · faulty non ancora arrivata: l\'FR si associa da solo quando la ricevi')]);
     o.rip = r.man.rip || (v ? v.riparatore : '');
     var sn = DB.serNoti[L.up(o.ser)];
     var scP = r.bc ? Ingresso.pulisci(r.bc, o.rip) : { pn: L.scegliPn(o.ser, o.ser, o.rip, regole, App.pnEsiste).pn, fonte: 'regole barcode' };
@@ -1372,8 +1375,8 @@ var Ingresso = {
     } else if (o.tipo === 'GOOD') {
       o.destinazione = frIn === '98787' ? 'INGEGNERIA' : (o.depDest || '');
       o.nota = (r.man.nota !== undefined) ? r.man.nota : (o.destinazione ? o.destinazione + ' / ' + ctx.nextLabel() : '');
-      if (!v) { o.msgs.push(['warn', 'FR non trovato in VLT']); o.warn = true; }
-      if (!o.destinazione) { o.msgs.push(['warn', 'Destinazione non ricavata dal depot VLT']); o.warn = true; }
+      if (!v && !(jg && !L.s(jg.fr))) { o.msgs.push(['warn', 'FR non trovato in VLT']); o.warn = true; }
+      if (!o.destinazione && !(jg && !L.s(jg.fr))) { o.msgs.push(['warn', 'Destinazione non ricavata dal depot VLT']); o.warn = true; }
     } else {
       if (frIn === '98787') o.destinazione = 'INGEGNERIA';
       if (v) {
@@ -1485,6 +1488,7 @@ var Ingresso = {
       var esito = await Ingresso.scrivi(T, C);
       Modal.close(); toast(C.length + ' pezzi caricati', 'ok');
       if (esito && (T.tipo === 'NEW' || T.tipo === 'REUSE')) Nr.daIngresso(T, esito.pezzi, esito.idR);
+      if (esito && esito.pezzi.some(function (p) { return p.tipo === 'FAULTY'; })) Jun.dopoIngresso(esito.pezzi, L.isoToday());
       Export.scrivi().catch(function (e) { toast('Export FR da chiudere non aggiornato: ' + e.message, 'ko'); });
       Ingresso.rows = []; Ingresso.save(); Ingresso.setTestata({ data: L.isoToday() }); Ingresso.ricalcola(); Ingresso.renderOggi(); App.syncInfo();
     } catch (e) {
@@ -3991,10 +3995,10 @@ var Jun = new Crud('jun', {
     { k: 'data_ricezione_faulty', label: 'Ricezione faulty', type: 'date' }, { k: 'awb_ups_faulty', label: 'AWB UPS faulty', mono: true }, { k: 'data_uscita_faulty', label: 'Uscita faulty', type: 'date' },
     { k: 'good_model_id', label: 'Model ID good', mono: true }, { k: 'good_seriale', label: 'Seriale good', mono: true }, { k: 'good_pn', label: 'P/N good', mono: true },
     { k: 'good_data_ricezione', label: 'Ricezione good', type: 'date' }, { k: 'data_ricezione_materiale_juniper', label: 'Ricezione materiale Juniper', type: 'date' },
-    { k: 'stato', label: 'Stato', type: 'select', opts: ['APERTA', 'FAULTY_SPEDITA', 'GOOD_IN_USCITA', 'CHIUSA'] }, { k: 'note', label: 'Note', type: 'area' }
+    { k: 'stato', label: 'Stato', type: 'select', opts: ['APERTA', 'FAULTY_SPEDITA', 'GOOD_IN_USCITA', 'GOOD_SPEDITA', 'CHIUSA'] }, { k: 'note', label: 'Note', type: 'area' }
   ],
   nuovo: function () { return { stato: 'APERTA' }; },
-  azioni: function (r) { return r.stato === 'CHIUSA' ? [] : [{ label: '📦 Metti GOOD in uscita RMA', cls: 'ghost', keep: true, fn: function () { Jun.inUscita(r.id_juniper); } }]; },
+  azioni: function (r) { return r.stato === 'CHIUSA' || r.stato === 'GOOD_SPEDITA' ? [] : [{ label: '📦 Metti GOOD in uscita RMA', cls: 'ghost', keep: true, fn: function () { Jun.inUscita(r.id_juniper); } }]; },
   rows: function (R) { return R; },
   filtriIniziali: {},
   grid: {
@@ -4006,13 +4010,13 @@ var Jun = new Crud('jun', {
       { k: 'data_ricezione_faulty', label: 'Ricez. faulty', cls: 'mono', get: function (r) { return L.normDate(r.data_ricezione_faulty); } }, { k: 'awb_ups_faulty', label: 'AWB UPS', filter: 'text', cls: 'mono' },
       { k: 'data_uscita_faulty', label: 'Uscita faulty', cls: 'mono', get: function (r) { return L.normDate(r.data_uscita_faulty); } }, { k: 'good_seriale', label: 'Seriale good', filter: 'text', cls: 'mono' },
       { k: 'good_data_ricezione', label: 'Ricez. good', cls: 'mono', get: function (r) { return L.normDate(r.good_data_ricezione); } },
-      { k: 'stato', label: 'Stato', filter: 'select', html: function (r) { return '<span class="pill ' + ({ APERTA: 'p-amber', FAULTY_SPEDITA: 'p-blue', GOOD_IN_USCITA: 'p-violet', CHIUSA: 'p-green' }[r.stato] || '') + '">' + esc(r.stato) + '</span>'; } },
+      { k: 'stato', label: 'Stato', filter: 'select', html: function (r) { return '<span class="pill ' + ({ APERTA: 'p-amber', FAULTY_SPEDITA: 'p-blue', GOOD_IN_USCITA: 'p-violet', GOOD_SPEDITA: 'p-teal', CHIUSA: 'p-green' }[r.stato] || '') + '">' + esc(r.stato) + '</span>'; } },
       { k: 'note', label: 'Note', filter: 'text' }
     ]
   },
   dopo: function () {
     var R = Jun.t().rows, n = function (s) { return R.filter(function (r) { return r.stato === s; }).length; };
-    $('junStats').innerHTML = '<div class="stat"><b style="color:var(--amber)">' + n('APERTA') + '</b><span>aperte</span></div><div class="stat"><b style="color:var(--blue)">' + n('FAULTY_SPEDITA') + '</b><span>faulty spedite</span></div><div class="stat"><b style="color:var(--violet)">' + n('GOOD_IN_USCITA') + '</b><span>good in uscita</span></div><div class="stat"><b style="color:var(--green)">' + n('CHIUSA') + '</b><span>chiuse</span></div>';
+    $('junStats').innerHTML = '<div class="stat"><b style="color:var(--amber)">' + n('APERTA') + '</b><span>aperte</span></div><div class="stat"><b style="color:var(--blue)">' + n('FAULTY_SPEDITA') + '</b><span>faulty spedite</span></div><div class="stat"><b style="color:var(--violet)">' + n('GOOD_IN_USCITA') + '</b><span>good in uscita</span></div><div class="stat"><b style="color:var(--teal)">' + n('GOOD_SPEDITA') + '</b><span>good spedite, faulty no</span></div><div class="stat"><b style="color:var(--green)">' + n('CHIUSA') + '</b><span>chiuse</span></div>';
   }
 });
 
@@ -4038,9 +4042,10 @@ Jun.dopoAck = async function (s, R, nDdt, oggi) {
   try {
     var t = await Jun.tab(), lista = [], senza = [];
     R.forEach(function (x) {
-      var p = t.rows.find(function (j) { return j.stato === 'APERTA' && ((x.fr && L.s(j.fr) === L.s(x.fr)) || (x.seriale && L.up(j.faulty_seriale) === L.up(x.seriale))); });
+      var p = t.rows.find(function (j) { return j.stato !== 'CHIUSA' && !L.s(j.data_uscita_faulty) && ((x.fr && L.s(j.fr) === L.s(x.fr)) || (x.seriale && L.up(j.faulty_seriale) === L.up(x.seriale))); });
       if (!p) { senza.push(x.fr || x.seriale); return; }
-      lista.push({ r: p, ch: { stato: 'FAULTY_SPEDITA', data_uscita_faulty: oggi, awb_ups_faulty: L.s(p.awb_ups_faulty) || L.s(s.awb), note: Jun.nota(p, 'faulty uscita con DDT ACK ' + nDdt + ' del ' + L.itDate(oggi)) } });
+      // la GOOD può essere già uscita prima: allora con la faulty la pratica si chiude
+      lista.push({ r: p, ch: { stato: p.stato === 'GOOD_SPEDITA' ? 'CHIUSA' : (p.stato === 'GOOD_IN_USCITA' ? 'GOOD_IN_USCITA' : 'FAULTY_SPEDITA'), fr: L.s(p.fr) || L.s(x.fr), data_uscita_faulty: oggi, awb_ups_faulty: L.s(p.awb_ups_faulty) || L.s(s.awb), note: Jun.nota(p, 'faulty uscita con DDT ACK ' + nDdt + ' del ' + L.itDate(oggi)) } });
     });
     await Jun.aggiorna(lista, 'JUNIPER_FAULTY_SPEDITA');
     if (Jun.loaded && App.tab === 'juniper') Jun.render();
@@ -4054,11 +4059,14 @@ Jun.dopoRma = async function (P, s, nDdt, oggi) {
     var t = await Jun.tab(), lista = [];
     P.forEach(function (p) {
       var j = t.rows.find(function (x) { return x.stato !== 'CHIUSA' && L.s(x.good_seriale) && L.up(x.good_seriale) === L.up(p.u.seriale); });
-      if (j) lista.push({ r: j, ch: { stato: 'CHIUSA', note: Jun.nota(j, 'GOOD spedita a ' + s.destinatario + ' con DDT ' + nDdt + (s.awb ? ' AWB ' + s.awb : '') + ' del ' + L.itDate(oggi) + ' · gestita e chiusa') } });
+      if (!j) return;
+      var fOk = !!L.s(j.data_uscita_faulty) || j.stato === 'FAULTY_SPEDITA';
+      lista.push({ r: j, ch: { stato: fOk ? 'CHIUSA' : 'GOOD_SPEDITA', note: Jun.nota(j, 'GOOD spedita a ' + s.destinatario + ' con DDT ' + nDdt + (s.awb ? ' AWB ' + s.awb : '') + ' del ' + L.itDate(oggi) + (fOk ? ' · gestita e chiusa' : ' · la pratica si chiude quando esce la faulty')) } });
     });
     if (!lista.length) return;
-    await Jun.aggiorna(lista, 'JUNIPER_CHIUSA');
-    toast('Juniper: ' + lista.length + ' pratiche gestite e chiuse', 'ok');
+    await Jun.aggiorna(lista, 'JUNIPER_GOOD_SPEDITA');
+    var nc = lista.filter(function (x) { return x.r.stato === 'CHIUSA'; }).length;
+    toast('Juniper: ' + nc + ' pratiche chiuse' + (lista.length - nc ? ' · ' + (lista.length - nc) + ' in attesa dell\'uscita faulty' : ''), 'ok');
   } catch (e) { toast('Pratiche Juniper non chiuse: ' + e.message, 'ko'); }
 };
 // pulsante sulla pratica: la GOOD in giacenza va nelle uscite RMA giornaliere
@@ -4070,8 +4078,12 @@ Jun.destOrigine = function (r) {
   var v = DB.vltMap && DB.vltMap[L.s(r.fr)], dep = v && DB.t.DEPOT_VLT.rows.find(function (d) { return d.depot_vlt === v.depot_origine; });
   return dep ? L.s(dep.destinazione) : '';
 };
-Jun.inUscita = function (id) {
+Jun.inUscita = async function (id) {
   var r = Jun.t().rows.find(function (x) { return x.id_juniper === id; }); if (!r) return;
+  if (!L.s(r.data_uscita_faulty) && r.stato !== 'FAULTY_SPEDITA') {
+    var cosa = !L.s(r.data_ricezione_faulty) && !L.s(r.fr) ? 'La faulty non risulta ancora ricevuta (FR non associato): la destinazione dall\'FR non c\'è.' : 'La faulty non risulta ancora spedita in riparazione.';
+    if (!(await Modal.confirm('GOOD Juniper prima della faulty · ' + id, cosa + '\n\nMetto comunque la GOOD in uscita? La pratica si chiude quando escono entrambe.'))) return;
+  }
   if (!L.s(r.good_seriale)) { Modal.open('GOOD non indicata', 'Compila prima "Seriale good" nella pratica ' + id + '.'); return; }
   var u = Jun.goodUnita(r);
   if (!u) { Modal.open('GOOD non in giacenza', 'La GOOD ' + r.good_seriale + ' non risulta in giacenza.\nRegistrala prima in Ingresso come GOOD, poi riprova.'); return; }
@@ -4104,6 +4116,41 @@ Jun.salvaUscita = async function (id, idU) {
     await Jun.aggiorna([{ r: r, ch: { stato: 'GOOD_IN_USCITA', note: Jun.nota(r, 'GOOD ' + u.id_unita + ' messa in uscita RMA verso ' + dest + (rma ? ' (RMA ' + rma + ')' : '') + ' il ' + L.itDate(L.isoToday())) } }], 'JUNIPER_GOOD_IN_USCITA');
     Modal.close(); toast('GOOD ' + u.seriale + ' in uscita RMA verso ' + dest, 'ok'); Jun.render();
   } catch (e) { Modal.progress(''); err('Non salvato: ' + e.message); }
+};
+
+// ─ GOOD Juniper arrivata prima della faulty: la pratica (seriale good) dà l'FR quando c'è; altrimenti l'FR si associa all'arrivo della faulty
+Jun.perGood = function (ser) { var t = DB.t.JUNIPER, s = L.up(ser); if (!t || !s) return null; return t.rows.find(function (j) { return j.stato !== 'CHIUSA' && L.up(j.good_seriale) === s; }) || null; };
+Jun.perFaulty = function (ser, fr) { var t = DB.t.JUNIPER, s = L.up(ser); if (!t) return null; return t.rows.find(function (j) { return j.stato !== 'CHIUSA' && ((s && L.up(j.faulty_seriale) === s) || (fr && L.s(j.fr) === L.s(fr))); }) || null; };
+// dopo il caricamento di FAULTY: pratica trovata dal seriale faulty → FR sulla pratica e sulla GOOD già in giacenza (con i suoi movimenti)
+Jun.dopoIngresso = async function (pezzi, oggi) {
+  try {
+    await Jun.tab();
+    var fatti = [];
+    for (var i = 0; i < pezzi.length; i++) {
+      var p = pezzi[i]; if (p.tipo !== 'FAULTY' || !L.s(p.fr)) continue;
+      var j = Jun.perFaulty(p.seriale, p.fr); if (!j) continue;
+      var ch = {};
+      if (!L.s(j.fr)) ch.fr = p.fr;
+      if (!L.s(j.data_ricezione_faulty)) ch.data_ricezione_faulty = oggi;
+      var u = Jun.goodUnita(j), nota = '';
+      if (u && !L.s(u.fr)) { await Jun.frSuGood(u, p.fr, j); nota = ' · FR ' + p.fr + ' associato alla GOOD ' + u.id_unita; }
+      if (Object.keys(ch).length || nota) { ch.note = Jun.nota(j, 'faulty ' + p.seriale + ' ricevuta il ' + L.itDate(oggi) + nota); await Jun.aggiorna([{ r: j, ch: ch }], 'JUNIPER_FAULTY_RICEVUTA'); fatti.push(j.id_juniper); }
+    }
+    if (fatti.length) { toast('Juniper: faulty ricevuta per ' + fatti.join(', '), 'ok'); if (App.tab === 'juniper') Jun.render(); }
+  } catch (e) { toast('Pratiche Juniper non aggiornate: ' + e.message, 'ko'); }
+};
+// FR sulla scheda GOOD + specchio nei movimenti + traccia 
+Jun.frSuGood = async function (u, fr, j) {
+  var tU = DB.t.UNITA, last = L.colLetter(tU.header.length - 1);
+  var cur = (await API.batchGet(DB.id, [API.q('UNITA') + '!A' + u._r + ':' + last + u._r]))[0][0] || [];
+  if (L.s(cur[tU.idx.id_unita]) !== u.id_unita || L.s(cur[tU.idx.rev]) !== L.s(u.rev)) throw new Error('scheda GOOD ' + u.id_unita + ' cambiata nel frattempo: associa l\'FR a mano da Giacenze');
+  var ch = { fr: fr, modificato_il: L.nowStamp(), modificato_da: Auth.email, rev: String((parseInt(u.rev, 10) || 1) + 1) };
+  if (!L.s(u.destinazione_prevista)) { var d = Jun.destOrigine({ fr: fr }); if (d) ch.destinazione_prevista = d; }
+  var upd = []; Object.keys(ch).forEach(function (h) { if (h in tU.idx) upd.push({ range: tU.cell(h, u._r), values: [[String(ch[h])]] }); });
+  await Spec.mov(); var H = await Ingresso.heads(), mr = await Spec.righe(H.MOVIMENTI), sp = Spec.movimenti(H.MOVIMENTI, mr, u.id_unita, { fr: ['', fr] }, null);
+  await API.batchUpdate(DB.id, upd.concat(sp.upd)); Spec.applica(sp.loc);
+  var prima = u.fr; Object.keys(ch).forEach(function (h) { u[h] = String(ch[h]); });
+  await Spec.traccia(H, u, 'JUNIPER ' + j.id_juniper + ': FR associato all\'arrivo della faulty · fr: ' + (prima || '—') + ' → ' + fr, { pratica: j.id_juniper, fr: fr }, 'JUNIPER_FR_GOOD', 'UNITA', u.id_unita);
 };
 
 // ───────────────────────── CARICHI NEW/REUSE: file per il Service Desk / cliente ─────────────────────────
