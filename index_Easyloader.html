@@ -1206,7 +1206,7 @@ var App = {
       await DB.loadTables(DB.SMALL.concat(['UNITA'])); await DB.loadVlt(true);
       try { await DB.loadHuawei(true); } catch (e) { toast('File Huawei non leggibile: ' + e.message, 'ko'); }
       Ingresso._heads = null;
-    if (Rma.loaded) await DB.loadTables(['RMA_RITORNI', 'SPEDIZIONI', 'SPEDIZIONI_COLLI', 'CARICHI_RMA']);
+    if (Rma.loaded) { await DB.loadTables(['RMA_RITORNI', 'SPEDIZIONI', 'SPEDIZIONI_COLLI', 'CARICHI_RMA']); await Rma.autoVlt(false); }
     if (Bal.loaded) await Bal.load(); if (Jun.loaded) await Jun.load(); Sto.dati.cur = null;
     if (Ack.loaded) { await Ack.flush(); await Ack.load(); }
       App.fillLists(); App.syncInfo(); Ingresso.ricalcola(); Ingresso.renderOggi(); if (App.tab === 'giacenze') Giacenze.render(); if (App.tab === 'admin') Admin.render(); if (App.tab === 'ack') Ack.render(); if (App.tab === 'rma') Rma.render(); if (App.tab === 'balancing') Bal.render(); if (App.tab === 'juniper') Jun.render(); if (App.tab === 'vlt') Vlt.render();
@@ -3270,6 +3270,7 @@ var Rma = {
     c.eq.forEach(function (e) { var m = k(e.material), q = k(e.material_equivalente); if (m && q) (lk.eq[m] = lk.eq[m] || []).push(q); });
     Rma.lk = lk; Rma.loaded = true;
     if (!$('uscData').value) $('uscData').value = L.isoToday();
+    await Rma.autoVlt(false);
   },
   excel: function () {
     if (Rma.sez !== 'usc') { Rma.grid(Rma.sez).excel({ inv: 'Inventario_giornaliero', rit: 'Ritorni_in_giacenza', car: 'Carichi_NEW_REUSE' }[Rma.sez]); return; }
@@ -3408,7 +3409,9 @@ var Rma = {
   bar: function () {
     var s = Rma.sez, nD = Object.keys(Rma.dirty).length, ult = Rma.ultimoImport();
     var imp = '<label class="btn ghost sm" style="cursor:pointer" title="CSV esportato da VLT: Ritorni in giacenza">⬆ Importa CSV ritorni<input type="file" accept=".csv,.txt" style="display:none" onchange="Rma.importa(this)"></label>';
-    var info = '<div class="hint" style="margin-top:8px">' + (ult ? 'Ultimo import ritorni: ' + esc(ult) + ' · ' + Rma.attivi().length + ' RMA aperte dal ' + esc(L.itDate(DB.dataInizio())) : 'Nessun import ritorni: carica il CSV esportato da VLT.') + '</div>';
+    var au = Rma.ultimoAuto();
+    imp = '<button class="btn ghost sm" onclick="Rma.autoVlt(true)" title="Rilegge il foglio RMA scritto ogni mattina dal backend (rma.csv: To Ship From CW, senza i Minore)">🔄 Ritorni da VLT</button> ' + imp;
+    var info = '<div class="hint" style="margin-top:8px">' + (ult ? 'Ultimo import ritorni: ' + esc(ult) + (au ? ' (automatico, rma.csv del ' + esc(au) + ')' : '') + ' · ' + Rma.attivi().length + ' RMA aperte dal ' + esc(L.itDate(DB.dataInizio())) : 'Nessun import ritorni: carica il CSV esportato da VLT.') + '</div>';
     var xl = ' <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button>';
     var ann = Rma.attivi().length ? ' <button class="btn ghost sm" onclick="Rma.annullaImport()" title="Annulla i ritorni dell\'ultimo import (es. file sbagliato): poi puoi caricarne uno nuovo">🗑 Annulla import ritorni</button>' : '';
     if (s === 'inv') return '<div class="row">' + imp + ann + xl + ' <button class="btn ghost sm" onclick="Rma.etichette()" title="Etichetta 10x5 solo per le schede con variazione di destino (tra le righe filtrate)">🏷 Etichette RMA</button>' + (Rma.ieri().length ? ' <button class="btn sm" onclick="Rma.associaIeri()" title="Gli RMA giacenza aperti ieri diventano RMA creato; i più vecchi li controlla il Service Desk">✓ Associa RMA di ieri (' + Rma.ieri().length + ')</button>' : '') + '<div class="spacer"></div><button class="btn sm" ' + (nD ? '' : 'disabled') + ' onclick="Rma.salva()">Salva modifiche' + (nD ? ' (' + nD + ')' : '') + '</button></div>' + info;
@@ -3565,41 +3568,72 @@ var Rma = {
     // export VLT: può essere Windows-1252 (accenti) e "combinato" (intestazione ripetuta tra un blocco e l'altro)
     var buf = await f.arrayBuffer(), txt;
     try { txt = new TextDecoder('utf-8', { fatal: true }).decode(buf); } catch (x) { txt = new TextDecoder('windows-1252').decode(buf); }
-    var rows = L.parseCsv(txt.replace(/^\uFEFF/, ''));
-    if (rows.length < 2) { Modal.open('Import ritorni', 'Il file è vuoto.'); return; }
+    await Rma.importaRighe(L.parseCsv(txt.replace(/^﻿/, '')), f.name, '');
+  },
+  // righe = tabella con intestazione (CSV manuale oppure foglio RMA scritto dal backend). auto = data di estrazione del backend
+  importaRighe: async function (rows, nome, auto) {
+    if (!rows || rows.length < 2) { Modal.open('Import ritorni', 'Il file è vuoto.'); return false; }
     var h = rows[0].map(L.s), idx = {};
     Object.keys(Rma.RIT_MAP).forEach(function (c) { var i = h.indexOf(c); if (i >= 0) idx[Rma.RIT_MAP[c]] = i; });
     var manc = ['Id', 'Material', 'Deposito Destinazione RMA'].filter(function (c) { return h.indexOf(c) < 0; });
-    if (manc.length) { Modal.open('Import ritorni', 'Colonne mancanti nel CSV: ' + manc.join(', ') + '\n\nIntestazioni trovate:\n' + h.join(' | ')); return; }
+    if (manc.length) { Modal.open('Import ritorni', 'Colonne mancanti ' + (auto ? 'nel foglio RMA' : 'nel CSV') + ': ' + manc.join(', ') + '\n\nIntestazioni trovate:\n' + h.join(' | ')); return false; }
     function dt(v) { v = L.s(v); var t = /(\d{1,2}:\d{2}(:\d{2})?)/.exec(v); return L.normDate(v) + (t ? ' ' + t[1] : ''); }
-    var now = L.nowStamp(), gg = parseInt(DB.param('rma_giorni_scadenza', '4'), 10) || 4, recs = [], seen = {};
+    var now = L.nowStamp(), gg = parseInt(DB.param('rma_giorni_scadenza', '4'), 10) || 4, recs = [], seen = {}, chi = auto ? Rma.AUTO + auto : Auth.email;
     rows.slice(1).forEach(function (r) {
       var o = {}; Object.keys(idx).forEach(function (k) { o[k] = L.s(r[idx[k]]); });
       o.id_rma = o.id_rma.replace(/\.0$/, '').replace(/^RMA\s*/i, ''); if (!/^\d+$/.test(o.id_rma)) return;   // "RMA212793" → 212793; righe di intestazione ripetute scartate
       if (seen[o.id_rma]) return; seen[o.id_rma] = 1;
+      if (/^minore$/i.test(o.priorita)) return;   // balancing: non sono ritorni in giacenza
       o.data_apertura = dt(o.data_apertura); o.data_ultima_modifica = dt(o.data_ultima_modifica);
-      o.data_scadenza = L.workday(o.data_apertura, gg); o.importato_il = now; o.importato_da = Auth.email;
+      if (!o.descrizione && Rma.lk) o.descrizione = Rma.lk.pnByMat[Rma.mk(o.material)] || '';   // rma.csv non ha la descrizione: P/N da ARTICOLI
+      o.data_scadenza = L.workday(o.data_apertura, gg); o.importato_il = now; o.importato_da = chi;
       recs.push(o);
     });
-    if (!recs.length) { Modal.open('Import ritorni', 'Nessuna riga con Id numerico nel file.'); return; }
-    Modal.open('Import ritorni', 'Salvo ' + recs.length + ' RMA…', []);
+    if (!recs.length && !auto) { Modal.open('Import ritorni', 'Nessuna riga con Id numerico nel file.'); return false; }
+    if (!auto) Modal.open('Import ritorni', 'Salvo ' + recs.length + ' RMA…', []);
     try {
       await DB.loadTables(['RMA_RITORNI']);
       var t = DB.t.RMA_RITORNI, byId = {}; t.rows.forEach(function (r) { byId[r.id_rma] = r; });
-      var upd = [], nuove = [], last = L.colLetter(t.header.length - 1);
+      var upd = [], nuove = [], last = L.colLetter(t.header.length - 1), tolti = [];
       recs.forEach(function (o) {
         var ex = byId[o.id_rma];
-        if (ex) { if (ex.stato === 'ANNULLATO') o.stato = 'DA_EVADERE'; Object.keys(o).forEach(function (k) { ex[k] = o[k]; }); upd.push({ range: API.q(t.name) + '!A' + ex._r + ':' + last + ex._r, values: [t.toRow(ex)] }); }
+        if (ex) { if (ex.stato === 'ANNULLATO' || ex.stato === 'NON_IN_VLT') o.stato = 'DA_EVADERE'; Object.keys(o).forEach(function (k) { ex[k] = o[k]; }); upd.push({ range: API.q(t.name) + '!A' + ex._r + ':' + last + ex._r, values: [t.toRow(ex)] }); }
         else { o.stato = 'DA_EVADERE'; o.rev = 1; nuove.push(o); }
       });
+      // backend senza ritorni oggi: quelli dell'ultimo import non sono più in To Ship From CW
+      if (!recs.length) Rma.attivi().forEach(function (r) { r.stato = 'NON_IN_VLT'; tolti.push(r.id_rma); upd.push({ range: t.cell('stato', r._r), values: [['NON_IN_VLT']] }); });
       if (upd.length) await API.batchUpdate(DB.id, upd);
       if (nuove.length) { var r0 = await API.append(DB.id, 'RMA_RITORNI', nuove.map(function (o) { return t.toRow(o); })); nuove.forEach(function (o, i) { Ack.pushRow(t, o, r0 + i); }); }
-      await API.append(DB.id, 'LOG', [App.log('IMPORT_RITORNI', 'RMA_RITORNI', f.name, { righe: recs.length, nuove: nuove.length, aggiornate: upd.length })]);
+      if (recs.length || tolti.length) await API.append(DB.id, 'LOG', [App.log(auto ? 'IMPORT_RITORNI_AUTO' : 'IMPORT_RITORNI', 'RMA_RITORNI', nome, { righe: recs.length, nuove: nuove.length, aggiornate: upd.length - tolti.length, non_piu_in_vlt: tolti, estratto_il: auto || undefined })]);
       var vecchie = recs.filter(function (o) { return !DB.daQuestAnno(o.data_apertura); }).length;
-      Modal.close(); toast('Ritorni importati: ' + nuove.length + ' nuovi, ' + upd.length + ' aggiornati' + (vecchie ? ' · ' + vecchie + ' anteriori al ' + L.itDate(DB.dataInizio()) + ' ignorati' : ''), 'ok'); Rma.render();
+      if (!auto) Modal.close();
+      toast((auto ? 'Ritorni da VLT (' + auto + '): ' : 'Ritorni importati: ') + nuove.length + ' nuovi, ' + (upd.length - tolti.length) + ' aggiornati' + (tolti.length ? ' · ' + tolti.length + ' non più da spedire' : '') + (vecchie ? ' · ' + vecchie + ' anteriori al ' + L.itDate(DB.dataInizio()) + ' ignorati' : ''), 'ok');
+      Rma.render();
       await Rma.associaIeri(true);
-    } catch (e) { Modal.open('Import non riuscito', e.message); }
+      return true;
+    } catch (e) { if (auto) throw e; Modal.open('Import non riuscito', e.message); return false; }
   },
+  // ─ ritorni automatici: il backend (fr_rma.exe) scrive il foglio RMA nello stesso file dei FR.
+  //   Si importa una volta per estrazione: se un import ha già quella data di estrazione non lo rifà (anche se poi annullato).
+  AUTO: 'VLT AUTO ',
+  autoFoglio: function () { return L.s(DB.param('rma_vlt_foglio', 'RMA')); },
+  autoVlt: async function (forza) {
+    var fg = Rma.autoFoglio(); if (!fg || fg === '-') { if (forza) toast('Import automatico spento (parametro rma_vlt_foglio = -)', 'ko'); return; }
+    if (forza) Modal.progress('Leggo i ritorni da VLT…');
+    try {
+      var v;
+      try { v = (await API.batchGet(CFG.VLT_ID, [API.q(fg) + '!A:Z']))[0] || []; }
+      catch (e) { if (forza) throw new Error('foglio "' + fg + '" non trovato nel file VLT: il backend fr_rma non l\'ha ancora scritto'); return; }
+      var h = (v[0] || []).map(L.s), ie = h.indexOf('Estratto Il');
+      var stamp = ie >= 0 ? (v.slice(1).map(function (r) { return L.s(r[ie]); }).filter(Boolean)[0] || '') : '';
+      if (!stamp) { if (forza) throw new Error('il foglio "' + fg + '" non ha la data di estrazione (colonna Estratto Il)'); return; }
+      var fatto = DB.t.RMA_RITORNI.rows.some(function (r) { return r.importato_da === Rma.AUTO + stamp; });
+      if (fatto && !forza) return;
+      if (forza) Modal.progress('');
+      await Rma.importaRighe(v, 'rma.csv ' + stamp, stamp);
+    } catch (e) { if (forza) { Modal.progress(''); Modal.open('Ritorni da VLT', e.message); } else console.warn('Ritorni automatici:', e); }
+  },
+  ultimoAuto: function () { var ult = Rma.ultimoImport(), r = DB.t.RMA_RITORNI.rows.find(function (x) { return x.importato_il === ult; }); return r && r.importato_da.indexOf(Rma.AUTO) === 0 ? r.importato_da.slice(Rma.AUTO.length) : ''; },
 
   // ─ CARICHI NEW/REUSE
   carUnita: function (ser) {
