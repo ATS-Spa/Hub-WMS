@@ -504,6 +504,35 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
       <div class="tbl-wrap"><table><thead id="vltHead"></thead><tbody id="vltRows"></tbody></table></div><div class="hint" id="vltFoot" style="margin-top:6px"></div>
     </div>
 
+    <!-- LOG (admin) -->
+    <div class="view" id="view-log">
+      <div class="card"><div class="row">
+        <div class="fg"><span class="fl">Dal</span><input class="fc mono" type="date" id="logDa" onchange="LogV.render()"></div>
+        <div class="fg"><span class="fl">Al</span><input class="fc mono" type="date" id="logA" onchange="LogV.render()"></div>
+        <div class="fg" style="flex:1;min-width:220px"><span class="fl">Cerca (record, dettaglio, azione: seriale, FR, RMA, DDT…)</span><input class="fc mono" id="logQ" oninput="clearTimeout(LogV._t);LogV._t=setTimeout(LogV.render,250)"></div>
+        <div class="spacer"></div>
+        <button class="btn ghost sm" onclick="LogV.carica(true).then(LogV.render)">↻ Ricarica</button>
+        <button class="btn ghost sm" onclick="LogV.excel()">⬇ Excel</button>
+      </div><div class="hint" style="margin-top:8px">Ogni scrittura fatta dall'app (ingressi, uscite, modifiche, import, accessi). Clicca una riga per il dettaglio prima → dopo.</div></div>
+      <div class="tbl-wrap"><table><thead id="logHead"></thead><tbody id="logRows"></tbody></table></div><div class="hint" id="logFoot" style="margin-top:6px"></div>
+    </div>
+
+    <!-- ANAGRAFICHE (admin) -->
+    <div class="view" id="view-anagrafiche">
+      <div class="subtabs" id="anaTabs"></div>
+      <div class="card"><div class="row">
+        <span id="anaAdm" style="display:contents"><button class="btn sm" onclick="Ana.modifica(0)">+ Nuova riga</button>
+        <label class="btn ghost sm" style="cursor:pointer">⬆ Import massivo<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Ana.importa(this)"></label>
+        <button class="btn ghost sm" onclick="Ana.modello()">Modello Excel</button></span>
+        <div class="spacer"></div>
+        <button class="btn ghost sm" onclick="Ana.ricarica()">↻</button>
+        <button class="btn ghost sm" onclick="Ana.excel(false)" title="Solo le righe filtrate">⬇ Excel vista</button>
+        <button class="btn ghost sm" onclick="Ana.excel(true)" title="Tutto il foglio">⬇ Excel completo</button>
+      </div><div class="hint" id="anaHint" style="margin-top:8px"></div></div>
+      <div class="stats" id="anaStats"></div>
+      <div class="tbl-wrap"><table><thead id="anaHead"></thead><tbody id="anaRows"></tbody></table></div><div class="hint" id="anaFoot" style="margin-top:6px"></div>
+    </div>
+
     <!-- CHIUSURE VLT -->
     <div class="view" id="view-chiusure">
       <div class="card"><div class="row">
@@ -1070,7 +1099,7 @@ var TABS = [
   { k: 'ingresso', label: 'Ingresso' },
   { k: 'ack', label: 'ACK' }, { k: 'rma', label: 'RMA' }, { k: 'balancing', label: 'Balancing' },
   { k: 'newreuse', label: 'Carichi NEW/REUSE' }, { k: 'juniper', label: 'Juniper' }, { k: 'giacenze', label: 'Giacenze' }, { k: 'vlt', label: 'VLT' }, { k: 'chiusure', label: 'Chiusure VLT' },
-  { k: 'storico', label: 'Movimenti' }, { k: 'dashboard', label: 'Dashboard', admin: true }, { k: 'admin', label: 'Admin', admin: true }
+  { k: 'storico', label: 'Movimenti' }, { k: 'dashboard', label: 'Dashboard', admin: true }, { k: 'log', label: 'Log', admin: true }, { k: 'anagrafiche', label: 'Anagrafiche' }, { k: 'admin', label: 'Admin', admin: true }
 ];
 var App = {
   me: null, isAdmin: false, tab: 'ingresso',
@@ -1147,6 +1176,8 @@ var App = {
     if (t.k === 'chiusure') Chv.show();
     if (t.k === 'storico') Sto.show();
     if (t.k === 'dashboard') Dash.show();
+    if (t.k === 'log') LogV.show();
+    if (t.k === 'anagrafiche') Ana.show();
   },
   TEMI: ['theme-dim', 'theme-grafite', 'theme-sap', 'theme-oceano', 'theme-light', 'theme-avorio', 'theme-salvia', 'theme-rovere'],
   menuUtente: function (e) {
@@ -4602,6 +4633,201 @@ var Sto = {
         rows: OUT.map(function (r) { return [r.id_mov, r.tipo, r.fr, r.po_mrn, r.rma, r.controparte, dt(r.data_ora), r.awb, r.ddt, Sto.op(r), r.mnft, r.seriale, r.pn, r.riparatore, r.note]; }) }
     ]);
     toast('Easyloader: ' + IN.length + ' inbound, ' + OUT.length + ' outbound', 'ok');
+  }
+};
+
+// ───────────────────────── LOG (solo admin): registro di ogni scrittura fatta dall'app ─────────────────────────
+var LogV = {
+  rows: null, grid: null,
+  carica: async function (forza) {
+    if (LogV.rows && !forza) return;
+    $('logRows').innerHTML = '<tr><td class="empty">Carico il registro…</td></tr>';
+    var r = await DB.loadCols(DB.id, 'LOG', ['data_ora', 'utente', 'azione', 'foglio', 'id_record', 'dettaglio']);
+    r.forEach(function (x, i) { x._i = i; }); LogV.rows = r.filter(function (x) { return x.data_ora || x.azione; });
+  },
+  show: async function () {
+    if (!$('logDa').value) { var d = new Date(); $('logA').value = L.isoToday(d); d.setDate(d.getDate() - 6); $('logDa').value = L.isoToday(d); }
+    try { await LogV.carica(false); LogV.render(); } catch (e) { $('logRows').innerHTML = '<tr><td class="empty">Errore: ' + esc(e.message) + '</td></tr>'; }
+  },
+  breve: function (j) { try { var o = JSON.parse(j); return Object.keys(o).map(function (k) { var v = o[k]; return k + ': ' + (typeof v === 'object' ? JSON.stringify(v) : v); }).join(' · '); } catch (e) { return L.s(j); } },
+  render: function () {
+    if (!LogV.grid) LogV.grid = new Grid('log', {
+      thead: 'logHead', tbody: 'logRows', foot: 'logFoot', sort: '_i', dir: -1, limit: 500, empty: 'Nessuna operazione nel periodo',
+      rowAttr: function (r) { return 'class="r-edit" onclick="LogV.apri(' + r._i + ')" title="Dettaglio"'; },
+      rows: function () {
+        var da = $('logDa').value || '0000', a = $('logA').value || '9999', q = L.up($('logQ').value);
+        return (LogV.rows || []).filter(function (r) { var g = L.s(r.data_ora).slice(0, 10); return (!g || (g >= da && g <= a)) && (!q || L.up(r.id_record + ' ' + r.dettaglio + ' ' + r.azione).indexOf(q) >= 0); });
+      },
+      cols: [
+        { k: 'data_ora', label: 'Data e ora', cls: 'mono nw', html: function (r) { return esc(Sto.dataOra(r.data_ora)); } },
+        { k: 'utente', label: 'Utente', filter: 'select', get: function (r) { return L.s(r.utente).split('@')[0]; } },
+        { k: 'azione', label: 'Azione', filter: 'select' }, { k: 'foglio', label: 'Foglio', filter: 'select' },
+        { k: 'id_record', label: 'Record', filter: 'text', cls: 'mono' },
+        { k: 'dettaglio', label: 'Dettaglio', filter: 'text', get: function (r) { return LogV.breve(r.dettaglio); }, html: function (r) { var t = LogV.breve(r.dettaglio); return '<span style="font-size:11.5px;color:var(--subtle)">' + esc(t.length > 160 ? t.slice(0, 160) + '…' : t) + '</span>'; } }
+      ]
+    });
+    LogV.grid.render();
+  },
+  apri: function (i) {
+    var r = (LogV.rows || []).find(function (x) { return x._i === i; }); if (!r) return;
+    var j = L.s(r.dettaglio); try { j = JSON.stringify(JSON.parse(j), null, 2); } catch (e) { }
+    Modal.html(r.azione + ' · ' + r.foglio + ' ' + r.id_record, '<div style="font-size:12.5px;color:var(--subtle);margin-bottom:8px">' + esc(Sto.dataOra(r.data_ora)) + ' · ' + esc(r.utente) + '</div><pre class="mono" style="white-space:pre-wrap;font-size:12px;background:var(--card);border:1px solid var(--border);border-radius:8px;padding:10px;max-height:60vh;overflow:auto">' + esc(j) + '</pre>', [{ label: 'Chiudi', cls: 'ghost' }], true);
+  },
+  excel: function () { var p = [$('logDa').value, $('logA').value]; LogV.grid && LogV.grid.excel('LOG_' + p[0] + '_' + p[1]); }
+};
+
+// ───────────────────────── ANAGRAFICHE (solo admin): ARTICOLI, ANAGRAFICA_PN, EQUIVALENTI ─────────────────────────
+// modifica riga, nuova, elimina, Excel, import massivo (aggiorna/aggiungi per chiave oppure sostituisci tutto)
+var Ana = {
+  sez: 'ARTICOLI', grids: {},
+  CONF: {
+    ARTICOLI: { titolo: 'Articoli', chiave: ['material'], hint: 'Una riga per material Vodafone: P/N ATS, produttore, riparatore. Usata per pulizia seriali, controllo P/N, P/N dal material e abbinamenti RMA.',
+      alias: { material: ['MATERIAL SAP CODE VF', 'MATERIAL SAP CODE', 'MATERIAL'], ats_code: ['ATS CODE'], pn: ['PART NUMBER ATS', 'PART NUMBER', 'PN', 'P/N'], mnft: ['PRODUTTORE', 'MNFT'], riparatore: ['RIPARATORE'], descrizione: ['MATERIALDESCR', 'DESCRIZIONE'], mpn: ['MANUFACPARTNUM', 'MPN'], model_id: ['MODEL ID'] } },
+    ANAGRAFICA_PN: { titolo: 'Anagrafica P/N', chiave: ['pn'], hint: 'Elenco P/N con produttore (si somma ad Articoli per la pulizia seriali e il controllo P/N).',
+      alias: { pn: ['PART NUMBER', 'PN', 'P/N'], mnft: ['PRODUTTORE', 'MNFT'], fonte: ['FONTE'] } },
+    EQUIVALENTI: { titolo: 'Equivalenti', chiave: ['material', 'material_equivalente'], hint: 'Material equivalenti: per abbinare un ritorno RMA a un pezzo con material diverso ma compatibile.',
+      alias: { material: ['MATERIALE', 'MATERIAL'], descrizione: ['MATERIALEDESC', 'DESCRIZIONE'], material_equivalente: ['EQUIVALENTE', 'MATERIAL EQUIVALENTE', 'MATERIALE EQUIVALENTE'], descrizione_equivalente: ['EQUIVALENTEDESC', 'DESCRIZIONE EQUIVALENTE'], ats_code: ['ATS CODE'], pn: ['PART NUMBER', 'PN'] } }
+  },
+  META: ['rev', 'creato_il', 'creato_da', 'modificato_il', 'modificato_da'],
+  t: function () { return DB.t[Ana.sez]; },
+  campi: function () { var t = Ana.t(); return t ? t.header.filter(function (h) { return h && Ana.META.indexOf(h) < 0; }) : []; },
+  norm: function (h, v) { v = L.s(v); return /material/.test(h) ? L.mat(v) : L.up(v); },
+  key: function (o) { return Ana.CONF[Ana.sez].chiave.map(function (k) { return Ana.norm(k, o[k]); }).join('|'); },
+  // consultazione per tutti; modifiche, nuove righe e import solo per gli admin (i fogli sono protetti)
+  show: async function () { $('anaAdm').style.display = App.isAdmin ? 'contents' : 'none'; Ana.tabs(); await Ana.apri(Ana.sez); },
+  tabs: function () { $('anaTabs').innerHTML = Object.keys(Ana.CONF).map(function (k) { return '<span class="subtab' + (Ana.sez === k ? ' active' : '') + '" onclick="Ana.apri(\'' + k + '\')">' + esc(Ana.CONF[k].titolo) + '</span>'; }).join(''); },
+  apri: async function (s) {
+    Ana.sez = s; Ana.tabs(); $('anaHint').textContent = Ana.CONF[s].hint; $('anaHead').dataset.g = '';
+    if (!DB.t[s] || !DB.t[s].header.length) { $('anaRows').innerHTML = '<tr><td class="empty">Carico ' + esc(Ana.CONF[s].titolo) + '…</td></tr>'; try { await DB.loadTables([s]); } catch (e) { $('anaRows').innerHTML = '<tr><td class="empty">Errore: ' + esc(e.message) + '</td></tr>'; return; } }
+    Ana.render();
+  },
+  ricarica: async function () { try { await DB.loadTables([Ana.sez]); Ana.render(); toast('Ricaricato', 'ok'); } catch (e) { toast(e.message, 'ko'); } },
+  grid: function () {
+    var s = Ana.sez; if (Ana.grids[s]) return Ana.grids[s];
+    return Ana.grids[s] = new Grid('ana_' + s, {
+      thead: 'anaHead', tbody: 'anaRows', foot: 'anaFoot', limit: 500, empty: 'Nessuna riga',
+      rowAttr: function (r) { return 'class="r-edit" onclick="Ana.modifica(' + r._r + ')" title="' + (App.isAdmin ? 'Clicca per modificare' : 'Dettaglio') + '"'; },
+      rows: function () { return Ana.t().rows; },
+      cols: Ana.campi().map(function (h) { return { k: h, label: h.replace(/_/g, ' '), filter: 'text', cls: /material|pn|code|mpn/.test(h) ? 'mono' : '' }; })
+    });
+  },
+  render: function () { var t = Ana.t(); if (!t) return; Ana.grid().render(); $('anaStats').innerHTML = '<div class="stat"><b>' + t.rows.length + '</b><span>righe</span></div>'; },
+  // dopo ogni scrittura: le anagrafiche usate da ingresso e RMA si ricaricano (niente cache vecchia)
+  dopo: function () { DB.cacheSet('lookups', null); DB.cacheSet('rmalk', null); Rma.loaded = false; DB.loadLookups(true).then(function () { App.fillLists(); Ingresso.ricalcola(); }).catch(function () { }); },
+  form: function (o) {
+    var ch = Ana.CONF[Ana.sez].chiave;
+    return '<div class="grid">' + Ana.campi().map(function (h) { return '<div class="fg' + (/descrizione/.test(h) ? ' wide' : '') + '"><span class="fl">' + esc(h.replace(/_/g, ' ')) + (ch.indexOf(h) >= 0 ? ' *' : '') + '</span><input class="fc' + (/material|pn|code|mpn/.test(h) ? ' mono' : '') + '" id="an_' + h + '" value="' + esc(o[h] || '') + '"></div>'; }).join('') + '</div><div class="hint" id="anErr" style="margin-top:8px"></div>';
+  },
+  modifica: function (r) {
+    var t = Ana.t(), o = r ? t.rows.find(function (x) { return x._r === r; }) : {}; if (r && !o) return;
+    if (!App.isAdmin) { if (!r) return; Modal.html(Ana.CONF[Ana.sez].titolo, '<div class="mc-det">' + Ana.campi().map(function (h) { return '<div class="mc-r" style="display:flex;gap:10px;padding:6px 0;border-bottom:1px solid var(--border)"><span style="flex:0 0 170px;font-size:11px;text-transform:uppercase;color:var(--muted)">' + esc(h.replace(/_/g, ' ')) + '</span><div class="mono">' + esc(o[h] || '') + '</div></div>'; }).join('') + '</div><div class="hint" style="margin-top:8px">Solo consultazione: le modifiche le fa un admin.</div>', [{ label: 'Chiudi', cls: 'ghost' }]); return; }
+    var bt = [{ label: 'Annulla', cls: 'ghost' }, { label: 'Salva', cls: 'green', keep: true, fn: function () { Ana.salva(r); } }];
+    if (r) bt.unshift({ label: '🗑 Elimina', cls: 'red', keep: true, fn: function () { Ana.elimina(r); } });
+    Modal.html((r ? 'Modifica · ' : 'Nuova riga · ') + Ana.CONF[Ana.sez].titolo, Ana.form(o), bt, true);
+  },
+  err: function (m) { $('anErr').textContent = m; $('anErr').className = 'hint err'; },
+  salva: async function (r) {
+    var t = Ana.t(), C = Ana.CONF[Ana.sez], o = {}, cur = r ? t.rows.find(function (x) { return x._r === r; }) : null;
+    Ana.campi().forEach(function (h) { var e = $('an_' + h); if (e) o[h] = L.s(e.value); });
+    var miss = C.chiave.filter(function (k) { return !o[k]; }); if (miss.length) { Ana.err('Compila: ' + miss.join(', ')); return; }
+    var k = Ana.key(o), dup = t.rows.find(function (x) { return x !== cur && Ana.key(x) === k; });
+    if (dup) { Ana.err('Esiste già una riga con ' + C.chiave.join(' + ') + ' uguale (riga ' + dup._r + ')'); return; }
+    Modal.progress('Salvataggio…');
+    try {
+      var now = L.nowStamp(), last = L.colLetter(t.header.length - 1);
+      if (cur) {
+        var vivo = (await API.batchGet(DB.id, [API.q(t.name) + '!A' + r + ':' + last + r]))[0][0] || [];
+        if (Ana.key(Object.fromEntries(t.header.map(function (h, i) { return [h, vivo[i]]; }))) !== Ana.key(cur)) throw new Error('la riga è cambiata nel frattempo: premi ↻ e riprova');
+        var prima = {}, upd = [];
+        Object.keys(o).forEach(function (h) { if (L.s(o[h]) !== L.s(cur[h])) { prima[h] = cur[h]; upd.push({ range: t.cell(h, r), values: [[o[h]]] }); } });
+        if (!upd.length) { Modal.close(); return; }
+        if ('modificato_il' in t.idx) { o.modificato_il = now; upd.push({ range: t.cell('modificato_il', r), values: [[now]] }); }
+        if ('modificato_da' in t.idx) { o.modificato_da = Auth.email; upd.push({ range: t.cell('modificato_da', r), values: [[Auth.email]] }); }
+        await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', [App.log('MODIFICA', t.name, k, { prima: prima, dopo: o })])]);
+        Object.keys(o).forEach(function (h) { cur[h] = String(o[h]); });
+      } else {
+        if ('creato_il' in t.idx) o.creato_il = now; if ('creato_da' in t.idx) o.creato_da = Auth.email;
+        var rr = await API.append(DB.id, t.name, [t.toRow(o)]);
+        await API.append(DB.id, 'LOG', [App.log('CREA', t.name, k, o)]);
+        Ack.pushRow(t, o, rr);
+      }
+      Modal.close(); toast('Salvato', 'ok'); Ana.render(); Ana.dopo();
+    } catch (e) { Modal.progress(''); Ana.err('Non salvato: ' + e.message); }
+  },
+  elimina: async function (r) {
+    var t = Ana.t(), cur = t.rows.find(function (x) { return x._r === r; }); if (!cur) return;
+    if (!(await Modal.confirm('Elimina riga', Ana.CONF[Ana.sez].titolo + ' · ' + Ana.CONF[Ana.sez].chiave.map(function (k) { return cur[k]; }).join(' / ') + '\n\nLa riga viene svuotata nel foglio (resta traccia nel LOG).'))) return;
+    try {
+      var last = L.colLetter(t.header.length - 1);
+      await Promise.all([API.call(API.S + DB.id + '/values:batchClear', { method: 'POST', body: JSON.stringify({ ranges: [API.q(t.name) + '!A' + r + ':' + last + r] }) }), API.append(DB.id, 'LOG', [App.log('ELIMINA', t.name, Ana.key(cur), cur)])]);
+      t.rows = t.rows.filter(function (x) { return x !== cur; }); Modal.close(); toast('Riga eliminata', 'ok'); Ana.render(); Ana.dopo();
+    } catch (e) { toast('Errore: ' + e.message, 'ko'); }
+  },
+  excel: function (tutto) {
+    var t = Ana.t(); if (!t) return;
+    if (!tutto) { Ana.grid().excel(t.name); return; }
+    var H = Ana.campi(); Xls.scarica(t.name + '_' + L.isoToday(), [{ nome: t.name, headers: H, rows: t.rows.map(function (r) { return H.map(function (h) { return r[h]; }); }) }]);
+  },
+  modello: function () { Crud.prototype.modello(Ana.campi(), 'modello_' + Ana.sez.toLowerCase() + '.xlsx'); },
+  // import massivo: intestazioni = nomi delle colonne del foglio (o i nomi originali dei file)
+  importa: async function (inp) {
+    var f = inp.files && inp.files[0]; inp.value = ''; if (!f) return;
+    var rows; try { rows = await leggiFoglio(f); } catch (e) { Modal.open('Import', 'File non leggibile: ' + e.message); return; }
+    var t = Ana.t(), C = Ana.CONF[Ana.sez], H = Ana.campi();
+    var nomi = {}; H.forEach(function (h) { nomi[h] = [L.up(h), L.up(h.replace(/_/g, ' '))].concat(C.alias[h] || []); });
+    var trov = H.filter(function (h) { return rows.length && nomi[h].some(function (n) { return n in rows[0]; }); });
+    var mancaK = C.chiave.filter(function (k) { return trov.indexOf(k) < 0; });
+    if (mancaK.length) { Modal.open('Import ' + C.titolo, 'Nel file manca la colonna chiave: ' + mancaK.join(', ') + '\n\nColonne attese: ' + H.join(', ')); return; }
+    var esist = {}; t.rows.forEach(function (r) { esist[Ana.key(r)] = r; });
+    var visti = {}, nuovi = [], agg = [], ug = 0, err = [];
+    rows.forEach(function (r, i) {
+      var o = {}; trov.forEach(function (h) { o[h] = campo(r, nomi[h]); });
+      if (C.chiave.some(function (k) { return !o[k]; })) { if (trov.some(function (h) { return o[h]; })) err.push('riga ' + (i + 2) + ': chiave mancante'); return; }
+      var k = Ana.key(o); if (visti[k]) { err.push('riga ' + (i + 2) + ': ripetuta nel file (' + k + ')'); return; } visti[k] = 1;
+      var e = esist[k];
+      if (!e) { nuovi.push(o); return; }
+      var diff = trov.filter(function (h) { return C.chiave.indexOf(h) < 0 && L.s(o[h]) !== L.s(e[h]); });
+      if (diff.length) agg.push({ r: e, o: o, diff: diff }); else ug++;
+    });
+    var es = agg.slice(0, 150).map(function (x) { return '<tr><td class="mono">' + esc(Ana.key(x.r)) + '</td><td>' + x.diff.map(function (h) { return esc(h) + ': <span style="color:var(--muted)">' + esc(x.r[h] || '—') + '</span> → <b>' + esc(x.o[h] || '—') + '</b>'; }).join('<br>') + '</td></tr>'; }).join('');
+    Modal.html('Import ' + C.titolo + ' · ' + f.name,
+      '<div style="font-size:13px;line-height:1.7">Colonne riconosciute: <b>' + esc(trov.join(', ')) + '</b><br>' +
+      '<b style="color:var(--green)">' + nuovi.length + '</b> nuove · <b style="color:var(--blue)">' + agg.length + '</b> da aggiornare · ' + ug + ' uguali' + (err.length ? ' · <b style="color:var(--red)">' + err.length + ' scartate</b>' : '') + '</div>' +
+      (err.length ? '<div class="hint err">' + esc(err.slice(0, 8).join(' · ')) + (err.length > 8 ? '…' : '') + '</div>' : '') +
+      (agg.length ? '<div class="tbl-wrap modal-scroll" style="margin-top:8px"><table><thead><tr><th>Chiave</th><th>Modifiche</th></tr></thead><tbody>' + es + '</tbody></table></div>' + (agg.length > 150 ? '<div class="hint">… e altre ' + (agg.length - 150) + '</div>' : '') : '') +
+      '<div class="hint" style="margin-top:8px">"Aggiorna e aggiungi" tocca solo le righe nuove e quelle cambiate. "Sostituisci tutto" svuota il foglio e lo riscrive con il file (' + (rows.length) + ' righe lette).</div>',
+      [{ label: 'Annulla', cls: 'ghost' },
+       { label: '⚠ Sostituisci tutto', cls: 'red', fn: function () { Ana.sostituisci(rows, nomi, trov, f.name); } }].concat(nuovi.length + agg.length ? [{ label: 'Aggiorna e aggiungi (' + (nuovi.length + agg.length) + ')', cls: 'green', fn: function () { Ana.scriviImport(nuovi, agg, f.name); } }] : []), true);
+  },
+  scriviImport: async function (nuovi, agg, nome) {
+    var t = Ana.t(), now = L.nowStamp(), last = L.colLetter(t.header.length - 1);
+    Modal.open('Import', 'Salvo…', []);
+    try {
+      var upd = agg.map(function (x) { var row = t.header.map(function (h) { return h in x.o ? x.o[h] : (h === 'modificato_il' ? now : (h === 'modificato_da' ? Auth.email : L.s(x.r[h]))); }); return { range: API.q(t.name) + '!A' + x.r._r + ':' + last + x.r._r, values: [row], x: x, row: row }; });
+      for (var i = 0; i < upd.length; i += 400) { Modal.progress('Aggiorno ' + Math.min(i + 400, upd.length) + '/' + upd.length); await API.batchUpdate(DB.id, upd.slice(i, i + 400).map(function (u) { return { range: u.range, values: u.values }; })); }
+      upd.forEach(function (u) { t.header.forEach(function (h, j) { u.x.r[h] = L.s(u.row[j]); }); });
+      if (nuovi.length) {
+        Modal.progress('Aggiungo ' + nuovi.length + ' righe');
+        var objs = nuovi.map(function (o) { var n = Object.assign({}, o); if ('creato_il' in t.idx) n.creato_il = now; if ('creato_da' in t.idx) n.creato_da = Auth.email; return n; });
+        for (var j = 0; j < objs.length; j += 5000) { var part = objs.slice(j, j + 5000), r = await API.append(DB.id, t.name, part.map(function (o) { return t.toRow(o); })); part.forEach(function (o, k) { Ack.pushRow(t, o, r + k); }); }
+      }
+      await API.append(DB.id, 'LOG', [App.log('IMPORT', t.name, nome, { nuove: nuovi.length, aggiornate: agg.length })]);
+      Modal.close(); toast(t.name + ': ' + nuovi.length + ' nuove, ' + agg.length + ' aggiornate', 'ok'); Ana.render(); Ana.dopo();
+    } catch (e) { Modal.open('Import non completato', e.message + '\n\nPremi ↻ per vedere cosa è stato salvato.'); }
+  },
+  sostituisci: async function (rows, nomi, trov, nome) {
+    var t = Ana.t(), C = Ana.CONF[Ana.sez];
+    var objs = rows.map(function (r) { var o = {}; trov.forEach(function (h) { o[h] = campo(r, nomi[h]); }); return o; }).filter(function (o) { return C.chiave.every(function (k) { return o[k]; }); });
+    if (!(await Modal.confirm('Sostituisci tutto · ' + C.titolo, 'Il foglio ' + t.name + ' (' + t.rows.length + ' righe) viene SVUOTATO e riscritto con le ' + objs.length + ' righe del file.\nLe colonne non presenti nel file restano vuote.\n\nSicuro?'))) return;
+    Modal.open('Sostituisci tutto', 'Non chiudere la pagina.', []);
+    try {
+      var last = L.colLetter(t.header.length - 1), now = L.nowStamp();
+      await API.call(API.S + DB.id + '/values/' + encodeURIComponent(API.q(t.name) + '!A2:' + last) + ':clear', { method: 'POST', body: '{}' });
+      var vals = objs.map(function (o) { if ('creato_il' in t.idx) o.creato_il = now; if ('creato_da' in t.idx) o.creato_da = Auth.email; return t.toRow(o); });
+      for (var i = 0; i < vals.length; i += 5000) { Modal.progress('Scrivo ' + Math.min(i + 5000, vals.length) + '/' + vals.length); await API.batchUpdate(DB.id, [{ range: API.q(t.name) + '!A' + (i + 2) + ':' + last + (i + 1 + Math.min(5000, vals.length - i)), values: vals.slice(i, i + 5000) }]); }
+      await API.append(DB.id, 'LOG', [App.log('IMPORT_SOSTITUISCI', t.name, nome, { prima: t.rows.length, dopo: objs.length })]);
+      await DB.loadTables([t.name]); Modal.close(); toast(t.name + ' sostituito: ' + objs.length + ' righe', 'ok'); Ana.render(); Ana.dopo();
+    } catch (e) { Modal.open('Sostituzione non completata', e.message + '\n\nIl foglio potrebbe essere parziale: rifai l\'import.'); }
   }
 };
 
