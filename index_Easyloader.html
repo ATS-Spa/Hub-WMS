@@ -3278,6 +3278,20 @@ var Rma = {
   },
   ultimoImport: function () { var m = ''; DB.t.RMA_RITORNI.rows.forEach(function (r) { if (r.importato_il > m) m = r.importato_il; }); return m; },
   // RMA aperte dell'ultimo import, dalla data di inizio operativa in poi
+  // ritorno scaduto: oltre la data scadenza (data open + rma_giorni_scadenza giorni lavorativi) non si abbina e non si usa come RMA creato
+  scaduto: function (r, oggi) { return !!(r && L.s(r.data_scadenza) && L.s(r.data_scadenza) < (oggi || L.isoToday())); },
+  // formato RMA: cifre da PARAMETRI rma_cifre ("6", oppure "6,7" quando arriverà a 1000000)
+  cifre: function () { var c = L.s(DB.param('rma_cifre', '6')).split(/[,;\s]+/).map(function (x) { return parseInt(x, 10); }).filter(function (n) { return n > 0; }); return c.length ? c : [6]; },
+  rmaErr: function (v, perCreato) {
+    v = L.s(v); if (!v) return '';
+    var c = Rma.cifre();
+    if (!/^\d+$/.test(v) || c.indexOf(v.length) < 0) return 'RMA ' + v + ': deve avere ' + c.join(' o ') + ' cifre (solo numeri)';
+    if (perCreato) {
+      var r = DB.t.RMA_RITORNI && DB.t.RMA_RITORNI.rows.find(function (x) { return x.id_rma === v && x.stato !== 'ANNULLATO'; });
+      if (r && Rma.scaduto(r)) return 'RMA ' + v + ' è un ritorno in giacenza scaduto il ' + L.itDate(r.data_scadenza) + ': non si può usare';
+    }
+    return '';
+  },
   attivi: function () {
     var ult = Rma.ultimoImport();
     return DB.t.RMA_RITORNI.rows.filter(function (r) { return r.importato_il === ult && (r.stato === 'DA_EVADERE' || r.stato === 'ASSEGNATA') && DB.daQuestAnno(r.data_apertura); });
@@ -3331,7 +3345,8 @@ var Rma = {
     var inv = Rma.inventario(), creati = {};
     inv.forEach(function (u) { var v = L.s(Rma.dv(u, 'rma')); if (v) creati[v] = 1; });
     Rma.carichi().forEach(function (c) { if (c.rma) creati[c.rma] = 1; });
-    var rmaList = Rma.attivi().filter(function (r) { return !creati[r.id_rma]; });
+    var oggi = L.isoToday();
+    var rmaList = Rma.attivi().filter(function (r) { return !creati[r.id_rma] && !Rma.scaduto(r, oggi); });
     var liberi = inv.filter(function (u) { return u.tipo === 'GOOD' && !L.s(Rma.dv(u, 'rma')); });
     Rma.abb = L.abbinaRma(rmaList, liberi, Rma.ctx());
     return inv;
@@ -3344,8 +3359,9 @@ var Rma = {
     var imp = '<label class="btn ghost sm" style="cursor:pointer" title="CSV esportato da VLT: Ritorni in giacenza">⬆ Importa CSV ritorni<input type="file" accept=".csv,.txt" style="display:none" onchange="Rma.importa(this)"></label>';
     var info = '<div class="hint" style="margin-top:8px">' + (ult ? 'Ultimo import ritorni: ' + esc(ult) + ' · ' + Rma.attivi().length + ' RMA aperte dal ' + esc(L.itDate(DB.dataInizio())) : 'Nessun import ritorni: carica il CSV esportato da VLT.') + '</div>';
     var xl = ' <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button>';
-    if (s === 'inv') return '<div class="row">' + imp + xl + ' <button class="btn ghost sm" onclick="Rma.etichette()" title="Etichetta 10x5 solo per le schede con variazione di destino (tra le righe filtrate)">🏷 Etichette RMA</button>' + (Rma.ieri().length ? ' <button class="btn sm" onclick="Rma.associaIeri()" title="Gli RMA giacenza aperti ieri diventano RMA creato; i più vecchi li controlla il Service Desk">✓ Associa RMA di ieri (' + Rma.ieri().length + ')</button>' : '') + '<div class="spacer"></div><button class="btn sm" ' + (nD ? '' : 'disabled') + ' onclick="Rma.salva()">Salva modifiche' + (nD ? ' (' + nD + ')' : '') + '</button></div>' + info;
-    if (s === 'rit') return '<div class="row">' + imp + xl + (Rma.attivi().length ? ' <button class="btn ghost sm" onclick="Rma.annullaImport()" title="Annulla i ritorni dell\'ultimo import (es. file sbagliato): poi puoi caricarne uno nuovo">🗑 Annulla import ritorni</button>' : '') + '</div>' + info;
+    var ann = Rma.attivi().length ? ' <button class="btn ghost sm" onclick="Rma.annullaImport()" title="Annulla i ritorni dell\'ultimo import (es. file sbagliato): poi puoi caricarne uno nuovo">🗑 Annulla import ritorni</button>' : '';
+    if (s === 'inv') return '<div class="row">' + imp + ann + xl + ' <button class="btn ghost sm" onclick="Rma.etichette()" title="Etichetta 10x5 solo per le schede con variazione di destino (tra le righe filtrate)">🏷 Etichette RMA</button>' + (Rma.ieri().length ? ' <button class="btn sm" onclick="Rma.associaIeri()" title="Gli RMA giacenza aperti ieri diventano RMA creato; i più vecchi li controlla il Service Desk">✓ Associa RMA di ieri (' + Rma.ieri().length + ')</button>' : '') + '<div class="spacer"></div><button class="btn sm" ' + (nD ? '' : 'disabled') + ' onclick="Rma.salva()">Salva modifiche' + (nD ? ' (' + nD + ')' : '') + '</button></div>' + info;
+    if (s === 'rit') return '<div class="row">' + imp + ann + xl + '</div>' + info;
     if (s === 'car') return '<div class="row">' +
       '<div class="fg" style="width:240px"><span class="fl">Seriale *</span><input class="fc mono" id="carSer" autocomplete="off" placeholder="spara il seriale" onkeydown="if(event.key===\'Enter\'){event.preventDefault();$(\'carRma\').focus()}" oninput="Rma.carInfo()"><span class="hint" id="carHint"></span></div>' +
       '<div class="fg" style="width:120px"><span class="fl">RMA *</span><input class="fc mono" id="carRma" autocomplete="off"></div>' +
@@ -3468,6 +3484,7 @@ var Rma = {
   },
   set: function (id, f, v) {
     var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); v = f === 'rma' ? L.frKey(v) : L.s(v);
+    if (f === 'rma' && v && Rma.rmaErr(v, true)) toast(Rma.rmaErr(v, true), 'ko');
     var orig = L.s(f === 'dest' ? u.destinazione_prevista : u.rma), d = Rma.dirty[id] || {};
     if (v === orig) delete d[f]; else d[f] = v;
     if (Object.keys(d).length) Rma.dirty[id] = d; else delete Rma.dirty[id];
@@ -3475,8 +3492,8 @@ var Rma = {
   },
   salva: async function () {
     var ids = Object.keys(Rma.dirty); if (!ids.length) return;
-    var bad = ids.filter(function (id) { var d = Rma.dirty[id]; return d.rma && !/^\d+$/.test(d.rma); });
-    if (bad.length) { Modal.open('RMA non valido', 'L\'RMA deve essere un numero.'); return; }
+    var bad = ids.map(function (id) { var d = Rma.dirty[id], u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); var e = d.rma ? Rma.rmaErr(d.rma, true) : ''; return e ? (u ? u.seriale + ': ' : '') + e : ''; }).filter(Boolean);
+    if (bad.length) { Modal.open('RMA non valido', bad.join('\n')); return; }
     var tU = DB.t.UNITA, now = L.nowStamp(), upd = [], logs = [], ch = {};
     ids.forEach(function (id) {
       var u = tU.rows.find(function (x) { return x.id_unita === id; }), d = Rma.dirty[id], c = { modificato_il: now, modificato_da: Auth.email, rev: (parseInt(u.rev, 10) || 1) + 1 }, prima = {};
@@ -3553,6 +3570,7 @@ var Rma = {
     if (Rma.carichi().some(function (c) { return c.id_unita === u.id_unita; })) return { u: u, err: 'già in un carico aperto' };
     if (visti && visti[u.id_unita]) return { u: u, err: 'seriale ripetuto nel file' };
     if (!L.s(o.rma)) return { u: u, err: 'RMA mancante' };
+    var re = Rma.rmaErr(o.rma, true); if (re) return { u: u, err: re };
     if (!L.s(o.destinazione)) return { u: u, err: 'destinazione mancante' };
     return { u: u, err: '' };
   },
@@ -4101,6 +4119,7 @@ Jun.salvaUscita = async function (id, idU) {
   var r = Jun.t().rows.find(function (x) { return x.id_juniper === id; }), tU = DB.t.UNITA, u = tU.rows.find(function (x) { return x.id_unita === idU; });
   var rma = L.frKey($('juRma').value), dest = L.s($('juDest').value), err = function (m) { $('juErr').textContent = m; $('juErr').className = 'hint err'; };
   if (rma && !/^\d+$/.test(rma)) { err('L\'RMA deve essere solo numeri (quello Juniper va nelle note)'); return; }
+  if (rma && Rma.rmaErr(rma, true)) { err(Rma.rmaErr(rma, true)); return; }
   if (!dest) { err('Indica la destinazione'); return; }
   Modal.progress('Salvataggio…');
   try {
