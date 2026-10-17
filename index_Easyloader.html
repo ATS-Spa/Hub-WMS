@@ -3673,7 +3673,7 @@ var Rma = {
       }).join('') + '</div></div>';
   },
   // ─ EXCEL RMA per il Service Desk: scarica le schede filtrate, il SD compila RMA CREATO (e NUOVA DESTINAZIONE se cambia), poi si reimporta
-  XR: ['ID UNITA', 'SERIALE', 'FR', 'TIPO', 'P/N', 'MNFT', 'REPAIR', 'MATERIAL', 'DESTINAZIONE ORIGINALE', 'DESTINAZIONE ATTUALE', 'NUOVA DESTINAZIONE', 'RMA CREATO', 'RMA GIACENZA PROPOSTO', 'DESTINAZIONE RITORNO', 'DATA OPEN', 'SCADENZA', 'NOTE SD'],
+  XR: ['P/N', 'MATERIAL', 'ID UNITA', 'SERIALE', 'FR', 'TIPO', 'MNFT', 'REPAIR', 'DESTINAZIONE ORIGINALE', 'DESTINAZIONE ATTUALE', 'NUOVA DESTINAZIONE', 'RMA CREATO', 'RMA GIACENZA PROPOSTO', 'DESTINAZIONE RITORNO', 'DATA OPEN', 'SCADENZA', 'NOTE SD'],
   destinazioni: function () {
     var m = {}; function add(x) { x = L.s(x); if (x && !m[L.up(x)]) m[L.up(x)] = x; }
     DB.t.CONTROPARTI.rows.forEach(function (r) { add(r.codice); });
@@ -3686,7 +3686,7 @@ var Rma = {
     var rows = vis.filter(function (u) { return u.tipo === 'GOOD' || u.tipo === 'BALANCING'; }).map(function (u) {
       var v = Rma.varia(u), a = Rma.ritDi(u), o = Rma.origine(u), att = v ? v.nuova : L.s(Rma.dv(u, 'dest'));
       var orig = u.tipo === 'GOOD' ? (o[0] || (v ? v.prima : '') || att) : att;   // dove andava (deposito VLT dell'FR) → dove va adesso
-      return [u.id_unita, u.seriale, u.fr, u.tipo, u.pn, u.mnft, u.riparatore, c.materialDi(u), orig, att, '', L.s(Rma.dv(u, 'rma')),
+      return [u.pn, c.materialDi(u), u.id_unita, u.seriale, u.fr, u.tipo, u.mnft, u.riparatore, orig, att, '', L.s(Rma.dv(u, 'rma')),
         a ? a.rma.id_rma : '', a ? Rma.destRma(a.rma) : '', a ? L.s(a.rma.data_apertura).slice(0, 10) : '', a ? a.rma.data_scadenza : '', a && a.rma.failure_report ? 'RITORNO GIACENZA FR ' + a.rma.failure_report : ''];
     });
     if (!rows.length) { toast('Nessuna scheda GOOD/BALANCING tra le righe filtrate', 'ko'); return; }
@@ -3699,7 +3699,7 @@ var Rma = {
     var nome = 'Excel_RMA_' + L.isoToday() + '.xlsx';
     try {
       await Lib.exceljs();
-      var wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('RMA', { views: [{ state: 'frozen', ySplit: 1, xSplit: 2 }] });
+      var wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('RMA', { views: [{ state: 'frozen', ySplit: 1, xSplit: 2 }] }   /* P/N e MATERIAL sempre a vista: servono per creare l RMA */);
       ws.addRow(Rma.XR); rows.forEach(function (r) { ws.addRow(r); });
       var ED = { 'NUOVA DESTINAZIONE': 1, 'RMA CREATO': 1 }, n = rows.length + 1;
       ws.getRow(1).eachCell(function (cell, i) {
@@ -3717,10 +3717,9 @@ var Rma = {
       ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: n, column: Rma.XR.length } };
       var wd = wb.addWorksheet('DESTINAZIONI'); wd.addRow(['DESTINAZIONE']); dest.forEach(function (d) { wd.addRow([d]); }); wd.getColumn(1).width = 46; wd.getRow(1).font = { bold: true };
       var colD = Rma.XR.indexOf('NUOVA DESTINAZIONE') + 1, colR = Rma.XR.indexOf('RMA CREATO') + 1;
-      for (var r = 2; r <= n; r++) {
-        ws.getCell(r, colD).dataValidation = { type: 'list', allowBlank: true, formulae: ['DESTINAZIONI!$A$2:$A$' + (dest.length + 1)], showErrorMessage: true, errorStyle: 'stop', errorTitle: 'Destinazione', error: 'Scegli una destinazione dal menu (foglio DESTINAZIONI)' };
-        ws.getCell(r, colR).dataValidation = { type: 'textLength', operator: 'between', allowBlank: true, formulae: [Math.min.apply(null, Rma.cifre()), Math.max.apply(null, Rma.cifre())], showErrorMessage: true, errorStyle: 'warning', errorTitle: 'RMA', error: 'L RMA deve avere ' + Rma.cifre().join(' o ') + ' cifre' };
-      }
+      var L_ = function (c) { return ws.getColumn(c).letter; };   // una sola convalida per colonna (niente intervalli sovrapposti)
+      ws.dataValidations.add(L_(colD) + '2:' + L_(colD) + n, { type: 'list', allowBlank: true, formulae: ['DESTINAZIONI!$A$2:$A$' + (dest.length + 1)], showErrorMessage: true, errorStyle: 'stop', errorTitle: 'Destinazione', error: 'Scegli una destinazione dal menu (foglio DESTINAZIONI)' });
+      ws.dataValidations.add(L_(colR) + '2:' + L_(colR) + n, { type: 'textLength', operator: 'between', allowBlank: true, formulae: [Math.min.apply(null, Rma.cifre()), Math.max.apply(null, Rma.cifre())], showErrorMessage: true, errorStyle: 'warning', errorTitle: 'RMA', error: 'L RMA deve avere ' + Rma.cifre().join(' o ') + ' cifre' });
       var wi = wb.addWorksheet('ISTRUZIONI'); wi.addRow(['Come compilare']); wi.getRow(1).font = { bold: true }; istr.forEach(function (t) { wi.addRow([t]); }); wi.getColumn(1).width = 130;
       var buf = await wb.xlsx.writeBuffer(), url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })), aEl = document.createElement('a');
       aEl.href = url; aEl.download = nome; document.body.appendChild(aEl); aEl.click(); aEl.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
