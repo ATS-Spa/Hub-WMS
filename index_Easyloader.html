@@ -2583,6 +2583,7 @@ var Lib = {
     return Lib._p[url];
   },
   xlsx: function () { return Lib.load('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', function () { return !!window.XLSX; }); },
+  exceljs: function () { return Lib.load('https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js', function () { return !!window.ExcelJS; }); },   // Excel con tendine (convalida dati)
   qr: function () { return Lib.load('https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js', function () { return !!window.qrcode; }); }
 };
 // legge un Excel/CSV caricato: righe come oggetti {INTESTAZIONE MAIUSCOLA: valore}
@@ -3672,7 +3673,7 @@ var Rma = {
       }).join('') + '</div></div>';
   },
   // ─ EXCEL RMA per il Service Desk: scarica le schede filtrate, il SD compila RMA CREATO (e NUOVA DESTINAZIONE se cambia), poi si reimporta
-  XR: ['ID UNITA', 'SERIALE', 'FR', 'TIPO', 'P/N', 'MNFT', 'REPAIR', 'MATERIAL', 'DESTINAZIONE ATTUALE', 'RMA GIACENZA PROPOSTO', 'DATA OPEN', 'SCADENZA', 'NOTE SD', 'RMA CREATO', 'NUOVA DESTINAZIONE'],
+  XR: ['ID UNITA', 'SERIALE', 'FR', 'TIPO', 'P/N', 'MNFT', 'REPAIR', 'MATERIAL', 'DESTINAZIONE ORIGINALE', 'DESTINAZIONE ATTUALE', 'NUOVA DESTINAZIONE', 'RMA CREATO', 'RMA GIACENZA PROPOSTO', 'DESTINAZIONE RITORNO', 'DATA OPEN', 'SCADENZA', 'NOTE SD'],
   destinazioni: function () {
     var m = {}; function add(x) { x = L.s(x); if (x && !m[L.up(x)]) m[L.up(x)] = x; }
     DB.t.CONTROPARTI.rows.forEach(function (r) { add(r.codice); });
@@ -3680,25 +3681,54 @@ var Rma = {
     Rma.inventario().forEach(function (u) { add(u.destinazione_prevista); });
     return m;   // MAIUSCOLO → nome come in anagrafica
   },
-  excelRma: function () {
+  excelRma: async function () {
     var vis = (Rma.grids.inv && Rma.grids.inv.visibili) || Rma.inventario(), c = Rma.ctx();
     var rows = vis.filter(function (u) { return u.tipo === 'GOOD' || u.tipo === 'BALANCING'; }).map(function (u) {
-      var v = Rma.varia(u), a = Rma.ritDi(u);
-      return [u.id_unita, u.seriale, u.fr, u.tipo, u.pn, u.mnft, u.riparatore, c.materialDi(u), v ? v.nuova : L.s(Rma.dv(u, 'dest')),
-        a ? a.rma.id_rma : '', a ? L.s(a.rma.data_apertura).slice(0, 10) : '', a ? a.rma.data_scadenza : '', a && a.rma.failure_report ? 'RITORNO GIACENZA FR ' + a.rma.failure_report : '',
-        L.s(Rma.dv(u, 'rma')), ''];
+      var v = Rma.varia(u), a = Rma.ritDi(u), o = Rma.origine(u), att = v ? v.nuova : L.s(Rma.dv(u, 'dest'));
+      var orig = u.tipo === 'GOOD' ? (o[0] || (v ? v.prima : '') || att) : att;   // dove andava (deposito VLT dell'FR) → dove va adesso
+      return [u.id_unita, u.seriale, u.fr, u.tipo, u.pn, u.mnft, u.riparatore, c.materialDi(u), orig, att, '', L.s(Rma.dv(u, 'rma')),
+        a ? a.rma.id_rma : '', a ? Rma.destRma(a.rma) : '', a ? L.s(a.rma.data_apertura).slice(0, 10) : '', a ? a.rma.data_scadenza : '', a && a.rma.failure_report ? 'RITORNO GIACENZA FR ' + a.rma.failure_report : ''];
     });
     if (!rows.length) { toast('Nessuna scheda GOOD/BALANCING tra le righe filtrate', 'ko'); return; }
-    var dest = Object.keys(Rma.destinazioni()).map(function (k) { return Rma.destinazioni()[k]; }).sort();
-    Xls.scarica('Excel_RMA', [
-      { nome: 'RMA', headers: Rma.XR, rows: rows },
-      { nome: 'DESTINAZIONI', headers: ['DESTINAZIONE (copia il nome esatto in NUOVA DESTINAZIONE)'], rows: dest.map(function (d) { return [d]; }) },
-      { nome: 'ISTRUZIONI', headers: ['Come compilare'], rows: [
-        ['1. Compila solo le ultime due colonne: RMA CREATO e, se il pezzo deve andare altrove, NUOVA DESTINAZIONE.'],
-        ['2. NUOVA DESTINAZIONE vuota = resta la destinazione attuale. Se l RMA è un ritorno in giacenza, la destinazione del ritorno viene presa da sola.'],
-        ['3. Usa i nomi del foglio DESTINAZIONI. Non cambiare ID UNITA e SERIALE: servono per riconoscere la scheda.'],
-        ['4. RMA di ' + Rma.cifre().join(' o ') + ' cifre. Poi in RMA → Inventario giornaliero premi "⬆ Importa RMA": vedi l anteprima e confermi.']] }
-    ]);
+    var D = Rma.destinazioni(), dest = Object.keys(D).map(function (k) { return D[k]; }).sort();
+    var istr = ['1. Compila solo le colonne gialle: NUOVA DESTINAZIONE (menu a tendina, solo se il pezzo deve andare altrove) e RMA CREATO.',
+      '2. NUOVA DESTINAZIONE vuota = resta la DESTINAZIONE ATTUALE. Se l RMA è un ritorno in giacenza, la destinazione del ritorno viene presa da sola.',
+      '3. DESTINAZIONE ORIGINALE = dove andava il pezzo (deposito VLT dell FR); DESTINAZIONE ATTUALE = dove va adesso (anche per variazione da ritorno in giacenza).',
+      '4. Non cambiare ID UNITA e SERIALE: servono per riconoscere la scheda. RMA di ' + Rma.cifre().join(' o ') + ' cifre.',
+      '5. Poi in RMA → Inventario giornaliero premi "⬆ Importa RMA": vedi l anteprima e confermi.'];
+    var nome = 'Excel_RMA_' + L.isoToday() + '.xlsx';
+    try {
+      await Lib.exceljs();
+      var wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('RMA', { views: [{ state: 'frozen', ySplit: 1, xSplit: 2 }] });
+      ws.addRow(Rma.XR); rows.forEach(function (r) { ws.addRow(r); });
+      var ED = { 'NUOVA DESTINAZIONE': 1, 'RMA CREATO': 1 }, n = rows.length + 1;
+      ws.getRow(1).eachCell(function (cell, i) {
+        var ed = ED[Rma.XR[i - 1]];
+        cell.font = { bold: true, color: { argb: ed ? 'FF000000' : 'FFFFFFFF' } };
+        cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ed ? 'FFFFD966' : 'FF1F3864' } };
+        cell.alignment = { vertical: 'middle', wrapText: true };
+      });
+      Rma.XR.forEach(function (h, i) {
+        var col = ws.getColumn(i + 1), m = h.length; rows.slice(0, 300).forEach(function (r) { m = Math.max(m, String(r[i] == null ? '' : r[i]).length); });
+        col.width = Math.min(42, m + 2);
+        if (ED[h]) for (var r = 2; r <= n; r++) ws.getCell(r, i + 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
+      });
+      ws.getColumn(Rma.XR.indexOf('RMA CREATO') + 1).numFmt = '@';
+      ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: n, column: Rma.XR.length } };
+      var wd = wb.addWorksheet('DESTINAZIONI'); wd.addRow(['DESTINAZIONE']); dest.forEach(function (d) { wd.addRow([d]); }); wd.getColumn(1).width = 46; wd.getRow(1).font = { bold: true };
+      var colD = Rma.XR.indexOf('NUOVA DESTINAZIONE') + 1, colR = Rma.XR.indexOf('RMA CREATO') + 1;
+      for (var r = 2; r <= n; r++) {
+        ws.getCell(r, colD).dataValidation = { type: 'list', allowBlank: true, formulae: ['DESTINAZIONI!$A$2:$A$' + (dest.length + 1)], showErrorMessage: true, errorStyle: 'stop', errorTitle: 'Destinazione', error: 'Scegli una destinazione dal menu (foglio DESTINAZIONI)' };
+        ws.getCell(r, colR).dataValidation = { type: 'textLength', operator: 'between', allowBlank: true, formulae: [Math.min.apply(null, Rma.cifre()), Math.max.apply(null, Rma.cifre())], showErrorMessage: true, errorStyle: 'warning', errorTitle: 'RMA', error: 'L RMA deve avere ' + Rma.cifre().join(' o ') + ' cifre' };
+      }
+      var wi = wb.addWorksheet('ISTRUZIONI'); wi.addRow(['Come compilare']); wi.getRow(1).font = { bold: true }; istr.forEach(function (t) { wi.addRow([t]); }); wi.getColumn(1).width = 130;
+      var buf = await wb.xlsx.writeBuffer(), url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })), aEl = document.createElement('a');
+      aEl.href = url; aEl.download = nome; document.body.appendChild(aEl); aEl.click(); aEl.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    } catch (e) {
+      // senza la libreria delle tendine: stesso file, senza menu
+      toast('Menu a tendina non disponibile (' + e.message + '): scarico il file semplice', 'ko');
+      Xls.scarica('Excel_RMA', [{ nome: 'RMA', headers: Rma.XR, rows: rows }, { nome: 'DESTINAZIONI', headers: ['DESTINAZIONE'], rows: dest.map(function (d) { return [d]; }) }, { nome: 'ISTRUZIONI', headers: ['Come compilare'], rows: istr.map(function (t) { return [t]; }) }]);
+    }
   },
   importaRma: async function (inp) {
     var f = inp.files && inp.files[0]; inp.value = ''; if (!f) return;
