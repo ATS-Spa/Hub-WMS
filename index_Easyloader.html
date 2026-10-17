@@ -950,7 +950,7 @@ var Sync = {
   },
   ricarica: async function (fogli) {
     var T = ['UNITA', 'BALANCING', 'CALENDARIO_USCITE'];
-    if (Rma.loaded) T = T.concat(['RMA_RITORNI', 'SPEDIZIONI', 'CARICHI_RMA']);
+    if (Rma.loaded) T = T.concat(['RMA_RITORNI', 'SPEDIZIONI', 'CARICHI_RMA', 'RMA_PENDING']);
     var ackLibero = Ack.loaded && !Ack.cur;
     if (ackLibero && T.indexOf('SPEDIZIONI') < 0) T = T.concat(['SPEDIZIONI']);
     if (ackLibero) T = T.concat(['SPEDIZIONI_RIGHE', 'ACK_PENDING']);
@@ -1221,7 +1221,7 @@ var App = {
       await DB.loadTables(DB.SMALL.concat(['UNITA'])); await DB.loadVlt(true);
       try { await DB.loadHuawei(true); } catch (e) { toast('File Huawei non leggibile: ' + e.message, 'ko'); }
       Ingresso._heads = null;
-    if (Rma.loaded) { await DB.loadTables(['RMA_RITORNI', 'SPEDIZIONI', 'SPEDIZIONI_COLLI', 'CARICHI_RMA']); await Rma.autoVlt(false); }
+    if (Rma.loaded) { await DB.loadTables(['RMA_RITORNI', 'SPEDIZIONI', 'SPEDIZIONI_COLLI', 'CARICHI_RMA', 'RMA_PENDING']); await Rma.autoVlt(false); }
     if (Bal.loaded) await Bal.load(); if (Jun.loaded) await Jun.load(); Sto.dati.cur = null;
     if (Ack.loaded) { await Ack.flush(); await Ack.load(); }
       App.fillLists(); App.syncInfo(); Ingresso.ricalcola(); Ingresso.renderOggi(); if (App.tab === 'giacenze') Giacenze.render(); if (App.tab === 'admin') Admin.render(); if (App.tab === 'ack') Ack.render(); if (App.tab === 'rma') Rma.render(); if (App.tab === 'balancing') Bal.render(); if (App.tab === 'juniper') Jun.render(); if (App.tab === 'vlt') Vlt.render();
@@ -3263,6 +3263,7 @@ var Rma = {
   RIT_MAP: { 'Id': 'id_rma', 'Richiedente': 'richiedente', 'Data Apertura': 'data_apertura', 'Data Ultima Modifica': 'data_ultima_modifica', 'Material': 'material', 'Equipment': 'equipment',
     'Seriale': 'seriale_vlt', 'Manufact Part Number': 'mpn', 'Materiale Descrizione': 'descrizione', 'Stato': 'stato_vlt', 'Deposito Origine': 'deposito_origine',
     'Deposito Destinazione RMA': 'deposito_dest_rma', 'Deposito Destinazione Indirizzo RMA': 'indirizzo_dest_rma', 'Failure Report': 'failure_report', 'Priorita': 'priorita', 'Quantita': 'quantita', 'Note': 'note_vlt' },
+  PEN_H: ['id_pending', 'id_unita', 'seriale', 'tipo', 'id_carico', 'rma', 'destinazione', 'motivo', 'stato', 'messo_il', 'messo_da', 'sbloccato_il', 'sbloccato_da', 'nota_sblocco'],
   CAR_H: ['id_carico', 'data', 'id_unita', 'seriale', 'pn', 'tipo', 'rma', 'destinazione', 'po_mrn', 'posizione', 'note', 'stato', 'id_spedizione', 'creato_il', 'creato_da'],
   show: async function () {
     if (!Rma.loaded) {
@@ -3274,6 +3275,7 @@ var Rma = {
   load: async function () {
     await DB.loadTables(['RMA_RITORNI', 'SPEDIZIONI', 'SPEDIZIONI_COLLI']);
     await DB.ensureSheet('CARICHI_RMA', Rma.CAR_H);
+    await DB.ensureSheet('RMA_PENDING', Rma.PEN_H);
     var c = await DB.cacheGet('rmalk');
     if (!c || (Date.now() - c.ts) > 24 * 3600 * 1000) {
       var art = await DB.loadCols(DB.id, 'ARTICOLI', ['material', 'pn']);
@@ -3421,7 +3423,7 @@ var Rma = {
     Rma.carichi().forEach(function (c) { if (c.rma) creati[c.rma] = 1; });
     var oggi = L.isoToday();
     var rmaList = Rma.attivi().filter(function (r) { return !creati[r.id_rma] && !Rma.scaduto(r, oggi); });
-    var liberi = inv.filter(function (u) { return u.tipo === 'GOOD' && !L.s(Rma.dv(u, 'rma')); });
+    var liberi = inv.filter(function (u) { return u.tipo === 'GOOD' && !L.s(Rma.dv(u, 'rma')) && !Rma.pend(u.id_unita); });
     Rma.abb = L.abbinaRma(rmaList, liberi, Rma.ctx());
     return inv;
   },
@@ -3436,7 +3438,9 @@ var Rma = {
     var info = '<div class="hint" style="margin-top:8px">' + (ult ? 'Ultimo import ritorni: ' + esc(ult) + (au ? ' (automatico, rma.csv del ' + esc(au) + ')' : '') + ' · ' + Rma.attivi().length + ' RMA aperte dal ' + esc(L.itDate(DB.dataInizio())) : 'Nessun import ritorni: carica il CSV esportato da VLT.') + '</div>';
     var xl = ' <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button>';
     var ann = Rma.attivi().length ? ' <button class="btn ghost sm" onclick="Rma.annullaImport()" title="Annulla i ritorni dell\'ultimo import (es. file sbagliato): poi puoi caricarne uno nuovo">🗑 Annulla import ritorni</button>' : '';
-    if (s === 'inv') return '<div class="row">' + imp + ann + xl + ' <button class="btn ghost sm" onclick="Rma.etichette()" title="Etichetta 10x5 solo per le schede con variazione di destino (tra le righe filtrate)">🏷 Etichette RMA</button>' + (Rma.ieri().length ? ' <button class="btn sm" onclick="Rma.associaIeri()" title="Gli RMA giacenza aperti ieri diventano RMA creato; i più vecchi li controlla il Service Desk">✓ Associa RMA di ieri (' + Rma.ieri().length + ')</button>' : '') + '<div class="spacer"></div><button class="btn sm" ' + (nD ? '' : 'disabled') + ' onclick="Rma.salva()">Salva modifiche' + (nD ? ' (' + nD + ')' : '') + '</button></div>' + info;
+    var xr = ' <button class="btn ghost sm" onclick="Rma.excelRma()" title="Schede filtrate da far compilare al Service Desk (RMA creato e nuova destinazione), poi da reimportare">⬇ Excel RMA</button>' +
+      ' <label class="btn ghost sm" style="cursor:pointer" title="Reimporta l Excel RMA compilato: anteprima e anomalie prima di confermare">⬆ Importa RMA<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Rma.importaRma(this)"></label>';
+    if (s === 'inv') return '<div class="row">' + imp + ann + xl + xr + ' <button class="btn ghost sm" onclick="Rma.etichette()" title="Etichetta 10x5 solo per le schede con variazione di destino (tra le righe filtrate)">🏷 Etichette RMA</button>' + (Rma.ieri().length ? ' <button class="btn sm" onclick="Rma.associaIeri()" title="Gli RMA giacenza aperti ieri diventano RMA creato; i più vecchi li controlla il Service Desk">✓ Associa RMA di ieri (' + Rma.ieri().length + ')</button>' : '') + '<div class="spacer"></div><button class="btn sm" ' + (nD ? '' : 'disabled') + ' onclick="Rma.salva()">Salva modifiche' + (nD ? ' (' + nD + ')' : '') + '</button></div>' + info;
     if (s === 'rit') return '<div class="row">' + imp + ann + xl + '</div>' + info;
     if (s === 'car') return '<div class="row">' +
       '<div class="fg" style="width:240px"><span class="fl">Seriale *</span><input class="fc mono" id="carSer" autocomplete="off" placeholder="spara il seriale" onkeydown="if(event.key===\'Enter\'){event.preventDefault();$(\'carRma\').focus()}" oninput="Rma.carInfo()"><span class="hint" id="carHint"></span></div>' +
@@ -3515,7 +3519,8 @@ var Rma = {
         { k: 'rmag', label: 'RMA giacenza', filter: 'text', cls: 'mono', get: function (u) { var a = Rma.ritDi(u); return a ? a.rma.id_rma : ''; }, html: function (u) { var a = Rma.ritDi(u); return a ? '<span style="color:var(--green)">' + esc(a.rma.id_rma) + '</span>' : ''; } },
         { k: 'open', label: 'Data open', cls: 'mono', get: function (u) { var a = Rma.ritDi(u); return a ? a.rma.data_apertura.slice(0, 10) : ''; } },
         { k: 'scad', label: 'Scadenza', cls: 'mono', get: function (u) { var a = Rma.ritDi(u); return a ? a.rma.data_scadenza : ''; }, html: function (u) { var a = Rma.ritDi(u), sc = a ? a.rma.data_scadenza : ''; return '<span' + (sc && sc < oggi() ? ' style="color:var(--red)"' : '') + '>' + esc(sc) + '</span>'; } },
-        { k: 'nsd', label: 'Note SD', filter: 'text', get: function (u) { var a = Rma.ritDi(u); return a && a.rma.failure_report ? 'RITORNO GIACENZA FR ' + a.rma.failure_report : ''; } }
+        { k: 'nsd', label: 'Note SD', filter: 'text', get: function (u) { var a = Rma.ritDi(u); return a && a.rma.failure_report ? 'RITORNO GIACENZA FR ' + a.rma.failure_report : ''; } },
+        { k: 'pend', label: 'Pending', filter: 'text', noXls: false, get: function (u) { var p = Rma.pend(u.id_unita); return p ? p.motivo : ''; }, html: function (u) { return Rma.pendCella(u); } }
       ]
     }));
     if (s === 'rit') {
@@ -3553,6 +3558,7 @@ var Rma = {
         { k: 'posizione', label: 'Posizione', filter: 'select', cls: 'mono' },
         { k: 'note', label: 'Note', filter: 'text' },
         { k: 'creato_da', label: 'Da', filter: 'select', get: function (c) { return L.s(c.creato_da).split('@')[0]; } },
+        { k: 'pend', label: 'Pending', filter: 'text', get: function (c) { var p = Rma.pend(c.id_unita); return p ? p.motivo : ''; }, html: function (c) { return Rma.pendCella({ id_unita: c.id_unita }); } },
         { k: 'az', label: '', html: function (c) { return '<button class="ico-btn" title="Annulla carico: il pezzo torna in giacenza" onclick="Rma.carAnnulla(\'' + c.id_carico + '\')">✕</button>'; } }
       ]
     }));
@@ -3583,6 +3589,187 @@ var Rma = {
       ids.forEach(function (id) { var u = tU.rows.find(function (x) { return x.id_unita === id; }); Object.keys(ch[id]).forEach(function (h) { u[h] = String(ch[id][h]); }); });
       Rma.dirty = {}; toast(ids.length + ' righe salvate', 'ok'); Rma.render();
     } catch (e) { toast('Errore salvataggio: ' + e.message, 'ko'); }
+  },
+  // ─ PENDING del Service Desk: la riga resta in giacenza (fermo a deposito) e non esce, oggi e nei giorni dopo, finché non viene rimessa in uscita
+  pend: function (idUnita) { var t = DB.t.RMA_PENDING; return t ? t.rows.find(function (p) { return p.id_unita === idUnita && p.stato === 'ATTIVO'; }) || null : null; },
+  pendAttivi: function () { return DB.t.RMA_PENDING ? DB.t.RMA_PENDING.rows.filter(function (p) { return p.stato === 'ATTIVO'; }) : []; },
+  pendCella: function (u) {
+    var p = Rma.pend(u.id_unita);
+    if (p) return '<span class="pill p-amber" title="' + esc(p.motivo + ' · ' + L.s(p.messo_da).split('@')[0] + ' ' + p.messo_il) + '">⏸ ' + esc(p.motivo.length > 22 ? p.motivo.slice(0, 22) + '…' : p.motivo) + '</span> <button class="ico-btn" title="Rimetti in uscita (sblocca)" onclick="Rma.pendSblocca(\'' + p.id_pending + '\')">▶</button>';
+    return '<button class="ico-btn" title="Metti in pending: resta fermo a deposito finché non lo sblocchi" onclick="Rma.pendMetti(\'' + u.id_unita + '\')">⏸</button>';
+  },
+  pendMetti: async function (idUnita) {
+    var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === idUnita; }); if (!u) return;
+    if (Rma.pend(idUnita)) { toast('Già in pending', 'ko'); return; }
+    var motivo = prompt('Pending ' + u.seriale + '\n\nMotivo (obbligatorio): resta fermo a deposito e non esce finché non lo rimetti in uscita', '');
+    if (motivo === null) return; motivo = L.s(motivo); if (!motivo) { toast('Serve il motivo', 'ko'); return; }
+    var car = Rma.carichi().find(function (c) { return c.id_unita === idUnita; }), x = Rma.daSpedire().find(function (y) { return y.u.id_unita === idUnita; });
+    try {
+      var t = await DB.ensureSheet('RMA_PENDING', Rma.PEN_H), now = L.nowStamp();
+      var o = { id_unita: idUnita, seriale: u.seriale, tipo: u.tipo, id_carico: car ? car.id_carico : '', rma: car ? car.rma : (x ? x.rma : L.s(u.rma)), destinazione: car ? car.destinazione : (x ? x.dest : u.destinazione_prevista), motivo: motivo, stato: 'ATTIVO', messo_il: now, messo_da: Auth.email };
+      var r = await API.append(DB.id, 'RMA_PENDING', [t.toRow(o)]); o.id_pending = 'P' + L.pad(r - 1, 6);
+      await Promise.all([API.batchUpdate(DB.id, [{ range: t.cell('id_pending', r), values: [[o.id_pending]] }]),
+        API.append(DB.id, 'LOG', [App.log('RMA_PENDING', 'UNITA', idUnita, { id_pending: o.id_pending, seriale: u.seriale, motivo: motivo, rma: o.rma, destinazione: o.destinazione, carico: o.id_carico })])]);
+      Ack.pushRow(t, o, r); toast(u.seriale + ' in pending: non esce finché non lo sblocchi', 'ok'); Rma.render();
+    } catch (e) { toast('Pending non salvato: ' + e.message, 'ko'); }
+  },
+  pendChiudi: async function (p, stato, nota, extra) {
+    var t = DB.t.RMA_PENDING, now = L.nowStamp(), c = { stato: stato, sbloccato_il: now, sbloccato_da: Auth.email, nota_sblocco: nota || '' };
+    var upd = Object.keys(c).map(function (h) { return { range: t.cell(h, p._r), values: [[c[h]]] }; });
+    await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', [App.log(stato === 'SBLOCCATO' ? 'RMA_PENDING_SBLOCCATO' : 'RMA_PENDING_ELIMINATO', 'UNITA', p.id_unita, Object.assign({ id_pending: p.id_pending, seriale: p.seriale, motivo: p.motivo, nota: nota || '' }, extra || {}))])]);
+    Object.keys(c).forEach(function (h) { p[h] = c[h]; });
+  },
+  // GOOD/BALANCING rimesse in uscita: l'RMA di prima è scaduto, va ricreato; resta nelle note come "RMA Precedente …" (anche sul DDT)
+  pendSblocca: async function (id) {
+    var p = DB.t.RMA_PENDING.rows.find(function (x) { return x.id_pending === id; }); if (!p || p.stato !== 'ATTIVO') return;
+    var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === p.id_unita; });
+    var ricrea = u && !p.id_carico && (u.tipo === 'GOOD' || u.tipo === 'BALANCING'), vecchio = ricrea ? (L.s(u.rma) || L.s(p.rma)) : '';
+    var nota = prompt('Rimetti in uscita ' + p.seriale + '\n(pending: ' + p.motivo + ')' + (vecchio ? '\n\nL RMA ' + vecchio + ' va ricreato: lo tolgo dalla scheda e lo scrivo nelle note come "RMA Precedente ' + vecchio + '".' : '') + '\n\nNota (facoltativa):', ''); if (nota === null) return;
+    try {
+      var extra = {};
+      if (vecchio) {
+        var now = L.nowStamp(), c = { note: 'RMA Precedente ' + vecchio + (L.s(u.note) ? ' | ' + L.s(u.note) : ''), modificato_il: now, modificato_da: Auth.email, rev: (parseInt(u.rev, 10) || 1) + 1 };
+        if (L.s(u.rma)) c.rma = '';
+        await API.batchUpdate(DB.id, Object.keys(c).map(function (h) { return { range: DB.t.UNITA.cell(h, u._r), values: [[String(c[h])]] }; }));
+        Object.keys(c).forEach(function (h) { u[h] = String(c[h]); }); delete Rma.dirty[u.id_unita]; extra.rma_precedente = vecchio;
+      }
+      await Rma.pendChiudi(p, 'SBLOCCATO', L.s(nota), extra);
+      toast(p.seriale + ' di nuovo in uscita' + (vecchio ? ': serve il nuovo RMA (precedente ' + vecchio + ')' : ''), 'ok'); Rma.render();
+    } catch (e) { toast('Non sbloccato: ' + e.message, 'ko'); }
+  },
+  // elimina la riga di uscita: carico NEW/REUSE annullato, oppure GOOD senza più RMA creato (torna la destinazione d'origine)
+  pendElimina: async function (id) {
+    var p = DB.t.RMA_PENDING.rows.find(function (x) { return x.id_pending === id; }); if (!p || p.stato !== 'ATTIVO') return;
+    var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === p.id_unita; }), car = p.id_carico && DB.t.CARICHI_RMA.rows.find(function (c) { return c.id_carico === p.id_carico && c.stato === 'APERTO'; });
+    if (!car && !(u && L.s(u.rma) && u.tipo === 'GOOD')) { toast('Niente da eliminare: non c è un RMA creato. Lascialo in pending o rimettilo in uscita', 'ko'); return; }
+    var cosa = car ? 'il carico ' + car.id_carico + ' viene annullato e il pezzo torna in giacenza senza RMA' : 'l RMA creato ' + u.rma + ' viene tolto (torna la destinazione d origine)';
+    var nota = prompt('Elimina ' + p.seriale + ' dall uscita: ' + cosa + '.\n\nMotivo:', p.motivo); if (nota === null) return;
+    try {
+      var now = L.nowStamp(), upd = [], extra = {};
+      if (car) {
+        var tC = DB.t.CARICHI_RMA; upd.push({ range: tC.cell('stato', car._r), values: [['ANNULLATO']] }); car.stato = 'ANNULLATO'; extra.carico_annullato = car.id_carico;
+        if (u && u.stato === 'IN_LAVORAZIONE') { var ch = { stato: 'IN_GIACENZA', rma: '', destinazione_prevista: '' }; Object.assign(ch, { modificato_il: now, modificato_da: Auth.email, rev: (parseInt(u.rev, 10) || 1) + 1 }); Object.keys(ch).forEach(function (h) { u[h] = String(ch[h]); upd.push({ range: DB.t.UNITA.cell(h, u._r), values: [[u[h]]] }); }); }
+      } else if (u && L.s(u.rma) && u.tipo === 'GOOD') {
+        var o = Rma.origine(u), c2 = { rma: '', modificato_il: now, modificato_da: Auth.email, rev: (parseInt(u.rev, 10) || 1) + 1 }; extra.rma_tolto = u.rma;
+        if (o.length) c2.destinazione_prevista = o[0];
+        Object.keys(c2).forEach(function (h) { u[h] = String(c2[h]); upd.push({ range: DB.t.UNITA.cell(h, u._r), values: [[u[h]]] }); });
+      }
+      if (upd.length) await API.batchUpdate(DB.id, upd);
+      await Rma.pendChiudi(p, 'ELIMINATO', L.s(nota), extra);
+      toast(p.seriale + ' eliminato dall uscita', 'ok'); Rma.render();
+    } catch (e) { toast('Non eliminato: ' + e.message, 'ko'); }
+  },
+  pendEliminabile: function (p) {
+    if (p.id_carico) return DB.t.CARICHI_RMA.rows.some(function (c) { return c.id_carico === p.id_carico && c.stato === 'APERTO'; });
+    var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === p.id_unita; }); return !!(u && u.tipo === 'GOOD' && L.s(u.rma));
+  },
+  pendCard: function () {
+    var L0 = Rma.pendAttivi(); if (!L0.length) return '';
+    return '<div class="card" style="margin-bottom:12px;border-color:var(--amber)"><div class="row" style="align-items:center"><b>⏸ In pending · fermi a deposito (' + L0.length + ')</b><span class="hint">non escono finché non li rimetti in uscita</span></div>' +
+      '<div class="usc-lista" style="margin-top:8px">' + L0.map(function (p) {
+        return '<div class="usc-p"><div class="usc-pi"><span class="mono">' + esc(p.seriale) + '</span><span class="usc-pd">· ' + esc(p.tipo) + (p.rma ? ' · RMA <b class="mono">' + esc(p.rma) + '</b>' : '') + (p.destinazione ? ' · ' + esc(p.destinazione) : '') + ' · <span style="color:var(--amber)">' + esc(p.motivo) + '</span> · ' + esc(L.s(p.messo_da).split('@')[0]) + ' ' + esc(L.itDate(p.messo_il)) + '</span></div>' +
+          '<button class="btn ghost sm" onclick="Rma.pendSblocca(\'' + p.id_pending + '\')">▶ Rimetti in uscita</button>' + (Rma.pendEliminabile(p) ? ' <button class="btn ghost sm" title="' + (p.id_carico ? 'Annulla il carico' : 'Togli l RMA creato') + '" onclick="Rma.pendElimina(\'' + p.id_pending + '\')">🗑 Elimina</button>' : '') + '</div>';
+      }).join('') + '</div></div>';
+  },
+  // ─ EXCEL RMA per il Service Desk: scarica le schede filtrate, il SD compila RMA CREATO (e NUOVA DESTINAZIONE se cambia), poi si reimporta
+  XR: ['ID UNITA', 'SERIALE', 'FR', 'TIPO', 'P/N', 'MNFT', 'REPAIR', 'MATERIAL', 'DESTINAZIONE ATTUALE', 'RMA GIACENZA PROPOSTO', 'DATA OPEN', 'SCADENZA', 'NOTE SD', 'RMA CREATO', 'NUOVA DESTINAZIONE'],
+  destinazioni: function () {
+    var m = {}; function add(x) { x = L.s(x); if (x && !m[L.up(x)]) m[L.up(x)] = x; }
+    DB.t.CONTROPARTI.rows.forEach(function (r) { add(r.codice); });
+    DB.t.DEPOT_VLT.rows.forEach(function (r) { add(r.destinazione); add(r.destinazione_conversione); });
+    Rma.inventario().forEach(function (u) { add(u.destinazione_prevista); });
+    return m;   // MAIUSCOLO → nome come in anagrafica
+  },
+  excelRma: function () {
+    var vis = (Rma.grids.inv && Rma.grids.inv.visibili) || Rma.inventario(), c = Rma.ctx();
+    var rows = vis.filter(function (u) { return u.tipo === 'GOOD' || u.tipo === 'BALANCING'; }).map(function (u) {
+      var v = Rma.varia(u), a = Rma.ritDi(u);
+      return [u.id_unita, u.seriale, u.fr, u.tipo, u.pn, u.mnft, u.riparatore, c.materialDi(u), v ? v.nuova : L.s(Rma.dv(u, 'dest')),
+        a ? a.rma.id_rma : '', a ? L.s(a.rma.data_apertura).slice(0, 10) : '', a ? a.rma.data_scadenza : '', a && a.rma.failure_report ? 'RITORNO GIACENZA FR ' + a.rma.failure_report : '',
+        L.s(Rma.dv(u, 'rma')), ''];
+    });
+    if (!rows.length) { toast('Nessuna scheda GOOD/BALANCING tra le righe filtrate', 'ko'); return; }
+    var dest = Object.keys(Rma.destinazioni()).map(function (k) { return Rma.destinazioni()[k]; }).sort();
+    Xls.scarica('Excel_RMA', [
+      { nome: 'RMA', headers: Rma.XR, rows: rows },
+      { nome: 'DESTINAZIONI', headers: ['DESTINAZIONE (copia il nome esatto in NUOVA DESTINAZIONE)'], rows: dest.map(function (d) { return [d]; }) },
+      { nome: 'ISTRUZIONI', headers: ['Come compilare'], rows: [
+        ['1. Compila solo le ultime due colonne: RMA CREATO e, se il pezzo deve andare altrove, NUOVA DESTINAZIONE.'],
+        ['2. NUOVA DESTINAZIONE vuota = resta la destinazione attuale. Se l RMA è un ritorno in giacenza, la destinazione del ritorno viene presa da sola.'],
+        ['3. Usa i nomi del foglio DESTINAZIONI. Non cambiare ID UNITA e SERIALE: servono per riconoscere la scheda.'],
+        ['4. RMA di ' + Rma.cifre().join(' o ') + ' cifre. Poi in RMA → Inventario giornaliero premi "⬆ Importa RMA": vedi l anteprima e confermi.']] }
+    ]);
+  },
+  importaRma: async function (inp) {
+    var f = inp.files && inp.files[0]; inp.value = ''; if (!f) return;
+    var rows;
+    try { rows = await leggiFoglio(f); } catch (e) { Modal.open('Importa RMA', 'File non leggibile: ' + e.message); return; }
+    if (!rows.length || !('RMA CREATO' in rows[0]) || !('SERIALE' in rows[0] || 'ID UNITA' in rows[0])) { Modal.open('Importa RMA', 'Il file non è un Excel RMA: servono almeno le colonne SERIALE (o ID UNITA) e RMA CREATO.\nScaricalo con "⬇ Excel RMA".'); return; }
+    var inv = Rma.inventario(), byId = {}, bySer = {}, D = Rma.destinazioni();
+    inv.forEach(function (u) { byId[u.id_unita] = u; [L.up(u.seriale), L.up(L.afterSpace(u.seriale))].forEach(function (k) { if (k && (bySer[k] = bySer[k] || []).indexOf(u) < 0) bySer[k].push(u); }); });
+    // RMA già usati da altre schede o carichi
+    var usati = {}; inv.forEach(function (u) { var v = L.s(Rma.dv(u, 'rma')); if (v) usati[v] = u; });
+    Rma.carichi().forEach(function (c) { if (c.rma && !usati[c.rma]) usati[c.rma] = { seriale: c.seriale + ' (carico ' + c.id_carico + ')' }; });
+    var nelFile = {}, out = [];
+    rows.forEach(function (r, i) {
+      var o = { riga: i + 2, ser: L.s(r['SERIALE']), id: L.s(r['ID UNITA']), rma: L.frKey(r['RMA CREATO']), nd: L.s(r['NUOVA DESTINAZIONE']), err: '', note: [] };
+      if (!o.ser && !o.id && !o.rma && !o.nd) return;
+      var u = o.id && byId[o.id], cand = bySer[L.up(o.ser)] || bySer[L.up(L.afterSpace(o.ser))] || [];
+      if (u && o.ser && cand.length && cand.indexOf(u) < 0) o.err = 'ID UNITA ' + o.id + ' e seriale ' + o.ser + ' non sono la stessa scheda';
+      else if (!u) { if (cand.length === 1) u = cand[0]; else if (cand.length > 1) o.err = 'seriale presente su più schede: indica l ID UNITA'; else o.err = 'seriale non presente nell inventario giornaliero'; }
+      o.u = u || null;
+      if (!o.err && !o.rma && !o.nd) { o.skip = 'niente da importare'; }
+      if (!o.err && u) {
+        o.rmaPrima = L.s(Rma.dv(u, 'rma')); o.destPrima = (Rma.varia(u) || {}).nuova || L.s(Rma.dv(u, 'dest'));
+        if (o.rma) {
+          if (u.tipo === 'BALANCING') o.err = 'balancing: l RMA non si cambia da qui';
+          else { var re = Rma.rmaErr(o.rma, true); if (re) o.err = re; }
+          if (!o.err && usati[o.rma] && usati[o.rma] !== u) o.err = 'RMA ' + o.rma + ' già usato da ' + (usati[o.rma].seriale || '');
+          if (!o.err && nelFile[o.rma] && nelFile[o.rma].u !== u) o.err = 'RMA ' + o.rma + ' ripetuto nel file (riga ' + nelFile[o.rma].riga + ')';
+          if (!o.err && !nelFile[o.rma]) nelFile[o.rma] = { u: u, riga: o.riga };
+        }
+        if (!o.err && o.nd) {
+          if (u.tipo !== 'GOOD') o.err = 'la destinazione si cambia solo sulle GOOD';
+          else if (!D[L.up(o.nd)]) o.err = 'destinazione "' + o.nd + '" non in anagrafica (vedi foglio DESTINAZIONI)';
+          else o.dest = D[L.up(o.nd)];
+        }
+        // RMA = ritorno in giacenza verso un altro deposito: la destinazione la dà il ritorno (come "Associa RMA di ieri")
+        if (!o.err && o.rma && !o.dest && u.tipo === 'GOOD') {
+          var rit = DB.t.RMA_RITORNI.rows.find(function (x) { return x.id_rma === o.rma && x.stato !== 'ANNULLATO'; });
+          if (rit) { var dr = Rma.destRma(rit); o.note.push('ritorno in giacenza'); if (dr && L.up(dr) !== L.up(o.destPrima)) { o.dest = dr; o.note.push('destinazione dal ritorno'); } }
+        }
+        if (!o.err) {
+          if (o.rma === o.rmaPrima) o.rma = '';
+          if (o.dest && L.up(o.dest) === L.up(o.destPrima)) o.dest = '';
+          if (!o.rma && !o.dest && !o.skip) o.skip = 'già così';
+        }
+      }
+      out.push(o);
+    });
+    Rma._imp = out;
+    var ok = out.filter(function (o) { return !o.err && !o.skip; }), ko = out.filter(function (o) { return o.err; }), sk = out.filter(function (o) { return o.skip && !o.err; });
+    function riga(o) {
+      var st = o.err ? '<span style="color:var(--red)">✗ ' + esc(o.err) + '</span>' : o.skip ? '<span class="hint">' + esc(o.skip) + '</span>' : '<span style="color:var(--green)">✓</span>' + (o.note.length ? ' <span class="hint">' + esc(o.note.join(' · ')) + '</span>' : '');
+      return '<tr' + (o.err ? ' style="background:rgba(220,38,38,.07)"' : '') + '><td class="mono">' + o.riga + '</td><td class="mono">' + esc(o.u ? o.u.seriale : o.ser) + '</td><td class="mono">' + esc(o.u ? o.u.id_unita : o.id) + '</td>' +
+        '<td class="mono">' + (o.rma ? esc(o.rmaPrima || '—') + ' → <b>' + esc(o.rma) + '</b>' : esc(o.rmaPrima || '')) + '</td>' +
+        '<td>' + (o.dest ? esc(o.destPrima || '—') + ' → <b>' + esc(o.dest) + '</b>' : esc(o.destPrima || '')) + '</td><td>' + st + '</td></tr>';
+    }
+    var lista = ko.concat(ok);   // le righe senza modifiche si contano soltanto
+    Modal.html('Importa RMA · ' + esc(f.name),
+      '<div style="font-size:13px;margin-bottom:8px"><b style="color:var(--green)">' + ok.length + '</b> da importare · <b style="color:var(--red)">' + ko.length + '</b> anomalie (non importate) · ' + sk.length + ' senza modifiche</div>' +
+      '<div style="max-height:55vh;overflow:auto"><table class="tbl"><thead><tr><th>Riga</th><th>Seriale</th><th>ID unità</th><th>RMA creato</th><th>Destinazione</th><th>Esito</th></tr></thead><tbody>' + lista.map(riga).join('') + '</tbody></table></div>',
+      [{ label: 'Annulla', cls: 'ghost' }].concat(ok.length ? [{ label: 'Importa ' + ok.length + ' righe', keep: true, fn: function () { Rma.confermaImportRma(); } }] : []), true);
+  },
+  confermaImportRma: async function () {
+    var ok = (Rma._imp || []).filter(function (o) { return !o.err && !o.skip; });
+    ok.forEach(function (o) {
+      var d = Rma.dirty[o.u.id_unita] || {};
+      if (o.rma) d.rma = o.rma;
+      if (o.dest) d.dest = o.dest;
+      Rma.dirty[o.u.id_unita] = d;
+    });
+    Modal.close(); Rma._imp = null;
+    await Rma.salva();
   },
   // ─ import del CSV "Ritorni in giacenza" esportato da VLT
   importa: async function (inp) {
@@ -3766,7 +3953,7 @@ var Rma = {
     Rma.carichi().forEach(function (c) { var u = U[c.id_unita]; if (u && u.stato === 'IN_LAVORAZIONE') out.push({ u: u, rma: c.rma, dest: c.destinazione, po: c.po_mrn, fonte: 'Carico ' + c.tipo, causale: 'RMA', car: c }); });
     var R = {}; DB.t.RMA_RITORNI.rows.forEach(function (r) { R[r.id_rma] = r; });
     out.forEach(function (x) { if (!x.rit && R[x.rma]) x.rit = R[x.rma]; });
-    return out.filter(function (x) { return L.s(x.dest); });
+    return out.filter(function (x) { return L.s(x.dest) && !Rma.pend(x.u.id_unita); });   // in pending: fermo a deposito finché non viene sbloccato
   },
   escl: function () { return lsG('usc_escl_' + $('uscData').value) || {}; },
   toggle: function (id, on) { var e = Rma.escl(); if (on) delete e[id]; else e[id] = 1; lsS('usc_escl_' + $('uscData').value, e); Rma.renderUscite(); },
@@ -3789,7 +3976,7 @@ var Rma = {
     var tot = G.reduce(function (a, g) { return a + g.attivi.length; }, 0), nM = G.reduce(function (a, g) { return a + (g.s && g.s.stato === 'SPEDITA' ? 0 : g.mancanti.length); }, 0), sped = G.filter(function (g) { return g.s && g.s.stato === 'SPEDITA'; }).length;
     $('rmaStats').innerHTML = '<div class="stat"><b>' + G.length + '</b><span>destinazioni</span></div><div class="stat"><b>' + tot + '</b><span>pezzi da spedire</span></div>' + (nM ? '<div class="stat"><b style="color:var(--amber)">' + nM + '</b><span>senza RMA</span></div>' : '') + '<div class="stat"><b style="color:var(--violet)">' + nP + '</b><span>pronte per ddt</span></div><div class="stat"><b style="color:var(--green)">' + sped + '</b><span>spedite</span></div>';
     var PILL = { BOZZA: 'p-blue', PRONTA: 'p-violet', SPEDITA: 'p-green' };
-    $('rmaUsc').innerHTML = G.length ? '<div class="ack-grid usc-grid">' + G.map(function (g) {
+    $('rmaUsc').innerHTML = Rma.pendCard() + (G.length ? '<div class="ack-grid usc-grid">' + G.map(function (g) {
       var s = g.s, k = Ack.key(g.dest), cp = Rma.cp(g.dest), st = s ? s.stato : 'DA PREPARARE', done = s && s.stato === 'SPEDITA', lock = done ? ' disabled' : '';
       var col = done ? Ack.colliDb(s.id_spedizione).map(function (c) { return { tipo: c.tipo_collo, misura: [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X'), peso: c.peso_kg }; })
         : (Rma.colli[k] || (s ? Ack.colliDb(s.id_spedizione).map(function (c) { return { tipo: c.tipo_collo, misura: [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X'), peso: c.peso_kg }; }) : []));
@@ -3806,7 +3993,7 @@ var Rma = {
         '<div class="usc-lista">' + lista.map(function (p) {
           var off = !done && !p.manca && esc0[p.u.id_unita];
           var cb = done ? '' : (p.manca ? '<input type="checkbox" disabled title="Si spunta da solo quando c\'è l\'RMA">' : '<input type="checkbox"' + (off ? '' : ' checked') + ' title="Togli dall\'uscita di oggi" onchange="Rma.toggle(\'' + p.u.id_unita + '\',this.checked)">');
-          return '<div class="usc-p' + (off ? ' off' : '') + (p.manca ? ' manca' : '') + '">' + cb + '<div class="usc-pi"><span class="mono">' + esc(p.u.seriale) + '</span><span class="usc-pd">· ' + esc(p.u.pn) + ' · ' + (p.manca ? '<span class="pill p-amber">manca RMA</span>' : 'RMA <b class="mono">' + esc(p.rma) + '</b>') + (p.fonte ? ' · ' + esc(p.fonte) : '') + '</span></div></div>';
+          return '<div class="usc-p' + (off ? ' off' : '') + (p.manca ? ' manca' : '') + '">' + cb + '<div class="usc-pi"><span class="mono">' + esc(p.u.seriale) + '</span><span class="usc-pd">· ' + esc(p.u.pn) + ' · ' + (p.manca ? '<span class="pill p-amber">manca RMA</span>' : 'RMA <b class="mono">' + esc(p.rma) + '</b>') + (p.rit && L.s(p.rit.failure_report) ? ' · RITORNO GIACENZA FR ' + esc(p.rit.failure_report) : (p.fonte ? ' · ' + esc(p.fonte) : '')) + '</span></div>' + (done ? '' : '<button class="ico-btn" title="Metti in pending: non esce, resta fermo a deposito finché non lo sblocchi" onclick="Rma.pendMetti(\'' + p.u.id_unita + '\')">⏸</button>') + '</div>';
         }).join('') + '</div></details>' +
         '<div style="font-size:12px;color:var(--subtle)">Colli: ' + col.length + ' · ' + Math.round(peso * 100) / 100 + ' kg</div>' +
         (done ? '' : '<table style="width:auto;font-size:12px"><tbody>' + col.map(function (c, i) {
@@ -3817,7 +4004,7 @@ var Rma = {
         '<div class="row"><div class="fg" style="flex:1;min-width:130px"><span class="fl">AWB (Service Desk)</span><input class="fc mono" id="uawb_' + k + '" value="' + esc(s ? s.awb : '') + '"' + lock + ' oninput="var v=L.vettoreDaAwb(this.value,DB.t.VETTORI.rows);if(v)$(\'uvet_' + k + '\').value=v"></div>' +
         '<div class="fg" style="width:110px"><span class="fl">Vettore</span><input class="fc" id="uvet_' + k + '" list="dlVettori" value="' + esc(s ? s.vettore : '') + '"' + lock + '></div></div>' +
         '<div class="row" style="align-items:center">' + bt + '</div></div>';
-    }).join('') + '</div>' : '<div class="card empty">Nessun pezzo da far uscire: GOOD e BALANCING in giacenza con destinazione, o carichi NEW/REUSE.</div>';
+    }).join('') + '</div>' : '<div class="card empty">Nessun pezzo da far uscire: GOOD e BALANCING in giacenza con destinazione, o carichi NEW/REUSE.</div>');
   },
   collo: function (k, i, f, v) { var c = Rma.colli[k] = Rma.colli[k] || []; if (f === 'del') c.splice(i, 1); else if (f === 'add') c.push({ tipo: (c[c.length - 1] || {}).tipo || 'COLLO', misura: '', peso: '' }); else c[i][f] = L.s(v).toUpperCase(); Rma.renderUscite(); },
   salvaDest: async function (dest) {
@@ -3899,10 +4086,14 @@ var Rma = {
     await API.batchUpdate(DB.id, [{ range: tD.cell('n_ddt', rD), values: [[nDdt]] }, { range: tD.cell('progressivo', rD), values: [[String(prog)]] }]);
     // 2. righe spedizione + movimenti OUT
     var tR = DB.t.SPEDIZIONI_RIGHE;
-    var righe = P.map(function (p) { return { id_spedizione: id, id_unita: p.u.id_unita, seriale: p.u.seriale, pn: p.u.pn, fr: p.u.fr, rma: p.rma, esito: 'SPUNTATO', spuntato_da: me, spuntato_il: now, note: p.fonte }; });
+    var notaDdt = function (p) {   // come nel DDT di oggi, + l'RMA scaduto di un pezzo rimasto in pending
+      var n = p.rit && L.s(p.rit.failure_report) ? 'RITORNO GIACENZA FR ' + L.s(p.rit.failure_report) : p.fonte, m = /RMA Precedente (\d+)/i.exec(L.s(p.u.note));
+      return m && m[1] !== L.s(p.rma) ? n + ' · RMA Precedente ' + m[1] : n;
+    };
+    var righe = P.map(function (p) { return { id_spedizione: id, id_unita: p.u.id_unita, seriale: p.u.seriale, pn: p.u.pn, fr: p.u.fr, rma: p.rma, esito: 'SPUNTATO', spuntato_da: me, spuntato_il: now, note: notaDdt(p) }; });
     var mObjs = P.map(function (p) {
       return { data_ora: oggi + ' ' + L.nowStamp().slice(11), direzione: 'OUT', causale: p.causale, id_unita: p.u.id_unita, seriale: p.u.seriale, pn: p.u.pn, mnft: p.u.mnft, tipo: p.u.tipo, fr: p.u.fr, rma: p.rma, po_mrn: p.po || '',
-        controparte: s.destinatario, awb: s.awb, vettore: s.vettore, ddt: nDdt, id_spedizione: id, riparatore: p.u.riparatore, ubicazione_da: p.u.ubicazione, operatore: me, operatore_sigla: sigla, note: p.fonte, origine: 'APP' };
+        controparte: s.destinatario, awb: s.awb, vettore: s.vettore, ddt: nDdt, id_spedizione: id, riparatore: p.u.riparatore, ubicazione_da: p.u.ubicazione, operatore: me, operatore_sigla: sigla, note: notaDdt(p), origine: 'APP' };
     });
     var rr = await Promise.all([API.append(DB.id, 'SPEDIZIONI_RIGHE', righe.map(function (o) { return tR.toRow(o); })), API.append(DB.id, 'MOVIMENTI', mObjs.map(function (o) { return tM.toRow(o); }))]);
     var rS = rr[0], rM = rr[1];
