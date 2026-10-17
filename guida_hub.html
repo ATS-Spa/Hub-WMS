@@ -289,6 +289,20 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
 .gtbl-cell.green{color:var(--green)}
 .gtbl-cell.blue{color:var(--blue)}
 .gtbl-cell.muted{color:var(--muted)}
+
+/* ── MODULO EASYLOADER (viola) ── */
+.mod-btn.active-e{color:var(--purple);border-bottom-color:var(--purple)}
+.sb-link.active-e{color:var(--purple);border-left-color:var(--purple);background:rgba(168,85,247,.06)}
+.ch-tag.purple{color:var(--purple)}
+.step-num.purple{color:var(--purple)}
+.nbtn.next.purple{background:var(--purple);color:#fff}
+.nbtn.next.purple:hover{background:#9333ea}
+.complete-title.purple{color:var(--purple)}
+#panel-e .steps{gap:14px}
+#panel-e .step-body code{white-space:nowrap}
+#panel-e .tm-logo,#panel-e .tm-btn{white-space:nowrap}
+#panel-e .topbar-mock{flex-wrap:wrap}
+@media(max-width:780px){.mod-switcher{overflow-x:auto}.mod-btn{flex-shrink:0;white-space:nowrap}}
 </style>
 </head>
 <body>
@@ -298,6 +312,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
   <button class="mod-btn active-p" id="mbtn-p" onclick="switchModule('p')"><span class="mod-icon">📋</span>Presenze</button>
   <button class="mod-btn" id="mbtn-s" onclick="switchModule('s')"><span class="mod-icon">📦</span>Spedizioni AWB</button>
   <button class="mod-btn" id="mbtn-g" onclick="switchModule('g')"><span class="mod-icon">🟢</span>GRN Manager</button>
+  <button class="mod-btn" id="mbtn-e" onclick="switchModule('e')"><span class="mod-icon">🚚</span>Easyloader</button>
 </div>
 
 <div class="layout">
@@ -362,6 +377,33 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
     <a class="sb-link" onclick="goto('g',6)" id="g-nav-6"><span class="icon">📤</span> Salva CSV <span class="num">7</span></a>
     <div class="sb-sect">Avanzato</div>
     <a class="sb-link" onclick="goto('g',7)" id="g-nav-7"><span class="icon">🔑</span> Permessi e Config <span class="num">8</span></a>
+  </div>
+  <!-- Sidebar Easyloader -->
+  <div id="sb-e" style="display:none">
+    <div class="sb-sect">Introduzione</div>
+    <a class="sb-link active-e" onclick="goto('e',0)" id="e-nav-0"><span class="icon">🏠</span> Panoramica <span class="num">1</span></a>
+    <a class="sb-link" onclick="goto('e',1)" id="e-nav-1"><span class="icon">🔑</span> Accesso e ruoli <span class="num">2</span></a>
+    <div class="sb-sect">Ingresso</div>
+    <a class="sb-link" onclick="goto('e',2)" id="e-nav-2"><span class="icon">📥</span> Ingresso · testata <span class="num">3</span></a>
+    <a class="sb-link" onclick="goto('e',3)" id="e-nav-3"><span class="icon">🔫</span> Ingresso · lettura pezzi <span class="num">4</span></a>
+    <div class="sb-sect">Uscite</div>
+    <a class="sb-link" onclick="goto('e',4)" id="e-nav-4"><span class="icon">🔧</span> ACK riparatori <span class="num">5</span></a>
+    <div class="sb-sect">RMA</div>
+    <a class="sb-link" onclick="goto('e',5)" id="e-nav-5"><span class="icon">📦</span> RMA · Inventario giornaliero <span class="num">6</span></a>
+    <a class="sb-link" onclick="goto('e',6)" id="e-nav-6"><span class="icon">📊</span> RMA · Excel RMA (SD) <span class="num">7</span></a>
+    <a class="sb-link" onclick="goto('e',7)" id="e-nav-7"><span class="icon">⏸</span> RMA · Pending <span class="num">8</span></a>
+    <a class="sb-link" onclick="goto('e',8)" id="e-nav-8"><span class="icon">↩️</span> RMA · Ritorni in giacenza <span class="num">9</span></a>
+    <a class="sb-link" onclick="goto('e',9)" id="e-nav-9"><span class="icon">🆕</span> RMA · Carichi NEW/REUSE <span class="num">10</span></a>
+    <a class="sb-link" onclick="goto('e',10)" id="e-nav-10"><span class="icon">🚚</span> RMA · Uscite e DDT <span class="num">11</span></a>
+    <div class="sb-sect">Altre gestioni</div>
+    <a class="sb-link" onclick="goto('e',11)" id="e-nav-11"><span class="icon">⚖️</span> Balancing e Juniper <span class="num">12</span></a>
+    <a class="sb-link" onclick="goto('e',12)" id="e-nav-12"><span class="icon">🗄</span> Giacenze e Movimenti <span class="num">13</span></a>
+    <div class="sb-sect">VLT</div>
+    <a class="sb-link" onclick="goto('e',13)" id="e-nav-13"><span class="icon">📡</span> VLT e Chiusure VLT <span class="num">14</span></a>
+    <div class="sb-sect">Controllo</div>
+    <a class="sb-link" onclick="goto('e',14)" id="e-nav-14"><span class="icon">📈</span> Dashboard, Log, Anagrafiche <span class="num">15</span></a>
+    <a class="sb-link" onclick="goto('e',15)" id="e-nav-15"><span class="icon">⚙️</span> Admin e parametri <span class="num">16</span></a>
+    <a class="sb-link" onclick="goto('e',16)" id="e-nav-16"><span class="icon">📱</span> Palmare e domande <span class="num">17</span></a>
   </div>
 </aside>
 
@@ -3016,6 +3058,862 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
 
 </div><!-- /panel-g -->
 
+<!-- ════════════════════════════════
+     MODULO EASYLOADER
+     ════════════════════════════════ -->
+<div class="module-panel" id="panel-e">
+
+<!-- ══ E0: Easyloader Hub FLM ══ -->
+<div class="chapter active" id="e-ch-0">
+  <div class="chapter-header">
+    <div class="ch-tag purple">Introduzione · Passo 1 di 17</div>
+    <h1 class="ch-title">Easyloader<br>Hub FLM</h1>
+    <p class="ch-desc">Easyloader è il modulo dell'Hub che gestisce tutto il magazzino FLM: ingressi, uscite ACK verso i riparatori, uscite RMA verso le ASP, balancing, pratiche Juniper, giacenza e chiusure su VLT. Sostituisce i vecchi fogli Easyloader, Inventario giornaliero, RMA giornalieri e ACK: i dati sono in un unico database Google (DB_EASYLOADER).</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">1</span>
+        <div>
+          <div class="step-title">Apri il modulo dall'Hub</div>
+          <div class="step-body">Dal menu laterale dell'Hub (☰) clicca <strong>Easyloader</strong>, oppure la scheda <strong>Easyloader</strong> nella home. Il modulo si apre dentro l'Hub.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">2</span>
+        <div>
+          <div class="step-title">La barra in alto</div>
+          <div class="step-body">In alto a destra trovi lo stato dei dati e i comandi generali.</div>
+        </div>
+      </div>
+      <div class="step-detail"><div class="topbar-mock"><span class="tm-logo">ATS · FASTWEB FLM</span><span class="tm-div"></span><span style="font-family:var(--ffm);font-size:10px;color:var(--muted)">VLT 08:12 · Huawei 1.204 seriali · giacenza 20.249 · dati 08:12</span><div class="tm-right"><span class="tm-btn">↻ Aggiorna</span><span class="tm-btn">🌙 Tema</span><span class="tm-badge admin">ADMIN</span></div></div><ul class="checklist "><li><span><strong>VLT hh:mm</strong>: ora dell'ultima lettura del foglio VLT (FR). Si aggiorna da solo ogni mattina dopo le 8.</span></li><li><span><strong>giacenza</strong>: pezzi a magazzino in questo momento.</span></li><li><span><strong>↻ Aggiorna</strong>: rilegge configurazione, giacenza, VLT e ritorni RMA. Usalo se un collega ha appena lavorato.</span></li><li><span><strong>Tema</strong>: chiaro/scuro e varianti di colore (resta salvato sul tuo PC).</span></li><li><span>Il badge mostra il tuo ruolo; dal tuo nome puoi <strong>cambiare account</strong> o <strong>uscire</strong>.</span></li></ul></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">3</span>
+        <div>
+          <div class="step-title">Le schede del modulo</div>
+          <div class="step-body">Ogni scheda corrisponde a una fase del lavoro:</div>
+        </div>
+      </div>
+      <div class="step-detail"><div class="gtbl"><div class="gtbl-head" style="display:flex"><div class="gtbl-th" style="flex:1">Scheda</div><div class="gtbl-th" style="flex:1">A cosa serve</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">Ingresso</div><div class="gtbl-cell" style="flex:1">Registrare i pezzi che arrivano (FAULTY, GOOD, NEW, REUSE, BALANCING, RESO, SCRAP)</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">ACK</div><div class="gtbl-cell" style="flex:1">Spunta e DDT delle FAULTY in uscita verso i riparatori</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">RMA</div><div class="gtbl-cell" style="flex:1">Inventario giornaliero GOOD, ritorni in giacenza, carichi NEW/REUSE, uscite e DDT RMA</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">Balancing</div><div class="gtbl-cell" style="flex:1">Previsioni di arrivo delle balancing inserite dal Service Desk</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">Carichi NEW/REUSE</div><div class="gtbl-cell" style="flex:1">Pratiche NEW/REUSE: file al Service Desk e ritorno lavorato</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">Juniper</div><div class="gtbl-cell" style="flex:1">Pratiche fuori processo Juniper (faulty via UPS, GOOD in sostituzione)</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">Giacenze</div><div class="gtbl-cell" style="flex:1">Tutto ciò che è a magazzino, con modifica dei dati del pezzo</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">VLT</div><div class="gtbl-cell" style="flex:1">Il foglio FR di VLT, con rettifiche ed etichette</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">Chiusure VLT</div><div class="gtbl-cell" style="flex:1">Code di chiusura su VLT eseguite dallo script Tampermonkey</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">Movimenti</div><div class="gtbl-cell" style="flex:1">Storico ingressi/uscite ed export Easyloader per la fatturazione</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">Dashboard · Log · Anagrafiche · Admin</div><div class="gtbl-cell" style="flex:1">Statistiche, registro delle operazioni, articoli e configurazione</div></div></div></div>
+    </div><div class="infobox info"><span class="ib-icon">ℹ️</span><div class="ib-body">Ogni operazione che scrive dati (ingresso, modifica, uscita, pending, import…) viene registrata nel <strong>Log</strong> con utente, data e valori prima/dopo.</div></div>
+  </div>
+  <div class="nav-btns">
+    <button class="nbtn prev" disabled>← Indietro</button>
+    <button class="nbtn next purple" onclick="goto('e',1)">Accesso e ruoli →</button>
+  </div>
+</div>
+
+<!-- ══ E1: Accesso e Ruoli ══ -->
+<div class="chapter" id="e-ch-1">
+  <div class="chapter-header">
+    <div class="ch-tag purple">Introduzione · Passo 2 di 17</div>
+    <h1 class="ch-title">Accesso e Ruoli</h1>
+    <p class="ch-desc">Si entra con l'account Google abilitato. Il collegamento tra email, sigla e ruolo è nel foglio OPERATORI.</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">1</span>
+        <div>
+          <div class="step-title">Primo accesso</div>
+          <div class="step-body">Alla prima apertura compare <strong>Accedi con Google</strong>: scegli l'account Gmail di lavoro e consenti l'accesso a Fogli e Drive. Le volte successive entri direttamente.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">2</span>
+        <div>
+          <div class="step-title">Sigla e ruolo</div>
+          <div class="step-body">La tua email deve essere nel foglio <strong>OPERATORI</strong> (Admin → Operatori) con sigla e ruolo. La sigla compare nei movimenti (colonna OP) come nei vecchi Easyloader.</div>
+        </div>
+      </div>
+      <div class="step-detail"><ul class="checklist "><li><span><strong>OPERATORE</strong>: lavora su ingressi, ACK, RMA, giacenze.</span></li><li><span><strong>ADMIN</strong>: in più modifica la configurazione (Admin), le anagrafiche e vede Log e Dashboard.</span></li><li><span>Altri ruoli (SERVICE DESK, RESPONSABILE…, dal parametro <code>ruoli</code>) per ora sono descrittivi: valgono come operatore.</span></li><li><span><strong>Attivo = NO</strong>: l'utente non entra.</span></li></ul></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">3</span>
+        <div>
+          <div class="step-title">Più persone insieme</div>
+          <div class="step-body">Più operatori possono lavorare contemporaneamente: l'app controlla le versioni delle righe (colonna <code>rev</code>) e ricarica da sola i dati cambiati dai colleghi. Se qualcosa non torna, premi <strong>↻ Aggiorna</strong>.</div>
+        </div>
+      </div>
+    </div><div class="infobox warn"><span class="ib-icon">⚠️</span><div class="ib-body">Il database non va modificato a mano dal foglio Google: scrive solo l'app. Le correzioni si fanno dall'app, così restano tracciate.</div></div>
+  </div>
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('e',0)">← Panoramica</button>
+    <button class="nbtn next purple" onclick="goto('e',2)">Ingresso · testata →</button>
+  </div>
+</div>
+
+<!-- ══ E2: Ingresso · Testata ══ -->
+<div class="chapter" id="e-ch-2">
+  <div class="chapter-header">
+    <div class="ch-tag purple">Ingresso · Passo 3 di 17</div>
+    <h1 class="ch-title">Ingresso · Testata</h1>
+    <p class="ch-desc">Ogni ingresso parte da una testata: tipo di materiale, data, mittente, AWB, vettore e DDT. Finché la testata non è completa, la lettura dei pezzi resta bloccata.</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">1</span>
+        <div>
+          <div class="step-title">Scegli il tipo</div>
+          <div class="step-body">Nella scheda <strong>Ingresso</strong> scegli il <strong>Tipo</strong>: FAULTY, GOOD, REUSE, NEW, BALANCING, RESO o SCRAP. Un ingresso contiene un solo tipo.</div>
+        </div>
+      </div>
+      <div class="step-detail"><div class="filters-mock" style="background:var(--surface)"><div class="fm-group"><div class="fm-label">Tipo *</div><div class="fm-input" style="min-width:110px;color:var(--muted)">FAULTY</div></div><div class="fm-group"><div class="fm-label">Data ingresso *</div><div class="fm-input" style="min-width:110px;color:var(--muted)">17/10/2026</div></div><div class="fm-group"><div class="fm-label">Mittente *</div><div class="fm-input" style="min-width:110px;color:var(--muted)">proposto dal 1° FR</div></div><div class="fm-group"><div class="fm-label">AWB *</div><div class="fm-input" style="min-width:110px;color:var(--muted)">proposto dal 1° FR</div></div><div class="fm-group"><div class="fm-label">Vettore *</div><div class="fm-input" style="min-width:110px;color:var(--muted)">GLS</div></div><div class="fm-group"><div class="fm-label">DDT mittente *</div><div class="fm-input" style="min-width:110px;color:var(--muted)">6257/26</div></div></div></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">2</span>
+        <div>
+          <div class="step-title">Compila data, mittente, AWB, vettore e DDT</div>
+          <div class="step-body">La data è oggi per default. Per FAULTY e GOOD puoi lasciare vuoti mittente e AWB: li propone l'app dal primo FR letto (deposito VLT e AWB del FR). Il vettore si riconosce dal prefisso dell'AWB.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">3</span>
+        <div>
+          <div class="step-title">Balancing e PO/MRN</div>
+          <div class="step-body">Per le BALANCING il campo <strong>Balancing</strong> si compila da solo dal seriale (previsione del Service Desk). Per NEW/REUSE indica il <strong>PO / MRN</strong> se presente.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">4</span>
+        <div>
+          <div class="step-title">NEW e REUSE: P/N fisso, ubicazione, pallet</div>
+          <div class="step-body">Per NEW/REUSE puoi fissare un <strong>P/N</strong> uguale per tutti i pezzi (vuoto = lo prende dal barcode), l'<strong>ubicazione</strong> e il <strong>pallet</strong>. <strong>＋ Nuovo pallet</strong> assegna il prossimo numero pallet FLM.</div>
+        </div>
+      </div>
+    </div><div class="infobox tip"><span class="ib-icon">💡</span><div class="ib-body"><strong>Nuovo ingresso</strong> svuota testata e righe per iniziare un altro DDT.</div></div>
+  </div>
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('e',1)">← Accesso e ruoli</button>
+    <button class="nbtn next purple" onclick="goto('e',3)">Ingresso · lettura pezzi →</button>
+  </div>
+</div>
+
+<!-- ══ E3: Ingresso · Lettura Pezzi ══ -->
+<div class="chapter" id="e-ch-3">
+  <div class="chapter-header">
+    <div class="ch-tag purple">Ingresso · Passo 4 di 17</div>
+    <h1 class="ch-title">Ingresso · Lettura Pezzi</h1>
+    <p class="ch-desc">Si spara il seriale: l'app trova l'FR su VLT, il P/N e controlla le anomalie. I pezzi si accumulano in un elenco e si registrano tutti insieme con Carica dati.</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">1</span>
+        <div>
+          <div class="step-title">Spara il seriale</div>
+          <div class="step-body">Nel campo <strong>Barcode seriale</strong> spara il codice e premi <kbd>Invio</kbd> o <kbd>Tab</kbd>. L'app pulisce il barcode con le regole (Admin → Regole barcode), cerca l'FR (anche Huawei) e mostra stato VLT, P/N e riparatore. Poi <strong>Aggiungi</strong>.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">2</span>
+        <div>
+          <div class="step-title">Leggi i messaggi</div>
+          <div class="step-body">Ogni riga ha un esito. I controlli principali:</div>
+        </div>
+      </div>
+      <div class="step-detail"><ul class="checklist amber"><li><span><strong>Seriale già in giacenza</strong> (riga rossa): mostra lo stato VLT al momento dell'ingresso precedente e quello di oggi. Se è una FAULTY ferma, verifica in <em>Spare ferme</em>.</span></li><li><span><strong>P/N assente su VLT</strong>: l'app lo ricava dal material (Anagrafica articoli), lo propone e aggiunge la nota <code>INSERIRE TPN CORRETTO : &lt;pn&gt;</code>.</span></li><li><span><strong>Nessun P/N</strong> (né su VLT né dal material): il pezzo <strong>non si può caricare</strong>.</span></li><li><span><strong>GOOD Juniper</strong>: se c'è una pratica Juniper aperta, l'FR arriva dalla pratica.</span></li><li><span>Lo <strong>stato VLT</strong> al momento della registrazione viene salvato nel movimento.</span></li></ul></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">3</span>
+        <div>
+          <div class="step-title">Carica dati</div>
+          <div class="step-body">Controllato l'elenco, premi <strong style="color:var(--green)">Carica dati</strong>: crea i pezzi in giacenza e i movimenti IN (ID IN… come l'Easyloader). Dallo stesso elenco puoi scaricare <strong>Excel</strong>, stampare <strong>Etichette</strong> e il <strong>Cedolino</strong> (NEW/REUSE per P/N e posizione).</div>
+        </div>
+      </div>
+      <div class="step-detail"><div class="filters-mock" style="background:var(--surface)"><button class="fm-btn" style="background:var(--purple);color:#fff">Aggiungi</button><button class="fm-btn" style="background:none;border:1px solid var(--border);color:var(--subtle)">⬇ Excel</button><button class="fm-btn" style="background:none;border:1px solid var(--border);color:var(--subtle)">🏷 Etichette</button><button class="fm-btn" style="background:none;border:1px solid var(--border);color:var(--subtle)">📋 Cedolino</button><button class="fm-btn" style="background:var(--green);color:#021a10">Carica dati</button></div></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">4</span>
+        <div>
+          <div class="step-title">Ingressi di oggi e correzioni</div>
+          <div class="step-body">Sotto trovi gli <strong>ingressi di oggi</strong> (tuoi o di tutti). Clicca una riga per correggerla: le modifiche aggiornano anche giacenza e movimenti e restano nel Log.</div>
+        </div>
+      </div>
+    </div><div class="infobox info"><span class="ib-icon">ℹ️</span><div class="ib-body">Per gli ingressi conta la <strong>data di registrazione VLT</strong> (DATA RECEIVED AND VERIFY), non solo la data in hub.</div></div>
+  </div>
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('e',2)">← Ingresso · testata</button>
+    <button class="nbtn next purple" onclick="goto('e',4)">ACK riparatori →</button>
+  </div>
+</div>
+
+<!-- ══ E4: ACK verso i Riparatori ══ -->
+<div class="chapter" id="e-ch-4">
+  <div class="chapter-header">
+    <div class="ch-tag purple">Uscite · Passo 5 di 17</div>
+    <h1 class="ch-title">ACK verso i Riparatori</h1>
+    <p class="ch-desc">Le FAULTY partono verso i riparatori nei giorni del calendario uscite. La lista degli FR attesi arriva da VLT (stato Repairer Ack Received); il magazzino spunta i pezzi e genera il DDT ACK.</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">1</span>
+        <div>
+          <div class="step-title">Giorno e riparatori</div>
+          <div class="step-body">Nella scheda <strong>ACK</strong> scegli il <strong>Giorno di uscita</strong>: compaiono le schede dei riparatori previsti dal calendario. Per uno fuori calendario usa <strong>Riparatore fuori calendario → + Aggiungi</strong>.</div>
+        </div>
+      </div>
+      <div class="step-detail"><div class="filters-mock" style="background:var(--surface)"><button class="fm-btn" style="background:none;border:1px solid var(--border);color:var(--subtle)">↻ VLT</button><button class="fm-btn" style="background:none;border:1px solid var(--border);color:var(--subtle)">Aggiorna lista da VLT</button><button class="fm-btn" style="background:none;border:1px solid var(--border);color:var(--subtle)">Aggiorna export FR da chiudere</button></div></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">2</span>
+        <div>
+          <div class="step-title">Apri la spunta</div>
+          <div class="step-body">Sulla scheda del riparatore premi <strong>Apri spunta</strong> e spara FR o seriali. Ogni pezzo diventa <span class="tag green">spuntato</span>. <strong>Aggiorna lista da VLT</strong> aggiunge gli FR arrivati in ACK nel frattempo.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">3</span>
+        <div>
+          <div class="step-title">Mancanti, rimossi e BAN</div>
+          <div class="step-body">Gli FR attesi ma non trovati sono <span class="tag red">mancanti</span>: trovali oppure usa <strong>Rimuovi</strong> (resta in giacenza e riparte con l'ACK successivo; <strong>Ripristina</strong> per annullare). I pezzi <span class="tag amber">BAN</span> (note che iniziano con BAN o RMA) <strong>non vanno spediti</strong>: mettili da parte.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">4</span>
+        <div>
+          <div class="step-title">Chiudi, colli e DDT</div>
+          <div class="step-body"><strong>Chiudi spunta</strong>, inserisci colli e pesi (<strong>+ Collo</strong>, misure proposte) e premi <strong>Genera DDT</strong>: numero dalla serie ACK, movimenti OUT, PDF su Drive. Poi <strong>Stampa DDT</strong>.</div>
+        </div>
+      </div>
+    </div><div class="infobox warn"><span class="ib-icon">⚠️</span><div class="ib-body">Se il parametro <code>ack_blocca_se_mancanti</code> è SI, l'ACK non si chiude finché ci sono mancanti non gestiti.</div></div>
+  </div>
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('e',3)">← Ingresso · lettura pezzi</button>
+    <button class="nbtn next purple" onclick="goto('e',5)">RMA · Inventario giornaliero →</button>
+  </div>
+</div>
+
+<!-- ══ E5: RMA · Inventario Giornaliero ══ -->
+<div class="chapter" id="e-ch-5">
+  <div class="chapter-header">
+    <div class="ch-tag purple">RMA · Passo 6 di 17</div>
+    <h1 class="ch-title">RMA · Inventario Giornaliero</h1>
+    <p class="ch-desc">È l'elenco delle GOOD e BALANCING in giacenza da far uscire verso le ASP. Qui il Service Desk inserisce gli RMA creati, varia le destinazioni e vede gli abbinamenti con i ritorni in giacenza.</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">1</span>
+        <div>
+          <div class="step-title">Leggi la tabella</div>
+          <div class="step-body">Colonne principali:</div>
+        </div>
+      </div>
+      <div class="step-detail"><div class="gtbl"><div class="gtbl-head" style="display:flex"><div class="gtbl-th" style="flex:1">Colonna</div><div class="gtbl-th" style="flex:1">Significato</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Destinazione</div><div class="gtbl-cell" style="flex:1">Dove va il pezzo. Se è cambiata compare <em>⇄ era: …</em> con <span class="tag purple">SD</span> (variata a mano) o <span class="tag purple">RMA</span> (dal ritorno)</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">RMA creato (SD)</div><div class="gtbl-cell" style="flex:1">L'RMA inserito dal Service Desk (modificabile in cella)</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">RMA giacenza</div><div class="gtbl-cell" style="flex:1">Ritorno in giacenza abbinato in automatico (stesso material o equivalente)</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Data open · Scadenza</div><div class="gtbl-cell" style="flex:1">Apertura del ritorno e scadenza (+4 giorni lavorativi, in rosso se scaduto)</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Note SD</div><div class="gtbl-cell" style="flex:1"><code>RITORNO GIACENZA FR xxxxx</code></div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Pending</div><div class="gtbl-cell" style="flex:1">⏸ per fermare il pezzo, oppure il motivo del pending</div></div></div></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">2</span>
+        <div>
+          <div class="step-title">Inserire RMA e destinazione a mano</div>
+          <div class="step-body">Scrivi l'RMA nella cella <strong>RMA creato</strong> (6 cifre, parametro <code>rma_cifre</code>) o cambia la <strong>Destinazione</strong> (solo GOOD). Le celle modificate si colorano: poi <strong>Salva modifiche</strong>.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">3</span>
+        <div>
+          <div class="step-title">Associa RMA di ieri</div>
+          <div class="step-body">Se ci sono ritorni aperti ieri abbinati a una GOOD, compare <strong>✓ Associa RMA di ieri (n)</strong>: l'RMA del ritorno diventa l'RMA creato e, se serve, cambia la destinazione. I ritorni più vecchi li controlla il Service Desk.</div>
+        </div>
+      </div>
+      <div class="step-detail"><div class="filters-mock" style="background:var(--surface)"><button class="fm-btn" style="background:none;border:1px solid var(--border);color:var(--subtle)">🔄 Ritorni da VLT</button><button class="fm-btn" style="background:none;border:1px solid var(--border);color:var(--subtle)">⬆ Importa CSV ritorni</button><button class="fm-btn" style="background:none;border:1px solid var(--border);color:var(--subtle)">🗑 Annulla import ritorni</button><button class="fm-btn" style="background:none;border:1px solid var(--border);color:var(--subtle)">⬇ Excel</button><button class="fm-btn" style="background:none;border:1px solid var(--border);color:var(--subtle)">⬇ Excel RMA</button><button class="fm-btn" style="background:none;border:1px solid var(--border);color:var(--subtle)">⬆ Importa RMA</button><button class="fm-btn" style="background:none;border:1px solid var(--border);color:var(--subtle)">🏷 Etichette RMA</button><button class="fm-btn" style="background:var(--purple);color:#fff">✓ Associa RMA di ieri</button></div></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">4</span>
+        <div>
+          <div class="step-title">Etichette RMA</div>
+          <div class="step-body"><strong>🏷 Etichette RMA</strong> stampa l'etichetta 10×5 solo per le schede con variazione di destino (tra le righe filtrate): nuova destinazione, RMA e ID scheda.</div>
+        </div>
+      </div>
+    </div><div class="infobox danger"><span class="ib-icon">⛔</span><div class="ib-body">Un ritorno <strong>scaduto</strong> non si abbina e non si può usare come RMA creato: l'app lo rifiuta.</div></div>
+  </div>
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('e',4)">← ACK riparatori</button>
+    <button class="nbtn next purple" onclick="goto('e',6)">RMA · Excel RMA (SD) →</button>
+  </div>
+</div>
+
+<!-- ══ E6: Excel RMA per il Service Desk ══ -->
+<div class="chapter" id="e-ch-6">
+  <div class="chapter-header">
+    <div class="ch-tag purple">RMA · Passo 7 di 17</div>
+    <h1 class="ch-title">Excel RMA per il Service Desk</h1>
+    <p class="ch-desc">Il Service Desk può lavorare gli RMA in Excel: scarica le schede, compila RMA e destinazioni, e reimporta il file. L'app riconosce le schede e mostra un'anteprima prima di salvare.</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">1</span>
+        <div>
+          <div class="step-title">Scarica il file</div>
+          <div class="step-body">In <strong>Inventario giornaliero</strong> filtra le righe che ti servono (es. per destinazione) e premi <strong>⬇ Excel RMA</strong>. Il file ha tre fogli:</div>
+        </div>
+      </div>
+      <div class="step-detail"><ul class="checklist "><li><span><strong>RMA</strong>: una riga per scheda con ID UNITA, seriale, FR, P/N, destinazione attuale, ritorno proposto, scadenza, note SD e le due colonne da compilare <strong>RMA CREATO</strong> e <strong>NUOVA DESTINAZIONE</strong>.</span></li><li><span><strong>DESTINAZIONI</strong>: i nomi validi da copiare.</span></li><li><span><strong>ISTRUZIONI</strong>: come compilarlo.</span></li></ul></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">2</span>
+        <div>
+          <div class="step-title">Compila</div>
+          <div class="step-body">Compila solo <strong>RMA CREATO</strong> e, se il pezzo deve andare altrove, <strong>NUOVA DESTINAZIONE</strong> (vuota = resta quella attuale). Non cambiare ID UNITA e SERIALE: servono a riconoscere la scheda.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">3</span>
+        <div>
+          <div class="step-title">Reimporta e controlla l'anteprima</div>
+          <div class="step-body">Premi <strong>⬆ Importa RMA</strong> e scegli il file. L'anteprima mostra per ogni riga RMA prima → dopo, destinazione prima → dopo ed esito.</div>
+        </div>
+      </div>
+      <div class="step-detail"><div class="gtbl"><div class="gtbl-head" style="display:flex"><div class="gtbl-th" style="flex:1">Seriale</div><div class="gtbl-th" style="flex:1">RMA creato</div><div class="gtbl-th" style="flex:1">Destinazione</div><div class="gtbl-th" style="flex:1">Esito</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">DH215041868</div><div class="gtbl-cell" style="flex:1">— → 213601</div><div class="gtbl-cell" style="flex:1">TELEBIT GE - FASTWEB</div><div class="gtbl-cell green" style="flex:1">✓</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">K9122937102</div><div class="gtbl-cell" style="flex:1">— → 213540</div><div class="gtbl-cell" style="flex:1">TELEBIT BO → TELEBIT PD</div><div class="gtbl-cell green" style="flex:1">✓ ritorno in giacenza · destinazione dal ritorno</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">2102310CET10E6</div><div class="gtbl-cell" style="flex:1">— → 12345</div><div class="gtbl-cell" style="flex:1">SIRTI AN</div><div class="gtbl-cell muted" style="flex:1">✗ deve avere 6 cifre</div></div></div></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">4</span>
+        <div>
+          <div class="step-title">Anomalie che non vengono importate</div>
+          <div class="step-body">Le righe con un problema restano fuori, le altre si importano:</div>
+        </div>
+      </div>
+      <div class="step-detail"><ul class="checklist amber"><li><span>seriale non presente nell'inventario o presente su più schede (indica l'ID UNITA)</span></li><li><span>RMA con cifre sbagliate, ritorno scaduto, RMA già usato da un'altra scheda o ripetuto nel file</span></li><li><span>destinazione non presente nel foglio DESTINAZIONI; destinazione cambiata su una BALANCING</span></li></ul></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">5</span>
+        <div>
+          <div class="step-title">Conferma</div>
+          <div class="step-body"><strong>Importa n righe</strong> salva tutto in una volta (come Salva modifiche) e scrive nel Log RMA_CREATO / VARIAZIONE_RMA.</div>
+        </div>
+      </div>
+    </div><div class="infobox tip"><span class="ib-icon">💡</span><div class="ib-body">Se l'RMA inserito è un ritorno in giacenza verso un altro deposito, la destinazione la prende da solo dal ritorno.</div></div>
+  </div>
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('e',5)">← RMA · Inventario giornaliero</button>
+    <button class="nbtn next purple" onclick="goto('e',7)">RMA · Pending →</button>
+  </div>
+</div>
+
+<!-- ══ E7: Pending · Fermi a Deposito ══ -->
+<div class="chapter" id="e-ch-7">
+  <div class="chapter-header">
+    <div class="ch-tag purple">RMA · Passo 8 di 17</div>
+    <h1 class="ch-title">Pending · Fermi a Deposito</h1>
+    <p class="ch-desc">Il Service Desk può fermare una GOOD, una BALANCING o un carico NEW/REUSE con una motivazione: il pezzo resta in giacenza e non esce né oggi né nei giorni dopo, finché non viene rimesso in uscita.</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">1</span>
+        <div>
+          <div class="step-title">Metti in pending</div>
+          <div class="step-body">Premi <strong>⏸</strong> sulla riga: nelle schede di <strong>Uscite e DDT RMA</strong>, nella colonna <strong>Pending</strong> dell'inventario giornaliero o nei <strong>Carichi NEW/REUSE</strong>. Il <strong>motivo è obbligatorio</strong>.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">2</span>
+        <div>
+          <div class="step-title">Cosa succede</div>
+          <div class="step-body">Il pezzo esce dalle uscite di oggi e dei giorni successivi, non viene usato per gli abbinamenti con i ritorni e compare nel riquadro <strong>⏸ In pending · fermi a deposito</strong> in testa alle uscite, con motivo, chi e quando.</div>
+        </div>
+      </div>
+      <div class="step-detail"><div class="export-mock" style="border-color:var(--amber)"><div class="em-title" style="color:var(--amber)">⏸ In pending · fermi a deposito (1)</div><div class="em-item"><span class="mono" style="font-family:var(--ffm)">2102310CEU10D1000423</span><span style="color:var(--muted)">· GOOD · RMA 213485 · SIRTI - ROMA - SPARE · <span style="color:var(--amber)">cliente non pronto</span></span><span style="margin-left:auto" class="tag teal">▶ Rimetti in uscita</span><span class="tag red">🗑 Elimina</span></div></div></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">3</span>
+        <div>
+          <div class="step-title">Rimetti in uscita</div>
+          <div class="step-body"><strong>▶ Rimetti in uscita</strong> sblocca la riga (nota facoltativa). Per GOOD e BALANCING l'RMA di prima è scaduto: viene tolto dalla scheda e scritto nelle note come <code>RMA Precedente XXXXXX</code> (anche sul DDT). Il Service Desk deve <strong>ricreare l'RMA</strong>; finché manca, il pezzo è "manca RMA".</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">4</span>
+        <div>
+          <div class="step-title">Elimina</div>
+          <div class="step-body"><strong>🗑 Elimina</strong> toglie la riga dall'uscita: per un carico NEW/REUSE annulla il carico (il pezzo torna in giacenza senza RMA), per una GOOD con RMA creato toglie l'RMA e ripristina la destinazione d'origine. Per GOOD abbinate a un ritorno e per le BALANCING il pulsante non c'è.</div>
+        </div>
+      </div>
+    </div><div class="infobox info"><span class="ib-icon">ℹ️</span><div class="ib-body">Tutto è tracciato: foglio <strong>RMA_PENDING</strong> (attivi e chiusi, con stato SBLOCCATO o ELIMINATO, chi e quando) e Log (RMA_PENDING, RMA_PENDING_SBLOCCATO, RMA_PENDING_ELIMINATO).</div></div>
+  </div>
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('e',6)">← RMA · Excel RMA (SD)</button>
+    <button class="nbtn next purple" onclick="goto('e',8)">RMA · Ritorni in giacenza →</button>
+  </div>
+</div>
+
+<!-- ══ E8: Ritorni in Giacenza (VLT) ══ -->
+<div class="chapter" id="e-ch-8">
+  <div class="chapter-header">
+    <div class="ch-tag purple">RMA · Passo 9 di 17</div>
+    <h1 class="ch-title">Ritorni in Giacenza (VLT)</h1>
+    <p class="ch-desc">Sono le richieste di ritorno in giacenza aperte su VLT (stato To Ship From CW, esclusi i Minore/balancing). Arrivano in automatico ogni mattina; resta possibile l'import manuale.</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">1</span>
+        <div>
+          <div class="step-title">Import automatico</div>
+          <div class="step-body">Il programma <strong>fr_rma.exe</strong> sul server legge ogni mattina la mail con <code>rma.csv</code> e scrive il foglio <strong>RMA</strong> nel file VLT. Aprendo il tab RMA (o con <strong>↻ Aggiorna</strong>) l'app importa i ritorni nuovi una volta per estrazione. La riga informativa dice <em>automatico, rma.csv del …</em>.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">2</span>
+        <div>
+          <div class="step-title">Ritorni da VLT</div>
+          <div class="step-body"><strong>🔄 Ritorni da VLT</strong> rilegge subito il foglio RMA. Gli RMA non più "To Ship From CW" escono dagli abbinamenti; quelli nuovi entrano e parte l'associazione degli RMA di ieri.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">3</span>
+        <div>
+          <div class="step-title">Import manuale (come prima)</div>
+          <div class="step-body"><strong>⬆ Importa CSV ritorni</strong> accetta l'export VLT "Ritorni in giacenza" (anche il file combinato con intestazioni ripetute).</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">4</span>
+        <div>
+          <div class="step-title">Annulla import</div>
+          <div class="step-body"><strong>🗑 Annulla import ritorni</strong> annulla i ritorni dell'ultimo import (file sbagliato): restano nel foglio come ANNULLATI e, se vuoi, toglie anche gli RMA creati dalle GOOD associate. Reimportandoli tornano attivi.</div>
+        </div>
+      </div>
+    </div><div class="infobox warn"><span class="ib-icon">⚠️</span><div class="ib-body">Il file rma.csv della mail contiene i ritorni fino al giorno prima: quelli aperti oggi arrivano con l'estrazione di domani (o con un import manuale).</div></div>
+  </div>
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('e',7)">← RMA · Pending</button>
+    <button class="nbtn next purple" onclick="goto('e',9)">RMA · Carichi NEW/REUSE →</button>
+  </div>
+</div>
+
+<!-- ══ E9: Carichi NEW / REUSE ══ -->
+<div class="chapter" id="e-ch-9">
+  <div class="chapter-header">
+    <div class="ch-tag purple">RMA · Passo 10 di 17</div>
+    <h1 class="ch-title">Carichi NEW / REUSE</h1>
+    <p class="ch-desc">Per far uscire NEW e REUSE in giacenza verso una destinazione con un RMA si crea un carico. I carichi aperti compaiono nelle uscite insieme alle GOOD.</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">1</span>
+        <div>
+          <div class="step-title">Crea un carico</div>
+          <div class="step-body">In <strong>RMA → Carichi NEW/REUSE</strong> spara il <strong>Seriale</strong> (deve essere NEW/REUSE in giacenza), poi <strong>RMA</strong>, <strong>Destinazione</strong> e, se c'è, <strong>PO / MRN</strong>.</div>
+        </div>
+      </div>
+      <div class="step-detail"><div class="filters-mock" style="background:var(--surface)"><div class="fm-group"><div class="fm-label">Seriale *</div><div class="fm-input" style="min-width:110px;color:var(--muted)">spara il seriale</div></div><div class="fm-group"><div class="fm-label">RMA *</div><div class="fm-input" style="min-width:110px;color:var(--muted)">213700</div></div><div class="fm-group"><div class="fm-label">Destinazione *</div><div class="fm-input" style="min-width:110px;color:var(--muted)">SIRTI AN</div></div><div class="fm-group"><div class="fm-label">PO / MRN</div><div class="fm-input" style="min-width:110px;color:var(--muted)"></div></div></div></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">2</span>
+        <div>
+          <div class="step-title">Import da Excel</div>
+          <div class="step-body">Con <strong>Modello Excel</strong> scarichi il tracciato; compilato, lo importi in blocco. Ogni riga è controllata (seriale, RMA, destinazione, doppioni).</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">3</span>
+        <div>
+          <div class="step-title">Annulla o metti in pending</div>
+          <div class="step-body">✕ annulla il carico (il pezzo torna in giacenza senza RMA). ⏸ lo mette in pending con un motivo.</div>
+        </div>
+      </div>
+    </div><div class="infobox info"><span class="ib-icon">ℹ️</span><div class="ib-body">Il tab <strong>Carichi NEW/REUSE</strong> in alto gestisce invece le pratiche col cliente: file inviato al Service Desk, ritorno lavorato e messa in uscita RMA.</div></div>
+  </div>
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('e',8)">← RMA · Ritorni in giacenza</button>
+    <button class="nbtn next purple" onclick="goto('e',10)">RMA · Uscite e DDT →</button>
+  </div>
+</div>
+
+<!-- ══ E10: Uscite e DDT RMA ══ -->
+<div class="chapter" id="e-ch-10">
+  <div class="chapter-header">
+    <div class="ch-tag purple">RMA · Passo 11 di 17</div>
+    <h1 class="ch-title">Uscite e DDT RMA</h1>
+    <p class="ch-desc">Una scheda per ogni destinazione del giorno, con i pezzi in uscita: GOOD con RMA, BALANCING con RMA e carichi NEW/REUSE. Il magazzino inserisce colli e AWB e genera un DDT per destinazione.</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">1</span>
+        <div>
+          <div class="step-title">Scegli il giorno</div>
+          <div class="step-body">In <strong>Uscite e DDT RMA</strong> scegli il <strong>Giorno di uscita</strong>. In alto: destinazioni, pezzi da spedire, senza RMA, pronte per DDT, spedite.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">2</span>
+        <div>
+          <div class="step-title">Controlla i pezzi</div>
+          <div class="step-body">Ogni riga è su una linea: <code>seriale · P/N · RMA · nota</code>. I pezzi <span class="tag amber">manca RMA</span> sono non spuntati e si spuntano da soli quando il Service Desk inserisce l'RMA. Togli la spunta per escludere un pezzo <strong>solo oggi</strong>; usa ⏸ per fermarlo finché non lo sblocchi.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">3</span>
+        <div>
+          <div class="step-title">Colli, peso, AWB</div>
+          <div class="step-body">Inserisci colli (COLLO/PLT, misure, kg) e <strong>AWB</strong> (il vettore si riconosce dal prefisso), poi <strong>Salva colli e AWB</strong>: la scheda diventa <span class="tag purple">PRONTA</span>.</div>
+        </div>
+      </div>
+      <div class="step-detail"><div class="filters-mock" style="background:var(--surface)"><button class="fm-btn" style="background:none;border:1px solid var(--border);color:var(--subtle)">+ Collo</button><button class="fm-btn" style="background:none;border:1px solid var(--border);color:var(--subtle)">Salva colli e AWB</button><button class="fm-btn" style="background:var(--green);color:#021a10">Genera DDT</button><button class="fm-btn" style="background:none;border:1px solid var(--border);color:var(--subtle)">Cedolini</button><button class="fm-btn" style="background:var(--green);color:#021a10">Genera i DDT pronti</button></div></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">4</span>
+        <div>
+          <div class="step-title">Genera il DDT</div>
+          <div class="step-body"><strong>Genera DDT</strong> (o <strong>Genera i DDT pronti</strong> per tutte): numero dalla serie RMA (<code>01952_2026 SPARE</code>), movimenti OUT, ritorni evasi, PDF su Drive, stampa. Se in quella destinazione mancano RMA, l'app chiede conferma prima di partire senza quei pezzi.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">5</span>
+        <div>
+          <div class="step-title">Note sul DDT</div>
+          <div class="step-body">La colonna NOTE riporta <code>RITORNO GIACENZA FR xxxxx</code> per i pezzi su ritorno in giacenza e <code>RMA Precedente XXXXXX</code> se il pezzo era stato in pending con un altro RMA.</div>
+        </div>
+      </div>
+    </div><div class="infobox tip"><span class="ib-icon">💡</span><div class="ib-body">Dopo il DDT, le chiusure RMA su VLT si fanno dal tab <strong>Chiusure VLT</strong>.</div></div>
+  </div>
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('e',9)">← RMA · Carichi NEW/REUSE</button>
+    <button class="nbtn next purple" onclick="goto('e',11)">Balancing e Juniper →</button>
+  </div>
+</div>
+
+<!-- ══ E11: Balancing e Juniper ══ -->
+<div class="chapter" id="e-ch-11">
+  <div class="chapter-header">
+    <div class="ch-tag purple">Altre gestioni · Passo 12 di 17</div>
+    <h1 class="ch-title">Balancing e Juniper</h1>
+    <p class="ch-desc">Le balancing sono previsioni di arrivo inserite dal Service Desk; Juniper ha pratiche fuori processo con faulty spedite via UPS e GOOD in sostituzione.</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">1</span>
+        <div>
+          <div class="step-title">Balancing</div>
+          <div class="step-body">Nel tab <strong>Balancing</strong>: <strong>+ Nuova balancing</strong> o <strong>Importa Excel</strong> (scarica prima il <strong>Modello Excel</strong>). Quando il magazzino registra l'ingresso BALANCING del seriale, la riga diventa <span class="tag green">arrivata</span> da sola (gestito = SI).</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">2</span>
+        <div>
+          <div class="step-title">Juniper: nuova pratica</div>
+          <div class="step-body">Nel tab <strong>Juniper</strong> <strong>+ Nuova pratica</strong> (o Importa Excel). Clicca una riga per modificarla.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">3</span>
+        <div>
+          <div class="step-title">GOOD prima della faulty</div>
+          <div class="step-body">La GOOD Juniper può arrivare prima della faulty: l'FR viene associato alla GOOD quando arriva la faulty. La pratica si chiude solo quando sono uscite entrambe.</div>
+        </div>
+      </div>
+      <div class="step-detail"><div class="gtbl"><div class="gtbl-head" style="display:flex"><div class="gtbl-th" style="flex:1">Stato</div><div class="gtbl-th" style="flex:1">Significato</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">APERTA</div><div class="gtbl-cell" style="flex:1">In attesa</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">FAULTY SPEDITA</div><div class="gtbl-cell" style="flex:1">Faulty partita, GOOD non ancora</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">GOOD SPEDITA, FAULTY NO</div><div class="gtbl-cell" style="flex:1">GOOD uscita prima della faulty</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">CHIUSA</div><div class="gtbl-cell" style="flex:1">Uscite entrambe</div></div></div></div>
+    </div>
+  </div>
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('e',10)">← RMA · Uscite e DDT</button>
+    <button class="nbtn next purple" onclick="goto('e',12)">Giacenze e Movimenti →</button>
+  </div>
+</div>
+
+<!-- ══ E12: Giacenze e Movimenti ══ -->
+<div class="chapter" id="e-ch-12">
+  <div class="chapter-header">
+    <div class="ch-tag purple">Altre gestioni · Passo 13 di 17</div>
+    <h1 class="ch-title">Giacenze e Movimenti</h1>
+    <p class="ch-desc">Giacenze mostra tutto ciò che è a magazzino; Movimenti è lo storico di ingressi e uscite con l'export Easyloader per la fatturazione.</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">1</span>
+        <div>
+          <div class="step-title">Cerca in giacenza</div>
+          <div class="step-body">Nel tab <strong>Giacenze</strong> cerca per seriale, P/N, FR, RMA, AWB, DDT, mittente, PO, ubicazione o nota; filtra per Tipo, Magazzino, Stato e <strong>Stato VLT</strong>. <strong>⚙ Colonne</strong> per scegliere le colonne, <strong>⬇ Excel</strong> per esportare.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">2</span>
+        <div>
+          <div class="step-title">Correggere un pezzo</div>
+          <div class="step-body">Clicca la riga: nella sezione <strong>Varia i dati</strong> puoi correggere seriale, P/N, produttore, tipo, FR, RMA e riparatore. La correzione è <strong>a specchio</strong> sui movimenti e sulle righe di spedizione e aggiunge un movimento interno <code>INT VARIAZIONE</code> che conserva il vecchio valore (es. FR abortito sostituito).</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">3</span>
+        <div>
+          <div class="step-title">Movimenti</div>
+          <div class="step-body">Nel tab <strong>Movimenti</strong> scegli i dati (anno corrente o archivi), il periodo e cerca. <strong>⬇ Excel vista</strong> esporta la scheda aperta.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">4</span>
+        <div>
+          <div class="step-title">Excel Easyloader</div>
+          <div class="step-body"><strong>⬇ Excel Easyloader</strong> crea il file come il vecchio Easyloader (fogli INBOUND e OUTBOUND del periodo) per la fatturazione. I movimenti interni di variazione <strong>non</strong> entrano.</div>
+        </div>
+      </div>
+    </div><div class="infobox info"><span class="ib-icon">ℹ️</span><div class="ib-body">Lo storico 2024 e 2025 è negli archivi DB_ARCHIVIO_2024 / 2025, consultabili da Movimenti.</div></div>
+  </div>
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('e',11)">← Balancing e Juniper</button>
+    <button class="nbtn next purple" onclick="goto('e',13)">VLT e Chiusure VLT →</button>
+  </div>
+</div>
+
+<!-- ══ E13: VLT e Chiusure VLT ══ -->
+<div class="chapter" id="e-ch-13">
+  <div class="chapter-header">
+    <div class="ch-tag purple">VLT · Passo 14 di 17</div>
+    <h1 class="ch-title">VLT e Chiusure VLT</h1>
+    <p class="ch-desc">Il tab VLT mostra il foglio FR alimentato dal server; Chiusure VLT prepara le code di chiusura che lo script Tampermonkey esegue sulla pagina VLT.</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">1</span>
+        <div>
+          <div class="step-title">Tab VLT</div>
+          <div class="step-body">Mostra gli FR aperti dal 1° gennaio (spunta "anche gli anni precedenti" per tutto). <strong>↻ Rileggi VLT</strong>, <strong>⬇ Excel</strong>, <strong>🏷 Etichette filtrate</strong>.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">2</span>
+        <div>
+          <div class="step-title">Rettifiche</div>
+          <div class="step-body"><strong>✏️ Abilita modifiche</strong> permette di correggere un valore sbagliato su VLT (es. seriale o TPN): <strong>Salva rettifiche</strong> chiede il motivo. Il file VLT non viene mai modificato: l'app usa il valore corretto (★) e lo registra in VLT_RETTIFICHE.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">3</span>
+        <div>
+          <div class="step-title">Chiusure VLT: installa lo script</div>
+          <div class="step-body">Nel tab <strong>Chiusure VLT</strong> premi <strong>📥 Installa script</strong> (Tampermonkey, script <em>ATS FLM VLT Chiusure</em>). Il pallino diventa verde quando lo script è rilevato. <strong>↗ Apri VLT</strong> apre la pagina VLT.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">4</span>
+        <div>
+          <div class="step-title">Code e invio</div>
+          <div class="step-body">Scegli il <strong>Giorno</strong>: compaiono le code INGRESSI, FERME (Spare ferme in hub), ACK e RMA. <strong>▶ Invia a VLT</strong> passa la coda allo script, che apre ogni FR, controlla lo stato e lo chiude; gli esiti tornano nell'app. <strong>⬇ Excel tutte le code</strong> per il riepilogo.</div>
+        </div>
+      </div>
+      <div class="step-detail"><ul class="checklist "><li><span>FR già nello stato finale: saltato (già fatto).</span></li><li><span>Stato inatteso: saltato e segnalato.</span></li><li><span>FERME con nota VLT che contiene "OK": la nota viene ignorata e l'FR va in Failure Report Sent.</span></li><li><span>RMA: chiusura semi-automatica con pannello seriali.</span></li></ul></div>
+    </div><div class="infobox warn"><span class="ib-icon">⚠️</span><div class="ib-body">Lascia aperta la scheda VLT mentre lo script lavora e non cliccare nei form finché la coda non è finita.</div></div>
+  </div>
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('e',12)">← Giacenze e Movimenti</button>
+    <button class="nbtn next purple" onclick="goto('e',14)">Dashboard, Log, Anagrafiche →</button>
+  </div>
+</div>
+
+<!-- ══ E14: Dashboard, Log e Anagrafiche ══ -->
+<div class="chapter" id="e-ch-14">
+  <div class="chapter-header">
+    <div class="ch-tag purple">Controllo · Passo 15 di 17</div>
+    <h1 class="ch-title">Dashboard, Log e Anagrafiche</h1>
+    <p class="ch-desc">Statistiche per operatore e periodo, registro di tutte le operazioni e anagrafiche di articoli, P/N ed equivalenti.</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">1</span>
+        <div>
+          <div class="step-title">Dashboard</div>
+          <div class="step-body">Scegli <strong>Periodo</strong> (oggi, 7/30/90 giorni, anno, intervallo) e <strong>Misura</strong> (totale, ingressi, uscite ACK, RMA/balancing, pezzi spuntati). <strong>⬇ Excel</strong> per esportare.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">2</span>
+        <div>
+          <div class="step-title">Log</div>
+          <div class="step-body">Ogni scrittura con data, utente, azione e record. Filtra per data e cerca seriale, FR, RMA, DDT. Clicca una riga: il dettaglio mostra la tabella <strong>Campo · Prima · Dopo</strong>.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">3</span>
+        <div>
+          <div class="step-title">Anagrafiche</div>
+          <div class="step-body">Tre schede: <strong>Articoli</strong> (material → P/N, produttore, riparatore), <strong>Anagrafica P/N</strong>, <strong>Equivalenti</strong>. Visibili a tutti, modificabili dagli admin.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">4</span>
+        <div>
+          <div class="step-title">Import massivo intelligente</div>
+          <div class="step-body">Scarica il <strong>Modello Excel</strong> o <strong>⬇ Excel completo</strong>, modifica e reimporta: l'anteprima mostra righe <strong>nuove</strong> (aggiunte), <strong>variate</strong> (sovrascritte) e <strong>identiche</strong> (lasciate stare). <strong>Sostituisci tutto</strong> è un'opzione separata.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('e',13)">← VLT e Chiusure VLT</button>
+    <button class="nbtn next purple" onclick="goto('e',15)">Admin e parametri →</button>
+  </div>
+</div>
+
+<!-- ══ E15: Admin e Parametri ══ -->
+<div class="chapter" id="e-ch-15">
+  <div class="chapter-header">
+    <div class="ch-tag purple">Controllo · Passo 16 di 17</div>
+    <h1 class="ch-title">Admin e Parametri</h1>
+    <p class="ch-desc">La configurazione del modulo: operatori, riparatori, depositi VLT, controparti, calendario uscite, vettori, regole barcode, parametri. Solo per ADMIN.</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">1</span>
+        <div>
+          <div class="step-title">Sezioni</div>
+          <div class="step-body">In <strong>Admin</strong> scegli la sezione, modifica le celle, <strong>+ Riga</strong> per aggiungere e <strong>Salva modifiche</strong>.</div>
+        </div>
+      </div>
+      <div class="step-detail"><div class="gtbl"><div class="gtbl-head" style="display:flex"><div class="gtbl-th" style="flex:1">Sezione</div><div class="gtbl-th" style="flex:1">Contenuto</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Operatori</div><div class="gtbl-cell" style="flex:1">Email, nome, sigla, ruolo, attivo</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Riparatori / Alias</div><div class="gtbl-cell" style="flex:1">Dati DDT ACK; nome VLT → codice</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Depositi VLT</div><div class="gtbl-cell" style="flex:1">Codice deposito → destinazione (mittente e destinazione GOOD)</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Controparti</div><div class="gtbl-cell" style="flex:1">Mittenti e destinazioni con indirizzo per i DDT RMA</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Calendario uscite</div><div class="gtbl-cell" style="flex:1">Riparatori in uscita per giorno</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Vettori · Regole barcode</div><div class="gtbl-cell" style="flex:1">Prefisso AWB; estrazione seriale/PN dal barcode</div></div></div></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">2</span>
+        <div>
+          <div class="step-title">Parametri principali</div>
+          <div class="step-body">Da modificare con attenzione:</div>
+        </div>
+      </div>
+      <div class="step-detail"><div class="gtbl"><div class="gtbl-head" style="display:flex"><div class="gtbl-th" style="flex:1">Parametro</div><div class="gtbl-th" style="flex:1">Uso</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">ddt_ack_prossimo / ddt_rma_prossimo</div><div class="gtbl-cell" style="flex:1">Numerazione DDT</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">rma_cifre</div><div class="gtbl-cell" style="flex:1">Cifre RMA: 6 oggi, poi "6,7"</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">rma_giorni_scadenza</div><div class="gtbl-cell" style="flex:1">Giorni lavorativi di scadenza dei ritorni (4)</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">rma_vlt_foglio</div><div class="gtbl-cell" style="flex:1">Foglio dei ritorni automatici (RMA; "-" = spento)</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">password_eliminazione</div><div class="gtbl-cell" style="flex:1">Password admin per eliminare pratiche</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">ruoli</div><div class="gtbl-cell" style="flex:1">Ruoli della tendina operatori</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">vlt_stati_fr_da_chiudere</div><div class="gtbl-cell" style="flex:1">Stati delle FAULTY nell'export FR da chiudere</div></div></div></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">3</span>
+        <div>
+          <div class="step-title">Protezione</div>
+          <div class="step-body">Gli admin possono attivare la protezione dei fogli di configurazione: solo loro potranno modificarli anche da Google Fogli.</div>
+        </div>
+      </div>
+    </div>
+  </div>
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('e',14)">← Dashboard, Log, Anagrafiche</button>
+    <button class="nbtn next purple" onclick="goto('e',16)">Palmare e domande →</button>
+  </div>
+</div>
+
+<!-- ══ E16: Palmare, Smartphone e Domande ══ -->
+<div class="chapter" id="e-ch-16">
+  <div class="chapter-header">
+    <div class="ch-tag purple">Controllo · Passo 17 di 17</div>
+    <h1 class="ch-title">Palmare, Smartphone e Domande</h1>
+    <p class="ch-desc">Su palmare e smartphone le tabelle diventano schede con le informazioni essenziali; tocca una scheda per il dettaglio.</p>
+  </div>
+  <div class="steps">
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">1</span>
+        <div>
+          <div class="step-title">Schede al posto delle tabelle</div>
+          <div class="step-body">Sotto i 760 px ogni riga è una scheda con FR, seriale ed esito. Tocca la scheda per aprire il dettaglio (negli ingressi anche per modificarlo). <strong>▦ Vista tabella</strong> torna alla tabella.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">2</span>
+        <div>
+          <div class="step-title">Domande frequenti</div>
+          <div class="step-body"></div>
+        </div>
+      </div>
+      <div class="step-detail"><div class="gtbl"><div class="gtbl-head" style="display:flex"><div class="gtbl-th" style="flex:1">Domanda</div><div class="gtbl-th" style="flex:1">Risposta</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Non vedo i dati di un collega</div><div class="gtbl-cell" style="flex:1">Premi ↻ Aggiorna in alto</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Una GOOD non compare nelle uscite</div><div class="gtbl-cell" style="flex:1">Manca la destinazione, è in pending oppure è esclusa per oggi</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">"RMA già usato"</div><div class="gtbl-cell" style="flex:1">Quell'RMA è già su un'altra scheda o su un carico</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">"Script VLT non rilevato"</div><div class="gtbl-cell" style="flex:1">Installa/aggiorna lo script in Tampermonkey e ricarica la pagina</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">I ritorni di oggi non ci sono</div><div class="gtbl-cell" style="flex:1">Arrivano con l'estrazione di domani: usa l'import manuale se servono subito</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Ho sbagliato un FR in giacenza</div><div class="gtbl-cell" style="flex:1">Giacenze → clicca la riga → Varia i dati (resta traccia del vecchio FR)</div></div></div></div>
+    </div>
+  <hr class="divider">
+  <div class="complete-screen">
+    <div class="complete-icon">📦</div>
+    <div class="complete-title purple">Guida completata!</div>
+    <p class="complete-sub">Hai visto tutte le funzioni del modulo Easyloader. Puoi rileggere qualsiasi sezione dal menu laterale.</p>
+    <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:20px"><button class="nbtn prev" onclick="goto('e',0)" style="border-radius:8px">↩ Ricomincia dall'inizio</button></div>
+  </div>
+  </div>
+  <div class="nav-btns">
+    <button class="nbtn prev" onclick="goto('e',15)">← Admin e parametri</button>
+    <button class="nbtn next" disabled>Fine ✓</button>
+  </div>
+</div>
+
+</div><!-- /panel-e -->
+
 </main>
 </div>
 
@@ -3024,7 +3922,8 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
 var state = {
   p: { current: 0, total: 10, visited: new Set([0]) },
   s: { current: 0, total: 9,  visited: new Set([0]) },
-  g: { current: 0, total: 8,  visited: new Set([0]) }
+  g: { current: 0, total: 8,  visited: new Set([0]) },
+  e: { current: 0, total: 17, visited: new Set([0]) }
 };
 var activeModule = 'p';
 
@@ -3040,11 +3939,11 @@ function switchModule(mod) {
   // Mostra nuovo pannello
   document.getElementById('panel-'+mod).classList.add('active');
   document.getElementById('sb-'+mod).style.display = '';
-  var cls = {p:'active-p', s:'active-s', g:'active-g'}[mod];
+  var cls = {p:'active-p', s:'active-s', g:'active-g', e:'active-e'}[mod];
   document.getElementById('mbtn-'+mod).className = 'mod-btn ' + cls;
 
   // Aggiorna sidebar logo
-  var subs = {p:'📋 Modulo Presenze', s:'📦 Spedizioni AWB', g:'🟢 GRN Manager'};
+  var subs = {p:'📋 Modulo Presenze', s:'📦 Spedizioni AWB', g:'🟢 GRN Manager', e:'🚚 Easyloader FLM'};
   document.getElementById('sb-sub').textContent = subs[mod];
 
   // Vai alla sezione corrente del modulo
@@ -3072,10 +3971,10 @@ function goto(mod, idx) {
 function updateSidebarActive(mod, idx) {
   // Rimuovi tutti gli active nel modulo
   var navLinks = document.querySelectorAll('#sb-'+mod+' .sb-link');
-  navLinks.forEach(function(el){ el.classList.remove('active', 'active-p', 'active-s', 'active-g'); });
+  navLinks.forEach(function(el){ el.classList.remove('active', 'active-p', 'active-s', 'active-g', 'active-e'); });
   var link = document.getElementById(mod+'-nav-'+idx);
   if (link) {
-    var cls = {p:'active-p', s:'active-s', g:'active-g'}[mod];
+    var cls = {p:'active-p', s:'active-s', g:'active-g', e:'active-e'}[mod];
     link.classList.add(cls);
   }
 }
@@ -3090,6 +3989,7 @@ function updateProgress(mod) {
 // ── INIT ───────────────────────────────────────
 updateSidebarActive('p', 0);
 updateProgress('p');
+if (/easyloader/i.test(location.hash)) switchModule('e');
 </script>
 </body>
 </html>
