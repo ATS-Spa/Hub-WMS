@@ -223,6 +223,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
 .kc-col.sel{background:var(--viz-track)}
 .kc-col:hover .kc-bar,.kc-col:hover .dash-seg{filter:brightness(1.2)}
 .kc-bar{display:block;flex:1 1 0;max-width:18px;border-radius:4px 4px 0 0}
+.kc-bar.ghost{opacity:.4}
 .kc-lab{position:absolute;left:0;right:0;text-align:center;font:600 11px var(--ff-mono);color:var(--text);transform:translateY(-2px);pointer-events:none;white-space:nowrap}
 .kc-target{position:absolute;left:0;right:0;border-top:2px dashed var(--red);opacity:.75;pointer-events:none;z-index:1}
 .kc-tsw{display:inline-block;width:14px;border-top:2px dashed var(--red);margin-right:6px;vertical-align:middle}
@@ -601,9 +602,10 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
         <div class="fg" style="width:170px"><span class="fl">Mese</span><input class="fc" type="month" id="kpiMese" onchange="if(this.value){Kpi.mese=this.value;Kpi.render()}"></div>
         <div class="spacer"></div>
         <button class="btn ghost sm" onclick="Blk.apri()">⛔ Blocco VLT</button>
+        <button class="btn ghost sm" onclick="Chi.nuova()">📅 Chiusura</button>
         <button class="btn ghost sm" onclick="Kpi.carica(true).then(Kpi.render).catch(function(e){toast(e.message,'ko')})">↻ Aggiorna</button>
         <button class="btn ghost sm" onclick="Kpi.excel()">⬇ Excel</button>
-      </div><div class="hint" style="margin-top:8px">Ultimi 12 mesi fino al mese scelto. Giorni lavorativi: esclusi sabato, domenica, festivi (parametro <span class="mono">kpi_festivi</span>, Pasquetta automatica) e giorni di blocco VLT registrati. Target nei parametri <span class="mono">kpi1_target</span>, <span class="mono">kpi2_target</span>, <span class="mono">kpi3_target</span>.</div></div>
+      </div><div class="hint" style="margin-top:8px">Ultimi 12 mesi fino al mese scelto. Giorni lavorativi: esclusi sabato, domenica, festivi (parametro <span class="mono">kpi_festivi</span>, Pasquetta automatica) giorni di blocco VLT e chiusure ATS; per il KPI₆ anche le chiusure del riparatore. Target nei parametri <span class="mono">kpi1_target</span> … <span class="mono">kpi6_target</span>.</div></div>
       <div id="kpiBody"></div>
     </div>
 
@@ -1200,6 +1202,8 @@ var App = {
     Ingresso.init(); Giacenze.init(); Ack.init(); if (App.isAdmin) Admin.init();
     App.go(lsG('tab') || 'ingresso');
     Blk.load().catch(function () { });
+    Chi.load().catch(function () { });
+    AckV.load().then(AckV.sync).catch(function (e) { console.warn('ACK VLT: ' + e.message); });
     Sync.avvia(); Chv.init(); Jun.tab().catch(function () { }); setTimeout(function () { Spec.mov().then(function () { Ingresso.ricalcola(); }).catch(function () { }); }, 3000);
   },
   go: function (k) {
@@ -1252,8 +1256,9 @@ var App = {
     try {
       await DB.loadTables(DB.SMALL.concat(['UNITA'])); await DB.loadVlt(true);
       try { await DB.loadHuawei(true); } catch (e) { toast('File Huawei non leggibile: ' + e.message, 'ko'); }
+      try { await Chi.load(); await AckV.load(); await AckV.sync(); } catch (e) { }
       Ingresso._heads = null;
-    if (Rma.loaded) { await DB.loadTables(['RMA_RITORNI', 'SPEDIZIONI', 'SPEDIZIONI_COLLI', 'CARICHI_RMA', 'RMA_PENDING']); await Rma.autoVlt(false); }
+    if (Rma.loaded) { await DB.loadTables(['RMA_RITORNI', 'SPEDIZIONI', 'SPEDIZIONI_COLLI', 'CARICHI_RMA', 'RMA_PENDING']); await Rma.autoVlt(false); try { await Chi.syncRma(); } catch (e) { toast('Pending per chiusura: ' + e.message, 'ko'); } }
     if (Bal.loaded) await Bal.load(); if (Jun.loaded) await Jun.load(); Sto.dati.cur = null;
     if (Ack.loaded) { await Ack.flush(); await Ack.load(); }
       App.fillLists(); App.syncInfo(); Ingresso.ricalcola(); Ingresso.renderOggi(); if (App.tab === 'giacenze') Giacenze.render(); if (App.tab === 'admin') Admin.render(); if (App.tab === 'ack') Ack.render(); if (App.tab === 'rma') Rma.render(); if (App.tab === 'balancing') Bal.render(); if (App.tab === 'juniper') Jun.render(); if (App.tab === 'vlt') Vlt.render();
@@ -2267,7 +2272,7 @@ var Admin = {
   sez: 'OPERATORI', dirty: {},
   // campi a scelta fissa (menu a tendina, sempre lo stesso testo)
   OPZ: { ruolo: ['OPERATORE', 'ADMIN'], attivo: ['SI', 'NO'], condiviso: ['NO', 'SI'], ack_include_as: ['NO', 'SI'],
-    stato: { CALENDARIO_USCITE: ['PIANIFICATA', 'IN_CORSO', 'CHIUSA', 'ANNULLATA'] }, tipo: { CONTROPARTI: ['DESTINAZIONE', 'MITTENTE', 'MITTENTE,DESTINAZIONE'] } },
+    stato: { CALENDARIO_USCITE: ['PIANIFICATA', 'IN_CORSO', 'CHIUSA', 'ANNULLATA'], CHIUSURE: ['ATTIVA', 'ANNULLATA'] }, tipo: { CONTROPARTI: ['DESTINAZIONE', 'MITTENTE', 'MITTENTE,DESTINAZIONE'], CHIUSURE: ['DITTA', 'ATS'] } },
   opz: function (h) { if (h === 'ruolo') return Admin.ruoli(); var o = Admin.OPZ[h]; return !o ? null : (Array.isArray(o) ? o : (o[Admin.sez] || null)); },
   // ruoli: OPERATORE e ADMIN sempre presenti; gli altri da PARAMETRI 'ruoli' (separati da ; o ,), per ora solo descrittivi
   ruoli: function () { var a = Admin.OPZ.ruolo.slice(); L.s(DB.param('ruoli', '')).split(/[;,]/).forEach(function (x) { x = L.up(L.s(x)); if (x && a.indexOf(x) < 0) a.push(x); }); return a; },
@@ -2278,9 +2283,11 @@ var Admin = {
     DEPOT_VLT: { title: 'Depositi VLT', hint: 'Codice deposito VLT → destinazione: usato per mittente e destinazione GOOD.', cols: ['depot_vlt', 'destinazione', 'sigla', 'destinazione_conversione'], add: true },
     CONTROPARTI: { title: 'Controparti', hint: 'Mittenti e destinazioni (ASP / field) con indirizzo per i DDT RMA.', cols: ['codice', 'indirizzo_completo', 'tipo', 'attivo', 'note'], add: true },
     CALENDARIO_USCITE: { title: 'Calendario uscite', hint: 'Riparatori in uscita per giorno (una riga per data e riparatore).', cols: ['data', 'riparatore', 'stato', 'id_spedizione', 'note'], add: true },
+    CHIUSURE: { title: 'Chiusure programmate', hint: 'Ferie e chiusure. Tipo ATS = la nostra azienda (giorni esclusi da tutti i KPI). Tipo DITTA = riparatore o destinazione: TELEBIT vale per tutte le sedi, "TELEBIT MI - FASTWEB" solo per quella; l\'ACK non si avvia, le uscite RMA vanno in pending fino alla riapertura (poi RMA nuovo), giorni esclusi dal KPI₆. Date dal/al comprese (AAAA-MM-GG o GG/MM/AAAA). Per togliere una chiusura metti stato ANNULLATA.', cols: ['id_chiusura', 'tipo', 'ditta', 'dal', 'al', 'motivo', 'stato', 'note'], add: true },
     MAGAZZINI: { title: 'Magazzini', hint: 'Aree logiche della giacenza.', cols: ['codice', 'descrizione'], add: true },
     PARAMETRI: { title: 'Parametri', hint: 'Modifica con attenzione: numerazioni DDT, mail, regole.', cols: ['chiave', 'valore', 'descrizione'], add: true },
     VETTORI: { title: 'Vettori', hint: 'Prefisso AWB per il riconoscimento automatico del vettore.', cols: ['vettore', 'prefisso_awb'], add: true },
+    KPI_STORICO: { title: 'KPI storico (BPR)', hint: 'Valori dei KPI dei mesi in cui il tool non li calcola (presentazione BPR). kpi = KPI6, mese = AAAA-MM, perc_1 / perc_2 = percentuali entro le due soglie. Un mese calcolato dal tool ha la precedenza.', cols: ['kpi', 'mese', 'perc_1', 'perc_2', 'fonte'], add: true },
     REGOLE_BARCODE: { title: 'Regole barcode', hint: 'Estrazione seriale/PN dal barcode, in ordine di priorità.', cols: ['priorita', 'prefisso', 'lunghezza', 'condizione_extra', 'riparatore', 'seriale_da', 'seriale_lung', 'pn_da', 'pn_lung', 'pn_prefisso', 'note'], add: true }
   },
   init: function () {
@@ -2301,6 +2308,7 @@ var Admin = {
       Admin._ec = true; DB.ensureCols('OPERATORI', ['condiviso', 'pin']).then(function () { Admin.render(); }).catch(function (e) { toast('Colonne condiviso/PIN non aggiunte: ' + e.message, 'ko'); });
     }
     var c = Admin.CONF[Admin.sez], t = DB.t[Admin.sez];
+    if (!t) { $('admRows').innerHTML = '<tr><td class="empty">Carico…</td></tr>'; Chi.load().then(Admin.render).catch(function (e) { toast(e.message, 'ko'); }); return; }
     document.querySelectorAll('.subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-' + Admin.sez); });
     $('admTitle').textContent = c.title; $('admHint').textContent = c.hint;
     $('admHead').innerHTML = '<tr>' + c.cols.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr>';
@@ -2323,6 +2331,14 @@ var Admin = {
   save: async function () {
     var t = DB.t[Admin.sez], keys = Object.keys(Admin.dirty);
     if (!keys.length) { toast('Nessuna modifica'); return; }
+    if (Admin.sez === 'CHIUSURE') {   // id automatico, date e campi controllati
+      for (var ck = 0; ck < keys.length; ck++) { var rc = Object.assign({}, t.rows[keys[ck]], Admin.dirty[keys[ck]]), er = Chi.valida(rc);
+        if (er) { toast('Chiusura riga ' + (+keys[ck] + 1) + ': ' + er, 'ko'); return; }
+        ['tipo', 'ditta', 'dal', 'al'].forEach(function (h) { if (rc[h] !== t.rows[keys[ck]][h]) Admin.dirty[keys[ck]][h] = rc[h]; });
+        if (!L.s(rc.id_chiusura)) Admin.dirty[keys[ck]].id_chiusura = 'CH' + (Date.now() + ck).toString(36).toUpperCase();
+        if (!L.s(rc.stato)) Admin.dirty[keys[ck]].stato = 'ATTIVA'; }
+    }
+    if (Admin.sez === 'CHIUSURE' || Admin.sez === 'KPI_STORICO') { try { t = await Chi.foglio(Admin.sez); } catch (e) { toast('Foglio ' + Admin.sez + ' non creato: ' + e.message, 'ko'); return; } }
     if (Admin.sez === 'OPERATORI') {   // PIN: 4-6 cifre, salvato come impronta sha256 (mai in chiaro)
       for (var pk = 0; pk < keys.length; pk++) { var dp = Admin.dirty[keys[pk]];
         if (dp.pin !== undefined && dp.pin !== '' && !/^sha256:/i.test(dp.pin)) {
@@ -2349,6 +2365,7 @@ var Admin = {
       if (nuove.length) { var rr = await API.append(DB.id, t.name, nuove.map(function (r) { return t.toRow(r); })); nuove.forEach(function (r, i) { r._r = rr + i; delete r._new; }); }
       await API.append(DB.id, 'LOG', logs);
       Admin.dirty = {}; Admin.render(); App.fillLists(); toast('Salvato', 'ok');
+      if (Admin.sez === 'CHIUSURE') Chi.dopo();
     } catch (e) { toast('Errore salvataggio: ' + Prot.msg(e), 'ko'); }
   }
 };
@@ -3053,10 +3070,11 @@ var Ack = {
 
   // ─ azioni
   avvia: async function (cod) {
-    var d = $('ackData').value;
+    var d = $('ackData').value, chc = Chi.ditta(cod, d);
+    if (chc) { Modal.open('ACK ' + cod, '⛔ ' + Chi.testo(chc) + '.\nL\'ACK non si avvia: le schede restano in hub fino alla riapertura.'); return; }
     Modal.open('ACK ' + cod, 'Rileggo VLT e preparo la lista del giorno…', []);
     try {
-      await Ack.flush(); await DB.loadVlt(true); App.syncInfo();
+      await Ack.flush(); await DB.loadVlt(true); App.syncInfo(); AckV.sync().catch(function () { });
       await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_RIGHE']);
       var s = Ack.sped(d, cod) || await Ack.creaSped(d, cod);
       if (s.stato === 'BOZZA' || s.stato === 'IN_SPUNTA') {
@@ -3436,7 +3454,8 @@ var Ack = {
         var a = Ack.attesi(cod, ix), nb = a.filter(function (x) { return x.flag === 'BAN'; }).length, na = a.filter(function (x) { return x.flag === 'AS'; }).length;
         nums = '<span>attesi da VLT <b>' + (a.length - nb) + '</b></span>' + (na ? '<span>AS <b>' + na + '</b></span>' : '') + (nb ? '<span>BAN <b>' + nb + '</b></span>' : '');
       }
-      if (!s || s.stato === 'BOZZA') btn = '<button class="btn sm" onclick="Ack.avvia(\'' + esc(cod) + '\')">Avvia spunta</button>';
+      var chc = Chi.ditta(cod, d);
+      if (!s || s.stato === 'BOZZA') btn = chc ? '<button class="btn sm" disabled title="' + esc(Chi.testo(chc)) + '">Avvia spunta</button>' : '<button class="btn sm" onclick="Ack.avvia(\'' + esc(cod) + '\')">Avvia spunta</button>';
       else btn = '<button class="btn sm ' + (s.stato === 'IN_SPUNTA' ? '' : 'ghost') + '" onclick="Ack.apri(\'' + s.id_spedizione + '\')">' + (s.stato === 'IN_SPUNTA' ? 'Apri spunta' : 'Dettaglio') + '</button>';
       if (s && s.stato === 'PRONTA') btn += ' <button class="btn sm green" ' + (L.s(s.awb) ? '' : 'disabled title="Manca l\'AWB"') + ' onclick="Ack.emetti(\'' + s.id_spedizione + '\')">Genera DDT</button>';
       if (s && s.n_ddt) btn += ' <button class="btn sm" onclick="Ack.stampa(\'' + s.id_spedizione + '\')">Stampa DDT</button>' + (s.link_pdf ? ' <a class="mail" target="_blank" href="' + esc(s.link_pdf) + '">PDF su Drive</a>' : '');
@@ -3447,6 +3466,7 @@ var Ack = {
       return '<div class="ack-card' + (s && Ack.cur === s.id_spedizione ? ' sel' : '') + '">' +
         '<div class="row" style="align-items:center"><span class="t">' + esc(cod) + '</span><div class="spacer"></div><span class="pill ' + (PILL[st] || '') + '">' + esc(st.replace('_', ' ')) + '</span></div>' +
         '<div class="hint">' + esc(rp.ragione_sociale || '') + (rp.indirizzo ? ' · ' + esc(rp.indirizzo) : '') + (s && s.n_ddt ? ' · <b>DDT ' + esc(s.n_ddt) + '</b>' : '') + '</div>' +
+        (chc ? '<div class="blk-banner" style="margin:6px 0">⛔ ' + esc(Chi.testo(chc)) + ': non si spedisce, le schede restano in hub fino alla riapertura</div>' : '') +
         '<div class="ack-nums">' + nums + (s && s.n_colli ? '<span>colli <b>' + esc(s.n_colli) + '</b> · <b>' + esc(s.peso_tot_kg) + '</b> kg</span>' : '') + '</div>' +
         '<div class="row"><div class="fg" style="flex:1;min-width:130px"><span class="fl">AWB (Service Desk)</span><input class="fc mono" id="awb_' + k + '" value="' + esc(s ? s.awb : '') + '"' + lock + ' oninput="var v=L.vettoreDaAwb(this.value,DB.t.VETTORI.rows);if(v)$(\'vet_' + k + '\').value=v"></div>' +
         '<div class="fg" style="width:110px"><span class="fl">Vettore</span><input class="fc" id="vet_' + k + '" list="dlVettori" value="' + esc(s ? s.vettore : '') + '"' + lock + '></div>' +
@@ -3535,6 +3555,8 @@ var Rma = {
     Rma.lk = lk; Rma.loaded = true;
     if (!$('uscData').value) $('uscData').value = L.isoToday();
     await Rma.autoVlt(false);
+    if (!DB.t.CHIUSURE) await Chi.load().catch(function () { });
+    try { await Chi.syncRma(); } catch (e) { toast('Pending per chiusura: ' + e.message, 'ko'); }
   },
   excel: function () {
     if (Rma.sez !== 'usc') { Rma.grid(Rma.sez).excel({ inv: 'Inventario_giornaliero', rit: 'Ritorni_in_giacenza', car: 'Carichi_NEW_REUSE' }[Rma.sez]); return; }
@@ -3669,7 +3691,8 @@ var Rma = {
     inv.forEach(function (u) { var v = L.s(Rma.dv(u, 'rma')); if (v) creati[v] = 1; });
     Rma.carichi().forEach(function (c) { if (c.rma) creati[c.rma] = 1; });
     var oggi = L.isoToday();
-    var rmaList = Rma.attivi().filter(function (r) { return !creati[r.id_rma] && !Rma.scaduto(r, oggi); });
+    // ritorni verso una destinazione chiusa (chiusura programmata): non si abbinano finché non riapre
+    var rmaList = Rma.attivi().filter(function (r) { return !creati[r.id_rma] && !Rma.scaduto(r, oggi) && !Chi.ditta(Rma.destRma(r), oggi); });
     var liberi = inv.filter(function (u) { return u.tipo === 'GOOD' && !L.s(Rma.dv(u, 'rma')) && !Rma.pend(u.id_unita); });
     Rma.abb = L.abbinaRma(rmaList, liberi, Rma.ctx());
     return inv;
@@ -3871,8 +3894,16 @@ var Rma = {
     var p = DB.t.RMA_PENDING.rows.find(function (x) { return x.id_pending === id; }); if (!p || p.stato !== 'ATTIVO') return;
     var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === p.id_unita; });
     var ricrea = u && !p.id_carico && (u.tipo === 'GOOD' || u.tipo === 'BALANCING'), vecchio = ricrea ? (L.s(u.rma) || L.s(p.rma)) : '';
+    if (L.s(p.chiusura) && Chi.inCorso(p.chiusura)) { if (!confirm('La destinazione è ancora chiusa (chiusura programmata). Rimetterlo in uscita lo stesso?')) return; }
     var nota = prompt('Rimetti in uscita ' + p.seriale + '\n(pending: ' + p.motivo + ')' + (vecchio ? '\n\nL RMA ' + vecchio + ' va ricreato: lo tolgo dalla scheda e lo scrivo nelle note come "RMA Precedente ' + vecchio + '".' : '') + '\n\nNota (facoltativa):', ''); if (nota === null) return;
-    try {
+    try { await Rma.pendRiapri(p, L.s(nota)); toast(p.seriale + ' di nuovo in uscita' + (vecchio ? ': serve il nuovo RMA (precedente ' + vecchio + ')' : ''), 'ok'); Rma.render(); }
+    catch (e) { toast('Non sbloccato: ' + e.message, 'ko'); }
+  },
+  // sblocco senza domande (anche automatico alla riapertura di una ditta chiusa)
+  pendRiapri: async function (p, nota) {
+    var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === p.id_unita; });
+    var ricrea = u && !p.id_carico && (u.tipo === 'GOOD' || u.tipo === 'BALANCING'), vecchio = ricrea ? (L.s(u.rma) || L.s(p.rma)) : '';
+    {
       var extra = {};
       if (vecchio) {
         var now = L.nowStamp(), c = { note: 'RMA Precedente ' + vecchio + (L.s(u.note) ? ' | ' + L.s(u.note) : ''), modificato_il: now, modificato_da: Auth.email, rev: (parseInt(u.rev, 10) || 1) + 1 };
@@ -3881,8 +3912,7 @@ var Rma = {
         Object.keys(c).forEach(function (h) { u[h] = String(c[h]); }); delete Rma.dirty[u.id_unita]; extra.rma_precedente = vecchio;
       }
       await Rma.pendChiudi(p, 'SBLOCCATO', L.s(nota), extra);
-      toast(p.seriale + ' di nuovo in uscita' + (vecchio ? ': serve il nuovo RMA (precedente ' + vecchio + ')' : ''), 'ok'); Rma.render();
-    } catch (e) { toast('Non sbloccato: ' + e.message, 'ko'); }
+    }
   },
   // elimina la riga di uscita: carico NEW/REUSE annullato, oppure GOOD senza più RMA creato (torna la destinazione d'origine)
   pendElimina: async function (id) {
@@ -3914,7 +3944,7 @@ var Rma = {
     var L0 = Rma.pendAttivi(); if (!L0.length) return '';
     return '<div class="card" style="margin-bottom:12px;border-color:var(--amber)"><div class="row" style="align-items:center"><b>⏸ In pending · fermi a deposito (' + L0.length + ')</b><span class="hint">non escono finché non li rimetti in uscita</span></div>' +
       '<div class="usc-lista" style="margin-top:8px">' + L0.map(function (p) {
-        return '<div class="usc-p"><div class="usc-pi"><span class="mono">' + esc(p.seriale) + '</span><span class="usc-pd">· ' + esc(p.tipo) + (p.rma ? ' · RMA <b class="mono">' + esc(p.rma) + '</b>' : '') + (p.destinazione ? ' · ' + esc(p.destinazione) : '') + ' · <span style="color:var(--amber)">' + esc(p.motivo) + '</span> · ' + esc(L.s(p.messo_da).split('@')[0]) + ' ' + esc(L.itDate(p.messo_il)) + '</span></div>' +
+        return '<div class="usc-p"><div class="usc-pi"><span class="mono">' + esc(p.seriale) + '</span><span class="usc-pd">· ' + esc(p.tipo) + (p.rma ? ' · RMA <b class="mono">' + esc(p.rma) + '</b>' : '') + (p.destinazione ? ' · ' + esc(p.destinazione) : '') + ' · <span style="color:var(--amber)">' + esc(p.motivo) + '</span> · ' + esc(L.s(p.messo_da).split('@')[0]) + ' ' + esc(L.itDate(p.messo_il)) + (L.s(p.chiusura) && p.id_carico && !Chi.inCorso(p.chiusura) ? ' · <b style="color:var(--red)">destinazione riaperta: serve un RMA nuovo → 🗑 Elimina annulla questo carico, poi rifai il carico</b>' : '') + '</span></div>' +
           '<button class="btn ghost sm" onclick="Rma.pendSblocca(\'' + p.id_pending + '\')">▶ Rimetti in uscita</button>' + (Rma.pendEliminabile(p) ? ' <button class="btn ghost sm" title="' + (p.id_carico ? 'Annulla il carico' : 'Togli l RMA creato') + '" onclick="Rma.pendElimina(\'' + p.id_pending + '\')">🗑 Elimina</button>' : '') + '</div>';
       }).join('') + '</div></div>';
   },
@@ -4141,6 +4171,9 @@ var Rma = {
     if (visti && visti[u.id_unita]) return { u: u, err: 'seriale ripetuto nel file' };
     if (!L.s(o.rma)) return { u: u, err: 'RMA mancante' };
     var re = Rma.rmaErr(o.rma, true); if (re) return { u: u, err: re };
+    if (visti && visti['RMA:' + o.rma]) return { u: u, err: 'RMA ripetuto nel file' };
+    var gia = Rma.carichi().find(function (c) { return L.s(c.rma) === L.s(o.rma); }) || Rma.inventario().find(function (x) { return x.id_unita !== u.id_unita && L.s(Rma.dv(x, 'rma')) === L.s(o.rma); });
+    if (gia) return { u: u, err: 'RMA già usato su ' + gia.seriale };
     if (!L.s(o.destinazione)) return { u: u, err: 'destinazione mancante' };
     return { u: u, err: '' };
   },
@@ -4182,7 +4215,7 @@ var Rma = {
       var o = { seriale: campo(r, ['SERIALE', 'SERIAL', 'SERIAL NO.', 'SN', 'S/N']), rma: L.frKey(campo(r, ['RMA'])), destinazione: campo(r, ['DESTINAZIONE', 'PV DESTINO', 'DESTINO', 'DESTINAZIONE INTERA']),
         po_mrn: campo(r, ['PO', 'P.O', 'PO / MRN', 'PO/MRN', 'MRN', 'PO NEW / MRN']), note: campo(r, ['NOTE', 'NOTE SD / FR', 'NOTE SD']),
         material: campo(r, ['MATERIAL SAP CODE', 'MATERIAL SAPCODE', 'SAP CODE', 'MATERIAL']) };
-      var v = Rma.carValida(o, visti); if (v.u && !v.err) visti[v.u.id_unita] = 1; o.u = v.u; o.err = v.err; return o;
+      var v = Rma.carValida(o, visti); if (v.u && !v.err) { visti[v.u.id_unita] = 1; visti['RMA:' + o.rma] = 1; } o.u = v.u; o.err = v.err; return o;
     }).filter(function (o) { return o.seriale || o.rma; });
     var ok = righe.filter(function (o) { return !o.err; }), ko = righe.filter(function (o) { return o.err; });
     var html = '<div style="font-size:13px;margin-bottom:8px">' + ok.length + ' righe valide' + (ko.length ? ', <b style="color:var(--red)">' + ko.length + ' con errori (non verranno caricate)</b>' : '') + '</div>' +
@@ -4789,16 +4822,49 @@ var Nr = {
   },
   // ─ file: stesso tracciato dello script (CREAZIONE FILE NEW & REUSE + STAMPA CEDOLINO)
   nomeFile: function (p) { return (L.s(p.mittente) + ' ' + L.s(p.po_mrn) + ' | ' + L.s(p.ddt)).replace(/[\\/:*?"<>]/g, '_') + '.xlsx'; },
+  // colonne del file: RMA, DESTINAZIONE e MATERIAL le compila il cliente (il material è proposto dal P/N, da verificare)
+  NRH: ['S/N', 'P/N', 'RMA', 'DESTINAZIONE', 'MATERIAL SAP CODE', 'POSITION', 'NOTE', 'MITTENTE', 'PO/MRN', 'PL'],
+  NOTA_MAT: 'Verificare esattezza del material',
+  // material proposto dal P/N (anagrafica articoli): { m: primo material, alt: altri material con lo stesso P/N }
+  matDi: function (pn) {
+    if (!Nr._pm || Nr._pmN !== Object.keys(DB.matPn || {}).length) {
+      var pm = {}; Object.keys(DB.matPn || {}).forEach(function (m) { var k = L.up(DB.matPn[m]); if (k) (pm[k] = pm[k] || []).push(m); });
+      if (Rma.lk) Object.keys(Rma.lk.matByPn).forEach(function (k) { var m = L.mat(Rma.lk.matByPn[k]); if (m && (pm[k] = pm[k] || []).indexOf(m) < 0) pm[k].push(m); });
+      Nr._pm = pm; Nr._pmN = Object.keys(DB.matPn || {}).length;
+    }
+    var a = Nr._pm[L.up(pn)] || []; return { m: a[0] || '', alt: a.slice(1) };
+  },
   crea: async function (p, pezzi) {
     await Lib.xlsx();
-    var a = [['S/N', 'P/N', 'POSITION', 'NOTE', 'MITTENTE', 'PO/MRN', 'PL', 'MATERIAL SAP CODE']];
-    pezzi.forEach(function (u, i) { a.push([u.seriale, u.pn, u.ubicazione || '', Rma.nota(u.note), i ? '' : p.mittente, i ? '' : p.po_mrn, i ? '' : p.ddt, '']); });
+    var righe = pezzi.map(function (u, i) { var mt = Nr.matDi(u.pn); return { r: [u.seriale, u.pn, '', '', mt.m, u.ubicazione || '', Rma.nota(u.note), i ? '' : p.mittente, i ? '' : p.po_mrn, i ? '' : p.ddt], mt: mt }; });
     var g = {}, ord = []; pezzi.forEach(function (u) { var k = L.s(u.pn); if (!g[k]) { g[k] = { q: 0, pos: [] }; ord.push(k); } g[k].q++; if (u.ubicazione && g[k].pos.indexOf(u.ubicazione) < 0) g[k].pos.push(u.ubicazione); });
     var c = [['TPN', 'NOTE', 'Q', 'POS.']].concat(ord.map(function (k) { return [k, '', g[k].q, g[k].pos.join(' / ')]; }));
-    var wb = XLSX.utils.book_new(), w1 = XLSX.utils.aoa_to_sheet(a), w2 = XLSX.utils.aoa_to_sheet(c);
-    w1['!cols'] = [{ wch: 26 }, { wch: 18 }, { wch: 18 }, { wch: 30 }, { wch: 24 }, { wch: 16 }, { wch: 22 }, { wch: 22 }]; w2['!cols'] = [{ wch: 22 }, { wch: 20 }, { wch: 6 }, { wch: 40 }];
-    XLSX.utils.book_append_sheet(wb, w1, 'CREAZIONE FILE NEW & REUSE'); XLSX.utils.book_append_sheet(wb, w2, 'STAMPA CEDOLINO');
-    return XLSX.write(wb, { bookType: 'xlsx', type: 'array' });
+    var W = [26, 18, 12, 30, 20, 18, 30, 24, 16, 22];
+    try {
+      await Lib.exceljs();
+      var D = Rma.destinazioni(), dest = Object.keys(D).map(function (k) { return D[k]; }).sort(), H = Nr.NRH, n = righe.length + 1;
+      var wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('CREAZIONE FILE NEW & REUSE', { views: [{ state: 'frozen', ySplit: 1 }] });
+      ws.addRow(H); righe.forEach(function (x) { ws.addRow(x.r); });
+      var ED = { 'RMA': 1, 'DESTINAZIONE': 1, 'MATERIAL SAP CODE': 1 };
+      ws.getRow(1).eachCell(function (cell, k) { var ed = ED[H[k - 1]]; cell.font = { bold: true, color: { argb: ed ? 'FF000000' : 'FFFFFFFF' } }; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: ed ? 'FFFFD966' : 'FF1F3864' } }; });
+      H.forEach(function (h, k) { ws.getColumn(k + 1).width = W[k]; if (ED[h]) for (var r = 2; r <= n; r++) ws.getCell(r, k + 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } }; });
+      var cR = H.indexOf('RMA') + 1, cD = H.indexOf('DESTINAZIONE') + 1, cM = H.indexOf('MATERIAL SAP CODE') + 1, Lt = function (k) { return ws.getColumn(k).letter; };
+      ws.getColumn(cR).numFmt = '@'; ws.getColumn(cM).numFmt = '@';
+      ws.getCell(1, cM).note = Nr.NOTA_MAT + ': è proposto dal P/N (anagrafica articoli). Correggilo se il pezzo deve uscire con un material diverso.';
+      ws.getCell(1, cR).note = 'Facoltativo: RMA già destinato a questo pezzo (' + Rma.cifre().join(' o ') + ' cifre). Con l\'RMA serve anche la DESTINAZIONE.';
+      righe.forEach(function (x, k) { var cell = ws.getCell(k + 2, cM); cell.note = x.mt.m ? Nr.NOTA_MAT + (x.mt.alt.length ? ' (stesso P/N anche: ' + x.mt.alt.join(', ') + ')' : '') : 'Material non trovato in anagrafica per questo P/N: inseriscilo'; });
+      var w2 = wb.addWorksheet('STAMPA CEDOLINO'); c.forEach(function (r) { w2.addRow(r); }); w2.getRow(1).font = { bold: true }; [22, 20, 6, 40].forEach(function (w, k) { w2.getColumn(k + 1).width = w; });
+      if (dest.length) { var wd = wb.addWorksheet('DESTINAZIONI'); wd.addRow(['DESTINAZIONE']); dest.forEach(function (d) { wd.addRow([d]); }); wd.getColumn(1).width = 46; wd.getRow(1).font = { bold: true };
+        ws.dataValidations.add(Lt(cD) + '2:' + Lt(cD) + n, { type: 'list', allowBlank: true, formulae: ['DESTINAZIONI!$A$2:$A$' + (dest.length + 1)], showErrorMessage: true, errorStyle: 'warning', errorTitle: 'Destinazione', error: 'Destinazione non in elenco: controlla' }); }
+      ws.dataValidations.add(Lt(cR) + '2:' + Lt(cR) + n, { type: 'textLength', operator: 'between', allowBlank: true, formulae: [Math.min.apply(null, Rma.cifre()), Math.max.apply(null, Rma.cifre())], showErrorMessage: true, errorStyle: 'warning', errorTitle: 'RMA', error: 'L\'RMA deve avere ' + Rma.cifre().join(' o ') + ' cifre' });
+      return new Uint8Array(await wb.xlsx.writeBuffer());
+    } catch (e) {
+      console.warn('File NEW/REUSE senza tendine: ' + e.message);
+      var wb2 = XLSX.utils.book_new(), w1 = XLSX.utils.aoa_to_sheet([Nr.NRH].concat(righe.map(function (x) { return x.r; }))), w3 = XLSX.utils.aoa_to_sheet(c);
+      w1['!cols'] = W.map(function (w) { return { wch: w }; }); w3['!cols'] = [{ wch: 22 }, { wch: 20 }, { wch: 6 }, { wch: 40 }];
+      XLSX.utils.book_append_sheet(wb2, w1, 'CREAZIONE FILE NEW & REUSE'); XLSX.utils.book_append_sheet(wb2, w3, 'STAMPA CEDOLINO');
+      return XLSX.write(wb2, { bookType: 'xlsx', type: 'array' });
+    }
   },
   // impronta del contenuto del primo foglio: serve a capire se il file ricaricato è identico a quello inviato
   impronta: async function (bytes) {
@@ -4856,14 +4922,35 @@ var Nr = {
       var rows = await leggiFoglio(new File([bytes], f.name)), sn = {}; rows.forEach(function (r) { var s = L.up(campo(r, ['S/N', 'SERIALE', 'SERIAL NO.'])); if (s) sn[s] = 1; });
       var miei = Nr.pezziRic(p.id_ricezione).map(function (u) { return L.up(u.seriale); });
       var manca = miei.filter(function (s) { return !sn[s]; }), extra = Object.keys(sn).filter(function (s) { return miei.indexOf(s) < 0; });
+      var ck = Nr.controlla(rows);
       var avviso = (manca.length ? '\n\n⚠ ' + manca.length + ' seriali della pratica non sono nel file: ' + manca.slice(0, 8).join(', ') + (manca.length > 8 ? '…' : '') : '') +
-        (extra.length ? '\n\n⚠ ' + extra.length + ' seriali nel file non sono di questa pratica: ' + extra.slice(0, 8).join(', ') + (extra.length > 8 ? '…' : '') : '');
+        (extra.length ? '\n\n⚠ ' + extra.length + ' seriali nel file non sono di questa pratica: ' + extra.slice(0, 8).join(', ') + (extra.length > 8 ? '…' : '') : '') +
+        (ck.n ? '\n\nRighe con RMA: ' + ck.n + (ck.av.length ? ' · da controllare:\n- ' + ck.av.slice(0, 12).join('\n- ') + (ck.av.length > 12 ? '\n- … altre ' + (ck.av.length - 12) : '') : ' · tutto a posto') : '\n\nNessun RMA nel file.') +
+        '\n\nIl caricamento salva solo il file: per mandare i pezzi in uscita usa poi "Metti in uscita RMA" (con la sua anteprima).';
       if (!(await Modal.confirm('Carica il file lavorato', 'Sostituisco il file della pratica ' + id + ' con "' + f.name + '".\nL\'originale resta su Drive come copia.' + avviso))) return;
       var ch = { stato: 'LAVORATA', lavorata_il: L.nowStamp(), lavorata_da: Auth.email };
       if (!L.s(p.file_originale_id)) { var cp = await Nr.copia(p.file_id, (p.file_nome || id).replace(/\.xlsx$/i, '') + ' (ORIGINALE INVIATO).xlsx'); ch.file_originale_id = cp.id; }
       await Nr.sostituisci(p.file_id, bytes);
       await Nr.set(p, ch, 'NR_FILE_LAVORATO'); toast('File lavorato caricato: pratica ' + id + ' → lavorata dal cliente', 'ok');
     } catch (e) { Modal.open('File non caricato', e.message); }
+  },
+  // controlli sul file lavorato: RMA senza destinazione (o il contrario), cifre, doppi, già usati, destinazione sconosciuta
+  controlla: function (rows) {
+    var D = Rma.destinazioni(), cif = Rma.cifre(), visti = {}, av = [], n = 0, usati = {};
+    Rma.inventario().forEach(function (u) { var v = L.s(Rma.dv(u, 'rma')); if (v) usati[v] = u.seriale; });
+    Rma.carichi().forEach(function (c) { if (c.rma) usati[L.s(c.rma)] = c.seriale; });
+    rows.forEach(function (r) {
+      var sn = L.s(campo(r, ['S/N', 'SERIALE', 'SERIAL NO.'])), rma = L.frKey(campo(r, ['RMA'])), de = L.s(campo(r, ['DESTINAZIONE', 'PV DESTINO', 'DESTINO'])), mat = L.s(campo(r, ['MATERIAL SAP CODE', 'MATERIAL']));
+      if (!sn && !rma) return; if (rma) n++;
+      if (rma && !de) av.push(sn + ': RMA ' + rma + ' senza DESTINAZIONE');
+      if (!rma && de) av.push(sn + ': DESTINAZIONE senza RMA');
+      if (rma && cif.indexOf(rma.length) < 0) av.push(sn + ': RMA ' + rma + ' non ha ' + cif.join(' o ') + ' cifre');
+      if (rma && visti[rma]) av.push(sn + ': RMA ' + rma + ' ripetuto nel file (anche ' + visti[rma] + ')'); if (rma) visti[rma] = sn;
+      if (rma && usati[rma] && L.up(usati[rma]) !== L.up(sn)) av.push(sn + ': RMA ' + rma + ' già usato su ' + usati[rma]);
+      if (de && !D[L.up(de)]) av.push(sn + ': destinazione "' + de + '" non in anagrafica');
+      if (rma && !mat) av.push(sn + ': manca il MATERIAL');
+    });
+    return { n: n, av: av };
   },
   // ─ tutto il file in uscita RMA (anteprima dei carichi come l'import Excel)
   inUscita: async function (id) {
@@ -5707,6 +5794,159 @@ var Blk = {
   }
 };
 
+// ───────────────────────── CHIUSURE PROGRAMMATE (ferie ATS e ditte) ─────────────────────────
+// ATS chiusa: quei giorni non contano in nessun KPI. Ditta chiusa: non contano per le schede dirette a lei (KPI₆),
+// l'ACK verso quel riparatore non si avvia, le uscite RMA verso quella destinazione vanno in pending finché riapre
+// e alla riapertura l'RMA va rifatto (il vecchio resta nelle note come "RMA Precedente …").
+var Chi = {
+  H: ['id_chiusura', 'tipo', 'ditta', 'dal', 'al', 'motivo', 'stato', 'note'],
+  KH: ['kpi', 'mese', 'perc_1', 'perc_2', 'fonte'],
+  // valori della presentazione BPR (Performance FLM luglio-agosto 2026): base dei mesi senza calcolo
+  SEME: [['KPI6', '2025-09', 95.5, 100], ['KPI6', '2025-10', 98.7, 100], ['KPI6', '2025-11', 99.3, 99.9], ['KPI6', '2025-12', 95.7, 100], ['KPI6', '2026-01', 97.1, 99.2], ['KPI6', '2026-02', 99.9, 100],
+    ['KPI6', '2026-03', 99.1, 100], ['KPI6', '2026-04', 100, 100], ['KPI6', '2026-05', 99.4, 99.9], ['KPI6', '2026-06', 96.3, 100], ['KPI6', '2026-07', 99.2, 100], ['KPI6', '2026-08', 78.2, 99]],
+  load: async function () {
+    for (var n of ['CHIUSURE', 'KPI_STORICO']) {
+      try { await DB.loadTables([n]); if (!DB.t[n].header.length) throw new Error('no sheet'); DB.t[n]._ok = true; }
+      catch (e) { if (!/parse range|no sheet|unable to parse/i.test(e.message)) throw e; DB.t[n] = new Table(n, n === 'CHIUSURE' ? Chi.H : Chi.KH, []); }
+    }
+  },
+  foglio: async function (n) { if (DB.t[n] && DB.t[n]._ok) return DB.t[n]; var keep = DB.t[n] ? DB.t[n].rows.filter(function (r) { return r._new; }) : []; var t = await DB.ensureSheet(n, n === 'CHIUSURE' ? Chi.H : Chi.KH); t._ok = true; keep.forEach(function (r) { t.rows.push(r); }); return t; },
+  attive: function () { var t = DB.t.CHIUSURE; return t ? t.rows.filter(function (r) { return !r._new && L.up(r.stato) !== 'ANNULLATA' && L.normDate(r.dal); }) : []; },
+  al: function (r) { return L.normDate(r.al) || L.normDate(r.dal); },
+  copre: function (r, iso) { return iso >= L.normDate(r.dal) && iso <= Chi.al(r); },
+  // TELEBIT = tutte le sedi; "TELEBIT MI - FASTWEB" = solo quella destinazione
+  match: function (r, dest) {
+    var D = L.up(r.ditta), G = Kpi.gruppo(r.ditta); if (!D || !L.s(dest)) return false;
+    return L.up(dest) === D || L.up(App.aliasRip(dest)) === D || (D === G && Kpi.gruppo(dest) === G);
+  },
+  ats: function (iso) { return Chi.attive().find(function (r) { return L.up(r.tipo) === 'ATS' && Chi.copre(r, iso); }) || null; },
+  ditta: function (dest, iso) { iso = iso || L.isoToday(); return Chi.attive().find(function (r) { return L.up(r.tipo) !== 'ATS' && Chi.copre(r, iso) && Chi.match(r, dest); }) || null; },
+  inCorso: function (id, iso) { iso = iso || L.isoToday(); var r = Chi.attive().find(function (x) { return x.id_chiusura === id; }); return !!(r && Chi.copre(r, iso)); },
+  testo: function (r) { return (L.up(r.tipo) === 'ATS' ? 'ATS chiusa' : r.ditta + ' chiusa') + ' dal ' + L.itDate(r.dal) + ' al ' + L.itDate(Chi.al(r)) + (r.motivo ? ' (' + r.motivo + ')' : ''); },
+  // giorni (iso) di chiusura: ATS per tutti, ditta per una destinazione
+  giorniAts: function () { var g = {}; Chi.attive().forEach(function (r) { if (L.up(r.tipo) === 'ATS') Chi.espandi(r, g); }); return g; },
+  giorniDitta: function (dest) { var g = {}; Chi.attive().forEach(function (r) { if (L.up(r.tipo) !== 'ATS' && Chi.match(r, dest)) Chi.espandi(r, g); }); return g; },
+  espandi: function (r, g) { var d = new Date(L.normDate(r.dal) + 'T12:00:00'), fine = Chi.al(r), k = 0; while (k++ < 400) { var iso = L.isoToday(d); if (iso > fine) break; g[iso] = 1; d.setDate(d.getDate() + 1); } },
+  ditte: function () {
+    var m = {}; function add(x) { x = L.s(x); if (x && !m[L.up(x)]) m[L.up(x)] = x; }
+    DB.t.RIPARATORI.rows.forEach(function (r) { add(r.codice); });
+    DB.t.CONTROPARTI.rows.forEach(function (r) { add(Kpi.gruppo(r.codice)); add(r.codice); });
+    return Object.keys(m).sort().map(function (k) { return m[k]; });
+  },
+  nuova: function () {
+    if (!App.isAdmin) { toast('Le chiusure le inserisce un admin', 'ko'); return; }
+    Modal.html('📅 Nuova chiusura programmata',
+      '<div class="hint" style="margin-bottom:10px"><b>ATS</b>: la nostra azienda è chiusa, quei giorni non contano in nessun KPI. <b>Ditta</b>: riparatore o destinazione chiusa (scrivi TELEBIT per tutte le sedi, oppure la destinazione precisa): l\'ACK non si avvia, le uscite RMA vanno in pending fino alla riapertura e alla riapertura serve un RMA nuovo.</div>' +
+      '<div class="row"><div class="fg" style="width:130px"><span class="fl">Chi è chiuso</span><select class="fc" id="chTipo" onchange="$(\'chDittaBox\').style.display=this.value===\'ATS\'?\'none\':\'\'"><option value="DITTA">Ditta</option><option value="ATS">ATS (noi)</option></select></div>' +
+      '<div class="fg" id="chDittaBox" style="flex:1;min-width:200px"><span class="fl">Ditta / destinazione</span><input class="fc" id="chDitta" list="dlChDitte" placeholder="es. TELEBIT"><datalist id="dlChDitte">' + Chi.ditte().map(function (d) { return '<option value="' + esc(d) + '">'; }).join('') + '</datalist></div></div>' +
+      '<div class="row"><div class="fg" style="width:160px"><span class="fl">Dal</span><input class="fc" type="date" id="chDal"></div><div class="fg" style="width:160px"><span class="fl">Al (compreso)</span><input class="fc" type="date" id="chAl"></div>' +
+      '<div class="fg" style="flex:1;min-width:180px"><span class="fl">Motivo</span><input class="fc" id="chMotivo" placeholder="es. ferie estive"></div></div><div id="chErr" class="hint" style="color:var(--red)"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Salva chiusura', cls: 'green', keep: true, fn: Chi.salva }]);
+  },
+  valida: function (o) {
+    o.tipo = L.up(o.tipo) === 'ATS' ? 'ATS' : 'DITTA'; o.dal = L.normDate(o.dal); o.al = L.normDate(o.al) || o.dal;
+    if (o.tipo === 'ATS') o.ditta = 'ATS';
+    if (!o.dal || !/^\d{4}-\d{2}-\d{2}$/.test(o.dal)) return 'Data "dal" non valida';
+    if (o.al < o.dal) return '"Al" è prima di "dal"';
+    if (o.tipo === 'DITTA' && !L.s(o.ditta)) return 'Scrivi la ditta';
+    if (!L.s(o.motivo)) return 'Scrivi il motivo';
+    return '';
+  },
+  salva: async function () {
+    var o = { tipo: $('chTipo').value, ditta: L.s($('chDitta').value), dal: $('chDal').value, al: $('chAl').value, motivo: L.s($('chMotivo').value) };
+    var e = Chi.valida(o); if (e) { $('chErr').textContent = e; return; }
+    try {
+      var t = await Chi.foglio('CHIUSURE'); o.id_chiusura = 'CH' + Date.now().toString(36).toUpperCase(); o.stato = 'ATTIVA';
+      var r = await API.append(DB.id, 'CHIUSURE', [t.toRow(o)]);
+      await API.append(DB.id, 'LOG', [App.log('CHIUSURA_CREATA', 'CHIUSURE', o.id_chiusura, o)]);
+      Ack.pushRow(t, o, r); Modal.close(); toast('Chiusura salvata: ' + Chi.testo(o), 'ok'); Chi.dopo();
+    } catch (x) { $('chErr').textContent = 'Errore: ' + x.message; }
+  },
+  annulla: function (id) {
+    var r = Chi.attive().find(function (x) { return x.id_chiusura === id; }); if (!r || !App.isAdmin) return;
+    Modal.html('Annulla chiusura', '<div class="hint">' + esc(Chi.testo(r)) + '</div><div class="fg" style="margin-top:10px"><span class="fl">Motivo</span><input class="fc" id="chAnn"></div><div id="chErr" class="hint" style="color:var(--red)"></div>',
+      [{ label: 'Chiudi', cls: 'ghost' }, { label: 'Annulla chiusura', cls: 'red', keep: true, fn: async function () {
+        var m = L.s($('chAnn').value); if (!m) { $('chErr').textContent = 'Scrivi il motivo'; return; }
+        try {
+          var t = DB.t.CHIUSURE, nota = (L.s(r.note) ? r.note + ' | ' : '') + 'annullata ' + L.nowStamp() + ' da ' + Auth.email + ': ' + m;
+          await API.batchUpdate(DB.id, [{ range: t.cell('stato', r._r), values: [['ANNULLATA']] }, { range: t.cell('note', r._r), values: [[nota]] }]);
+          await API.append(DB.id, 'LOG', [App.log('CHIUSURA_ANNULLATA', 'CHIUSURE', id, { chiusura: Chi.testo(r), motivo: m })]);
+          r.stato = 'ANNULLATA'; r.note = nota; Modal.close(); toast('Chiusura annullata', 'ok'); Chi.dopo();
+        } catch (x) { $('chErr').textContent = 'Errore: ' + x.message; }
+      } }]);
+  },
+  dopo: function () {
+    if (App.tab === 'kpi') Kpi.render(); if (App.tab === 'admin') Admin.render(); if (App.tab === 'ack') Ack.render();
+    if (Rma.loaded) Chi.syncRma().then(function () { if (App.tab === 'rma') Rma.render(); }).catch(function (e) { toast('Pending per chiusura: ' + e.message, 'ko'); });
+  },
+  // uscite RMA: in pending i pezzi per una destinazione chiusa oggi; alla riapertura tornano in uscita con l'RMA da rifare
+  syncRma: async function () {
+    if (!Rma.loaded || Chi._sync) return; Chi._sync = true;
+    try {
+      var oggi = L.isoToday(), t = await DB.ensureSheet('RMA_PENDING', Rma.PEN_H);
+      if (!('chiusura' in t.idx)) t = await DB.ensureCols('RMA_PENDING', ['chiusura']);
+      // più giri: tolti dei pezzi, gli abbinamenti RMA giacenza si ricalcolano e possono portarne altri sulla stessa destinazione
+      for (var giro = 0; giro < 4; giro++) {
+      Rma.calcola();
+      var nuovi = [];
+      Rma.daSpedire().forEach(function (x) { var c = Chi.ditta(x.dest, oggi); if (c && !Rma.pend(x.u.id_unita)) nuovi.push({ x: x, c: c }); });
+      if (!nuovi.length) break;
+      {
+        var now = L.nowStamp(), rows = nuovi.map(function (n) { var x = n.x, u = x.u; return { id_unita: u.id_unita, seriale: u.seriale, tipo: u.tipo, id_carico: x.car ? x.car.id_carico : '', rma: x.rma || L.s(u.rma), destinazione: x.dest, motivo: 'Chiusura programmata: ' + Chi.testo(n.c), stato: 'ATTIVO', messo_il: now, messo_da: 'AUTO ' + Auth.email, chiusura: n.c.id_chiusura }; });
+        var r0 = await API.append(DB.id, 'RMA_PENDING', rows.map(function (o) { return t.toRow(o); }));
+        rows.forEach(function (o, i) { o.id_pending = 'P' + L.pad(r0 + i - 1, 6); });
+        await Promise.all([API.batchUpdate(DB.id, [{ range: t.cell('id_pending', r0) + ':' + t.col('id_pending') + (r0 + rows.length - 1), values: rows.map(function (o) { return [o.id_pending]; }) }]),
+          API.append(DB.id, 'LOG', rows.map(function (o) { return App.log('RMA_PENDING', 'UNITA', o.id_unita, { id_pending: o.id_pending, seriale: o.seriale, motivo: o.motivo, rma: o.rma, destinazione: o.destinazione, chiusura: o.chiusura, automatico: true }); }))]);
+        rows.forEach(function (o, i) { Ack.pushRow(t, o, r0 + i); });
+        toast(rows.length + ' pezzi in pending per destinazione chiusa', 'ok');
+      }
+      }
+      // riapertura: GOOD / BALANCING tornano in uscita, l'RMA vecchio va nelle note; i carichi restano in pending (serve un nuovo carico)
+      var fine = Rma.pendAttivi().filter(function (p) { return L.s(p.chiusura) && !Chi.inCorso(p.chiusura, oggi) && !p.id_carico; });
+      for (var i = 0; i < fine.length; i++) await Rma.pendRiapri(fine[i], 'Riapertura dopo chiusura programmata');
+      if (fine.length) toast(fine.length + ' pezzi tornati in uscita dopo la chiusura: serve l\'RMA nuovo', 'ok');
+    } finally { Chi._sync = false; }
+  }
+};
+
+// ───────────────────────── DATA ACK SU VLT (base del KPI₆) ─────────────────────────
+// Ogni giorno, alla lettura del VLT, si registra il primo giorno in cui una FAULTY in giacenza risulta in ACK
+// (o AS per i riparatori che li prevedono). Al primo avvio le schede già in ACK sono "INIZIALE": data vera ignota, fuori dal KPI.
+var AckV = {
+  H: ['fr', 'data_ack', 'stato_vlt', 'riparatore', 'id_unita', 'origine', 'registrato_il'],
+  map: null,
+  load: async function () {
+    try { await DB.loadTables(['ACK_VLT']); if (!DB.t.ACK_VLT.header.length) throw new Error('no sheet'); DB.t.ACK_VLT._ok = true; }
+    catch (e) { if (!/parse range|no sheet|unable to parse/i.test(e.message)) throw e; DB.t.ACK_VLT = new Table('ACK_VLT', AckV.H, []); }
+    AckV.indice();
+  },
+  indice: function () {
+    var m = {}; (DB.t.ACK_VLT ? DB.t.ACK_VLT.rows : []).forEach(function (r) { var d = L.normDate(r.data_ack); if (!r.fr || !d) return; var x = m[r.fr]; if (!x || d < x.d) m[r.fr] = { d: d, ini: L.up(r.origine) === 'INIZIALE', rip: r.riparatore }; });
+    AckV.map = m;
+  },
+  inizio: function () { var m = null; (DB.t.ACK_VLT ? DB.t.ACK_VLT.rows : []).forEach(function (r) { var d = L.normDate(r.data_ack); if (d && (!m || d < m)) m = d; }); return m; },
+  sync: async function () {
+    if (!DB.vlt || !DB.t.UNITA || AckV._run) return 0; AckV._run = true;
+    try {
+      if (!DB.t.ACK_VLT) await AckV.load();
+      var c = Ack.cfg(), as = {}, oggi = L.isoToday(), U = {}, nuovi = [];
+      DB.t.RIPARATORI.rows.forEach(function (r) { if (L.up(r.ack_include_as) === 'SI') as[L.up(r.codice)] = 1; });
+      DB.t.UNITA.rows.forEach(function (u) { if (u.tipo === 'FAULTY' && u.fr && Giacenze.A_MAG.indexOf(u.stato) >= 0) U[u.fr] = u; });
+      var primo = !DB.t.ACK_VLT.rows.length;
+      DB.vlt.rows.forEach(function (v) {
+        var u = U[v.fr_id]; if (!u || AckV.map[v.fr_id]) return;
+        var rip = L.up(App.aliasRip(v.riparatore));
+        if (v.stato === c.statoAck || (as[rip] && v.stato === c.statoAs)) nuovi.push({ fr: v.fr_id, data_ack: oggi, stato_vlt: v.stato, riparatore: App.aliasRip(v.riparatore), id_unita: u.id_unita, origine: primo ? 'INIZIALE' : 'VLT', registrato_il: L.nowStamp() });
+      });
+      if (!nuovi.length) return 0;
+      var t = DB.t.ACK_VLT._ok ? DB.t.ACK_VLT : await DB.ensureSheet('ACK_VLT', AckV.H); t._ok = true;
+      var r0 = await API.append(DB.id, 'ACK_VLT', nuovi.map(function (o) { return t.toRow(o); }));
+      nuovi.forEach(function (o, i) { Ack.pushRow(t, o, r0 + i); }); AckV.indice();
+      return nuovi.length;
+    } finally { AckV._run = false; }
+  }
+};
+
 // ───────────────────────── KPI (performance FLM, base BPR mensile) ─────────────────────────
 // Solo KPI calcolabili con certezza dai dati del tool. Giorni lavorativi: esclusi sabato, domenica,
 // festivi (parametro kpi_festivi + Pasquetta) e giorni di blocco VLT registrati.
@@ -5730,7 +5970,8 @@ var Kpi = {
     if (!Sto.dati.cur || forza) job.push(Sto.colsSafe(DB.id, 'MOVIMENTI').then(function (r) { Sto.dati.cur = r; }));
     if (!DB.t.SPEDIZIONI || !DB.t.SPEDIZIONI_COLLI || forza) job.push(DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_COLLI']).catch(function () { }));
     if (!Kpi.art || forza) job.push(DB.loadCols(DB.id, 'ARTICOLI', ['material', 'pn', 'gruppo_articoli', 'technology']).then(function (a) { Kpi.art = a; }).catch(function () { Kpi.art = []; }));
-    if (forza) job.push(Blk.load().catch(function () { }));
+    if (forza) job.push(Blk.load().catch(function () { }), Chi.load().catch(function () { }), AckV.load().catch(function () { }));
+    else { if (!DB.t.CHIUSURE) job.push(Chi.load().catch(function () { })); if (!DB.t.ACK_VLT) job.push(AckV.load().catch(function () { })); }
     // archivio dell'anno prima: serve per i 12 mesi (resta in cache, non cambia)
     var y = String(new Date().getFullYear() - 1);
     if (!Kpi._archY || forza) job.push((async function () {
@@ -5742,6 +5983,11 @@ var Kpi = {
       Kpi._archY = y;
     })());
     await Promise.all(job);
+    // base del KPI₆: valori della presentazione BPR, scritti una volta in KPI_STORICO (modificabili da Admin)
+    if (App.isAdmin && DB.t.KPI_STORICO && !DB.t.KPI_STORICO._ok && !DB.t.KPI_STORICO.rows.length) {
+      try { var tk = await Chi.foglio('KPI_STORICO'); var rs = Chi.SEME.map(function (x) { return { kpi: x[0], mese: x[1], perc_1: x[2], perc_2: x[3], fonte: 'BPR luglio-agosto 2026' }; });
+        var r0 = await API.append(DB.id, 'KPI_STORICO', rs.map(function (o) { return tk.toRow(o); })); rs.forEach(function (o, i) { Ack.pushRow(tk, o, r0 + i); }); } catch (e) { }
+    }
   },
   mesi: function () { var a = [], p = Kpi.mese.split('-'), y = +p[0], m = +p[1]; for (var i = 11; i >= 0; i--) { var d = new Date(y, m - 1 - i, 1); a.push(d.getFullYear() + '-' + L.pad(d.getMonth() + 1, 2)); } return a; },
   lab: function (mk) { return Kpi.MESI[+mk.slice(5) - 1] + ' ' + mk.slice(2, 4); },
@@ -5759,11 +6005,13 @@ var Kpi = {
     return !!(F.mmdd[iso.slice(5)] || F.pq[iso]);
   },
   // giorni lavorativi in [a, b): come NETWORKDAYS meno uno. a = data in hub, b = registrazione/uscita
-  gg: function (a, b) {
+  // dest: destinazione della scheda (KPI₆) → si tolgono anche i giorni di chiusura di quella ditta
+  gg: function (a, b, dest) {
     if (!a || !b || b <= a) return 0;
-    var k = a + b, c = Kpi._gg[k]; if (c !== undefined) return c;
-    var n = 0, d = new Date(a + 'T12:00:00'), fine = new Date(b + 'T12:00:00'), blk = Kpi._blk, guard = 0;
-    while (d < fine && guard++ < 800) { var iso = L.isoToday(d), w = d.getDay(); if (w && w !== 6 && !Kpi.festivo(iso) && !blk[iso]) n++; d.setDate(d.getDate() + 1); }
+    var cd = dest ? (Kpi._cd[dest] = Kpi._cd[dest] || Chi.giorniDitta(dest)) : null;
+    var k = a + b + (dest || ''), c = Kpi._gg[k]; if (c !== undefined) return c;
+    var n = 0, d = new Date(a + 'T12:00:00'), fine = new Date(b + 'T12:00:00'), blk = Kpi._blk, ats = Kpi._ats, guard = 0;
+    while (d < fine && guard++ < 800) { var iso = L.isoToday(d), w = d.getDay(); if (w && w !== 6 && !Kpi.festivo(iso) && !blk[iso] && !ats[iso] && !(cd && cd[iso])) n++; d.setDate(d.getDate() + 1); }
     return Kpi._gg[k] = n;
   },
   soglie: function (n, def) { return L.s(DB.param('kpi' + n + '_target', def)).split(',').map(function (x) { var p = x.split(':'); return [parseInt(p[0], 10), parseFloat(p[1])]; }).filter(function (p) { return !isNaN(p[0]) && !isNaN(p[1]); }).slice(0, 2); },
@@ -5776,7 +6024,8 @@ var Kpi = {
   rip: function (g) { var s = Kpi._rip; if (!s) { s = Kpi._rip = {}; DB.t.RIPARATORI.rows.forEach(function (r) { if (r.codice) s[L.up(r.codice)] = 1; }); } return !!s[g]; },
   calcola: function () {
     var mesi = Kpi.mesi(), M = {}, sel = Kpi.mese, R = (Sto.dati.cur || []).concat(Kpi.arch || []);
-    Kpi._blk = Blk.giorni(); Kpi._gg = {}; Kpi._fest = null; Kpi._al = null; Kpi._rip = null;
+    Kpi._blk = Blk.giorni(); Kpi._ats = Chi.giorniAts(); Kpi._cd = {}; Kpi._gg = {}; Kpi._fest = null; Kpi._al = null; Kpi._rip = null;
+    var t6 = {}, r6 = {}, ini6 = AckV.inizio(); if (!AckV.map) AckV.indice();
     mesi.forEach(function (m) { M[m] = { inF: 0, inG: 0, outF: 0, outG: 0, inNR: 0, outNR: 0, outB: 0, ddt: {}, k: {} }; });
     var tempi = { 1: {}, 2: {}, 3: {} }, dest = {}, idSped = {};
     R.forEach(function (r) {
@@ -5791,6 +6040,7 @@ var Kpi = {
         var d = L.normDate(r.data_ora), mk2 = d.slice(0, 7), q = M[mk2]; if (!q) return;
         if (r.tipo === 'FAULTY') q.outF++; else if (r.tipo === 'GOOD') q.outG++; else if (r.tipo === 'NEW' || r.tipo === 'REUSE') q.outNR++; else if (r.tipo === 'BALANCING') q.outB++;
         var kd = L.s(r.ddt) || L.s(r.id_spedizione); if (kd) q.ddt[kd] = 1;
+        if (r.causale === 'ACK' && r.fr) { var av = AckV.map[r.fr]; if (av && !av.ini && av.d <= d) { var w6 = Kpi.gg(av.d, d, r.controparte); (t6[mk2] = t6[mk2] || []).push(w6); if (mk2 === sel) { var rr = Kpi.gruppo(r.controparte); (r6[rr] = r6[rr] || []).push(w6); } } }
         if (mk2 === sel) {
           var g = Kpi.gruppo(r.controparte), x = dest[g] = dest[g] || { g: g, schede: 0, ddt: {}, sped: {} };
           x.schede++; if (kd) x.ddt[kd] = 1; if (r.id_spedizione) { x.sped[r.id_spedizione] = 1; idSped[r.id_spedizione] = 1; }
@@ -5802,6 +6052,12 @@ var Kpi = {
       var s = Kpi.soglie(def.n, def.def);
       return { def: def, s: s, mesi: mesi.map(function (m) { var v = tempi[def.n][m] || []; return { m: m, n: v.length, p: s.map(function (t) { return v.length ? Math.round(v.filter(function (x) { return x <= t[0]; }).length / v.length * 1000) / 10 : null; }) }; }) };
     });
+    var s6 = Kpi.soglie(6, '6:95,11:100'), BS = {};
+    (DB.t.KPI_STORICO ? DB.t.KPI_STORICO.rows : []).forEach(function (b) { if (L.up(b.kpi) === 'KPI6') BS[L.s(b.mese).slice(0, 7)] = b; });
+    var pf = function (v) { return s6.map(function (t) { return v.length ? Math.round(v.filter(function (x) { return x <= t[0]; }).length / v.length * 1000) / 10 : null; }); };
+    var num = function (x) { x = parseFloat(String(x).replace(',', '.')); return isNaN(x) ? null : x; };
+    var K6 = { s: s6, inizio: ini6, mesi: mesi.map(function (m) { var v = t6[m] || []; if (v.length) return { m: m, n: v.length, p: pf(v) }; var b = BS[m]; return b ? { m: m, n: 0, p: [num(b.perc_1), num(b.perc_2)], bpr: true } : { m: m, n: 0, p: [null, null] }; }),
+      rip: Object.keys(r6).sort().map(function (k) { return { g: k, n: r6[k].length, p: pf(r6[k]) }; }) };
     // colli e bancali: solo spedizioni create dall'app (lo storico migrato non li ha)
     var SP = DB.t.SPEDIZIONI ? DB.t.SPEDIZIONI.rows : [], CO = DB.t.SPEDIZIONI_COLLI ? DB.t.SPEDIZIONI_COLLI.rows : [], spI = {}, coI = {};
     SP.forEach(function (s) { if (idSped[s.id_spedizione]) spI[s.id_spedizione] = s; });
@@ -5824,7 +6080,7 @@ var Kpi = {
       if (/^MODULO (SFP|XFP)/.test(gr)) gr = 'MODULO SFP-XFP'; else if (a.gruppo_articoli && Kpi.GRUPPI.indexOf(gr) < 0) gr = 'ALTRO (gruppo non standard)'; if (te === 'NOT APPLICABLE') te = 'N/A'; if (te === '—') te = '(senza tecnologia)';
       var row = G.tab[gr] = G.tab[gr] || { tot: 0 }; row[te] = (row[te] || 0) + 1; row.tot++; G.tec[te] = (G.tec[te] || 0) + 1;
     });
-    return { mesi: mesi, M: M, K: K, D: D, G: G, note: Blk.dalleNote(R) };
+    return { mesi: mesi, M: M, K: K, K6: K6, D: D, G: G, note: Blk.dalleNote(R) };
   },
   // grafico a colonne in HTML: serie affiancate (o impilate), linea di target, mese scelto evidenziato
   chart: function (o) {
@@ -5834,10 +6090,10 @@ var Kpi = {
     var leg = S.length > 1 ? '<div class="dash-leg">' + S.map(function (s) { return '<span><i class="dash-sw" style="background:' + s.col + '"></i>' + esc(s.nome) + '</span>'; }).join('') + (o.target ? '<span><i class="kc-tsw"></i>' + esc(o.target.label) + '</span>' : '') + '</div>' : '';
     var fmt = function (v) { return v === null || v === undefined ? '—' : (o.pct ? String(v).replace('.', ',') + '%' : v.toLocaleString('it-IT')); };
     var cols = cats.map(function (c, i) {
-      var tip = Kpi.lab(c) + S.map(function (s) { return '\n' + s.nome + ': ' + fmt(s.vals[i]); }).join('') + (o.extra ? o.extra(i) : '');
+      var tip = Kpi.lab(c) + S.map(function (s) { return '\n' + s.nome + ': ' + fmt(s.vals[i]) + (s.ghost && s.ghost[i] ? ' (da BPR)' : ''); }).join('') + (o.extra ? o.extra(i) : '');
       var inner = o.stack
         ? '<span class="dash-stack">' + S.map(function (s) { var v = s.vals[i] || 0; return v ? '<span class="dash-seg" style="height:' + (v / max * 100) + '%;background:' + s.col + '"></span>' : ''; }).join('') + '</span>'
-        : S.map(function (s) { var v = s.vals[i]; return '<span class="kc-bar" style="height:' + (v ? Math.max(1, Math.min(100, v / max * 100)) : 0) + '%;background:' + s.col + '"></span>'; }).join('');
+        : S.map(function (s) { var v = s.vals[i]; return '<span class="kc-bar' + (s.ghost && s.ghost[i] ? ' ghost' : '') + '" style="height:' + (v ? Math.max(1, Math.min(100, v / max * 100)) : 0) + '%;background:' + s.col + '"></span>'; }).join('');
       var top = o.stack ? S.reduce(function (a, s) { return a + (s.vals[i] || 0); }, 0) : S[0].vals[i];
       var lab = c === Kpi.mese && top !== null && top !== undefined ? '<span class="kc-lab" style="bottom:' + Math.min(100, (top / max * 100)) + '%">' + fmt(top) + '</span>' : '';
       return '<div class="kc-col' + (c === Kpi.mese ? ' sel' : '') + '" title="' + esc(tip) + '">' + inner + lab + '</div>';
@@ -5869,6 +6125,15 @@ var Kpi = {
           target: { v: s1[1], label: 'target ' + s1[1] + '%' }, extra: function (j) { return '\npezzi: ' + k.mesi[j].n; } }) +
         '<div class="hint" style="margin-top:6px">' + esc(Kpi.lab(Kpi.mese)) + ': ' + pc(m.p[0]) + ' entro ' + s1[0] + ' gg · ' + pc(m.p[1] === undefined ? null : m.p[1]) + ' entro ' + s2[0] + ' gg · ' + n(m.n) + ' pezzi</div></div>';
     }).join('') + '</div>';
+    // KPI6
+    var K6 = C.K6, a6 = K6.s[0], b6 = K6.s[1] || a6, m6 = K6.mesi[i], gh = K6.mesi.map(function (x) { return !!x.bpr; });
+    var ok6 = m6.p[0] !== null && m6.p[0] >= a6[1] && (m6.p[1] === null || m6.p[1] >= b6[1]);
+    h += '<div class="card" style="margin-bottom:14px"><div class="kc-head"><div><div class="card-t" style="font-size:15px">KPI₆ · Delivery FAULTY al riparatore</div><div class="hint">dal giorno in cui la scheda risulta in ACK su VLT all\'uscita (DDT ACK) · target ' + a6[1] + '% in ' + a6[0] + ' gg lav. – ' + b6[1] + '% in ' + b6[0] + ' gg lav. · esclusi anche i giorni di chiusura del riparatore</div></div>' +
+      (m6.p[0] === null ? '<span class="pill">nessun dato</span>' : '<span class="pill ' + (ok6 ? 'p-green' : 'p-red') + '">' + (ok6 ? '✓ in target' : '✗ fuori target') + (m6.bpr ? ' · BPR' : '') + '</span>') + '</div>' +
+      '<div class="kpi-grid" style="margin-bottom:0"><div>' + Kpi.chart({ cats: mesi, pct: true, h: 140, series: [{ nome: 'entro ' + a6[0] + ' gg', col: 'var(--s1)', vals: K6.mesi.map(function (x) { return x.p[0]; }), ghost: gh }, { nome: 'entro ' + b6[0] + ' gg', col: 'var(--s2)', vals: K6.mesi.map(function (x) { return x.p[1]; }), ghost: gh }],
+        target: { v: a6[1], label: 'target ' + a6[1] + '%' }, extra: function (j) { return K6.mesi[j].bpr ? '\nvalore della presentazione BPR' : '\nschede: ' + K6.mesi[j].n; } }) +
+      '<div class="hint" style="margin-top:6px">Barre chiare = valori della presentazione BPR. Calcolo effettivo ' + (K6.inizio ? 'dal ' + esc(L.itDate(K6.inizio)) + ' (primo giorno di tracciamento ACK; le schede già in ACK quel giorno non contano)' : 'non ancora partito: si avvia da solo alla prima lettura del VLT') + '.</div></div>' +
+      '<div>' + (K6.rip.length ? '<div class="tbl-wrap"><table><thead><tr><th>Riparatore · ' + esc(Kpi.lab(Kpi.mese)) + '</th><th>Schede</th><th>entro ' + a6[0] + ' gg</th><th>entro ' + b6[0] + ' gg</th></tr></thead><tbody>' + K6.rip.map(function (r) { return '<tr><td>' + esc(r.g) + '</td><td class="mono">' + n(r.n) + '</td><td class="mono">' + pc(r.p[0]) + '</td><td class="mono">' + pc(r.p[1]) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="empty">' + (m6.bpr ? 'Mese con valore BPR: nessun dettaglio per riparatore' : 'Nessuna uscita ACK calcolabile nel mese') + '</div>') + '</div></div></div>';
     // volumi
     h += '<div class="card"><div class="card-t" style="font-size:15px;margin-bottom:8px">Volumi INBOUND – OUTBOUND</div><div class="hint" style="margin-bottom:8px">Ingressi per mese di registrazione VLT, uscite per data out.</div><div class="kpi-grid k4">' +
       [['inF', 'IN FAULTY', 'var(--s1)'], ['outF', 'OUT FAULTY', 'var(--s1)'], ['inG', 'IN GOOD', 'var(--s3)'], ['outG', 'OUT GOOD', 'var(--s3)']].map(function (x) {
@@ -5893,6 +6158,11 @@ var Kpi = {
       '<div class="tbl-wrap"><table><thead><tr><th>Gruppo articoli</th>' + tec.map(function (t) { return '<th>' + esc(t) + '</th>'; }).join('') + '<th>Totale</th></tr></thead><tbody>' +
       gr.map(function (g) { return '<tr><td>' + esc(g) + '</td>' + tec.map(function (t) { return '<td class="mono">' + (G.tab[g][t] ? n(G.tab[g][t]) : '') + '</td>'; }).join('') + '<td class="mono"><b>' + n(G.tab[g].tot) + '</b></td></tr>'; }).join('') +
       '<tr style="font-weight:700"><td>Totale</td>' + tec.map(function (t) { return '<td class="mono">' + n(G.tec[t]) + '</td>'; }).join('') + '<td class="mono">' + n(G.buffer) + '</td></tr></tbody></table></div></div>';
+    // chiusure programmate
+    var CH = Chi.attive().slice().sort(function (a, b) { return L.normDate(b.dal).localeCompare(L.normDate(a.dal)); }), oggi = L.isoToday();
+    h += '<div class="card"><div class="row"><div class="card-t" style="font-size:15px">Chiusure programmate (ferie ATS e ditte)</div><div class="spacer"></div>' + (App.isAdmin ? '<button class="btn ghost sm" onclick="Chi.nuova()">📅 Nuova chiusura</button>' : '') + '</div>' +
+      '<div class="hint" style="margin:6px 0 8px">ATS chiusa: giorni esclusi da tutti i KPI. Ditta chiusa: esclusi dal KPI₆ per quel riparatore, ACK non avviabile, uscite RMA in pending fino alla riapertura (poi RMA nuovo). Si modificano anche da Admin → Chiusure programmate.</div>' +
+      (CH.length ? '<div class="tbl-wrap"><table><thead><tr><th>Chi</th><th>Dal</th><th>Al</th><th>Motivo</th><th>Stato</th><th></th></tr></thead><tbody>' + CH.map(function (r) { var st = Chi.copre(r, oggi) ? '<span class="pill p-red">in corso</span>' : (L.normDate(r.dal) > oggi ? '<span class="pill p-blue">programmata</span>' : '<span class="pill">finita</span>'); return '<tr><td>' + esc(L.up(r.tipo) === 'ATS' ? 'ATS (noi)' : r.ditta) + '</td><td class="mono">' + esc(L.itDate(r.dal)) + '</td><td class="mono">' + esc(L.itDate(Chi.al(r))) + '</td><td>' + esc(r.motivo) + '</td><td>' + st + '</td><td>' + (App.isAdmin ? '<button class="btn ghost sm" onclick="Chi.annulla(\'' + esc(r.id_chiusura) + '\')">Annulla</button>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="empty">Nessuna chiusura inserita</div>') + '</div>';
     // blocchi VLT
     var B = Blk.attivi().slice().sort(function (a, b) { return L.normDate(b.data).localeCompare(L.normDate(a.data)); });
     h += '<div class="card"><div class="row"><div class="card-t" style="font-size:15px">Blocchi VLT registrati</div><div class="spacer"></div><button class="btn ghost sm" onclick="Blk.apri()">⛔ Registra blocco VLT</button></div>' +
@@ -5904,12 +6174,15 @@ var Kpi = {
   excel: function () {
     var C = Kpi.dati; if (!C) return;
     var rowsK = []; C.K.forEach(function (k) { k.mesi.forEach(function (m) { rowsK.push(['KPI' + k.def.n, k.def.tipi.join('+'), m.m, m.n, m.p[0], k.s[0][0] + ' gg ≥ ' + k.s[0][1] + '%', m.p[1] === undefined ? '' : m.p[1], k.s[1] ? k.s[1][0] + ' gg ≥ ' + k.s[1][1] + '%' : '']); }); });
+    C.K6.mesi.forEach(function (m) { rowsK.push(['KPI6', 'FAULTY ACK', m.m, m.bpr ? 'BPR' : m.n, m.p[0] === null ? '' : m.p[0], C.K6.s[0][0] + ' gg ≥ ' + C.K6.s[0][1] + '%', m.p[1] === null || m.p[1] === undefined ? '' : m.p[1], C.K6.s[1] ? C.K6.s[1][0] + ' gg ≥ ' + C.K6.s[1][1] + '%' : '']); });
     var tec = Object.keys(C.G.tec);
     Xls.scarica('KPI_FLM_' + Kpi.mese, [
       { nome: 'KPI tempi', headers: ['KPI', 'Tipo', 'Mese', 'Pezzi', '% soglia 1', 'Target 1', '% soglia 2', 'Target 2'], rows: rowsK },
       { nome: 'Volumi', headers: ['Mese', 'IN FAULTY', 'IN GOOD', 'IN NEW/REUSE', 'OUT FAULTY', 'OUT GOOD', 'OUT NEW/REUSE', 'OUT BALANCING', 'Spedizioni (DDT)'], rows: C.mesi.map(function (m) { var o = C.M[m]; return [m, o.inF, o.inG, o.inNR, o.outF, o.outG, o.outNR, o.outB, Object.keys(o.ddt).length]; }) },
       { nome: 'Shipment ' + Kpi.mese, headers: ['Destino', 'Tipo', 'Nr schede', 'Spedizioni', 'Colli', 'Bancali', 'Peso kg'], rows: C.D.map(function (d) { return [d.g, d.asp ? 'ASP' : 'REPAIRER', d.schede, d.ddt, d.colli === null ? '' : d.colli, d.bancali === null ? '' : d.bancali, d.kg === null ? '' : d.kg]; }) },
       { nome: 'Giacenza attuale', headers: ['Gruppo articoli'].concat(tec, ['Totale']), rows: Object.keys(C.G.tab).map(function (g) { return [g].concat(tec.map(function (t) { return C.G.tab[g][t] || 0; }), [C.G.tab[g].tot]); }) },
+      { nome: 'KPI6 per riparatore', headers: ['Riparatore', 'Schede', '% soglia 1', '% soglia 2'], rows: C.K6.rip.map(function (r) { return [r.g, r.n, r.p[0], r.p[1]]; }) },
+      { nome: 'Chiusure', headers: ['Tipo', 'Ditta', 'Dal', 'Al', 'Motivo'], rows: Chi.attive().map(function (r) { return [r.tipo, r.ditta, L.normDate(r.dal), Chi.al(r), r.motivo]; }) },
       { nome: 'Blocchi VLT', headers: ['Giorno', 'Motivo', 'Registrato da', 'Registrato il'], rows: Blk.attivi().map(function (r) { return [L.normDate(r.data), r.motivo, r.creato_da, r.creato_il]; }) }
     ]);
   }
