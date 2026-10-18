@@ -3139,6 +3139,16 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
       <div class="step-header">
         <span class="step-num purple">3</span>
         <div>
+          <div class="step-title">Account condiviso (palmarino ACK)</div>
+          <div class="step-body">Se più operatori usano lo stesso account Gmail (es. il palmarino degli ACK), in <strong>Admin → Operatori</strong> metti <strong>condiviso = SI</strong> sulla riga di quell'account. Ogni operatore ha la sua riga con email personale, sigla e <strong>PIN</strong> (4-6 cifre, salvato cifrato: nella tabella si vede solo "•••• impostato").</div>
+        </div>
+      </div>
+      <div class="step-detail"><ul class="checklist "><li><span>Con l'account condiviso, prima di spuntare un ACK si sceglie il proprio nome e si inserisce il PIN.</span></li><li><span>Spunte, chiusura, movimenti, DDT e Log vengono registrati con <strong>l'operatore scelto</strong>; l'account del palmarino resta annotato nel Log.</span></li><li><span>Gli account personali funzionano come sempre, senza PIN.</span></li></ul></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">4</span>
+        <div>
           <div class="step-title">Più persone insieme</div>
           <div class="step-body">Più operatori possono lavorare contemporaneamente: l'app controlla le versioni delle righe (colonna <code>rev</code>) e ricarica da sola i dati cambiati dai colleghi. Se qualcosa non torna, premi <strong>↻ Aggiorna</strong>.</div>
         </div>
@@ -3278,6 +3288,16 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
       <div class="step-header">
         <span class="step-num purple">2</span>
         <div>
+          <div class="step-title">Palmarino: chi sta spuntando</div>
+          <div class="step-body">Con l'account condiviso, aprendo la spunta compare <strong>Chi sta spuntando?</strong>: scegli il tuo nome e inserisci il <strong>PIN</strong>. L'operatore resta legato alla scheda (pillola 👤 in alto). Se devi lasciare il lavoro a un collega premi <strong>Cambia operatore</strong>: lui sceglie il suo nome e mette il suo PIN. Dopo 15 minuti senza letture il PIN viene richiesto di nuovo.</div>
+        </div>
+      </div>
+      <div class="step-detail"><div class="filters-mock" style="background:var(--surface)"><span class="tag purple">👤 RF · Raffaele Finelli</span><button class="fm-btn" style="background:none;border:1px solid var(--border);color:var(--subtle)">Cambia operatore</button></div></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">3</span>
+        <div>
           <div class="step-title">Apri la spunta</div>
           <div class="step-body">Sulla scheda del riparatore premi <strong>Apri spunta</strong> e spara FR o seriali. Ogni pezzo diventa <span class="tag green">spuntato</span>. <strong>Aggiorna lista da VLT</strong> aggiunge gli FR arrivati in ACK nel frattempo.</div>
         </div>
@@ -3285,7 +3305,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
     </div>
     <div class="step">
       <div class="step-header">
-        <span class="step-num purple">3</span>
+        <span class="step-num purple">4</span>
         <div>
           <div class="step-title">Mancanti, rimossi e BAN</div>
           <div class="step-body">Gli FR attesi ma non trovati sono <span class="tag red">mancanti</span>: trovali oppure usa <strong>Rimuovi</strong> (resta in giacenza e riparte con l'ACK successivo; <strong>Ripristina</strong> per annullare). I pezzi <span class="tag amber">BAN</span> (note che iniziano con BAN o RMA) <strong>non vanno spediti</strong>: mettili da parte.</div>
@@ -3294,10 +3314,10 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
     </div>
     <div class="step">
       <div class="step-header">
-        <span class="step-num purple">4</span>
+        <span class="step-num purple">5</span>
         <div>
           <div class="step-title">Chiudi, colli e DDT</div>
-          <div class="step-body"><strong>Chiudi spunta</strong>, inserisci colli e pesi (<strong>+ Collo</strong>, misure proposte) e premi <strong>Genera DDT</strong>: numero dalla serie ACK, movimenti OUT, PDF su Drive. Poi <strong>Stampa DDT</strong>.</div>
+          <div class="step-body">Con il palmarino, prima di chiudere l'app chiede di <strong>confermare l'operatore</strong> ("Confermo, sono RF" oppure Cambia operatore): sarà la sigla OP dei movimenti e del DDT. <strong>Chiudi spunta</strong>, inserisci colli e pesi (<strong>+ Collo</strong>, misure proposte) e premi <strong>Genera DDT</strong>: numero dalla serie ACK, movimenti OUT, PDF su Drive. Poi <strong>Stampa DDT</strong>.</div>
         </div>
       </div>
     </div><div class="infobox warn"><span class="ib-icon">⚠️</span><div class="ib-body">Se il parametro <code>ack_blocca_se_mancanti</code> è SI, l'ACK non si chiude finché ci sono mancanti non gestiti.</div></div><div class="infobox info"><span class="ib-icon">ℹ️</span><div class="ib-body"><strong>Stesso riparatore scritto in modi diversi su VLT</strong> (es. <code>CRC</code>, <code>CReC</code>, <code>CR&amp;C</code>): l'app li riconosce come un unico riparatore grazie ad <strong>Admin → Alias riparatori VLT</strong>, quindi finiscono nello stesso ACK, nello stesso calendario e sullo stesso DDT. Non serve più sistemare a mano il foglio FR. Se VLT usa una scrittura nuova, aggiungi una riga in Alias (nome VLT → codice).</div></div>
@@ -3928,7 +3948,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
           
         </div>
       </div>
-      <div class="step-detail"><div class="gtbl"><div class="gtbl-head" style="display:flex"><div class="gtbl-th" style="flex:1">Se cambia…</div><div class="gtbl-th" style="flex:1">Dove si cambia</div><div class="gtbl-th" style="flex:1">Esempio / nota</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Un nuovo operatore, la sigla o il ruolo</div><div class="gtbl-cell mono" style="flex:1">Admin → Operatori</div><div class="gtbl-cell" style="flex:1">Attivo = NO per disabilitare senza cancellare</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">L'elenco dei ruoli</div><div class="gtbl-cell mono" style="flex:1">Parametri → ruoli</div><div class="gtbl-cell" style="flex:1">Separati da ; (per ora descrittivi)</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">La password per eliminare</div><div class="gtbl-cell mono" style="flex:1">Parametri → password_eliminazione</div><div class="gtbl-cell" style="flex:1">Solo admin; si può scrivere come sha256:&lt;impronta&gt;</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">I destinatari delle mail</div><div class="gtbl-cell mono" style="flex:1">Parametri → mail_sd / mail_cc / mail_report_faulty / mail_new_reuse</div><div class="gtbl-cell" style="flex:1">Indirizzi separati da virgola</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">I testi delle mail</div><div class="gtbl-cell mono" style="flex:1">Parametri → testo_mail_balancing / testo_mail_faulty_open / testo_mail_new_reuse</div><div class="gtbl-cell" style="flex:1">Corpo della mail proposta</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">La cartella Drive dei carichi NEW/REUSE</div><div class="gtbl-cell mono" style="flex:1">Parametri → drive_cartella_new_reuse</div><div class="gtbl-cell" style="flex:1">Vuoto = cartella CARICHI NEW REUSE</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Ogni quanto l'app controlla i dati dei colleghi</div><div class="gtbl-cell mono" style="flex:1">Parametri → aggiornamento_auto_sec</div><div class="gtbl-cell" style="flex:1">Secondi, minimo 30 (oggi 60)</div></div></div></div>
+      <div class="step-detail"><div class="gtbl"><div class="gtbl-head" style="display:flex"><div class="gtbl-th" style="flex:1">Se cambia…</div><div class="gtbl-th" style="flex:1">Dove si cambia</div><div class="gtbl-th" style="flex:1">Esempio / nota</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Un nuovo operatore, la sigla o il ruolo</div><div class="gtbl-cell mono" style="flex:1">Admin → Operatori</div><div class="gtbl-cell" style="flex:1">Attivo = NO per disabilitare senza cancellare</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">L'elenco dei ruoli</div><div class="gtbl-cell mono" style="flex:1">Parametri → ruoli</div><div class="gtbl-cell" style="flex:1">Separati da ; (per ora descrittivi)</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Un account usato da più persone (palmarino)</div><div class="gtbl-cell mono" style="flex:1">Admin → Operatori → condiviso</div><div class="gtbl-cell" style="flex:1">SI = prima della spunta ACK si sceglie l'operatore con il PIN</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Il PIN di un operatore</div><div class="gtbl-cell mono" style="flex:1">Admin → Operatori → pin</div><div class="gtbl-cell" style="flex:1">4-6 cifre; salvato cifrato. Per cambiarlo scrivi il nuovo, per toglierlo svuota la cella</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Obbligo del PIN</div><div class="gtbl-cell mono" style="flex:1">Parametri → ack_pin_obbligatorio</div><div class="gtbl-cell" style="flex:1">SI (consigliato) / NO = basta scegliere il nome</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Dopo quanto il PIN viene richiesto di nuovo</div><div class="gtbl-cell mono" style="flex:1">Parametri → ack_operatore_minuti</div><div class="gtbl-cell" style="flex:1">Minuti di inattività (oggi 15)</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">La password per eliminare</div><div class="gtbl-cell mono" style="flex:1">Parametri → password_eliminazione</div><div class="gtbl-cell" style="flex:1">Solo admin; si può scrivere come sha256:&lt;impronta&gt;</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">I destinatari delle mail</div><div class="gtbl-cell mono" style="flex:1">Parametri → mail_sd / mail_cc / mail_report_faulty / mail_new_reuse</div><div class="gtbl-cell" style="flex:1">Indirizzi separati da virgola</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">I testi delle mail</div><div class="gtbl-cell mono" style="flex:1">Parametri → testo_mail_balancing / testo_mail_faulty_open / testo_mail_new_reuse</div><div class="gtbl-cell" style="flex:1">Corpo della mail proposta</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">La cartella Drive dei carichi NEW/REUSE</div><div class="gtbl-cell mono" style="flex:1">Parametri → drive_cartella_new_reuse</div><div class="gtbl-cell" style="flex:1">Vuoto = cartella CARICHI NEW REUSE</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Ogni quanto l'app controlla i dati dei colleghi</div><div class="gtbl-cell mono" style="flex:1">Parametri → aggiornamento_auto_sec</div><div class="gtbl-cell" style="flex:1">Secondi, minimo 30 (oggi 60)</div></div></div></div>
     </div><div class="infobox danger"><span class="ib-icon">⛔</span><div class="ib-body"><strong>Da non toccare</strong> se non all'archiviazione di fine anno: <code>id_in_prossimo</code>, <code>id_out_prossimo</code>, <code>mov_id_base</code>, <code>mov_out_id_base</code>, <code>unita_id_base</code>. Servono a numerare movimenti e schede.</div></div><div class="infobox tip"><span class="ib-icon">💡</span><div class="ib-body">Un parametro che manca nel foglio PARAMETRI usa il suo valore predefinito: per cambiarlo aggiungi una riga in <strong>Admin → Parametri</strong> con chiave e valore.</div></div>
   </div>
   <div class="nav-btns">
