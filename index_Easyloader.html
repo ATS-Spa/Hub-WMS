@@ -629,6 +629,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
           <label class="btn ghost sm" id="admCal" style="cursor:pointer;display:none" title="Importa il calendario aggiornato (xlsx): sostituisce quello esistente">⬆ Importa calendario<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Cal.importa(this)"></label>
           <button class="btn ghost sm" id="admXls" onclick="Admin.excel()">⬇ Excel</button>
           <button class="btn sm" id="admSave" onclick="Admin.save()">Salva modifiche</button></div>
+        <div id="spzBox"></div>
         <div class="tbl-wrap"><table><thead id="admHead"></thead><tbody id="admRows"></tbody></table></div>
       </div>
     </div>
@@ -1212,6 +1213,7 @@ var App = {
     Ingresso.init(); Giacenze.init(); Ack.init(); if (App.isAdmin) Admin.init();
     App.go(lsG('tab') || 'ingresso');
     Blk.load().catch(function () { });
+    if (App.isAdmin) setTimeout(Spz.avviso, 8000);
     Chi.load().catch(function () { });
     AckV.load().then(AckV.sync).catch(function (e) { console.warn('ACK VLT: ' + e.message); });
     Sync.avvia(); Chv.init(); Jun.tab().catch(function () { }); setTimeout(function () { Spec.mov().then(function () { Ingresso.ricalcola(); }).catch(function () { }); }, 3000);
@@ -2301,7 +2303,7 @@ var Admin = {
     REGOLE_BARCODE: { title: 'Regole barcode', hint: 'Estrazione seriale/PN dal barcode, in ordine di priorità.', cols: ['priorita', 'prefisso', 'lunghezza', 'condizione_extra', 'riparatore', 'seriale_da', 'seriale_lung', 'pn_da', 'pn_lung', 'pn_prefisso', 'note'], add: true }
   },
   init: function () {
-    $('admTabs').innerHTML = '<span class="subtab" id="adm-ACCESSI" onclick="Admin.open(\'ACCESSI\')">🔑 Accessi admin</span>' + Object.keys(Admin.CONF).map(function (k) { return '<span class="subtab" id="adm-' + k + '" onclick="Admin.open(\'' + k + '\')">' + esc(Admin.CONF[k].title) + '</span>'; }).join('');
+    $('admTabs').innerHTML = '<span class="subtab" id="adm-ACCESSI" onclick="Admin.open(\'ACCESSI\')">🔑 Accessi admin</span><span class="subtab" id="adm-SPAZIO" onclick="Admin.open(\'SPAZIO\')">💾 Spazio database</span>' + Object.keys(Admin.CONF).map(function (k) { return '<span class="subtab" id="adm-' + k + '" onclick="Admin.open(\'' + k + '\')">' + esc(Admin.CONF[k].title) + '</span>'; }).join('');
   },
   excel: function () { var c = Admin.CONF[Admin.sez]; Xls.scarica(Admin.sez, [Object.assign({ nome: Admin.sez }, Xls.oggetti(DB.t[Admin.sez].rows, c.cols.map(function (h) { return [h, h]; })))]); },
   open: function (k) {
@@ -2309,8 +2311,10 @@ var Admin = {
     Admin.sez = k; Admin.dirty = {}; $('admQ').value = ''; Admin.render();
   },
   render: function () {
-    var acc = Admin.sez === 'ACCESSI';
-    ['admAdd', 'admQ', 'admSave', 'admXls'].forEach(function (id) { $(id).style.display = acc ? 'none' : ''; });
+    var acc = Admin.sez === 'ACCESSI', spz = Admin.sez === 'SPAZIO';
+    ['admAdd', 'admQ', 'admSave', 'admXls'].forEach(function (id) { $(id).style.display = acc || spz ? 'none' : ''; });
+    $('spzBox').style.display = spz ? '' : 'none';
+    if (spz) { document.querySelectorAll('#admTabs .subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-SPAZIO'); }); if ($('accSuperBox')) $('accSuperBox').style.display = 'none'; $('admCal').style.display = 'none'; Spz.render(); return; }
     $('admCal').style.display = Admin.sez === 'CALENDARIO_USCITE' ? '' : 'none';
     if (acc) { document.querySelectorAll('#admTabs .subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-ACCESSI'); }); Accessi.render(); return; }
     if ($('accSuperBox')) $('accSuperBox').style.display = 'none';
@@ -6358,6 +6362,106 @@ var Dash = {
   excel: function () {
     var iv = Dash.intervallo();
     Xls.scarica('Dashboard_operatori_' + iv[0] + '_' + iv[1], [{ nome: 'Operatori', headers: ['Operatore', 'Ingressi', 'Uscite ACK', 'Uscite RMA/balancing', 'Spunte ACK', 'Totale', 'Giorni attivi', 'Media/giorno'], rows: Dash.tabella || [] }]);
+  }
+};
+
+// ───────────────────────── SPAZIO DATABASE (limite Google: 10 milioni di celle per file, celle vuote comprese) ─────────────────────────
+var Spz = {
+  LIMITE: 10000000, dati: null, busy: false,
+  // file da controllare: database + archivi annuali nella stessa cartella
+  file: async function () {
+    var out = [{ id: DB.id, nome: CFG.DB_MAIN, main: true }];
+    try {
+      var q = "'" + CFG.FOLDER_ID + "' in parents and name contains 'DB_ARCHIVIO_' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false";
+      var js = await API.call('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id,name)&q=' + encodeURIComponent(q));
+      (js.files || []).sort(function (a, b) { return b.name.localeCompare(a.name); }).forEach(function (f) { out.push({ id: f.id, nome: f.name }); });
+    } catch (e) { }
+    return out;
+  },
+  // griglia reale di ogni scheda + righe/colonne usate (solo righe e colonne vuote in fondo sono "recuperabili")
+  analizza: async function (f) {
+    var js = await API.call(API.S + f.id + '?fields=' + encodeURIComponent('sheets(properties(sheetId,title,gridProperties(rowCount,columnCount)))'));
+    var sh = (js.sheets || []).map(function (s) { var g = s.properties.gridProperties || {}; return { id: s.properties.sheetId, nome: s.properties.title, righe: g.rowCount || 0, col: g.columnCount || 0 }; });
+    if (!sh.length) return { f: f, sh: [] };
+    // intestazione e colonna A: ultima riga e ultima colonna con dati
+    var r1 = await API.batchGet(f.id, sh.map(function (s) { return API.q(s.nome) + '!1:1'; }).concat(sh.map(function (s) { return API.q(s.nome) + '!A:A'; })));
+    sh.forEach(function (s, i) { s.uCol = Math.max(1, ((r1[i] || [])[0] || []).length); s.uRig = Math.max(1, (r1[sh.length + i] || []).length); });
+    // controllo di sicurezza: oltre l'ultima colonna dell'intestazione e sotto l'ultima riga della colonna A non deve esserci nulla
+    var chk = [];
+    sh.forEach(function (s) {
+      if (s.col > s.uCol) chk.push({ s: s, k: 'c', r: API.q(s.nome) + '!' + L.colLetter(s.uCol) + '1:' + L.colLetter(s.col - 1) + s.righe });
+      if (s.righe > s.uRig) chk.push({ s: s, k: 'r', r: API.q(s.nome) + '!A' + (s.uRig + 1) + ':' + L.colLetter(Math.max(s.uCol, 1) - 1) + s.righe });
+    });
+    for (var i = 0; i < chk.length; i += 40) {
+      var part = chk.slice(i, i + 40), v = await API.batchGet(f.id, part.map(function (x) { return x.r; }));
+      part.forEach(function (x, j) {
+        var vals = v[j] || [];
+        if (x.k === 'c') { var m = 0; vals.forEach(function (row) { for (var c = row.length - 1; c >= 0; c--) if (L.s(row[c]) !== '') { m = Math.max(m, c + 1); break; } }); x.s.uCol += m; }
+        else { var last = 0; vals.forEach(function (row, k) { if (row.some(function (c) { return L.s(c) !== ''; })) last = k + 1; }); x.s.uRig += last; }
+      });
+    }
+    sh.forEach(function (s) { s.uRig = Math.min(s.uRig, s.righe); s.uCol = Math.min(s.uCol, s.col); s.celle = s.righe * s.col; s.usate = s.uRig * s.uCol; s.libere = Math.max(0, s.celle - s.usate); });
+    return { f: f, sh: sh, tot: sh.reduce(function (a, s) { return a + s.celle; }, 0), usate: sh.reduce(function (a, s) { return a + s.usate; }, 0) };
+  },
+  carica: async function () {
+    $('admRows').innerHTML = '<tr><td class="empty">Leggo la griglia di database e archivi…</td></tr>'; $('spzBox').innerHTML = '';
+    try { var F = await Spz.file(), D = []; for (var i = 0; i < F.length; i++) D.push(await Spz.analizza(F[i])); Spz.dati = D; Spz.disegna(); }
+    catch (e) { $('admRows').innerHTML = '<tr><td class="empty">Errore: ' + esc(e.message) + '</td></tr>'; }
+  },
+  render: function () {
+    $('admTitle').textContent = 'Spazio database';
+    $('admHint').textContent = 'Google Sheets: massimo 10 milioni di celle per file, sommando tutte le schede e contando anche le celle vuote della griglia. Ogni archivio annuale è un file a parte con il suo limite.';
+    if (Spz.dati) Spz.disegna(); else Spz.carica();
+  },
+  disegna: function () {
+    var n = function (x) { return (x || 0).toLocaleString('it-IT'); }, pc = function (x) { return (Math.round(x / Spz.LIMITE * 1000) / 10).toString().replace('.', ',') + '%'; };
+    $('spzBox').innerHTML = '<div class="row" style="margin-bottom:10px">' + Spz.dati.map(function (d, i) {
+      var p = d.tot / Spz.LIMITE, col = p >= 0.9 ? 'var(--red)' : p >= 0.8 ? 'var(--amber)' : 'var(--green)';
+      return '<div class="stat" style="min-width:250px;flex:1"><b style="color:' + col + '">' + pc(d.tot) + '</b><span>' + esc(d.f.nome) + '</span>' +
+        '<div style="height:6px;background:var(--viz-track);border-radius:3px;margin:6px 0"><div style="height:6px;width:' + Math.min(100, p * 100) + '%;background:' + col + ';border-radius:3px"></div></div>' +
+        '<div class="hint">' + n(d.tot) + ' celle di griglia · ' + n(d.usate) + ' usate · ' + n(d.tot - d.usate) + ' vuote recuperabili</div>' +
+        (p >= 0.8 ? '<div class="hint" style="color:' + col + '">⚠ oltre l\'' + (p >= 0.9 ? '90' : '80') + '%: togli le celle vuote' + (d.f.main ? ' e valuta l\'archiviazione dell\'anno' : '') + '</div>' : '') +
+        (d.tot - d.usate > 0 ? '<button class="btn ghost sm" style="margin-top:6px" onclick="Spz.pulisci(' + i + ')">🧹 Togli righe e colonne vuote</button>' : '') + '</div>';
+    }).join('') + '</div><div class="hint">Le celle vuote recuperabili sono righe e colonne vuote in fondo alle schede (dopo l\'ultima riga e l\'ultima colonna con dati): toglierle non tocca nessun dato. Le schede si allungano da sole quando servono.</div>';
+    $('admHead').innerHTML = '<tr><th>File</th><th>Scheda</th><th>Righe griglia</th><th>Colonne griglia</th><th>Celle griglia</th><th>Righe usate</th><th>Colonne usate</th><th>Celle vuote recuperabili</th><th>% del file</th></tr>';
+    var rows = []; Spz.dati.forEach(function (d) { d.sh.slice().sort(function (a, b) { return b.celle - a.celle; }).forEach(function (s) { rows.push('<tr><td>' + esc(d.f.nome) + '</td><td>' + esc(s.nome) + '</td><td class="mono">' + n(s.righe) + '</td><td class="mono">' + n(s.col) + '</td><td class="mono"><b>' + n(s.celle) + '</b></td><td class="mono">' + n(s.uRig) + '</td><td class="mono">' + n(s.uCol) + '</td><td class="mono"' + (s.libere > 100000 ? ' style="color:var(--amber)"' : '') + '>' + n(s.libere) + '</td><td class="mono">' + pc(s.celle) + '</td></tr>'); }); });
+    $('admRows').innerHTML = rows.join('');
+  },
+  pulisci: async function (i) {
+    var d = Spz.dati[i]; if (!d || Spz.busy) return;
+    var req = [], det = [];
+    d.sh.forEach(function (s) {
+      // prima le colonne (a destra), poi le righe (in fondo): mai sotto l'intestazione né prima dell'ultima colonna usata
+      if (s.col > s.uCol) req.push({ deleteDimension: { range: { sheetId: s.id, dimension: 'COLUMNS', startIndex: s.uCol, endIndex: s.col } } });
+      if (s.righe > s.uRig) req.push({ deleteDimension: { range: { sheetId: s.id, dimension: 'ROWS', startIndex: s.uRig, endIndex: s.righe } } });
+      if (s.libere) det.push(s.nome + ': ' + s.libere);
+    });
+    if (!req.length) { toast('Niente da togliere', 'ok'); return; }
+    var lib = d.tot - d.usate;
+    if (!(await Modal.confirm('Togli righe e colonne vuote · ' + d.f.nome, 'Tolgo ' + lib.toLocaleString('it-IT') + ' celle vuote in fondo alle schede (' + det.length + ' schede). Nessun dato viene toccato.\n\nPrima rileggo la griglia per sicurezza.'))) return;
+    Spz.busy = true;
+    try {
+      Modal.open('Spazio database', 'Rileggo la griglia…', []);
+      d = await Spz.analizza(d.f); Spz.dati[i] = d;   // dati freschi: se nel frattempo qualcuno ha scritto, si ricalcola
+      req = [];
+      d.sh.forEach(function (s) {
+        if (s.col > s.uCol) req.push({ deleteDimension: { range: { sheetId: s.id, dimension: 'COLUMNS', startIndex: s.uCol, endIndex: s.col } } });
+        if (s.righe > s.uRig) req.push({ deleteDimension: { range: { sheetId: s.id, dimension: 'ROWS', startIndex: s.uRig, endIndex: s.righe } } });
+      });
+      Modal.progress('Tolgo le celle vuote…');
+      if (req.length) await API.call(API.S + d.f.id + ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: req }) });
+      await API.append(DB.id, 'LOG', [App.log('SPAZIO_PULIZIA', 'DATABASE', d.f.nome, { celle_tolte: d.tot - d.usate, schede: d.sh.filter(function (s) { return s.libere; }).map(function (s) { return s.nome + ' ' + s.libere; }) })]);
+      Spz.dati[i] = await Spz.analizza(d.f); Modal.close(); toast('Fatto: ' + d.f.nome + ' ora usa ' + Spz.dati[i].tot.toLocaleString('it-IT') + ' celle', 'ok'); Spz.disegna();
+    } catch (e) { Modal.open('Pulizia non riuscita', e.message); }
+    finally { Spz.busy = false; }
+  },
+  // controllo leggero all'avvio (solo admin): avviso se il database supera l'80%
+  avviso: async function () {
+    try {
+      var js = await API.call(API.S + DB.id + '?fields=' + encodeURIComponent('sheets(properties(gridProperties(rowCount,columnCount)))'));
+      var tot = (js.sheets || []).reduce(function (a, s) { var g = s.properties.gridProperties || {}; return a + (g.rowCount || 0) * (g.columnCount || 0); }, 0);
+      if (tot / Spz.LIMITE >= 0.8) toast('⚠ Database al ' + Math.round(tot / Spz.LIMITE * 100) + '% del limite Google (10 milioni di celle): Admin → Spazio database', 'ko');
+    } catch (e) { }
   }
 };
 
