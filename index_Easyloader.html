@@ -213,6 +213,23 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
 .dash-leg span{cursor:pointer;display:inline-flex;align-items:center;padding:2px 4px;border-radius:5px}
 .dash-leg span:hover,.dash-leg span.on{background:var(--card);color:var(--text)}
 .dash-sw{display:inline-block;width:10px;height:10px;border-radius:3px;margin-right:6px;flex-shrink:0}
+.kpi-grid{display:grid;grid-template-columns:repeat(auto-fit,minmax(360px,1fr));gap:14px;margin-bottom:14px}
+.kpi-grid.k4{grid-template-columns:repeat(auto-fit,minmax(260px,1fr));margin-bottom:0}
+@media (max-width:600px){.kpi-grid,.kpi-grid.k4{grid-template-columns:1fr}}
+.kc-head{display:flex;justify-content:space-between;align-items:flex-start;gap:10px;margin-bottom:10px}
+.kc-sub{font-size:11px;letter-spacing:1px;text-transform:uppercase;color:var(--muted);margin-bottom:4px}
+.kc-plot{position:relative;display:flex;align-items:flex-end;gap:4px;border-bottom:1px solid var(--border)}
+.kc-col{position:relative;flex:1 1 0;min-width:0;height:100%;display:flex;align-items:flex-end;justify-content:center;gap:2px;border-radius:4px 4px 0 0}
+.kc-col.sel{background:var(--viz-track)}
+.kc-col:hover .kc-bar,.kc-col:hover .dash-seg{filter:brightness(1.2)}
+.kc-bar{display:block;flex:1 1 0;max-width:18px;border-radius:4px 4px 0 0}
+.kc-lab{position:absolute;left:0;right:0;text-align:center;font:600 11px var(--ff-mono);color:var(--text);transform:translateY(-2px);pointer-events:none;white-space:nowrap}
+.kc-target{position:absolute;left:0;right:0;border-top:2px dashed var(--red);opacity:.75;pointer-events:none;z-index:1}
+.kc-tsw{display:inline-block;width:14px;border-top:2px dashed var(--red);margin-right:6px;vertical-align:middle}
+.kc-x{display:flex;gap:4px;font-size:10px;color:var(--muted);margin-top:4px}
+.kc-x span{flex:1 1 0;min-width:0;text-align:center;white-space:nowrap;overflow:hidden}
+.kc-x span.sel{color:var(--text);font-weight:700}
+.blk-banner{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);color:var(--text);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:13px}
 .dash-axis{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px}
 .progress{font-family:var(--ff-mono);font-size:12px;color:var(--subtle);margin-top:10px;white-space:pre-line}
 .ack-grid.usc-grid{grid-template-columns:repeat(auto-fill,minmax(min(410px,100%),1fr))}
@@ -352,6 +369,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
 
     <!-- INGRESSO -->
     <div class="view" id="view-ingresso">
+      <div class="blk-banner" id="blkBanner" style="display:none"></div>
       <div class="card">
         <div class="card-h"><div class="card-t">Testata ingresso</div><div class="spacer"></div>
           <button class="btn ghost sm" onclick="Ingresso.nuovo()">Nuovo ingresso</button></div>
@@ -397,7 +415,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
 
       <div class="card">
         <div class="card-h"><div class="card-t">Ingressi di oggi</div>
-          <label style="font-size:12px;color:var(--subtle);display:flex;gap:6px;align-items:center"><input type="checkbox" id="oggiTutti" onchange="Ingresso.renderOggi()"> tutti gli operatori</label><div class="spacer"></div><button class="btn ghost sm" onclick="Ingresso.excelOggi()">⬇ Excel</button> <button class="btn ghost sm" onclick="Ingresso.etichetteOggi()">🏷 Etichette</button> <button class="btn ghost sm" onclick="Ingresso.cedolinoOggi()" title="Cedolino per P/N degli ingressi NEW/REUSE mostrati">📋 Cedolino</button></div>
+          <label style="font-size:12px;color:var(--subtle);display:flex;gap:6px;align-items:center"><input type="checkbox" id="oggiTutti" onchange="Ingresso.renderOggi()"> tutti gli operatori</label><div class="spacer"></div><button class="btn ghost sm" onclick="Blk.apri()" title="Registra un giorno di blocco VLT: non conta nei KPI e mette la nota DISSERVIZIO VLT alle entrate FAULTY/GOOD">⛔ Blocco VLT</button> <button class="btn ghost sm" onclick="Ingresso.excelOggi()">⬇ Excel</button> <button class="btn ghost sm" onclick="Ingresso.etichetteOggi()">🏷 Etichette</button> <button class="btn ghost sm" onclick="Ingresso.cedolinoOggi()" title="Cedolino per P/N degli ingressi NEW/REUSE mostrati">📋 Cedolino</button></div>
         <div class="stats" id="oggiStats"></div>
         <div class="tbl-wrap" style="max-height:40vh"><table>
           <thead><tr><th>ID</th><th>Tipo</th><th>FR</th><th>RMA</th><th>Seriale</th><th>P/N</th><th>Riparatore</th><th>Nota</th><th>Operatore</th><th></th></tr></thead>
@@ -576,6 +594,17 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
         <button class="btn ghost sm" onclick="Dash.excel()">⬇ Excel</button>
       </div><div class="hint" style="margin-top:8px">Movimenti dell'anno in corso (ingressi, uscite ACK, uscite RMA/balancing) e pezzi spuntati negli ACK. Clic su un operatore per vedere solo il suo andamento.</div></div>
       <div id="dashBody"></div>
+    </div>
+
+    <div class="view" id="view-kpi">
+      <div class="card"><div class="row">
+        <div class="fg" style="width:170px"><span class="fl">Mese</span><input class="fc" type="month" id="kpiMese" onchange="if(this.value){Kpi.mese=this.value;Kpi.render()}"></div>
+        <div class="spacer"></div>
+        <button class="btn ghost sm" onclick="Blk.apri()">⛔ Blocco VLT</button>
+        <button class="btn ghost sm" onclick="Kpi.carica(true).then(Kpi.render).catch(function(e){toast(e.message,'ko')})">↻ Aggiorna</button>
+        <button class="btn ghost sm" onclick="Kpi.excel()">⬇ Excel</button>
+      </div><div class="hint" style="margin-top:8px">Ultimi 12 mesi fino al mese scelto. Giorni lavorativi: esclusi sabato, domenica, festivi (parametro <span class="mono">kpi_festivi</span>, Pasquetta automatica) e giorni di blocco VLT registrati. Target nei parametri <span class="mono">kpi1_target</span>, <span class="mono">kpi2_target</span>, <span class="mono">kpi3_target</span>.</div></div>
+      <div id="kpiBody"></div>
     </div>
 
     <!-- ADMIN -->
@@ -1115,7 +1144,7 @@ var TABS = [
   { k: 'ingresso', label: 'Ingresso' },
   { k: 'ack', label: 'ACK' }, { k: 'rma', label: 'RMA' }, { k: 'balancing', label: 'Balancing' },
   { k: 'newreuse', label: 'Carichi NEW/REUSE' }, { k: 'juniper', label: 'Juniper' }, { k: 'giacenze', label: 'Giacenze' }, { k: 'vlt', label: 'VLT' }, { k: 'chiusure', label: 'Chiusure VLT' },
-  { k: 'storico', label: 'Movimenti' }, { k: 'dashboard', label: 'Dashboard', admin: true }, { k: 'log', label: 'Log', admin: true }, { k: 'anagrafiche', label: 'Anagrafiche' }, { k: 'admin', label: 'Admin', admin: true }
+  { k: 'storico', label: 'Movimenti' }, { k: 'dashboard', label: 'Dashboard', admin: true }, { k: 'kpi', label: 'KPI', admin: true }, { k: 'log', label: 'Log', admin: true }, { k: 'anagrafiche', label: 'Anagrafiche' }, { k: 'admin', label: 'Admin', admin: true }
 ];
 var App = {
   me: null, isAdmin: false, tab: 'ingresso',
@@ -1170,6 +1199,7 @@ var App = {
     App.fillLists(); App.syncInfo();
     Ingresso.init(); Giacenze.init(); Ack.init(); if (App.isAdmin) Admin.init();
     App.go(lsG('tab') || 'ingresso');
+    Blk.load().catch(function () { });
     Sync.avvia(); Chv.init(); Jun.tab().catch(function () { }); setTimeout(function () { Spec.mov().then(function () { Ingresso.ricalcola(); }).catch(function () { }); }, 3000);
   },
   go: function (k) {
@@ -1192,6 +1222,7 @@ var App = {
     if (t.k === 'chiusure') Chv.show();
     if (t.k === 'storico') Sto.show();
     if (t.k === 'dashboard') Dash.show();
+    if (t.k === 'kpi') Kpi.show();
     if (t.k === 'log') LogV.show();
     if (t.k === 'anagrafiche') Ana.show();
   },
@@ -1592,7 +1623,7 @@ var Ingresso = {
         data_in: T.data, note: c.nota, rev: 1, creato_il: now, creato_da: me };
     });
     var mObjs = C.map(function (c, i) {
-      return { data_ora: T.data + ' ' + now.slice(11), data_registrazione_vlt: L.isoToday(), posizione_note: [uObjs[i].ubicazione, uObjs[i].n_plt].filter(Boolean).join(' / '), direzione: 'IN', causale: 'INGRESSO', seriale: c.ser, pn: c.pn, mnft: c.mnft, tipo: c.tipo, fr: c.fr, rma: c.rma,
+      return { data_ora: T.data + ' ' + now.slice(11), data_registrazione_vlt: L.isoToday(), posizione_note: (c.tipo === 'FAULTY' || c.tipo === 'GOOD') ? Blk.nota(T.data, L.isoToday()) : [uObjs[i].ubicazione, uObjs[i].n_plt].filter(Boolean).join(' / '), direzione: 'IN', causale: 'INGRESSO', seriale: c.ser, pn: c.pn, mnft: c.mnft, tipo: c.tipo, fr: c.fr, rma: c.rma,
         po_mrn: T.po, controparte: T.mittente, awb: T.awb, vettore: T.vettore, ddt: T.ddt, riparatore: c.rip, ubicazione_a: uObjs[i].ubicazione,
         operatore: me, operatore_sigla: sigla, note: c.nota, stato_vlt: c.vltStato || '', origine: 'APP' };
     });
@@ -5581,6 +5612,309 @@ var Cedolino = {
 };
 
 // ───────────────────────── DASHBOARD OPERATORI (solo admin) ─────────────────────────
+// ───────────────────────── BLOCCHI VLT: giorni in cui VLT non permette le registrazioni ─────────────────────────
+// Fonte unica per i KPI (quei giorni non si contano) e per la nota "DISSERVIZIO VLT" nella colonna
+// POSIZIONE E NOTE - NOTE BUG SISTEMA dell'Easyloader sulle entrate FAULTY/GOOD.
+var Blk = {
+  H: ['id_blocco', 'data', 'motivo', 'stato', 'creato_il', 'creato_da', 'annullato_il', 'annullato_da', 'nota_annullo'],
+  NOTA: 'DISSERVIZIO VLT',
+  MOTIVI: ['VLT non raggiungibile', 'VLT bloccato / in manutenzione', 'VLT lento: registrazioni non possibili'],
+  load: async function () {
+    try { await DB.loadTables(['BLOCCHI_VLT']); }
+    catch (e) { if (!/parse range|no sheet|unable to parse/i.test(e.message)) throw e; DB.t.BLOCCHI_VLT = new Table('BLOCCHI_VLT', [], []); }
+    Blk.banner();
+  },
+  attivi: function () { var t = DB.t.BLOCCHI_VLT; return t ? t.rows.filter(function (r) { return L.up(r.stato) !== 'ANNULLATO' && L.normDate(r.data); }) : []; },
+  giorni: function () { var g = {}; Blk.attivi().forEach(function (r) { g[L.normDate(r.data)] = r; }); return g; },
+  // nota da proporre a un'entrata FAULTY/GOOD arrivata il giorno "da" e registrata il giorno "a": c'è un blocco in mezzo?
+  nota: function (da, a) { da = L.normDate(da); a = L.normDate(a) || L.isoToday(); if (!da) return ''; var g = Blk.giorni(); return Object.keys(g).some(function (k) { return k >= da && k <= a; }) ? Blk.NOTA : ''; },
+  banner: function () {
+    var el = $('blkBanner'); if (!el) return; var r = Blk.giorni()[L.isoToday()];
+    el.style.display = r ? '' : 'none';
+    el.innerHTML = r ? '⛔ <b>Oggi è registrato un blocco VLT</b> (' + esc(r.motivo) + '): le entrate FAULTY e GOOD prendono in automatico la nota "' + Blk.NOTA + '".' : '';
+  },
+  // entrate FAULTY/GOOD arrivate in quel giorno che non hanno ancora la nota
+  candidati: function (data) {
+    return (Sto.dati.cur || []).filter(function (r) {
+      return r.direzione === 'IN' && r.causale === 'INGRESSO' && (r.tipo === 'FAULTY' || r.tipo === 'GOOD') && L.normDate(r.data_ora) === data && L.up(r.posizione_note).indexOf(Blk.NOTA) < 0;
+    });
+  },
+  apri: async function (data) {
+    data = data || L.isoToday();
+    Modal.html('⛔ Registra blocco VLT',
+      '<div class="hint" style="margin-bottom:10px">Il giorno registrato <b>non si conta</b> nei KPI dei tempi. Alle entrate FAULTY e GOOD di quel giorno si può aggiungere la nota "' + Blk.NOTA + '" (colonna <i>Posizione e note – note bug sistema</i> dell\'Easyloader); quelle registrate dopo la prendono in automatico.</div>' +
+      '<div class="row"><div class="fg" style="width:170px"><span class="fl">Giorno del blocco</span><input class="fc" type="date" id="blkData" max="' + L.isoToday() + '" value="' + data + '" onchange="Blk.anteprima()"></div>' +
+      '<div class="fg" style="flex:1;min-width:220px"><span class="fl">Motivo</span><input class="fc" id="blkMotivo" list="dlBlkMotivi" placeholder="es. VLT non raggiungibile"><datalist id="dlBlkMotivi">' + Blk.MOTIVI.map(function (m) { return '<option value="' + esc(m) + '">'; }).join('') + '</datalist></div></div>' +
+      '<div id="blkPrev" class="hint" style="margin-top:10px">Controllo le entrate del giorno…</div><div id="blkErr" class="hint" style="color:var(--red)"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Registra blocco', cls: 'green', keep: true, fn: Blk.salva }]);
+    try { if (!Sto.dati.cur) Sto.dati.cur = await Sto.colsSafe(DB.id, 'MOVIMENTI'); } catch (e) { }
+    Blk.anteprima();
+  },
+  anteprima: function () {
+    var d = $('blkData') && $('blkData').value, el = $('blkPrev'); if (!el) return;
+    if (!d) { el.innerHTML = ''; return; }
+    var gia = Blk.giorni()[d], c = Blk.candidati(d);
+    el.innerHTML = (gia ? '<div style="color:var(--amber)">Il ' + esc(L.itDate(d)) + ' è già registrato come blocco (' + esc(gia.motivo) + ').</div>' : '') +
+      (c.length ? '<label style="display:flex;gap:8px;align-items:center;margin-top:4px"><input type="checkbox" id="blkNote" checked> Aggiungi la nota "' + Blk.NOTA + '" a <b>' + c.length + '</b> entrate FAULTY/GOOD arrivate il ' + esc(L.itDate(d)) + ' (' + c.filter(function (r) { return r.tipo === 'FAULTY'; }).length + ' FAULTY, ' + c.filter(function (r) { return r.tipo === 'GOOD'; }).length + ' GOOD)</label>'
+        : '<div>Nessuna entrata FAULTY/GOOD di quel giorno senza nota.</div>');
+  },
+  salva: async function () {
+    var d = $('blkData').value, mot = L.s($('blkMotivo').value), err = function (t) { $('blkErr').textContent = t; };
+    if (!d || d > L.isoToday()) { err('Scegli un giorno (non nel futuro)'); return; }
+    if (!mot) { err('Scrivi il motivo'); $('blkMotivo').focus(); return; }
+    var conNote = $('blkNote') && $('blkNote').checked, gia = Blk.giorni()[d];
+    Modal.progress('Salvo…');
+    try {
+      var now = L.nowStamp(), chi = App.chi(), id = gia ? gia.id_blocco : '', n = 0;
+      if (!gia) {
+        var t = DB.t.BLOCCHI_VLT && DB.t.BLOCCHI_VLT.header.length ? DB.t.BLOCCHI_VLT : await DB.ensureSheet('BLOCCHI_VLT', Blk.H);
+        id = 'BLK' + d.replace(/-/g, '') + '-' + (t.rows.filter(function (r) { return L.normDate(r.data) === d; }).length + 1);
+        await API.append(DB.id, 'BLOCCHI_VLT', [t.toRow({ id_blocco: id, data: d, motivo: mot, stato: 'ATTIVO', creato_il: now, creato_da: chi.email })]);
+      }
+      if (conNote) {
+        Sto.dati.cur = await Sto.colsSafe(DB.id, 'MOVIMENTI');   // righe fresche: la nota si aggiunge a quella che c'è
+        var tM = (await Ingresso.heads()).MOVIMENTI, c = Blk.candidati(d);
+        if (c.length) {
+          await API.batchUpdate(DB.id, c.map(function (r) { var v = L.s(r.posizione_note); r.posizione_note = (v ? v + ' · ' : '') + Blk.NOTA; return { range: tM.cell('posizione_note', r._r), values: [[r.posizione_note]] }; }));
+          n = c.length;
+        }
+      }
+      await API.append(DB.id, 'LOG', [App.log(gia ? 'BLOCCO_VLT_NOTE' : 'BLOCCO_VLT', 'BLOCCHI_VLT', id, { data: d, motivo: mot, note_aggiunte: n })]);
+      await Blk.load(); Modal.close();
+      toast((gia ? 'Blocco già presente' : 'Blocco VLT del ' + L.itDate(d) + ' registrato') + (n ? ' · nota aggiunta a ' + n + ' entrate' : ''), 'ok');
+      if (App.tab === 'kpi') Kpi.render(); if (App.tab === 'storico') Sto.render();
+    } catch (e) { Modal.progress(''); err('Errore: ' + e.message); }
+  },
+  annulla: function (id) {
+    if (!App.isAdmin) { toast('Solo un admin può annullare un blocco', 'ko'); return; }
+    var r = Blk.attivi().find(function (x) { return x.id_blocco === id; }); if (!r) return;
+    Modal.html('Annulla blocco VLT del ' + L.itDate(r.data), '<div class="hint">Il giorno tornerà a contare nei KPI. Le note già scritte sui movimenti restano (si correggono da Movimenti).</div><div class="fg" style="margin-top:10px"><span class="fl">Motivo</span><input class="fc" id="blkAnn"></div><div id="blkErr" class="hint" style="color:var(--red)"></div>',
+      [{ label: 'Chiudi', cls: 'ghost' }, { label: 'Annulla blocco', cls: 'red', keep: true, fn: async function () {
+        var mot = L.s($('blkAnn').value); if (!mot) { $('blkErr').textContent = 'Scrivi il motivo'; return; }
+        try {
+          var t = DB.t.BLOCCHI_VLT, now = L.nowStamp(), ch = { stato: 'ANNULLATO', annullato_il: now, annullato_da: Auth.email, nota_annullo: mot };
+          await API.batchUpdate(DB.id, Object.keys(ch).filter(function (h) { return h in t.idx; }).map(function (h) { return { range: t.cell(h, r._r), values: [[ch[h]]] }; }));
+          await API.append(DB.id, 'LOG', [App.log('BLOCCO_VLT_ANNULLATO', 'BLOCCHI_VLT', id, { data: r.data, motivo: mot })]);
+          await Blk.load(); Modal.close(); toast('Blocco annullato', 'ok'); if (App.tab === 'kpi') Kpi.render();
+        } catch (e) { $('blkErr').textContent = 'Errore: ' + e.message; }
+      } }]);
+  },
+  // giorni con "DISSERVIZIO VLT" nelle note dei movimenti ma non registrati (es. dati migrati)
+  dalleNote: function (rows) {
+    var g = Blk.giorni(), o = {};
+    rows.forEach(function (r) { if ((L.up(r.note) + ' ' + L.up(r.posizione_note)).indexOf(Blk.NOTA) < 0) return; var d = L.normDate(r.data_ora); if (d && !g[d]) o[d] = (o[d] || 0) + 1; });
+    return Object.keys(o).sort().map(function (d) { return [d, o[d]]; });
+  }
+};
+
+// ───────────────────────── KPI (performance FLM, base BPR mensile) ─────────────────────────
+// Solo KPI calcolabili con certezza dai dati del tool. Giorni lavorativi: esclusi sabato, domenica,
+// festivi (parametro kpi_festivi + Pasquetta) e giorni di blocco VLT registrati.
+var Kpi = {
+  mese: '', arch: [], archNota: '', art: null,
+  GRUPPI: ['UNIT', 'ACCESSORI_INST', 'KIT BUNDLE', 'ANTENNA', 'PARABOLA', 'KIT_ANTENNA', 'SUBRACK', 'RACK', 'TERMINAZIONI', 'BATTERIE', 'LICENZA', 'CDZ', 'QUADRO ELETTRICO', 'NOT APPLICABLE'],
+  MESI: ['gen', 'feb', 'mar', 'apr', 'mag', 'giu', 'lug', 'ago', 'set', 'ott', 'nov', 'dic'],
+  DEF: [
+    { n: 1, tit: 'KPI₁ · Allineamento VLT FAULTY', sub: 'dalla data in hub alla registrazione VLT', tipi: ['FAULTY'], def: '1:95,2:100' },
+    { n: 2, tit: 'KPI₂ · Allineamento VLT GOOD', sub: 'dalla data in hub alla registrazione VLT', tipi: ['GOOD'], def: '1:95,2:100' },
+    { n: 3, tit: 'KPI₃ · Allineamento VLT NEW BUY & REUSE', sub: 'dalla data in hub alla registrazione VLT', tipi: ['NEW', 'REUSE'], def: '5:80,7:100' }
+  ],
+  show: async function () {
+    if (!Kpi.mese) { var d = new Date(); d.setDate(1); d.setMonth(d.getMonth() - 1); Kpi.mese = L.isoToday(d).slice(0, 7); }
+    $('kpiMese').value = Kpi.mese; $('kpiMese').max = L.isoToday().slice(0, 7);
+    $('kpiBody').innerHTML = '<div class="card empty">Carico movimenti, archivio e anagrafica…</div>';
+    try { await Kpi.carica(false); Kpi.render(); } catch (e) { $('kpiBody').innerHTML = '<div class="card empty">Errore: ' + esc(e.message) + '</div>'; }
+  },
+  carica: async function (forza) {
+    var job = [];
+    if (!Sto.dati.cur || forza) job.push(Sto.colsSafe(DB.id, 'MOVIMENTI').then(function (r) { Sto.dati.cur = r; }));
+    if (!DB.t.SPEDIZIONI || !DB.t.SPEDIZIONI_COLLI || forza) job.push(DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_COLLI']).catch(function () { }));
+    if (!Kpi.art || forza) job.push(DB.loadCols(DB.id, 'ARTICOLI', ['material', 'pn', 'gruppo_articoli', 'technology']).then(function (a) { Kpi.art = a; }).catch(function () { Kpi.art = []; }));
+    if (forza) job.push(Blk.load().catch(function () { }));
+    // archivio dell'anno prima: serve per i 12 mesi (resta in cache, non cambia)
+    var y = String(new Date().getFullYear() - 1);
+    if (!Kpi._archY || forza) job.push((async function () {
+      try {
+        var c = forza ? null : await DB.cacheGet('arch_' + y);
+        if (!c) { var f = await API.findInFolder(CFG.FOLDER_ID, 'DB_ARCHIVIO_' + y); if (!f) throw new Error('file DB_ARCHIVIO_' + y + ' non trovato'); c = { ts: Date.now(), rows: await Sto.colsSafe(f.id, 'MOVIMENTI') }; await DB.cacheSet('arch_' + y, c); }
+        Sto.dati[y] = c.rows; Kpi.arch = c.rows; Kpi.archNota = '';
+      } catch (e) { Kpi.arch = []; Kpi.archNota = 'Archivio ' + y + ' non caricato (' + e.message + '): i mesi del ' + y + ' restano vuoti.'; }
+      Kpi._archY = y;
+    })());
+    await Promise.all(job);
+  },
+  mesi: function () { var a = [], p = Kpi.mese.split('-'), y = +p[0], m = +p[1]; for (var i = 11; i >= 0; i--) { var d = new Date(y, m - 1 - i, 1); a.push(d.getFullYear() + '-' + L.pad(d.getMonth() + 1, 2)); } return a; },
+  lab: function (mk) { return Kpi.MESI[+mk.slice(5) - 1] + ' ' + mk.slice(2, 4); },
+  pasquetta: function (y) {   // lunedì dopo Pasqua (algoritmo gregoriano anonimo)
+    var a = y % 19, b = Math.floor(y / 100), c = y % 100, d = Math.floor(b / 4), e = b % 4, f = Math.floor((b + 8) / 25), g = Math.floor((b - f + 1) / 3), h = (19 * a + b - d - g + 15) % 30,
+      i = Math.floor(c / 4), k = c % 4, l = (32 + 2 * e + 2 * i - h - k) % 7, m = Math.floor((a + 11 * h + 22 * l) / 451), mo = Math.floor((h + l - 7 * m + 114) / 31), dd = ((h + l - 7 * m + 114) % 31) + 1;
+    return L.isoToday(new Date(y, mo - 1, dd + 1));
+  },
+  festivo: function (iso) {
+    var F = Kpi._fest; if (!F) {
+      F = Kpi._fest = { mmdd: {}, pq: {} };
+      L.s(DB.param('kpi_festivi', '01-01,01-06,04-25,05-01,06-02,08-15,11-01,12-08,12-25,12-26')).split(/[,;\s]+/).forEach(function (x) { x = L.s(x); if (/^\d{4}-\d{2}-\d{2}$/.test(x)) F.pq[x] = 1; else if (/^\d{2}-\d{2}$/.test(x)) F.mmdd[x] = 1; });
+    }
+    var y = +iso.slice(0, 4); if (!F['p' + y]) { F.pq[Kpi.pasquetta(y)] = 1; F['p' + y] = 1; }
+    return !!(F.mmdd[iso.slice(5)] || F.pq[iso]);
+  },
+  // giorni lavorativi in [a, b): come NETWORKDAYS meno uno. a = data in hub, b = registrazione/uscita
+  gg: function (a, b) {
+    if (!a || !b || b <= a) return 0;
+    var k = a + b, c = Kpi._gg[k]; if (c !== undefined) return c;
+    var n = 0, d = new Date(a + 'T12:00:00'), fine = new Date(b + 'T12:00:00'), blk = Kpi._blk, guard = 0;
+    while (d < fine && guard++ < 800) { var iso = L.isoToday(d), w = d.getDay(); if (w && w !== 6 && !Kpi.festivo(iso) && !blk[iso]) n++; d.setDate(d.getDate() + 1); }
+    return Kpi._gg[k] = n;
+  },
+  soglie: function (n, def) { return L.s(DB.param('kpi' + n + '_target', def)).split(',').map(function (x) { var p = x.split(':'); return [parseInt(p[0], 10), parseFloat(p[1])]; }).filter(function (p) { return !isNaN(p[0]) && !isNaN(p[1]); }).slice(0, 2); },
+  gruppo: function (cp) {
+    var s = L.up(cp).replace(/^ACT\s+/, ''), al = Kpi._al;
+    if (!al) { al = Kpi._al = {}; (DB.t.RIPARATORI_ALIAS ? DB.t.RIPARATORI_ALIAS.rows : []).forEach(function (r) { if (r.nome_vlt) al[L.up(r.nome_vlt)] = L.up(r.codice_riparatore); }); }
+    var tok = s.split(/\s+-\s+|\s+|\//)[0] || s;
+    return al[s] || al[tok] || tok || '(senza destino)';
+  },
+  rip: function (g) { var s = Kpi._rip; if (!s) { s = Kpi._rip = {}; DB.t.RIPARATORI.rows.forEach(function (r) { if (r.codice) s[L.up(r.codice)] = 1; }); } return !!s[g]; },
+  calcola: function () {
+    var mesi = Kpi.mesi(), M = {}, sel = Kpi.mese, R = (Sto.dati.cur || []).concat(Kpi.arch || []);
+    Kpi._blk = Blk.giorni(); Kpi._gg = {}; Kpi._fest = null; Kpi._al = null; Kpi._rip = null;
+    mesi.forEach(function (m) { M[m] = { inF: 0, inG: 0, outF: 0, outG: 0, inNR: 0, outNR: 0, outB: 0, ddt: {}, k: {} }; });
+    var tempi = { 1: {}, 2: {}, 3: {} }, dest = {}, idSped = {};
+    R.forEach(function (r) {
+      if (r.direzione === 'IN') {
+        if (r.causale === 'INGRESSO_ANNULLATO') return;
+        var reg = L.normDate(r.data_registrazione_vlt) || L.normDate(r.data_ora), mk = reg.slice(0, 7), o = M[mk]; if (!o) return;
+        if (r.tipo === 'FAULTY') o.inF++; else if (r.tipo === 'GOOD') o.inG++; else if (r.tipo === 'NEW' || r.tipo === 'REUSE') o.inNR++;
+        var n = r.tipo === 'FAULTY' ? 1 : r.tipo === 'GOOD' ? 2 : (r.tipo === 'NEW' || r.tipo === 'REUSE') ? 3 : 0;
+        var a = L.normDate(r.data_ora);
+        if (n && a) (tempi[n][mk] = tempi[n][mk] || []).push(Kpi.gg(a, reg));
+      } else if (r.direzione === 'OUT') {
+        var d = L.normDate(r.data_ora), mk2 = d.slice(0, 7), q = M[mk2]; if (!q) return;
+        if (r.tipo === 'FAULTY') q.outF++; else if (r.tipo === 'GOOD') q.outG++; else if (r.tipo === 'NEW' || r.tipo === 'REUSE') q.outNR++; else if (r.tipo === 'BALANCING') q.outB++;
+        var kd = L.s(r.ddt) || L.s(r.id_spedizione); if (kd) q.ddt[kd] = 1;
+        if (mk2 === sel) {
+          var g = Kpi.gruppo(r.controparte), x = dest[g] = dest[g] || { g: g, schede: 0, ddt: {}, sped: {} };
+          x.schede++; if (kd) x.ddt[kd] = 1; if (r.id_spedizione) { x.sped[r.id_spedizione] = 1; idSped[r.id_spedizione] = 1; }
+        }
+      }
+    });
+    // percentuali entro le soglie
+    var K = Kpi.DEF.map(function (def) {
+      var s = Kpi.soglie(def.n, def.def);
+      return { def: def, s: s, mesi: mesi.map(function (m) { var v = tempi[def.n][m] || []; return { m: m, n: v.length, p: s.map(function (t) { return v.length ? Math.round(v.filter(function (x) { return x <= t[0]; }).length / v.length * 1000) / 10 : null; }) }; }) };
+    });
+    // colli e bancali: solo spedizioni create dall'app (lo storico migrato non li ha)
+    var SP = DB.t.SPEDIZIONI ? DB.t.SPEDIZIONI.rows : [], CO = DB.t.SPEDIZIONI_COLLI ? DB.t.SPEDIZIONI_COLLI.rows : [], spI = {}, coI = {};
+    SP.forEach(function (s) { if (idSped[s.id_spedizione]) spI[s.id_spedizione] = s; });
+    CO.forEach(function (c) { if (!spI[c.id_spedizione]) return; var o = coI[c.id_spedizione] = coI[c.id_spedizione] || { colli: 0, bancali: 0 }; if (/BANCAL|PALLET|PLT|EPAL/i.test(c.tipo_collo)) o.bancali++; else o.colli++; });
+    var D = Object.keys(dest).map(function (k) {
+      var x = dest[k], ids = Object.keys(x.sped).filter(function (i) { return spI[i]; }), col = 0, ban = 0, kg = 0;
+      ids.forEach(function (i) { var c = coI[i]; if (c) { col += c.colli; ban += c.bancali; } else col += parseInt(spI[i].n_colli, 10) || 0; kg += parseFloat(String(spI[i].peso_tot_kg).replace(',', '.')) || 0; });
+      return { g: x.g, asp: !Kpi.rip(x.g), schede: x.schede, ddt: Object.keys(x.ddt).length, colli: ids.length ? col : null, bancali: ids.length ? ban : null, kg: ids.length ? Math.round(kg) : null };
+    }).sort(function (a, b) { return (a.asp - b.asp) || a.g.localeCompare(b.g); });
+    // giacenza attuale
+    var am = {}, ap = {}; (Kpi.art || []).forEach(function (a) { var m = L.mat(a.material); if (m && !am[m]) am[m] = a; var p = L.up(a.pn); if (p && !ap[p]) ap[p] = a; });
+    var G = { buffer: 0, faulty: 0, scrap: 0, tipi: {}, tab: {}, tec: {} };
+    DB.t.UNITA.rows.forEach(function (u) {
+      if (Giacenze.A_MAG.indexOf(u.stato) < 0) return;
+      G.tipi[u.tipo] = (G.tipi[u.tipo] || 0) + 1;
+      if (u.tipo === 'FAULTY') { G.faulty++; return; } if (u.tipo === 'SCRAP') { G.scrap++; return; }
+      if (['GOOD', 'NEW', 'REUSE', 'BALANCING'].indexOf(u.tipo) < 0) return;
+      G.buffer++;
+      var a = am[L.mat(u.material)] || ap[L.up(u.pn)] || {}, gr = L.up(a.gruppo_articoli) || '(non in anagrafica)', te = L.up(a.technology) || '—';
+      if (/^MODULO (SFP|XFP)/.test(gr)) gr = 'MODULO SFP-XFP'; else if (a.gruppo_articoli && Kpi.GRUPPI.indexOf(gr) < 0) gr = 'ALTRO (gruppo non standard)'; if (te === 'NOT APPLICABLE') te = 'N/A'; if (te === '—') te = '(senza tecnologia)';
+      var row = G.tab[gr] = G.tab[gr] || { tot: 0 }; row[te] = (row[te] || 0) + 1; row.tot++; G.tec[te] = (G.tec[te] || 0) + 1;
+    });
+    return { mesi: mesi, M: M, K: K, D: D, G: G, note: Blk.dalleNote(R) };
+  },
+  // grafico a colonne in HTML: serie affiancate (o impilate), linea di target, mese scelto evidenziato
+  chart: function (o) {
+    var cats = o.cats, S = o.series, h = o.h || 150, max = o.pct ? 112 : 1;
+    if (!o.pct) cats.forEach(function (c, i) { var t = o.stack ? S.reduce(function (a, s) { return a + (s.vals[i] || 0); }, 0) : Math.max.apply(null, S.map(function (s) { return s.vals[i] || 0; })); max = Math.max(max, t); });
+    if (!o.pct) max = max * 1.12;
+    var leg = S.length > 1 ? '<div class="dash-leg">' + S.map(function (s) { return '<span><i class="dash-sw" style="background:' + s.col + '"></i>' + esc(s.nome) + '</span>'; }).join('') + (o.target ? '<span><i class="kc-tsw"></i>' + esc(o.target.label) + '</span>' : '') + '</div>' : '';
+    var fmt = function (v) { return v === null || v === undefined ? '—' : (o.pct ? String(v).replace('.', ',') + '%' : v.toLocaleString('it-IT')); };
+    var cols = cats.map(function (c, i) {
+      var tip = Kpi.lab(c) + S.map(function (s) { return '\n' + s.nome + ': ' + fmt(s.vals[i]); }).join('') + (o.extra ? o.extra(i) : '');
+      var inner = o.stack
+        ? '<span class="dash-stack">' + S.map(function (s) { var v = s.vals[i] || 0; return v ? '<span class="dash-seg" style="height:' + (v / max * 100) + '%;background:' + s.col + '"></span>' : ''; }).join('') + '</span>'
+        : S.map(function (s) { var v = s.vals[i]; return '<span class="kc-bar" style="height:' + (v ? Math.max(1, Math.min(100, v / max * 100)) : 0) + '%;background:' + s.col + '"></span>'; }).join('');
+      var top = o.stack ? S.reduce(function (a, s) { return a + (s.vals[i] || 0); }, 0) : S[0].vals[i];
+      var lab = c === Kpi.mese && top !== null && top !== undefined ? '<span class="kc-lab" style="bottom:' + Math.min(100, (top / max * 100)) + '%">' + fmt(top) + '</span>' : '';
+      return '<div class="kc-col' + (c === Kpi.mese ? ' sel' : '') + '" title="' + esc(tip) + '">' + inner + lab + '</div>';
+    }).join('');
+    var tl = o.target ? '<div class="kc-target" style="bottom:' + (o.target.v / max * 100) + '%"></div>' : '';
+    return leg + '<div class="kc-plot" style="height:' + h + 'px">' + tl + cols + '</div><div class="kc-x">' + cats.map(function (c) { return '<span' + (c === Kpi.mese ? ' class="sel"' : '') + '>' + esc(o.short ? Kpi.MESI[+c.slice(5) - 1] : Kpi.lab(c)) + '</span>'; }).join('') + '</div>';
+  },
+  esito: function (k, i) {
+    var m = k.mesi[i]; if (!m || !m.n) return '<span class="pill">nessun dato</span>';
+    var ok = k.s.every(function (t, j) { return m.p[j] !== null && m.p[j] >= t[1]; });
+    return '<span class="pill ' + (ok ? 'p-green' : 'p-red') + '">' + (ok ? '✓ in target' : '✗ fuori target') + '</span>';
+  },
+  render: function () {
+    if (!Sto.dati.cur) return;
+    var C = Kpi.dati = Kpi.calcola(), mesi = C.mesi, i = mesi.indexOf(Kpi.mese), M = C.M, cur = M[Kpi.mese];
+    var v = function (k) { return mesi.map(function (m) { return M[m][k]; }); }, n = function (x) { return (x || 0).toLocaleString('it-IT'); };
+    var pc = function (x) { return x === null ? '—' : String(x).replace('.', ',') + '%'; };
+    var h = '';
+    if (Kpi.archNota) h += '<div class="card hint" style="color:var(--amber)">' + esc(Kpi.archNota) + '</div>';
+    // riepilogo del mese
+    h += '<div class="stats">' + [['inF', 'In FAULTY'], ['inG', 'In GOOD'], ['outF', 'Out FAULTY'], ['outG', 'Out GOOD']].map(function (x) { return '<div class="stat"><b>' + n(cur[x[0]]) + '</b><span>' + x[1] + '</span></div>'; }).join('') +
+      '<div class="stat"><b>' + n(Object.keys(cur.ddt).length) + '</b><span>spedizioni (DDT)</span></div>' +
+      C.K.map(function (k) { var m = k.mesi[i]; return '<div class="stat"><b>' + pc(m.p[0]) + '</b><span>KPI' + k.def.n + ' entro ' + k.s[0][0] + ' gg</span></div>'; }).join('') + '</div>';
+    // KPI tempi
+    h += '<div class="kpi-grid">' + C.K.map(function (k) {
+      var s1 = k.s[0], s2 = k.s[1] || s1, m = k.mesi[i];
+      return '<div class="card"><div class="kc-head"><div><div class="card-t" style="font-size:15px">' + esc(k.def.tit) + '</div><div class="hint">' + esc(k.def.sub) + ' · target ' + s1[1] + '% in ' + s1[0] + ' gg lav. – ' + s2[1] + '% in ' + s2[0] + ' gg lav.</div></div>' + Kpi.esito(k, i) + '</div>' +
+        Kpi.chart({ cats: mesi, pct: true, h: 140, series: [{ nome: 'entro ' + s1[0] + ' gg', col: 'var(--s1)', vals: k.mesi.map(function (x) { return x.p[0]; }) }, { nome: 'entro ' + s2[0] + ' gg', col: 'var(--s2)', vals: k.mesi.map(function (x) { return x.p[1] === undefined ? null : x.p[1]; }) }],
+          target: { v: s1[1], label: 'target ' + s1[1] + '%' }, extra: function (j) { return '\npezzi: ' + k.mesi[j].n; } }) +
+        '<div class="hint" style="margin-top:6px">' + esc(Kpi.lab(Kpi.mese)) + ': ' + pc(m.p[0]) + ' entro ' + s1[0] + ' gg · ' + pc(m.p[1] === undefined ? null : m.p[1]) + ' entro ' + s2[0] + ' gg · ' + n(m.n) + ' pezzi</div></div>';
+    }).join('') + '</div>';
+    // volumi
+    h += '<div class="card"><div class="card-t" style="font-size:15px;margin-bottom:8px">Volumi INBOUND – OUTBOUND</div><div class="hint" style="margin-bottom:8px">Ingressi per mese di registrazione VLT, uscite per data out.</div><div class="kpi-grid k4">' +
+      [['inF', 'IN FAULTY', 'var(--s1)'], ['outF', 'OUT FAULTY', 'var(--s1)'], ['inG', 'IN GOOD', 'var(--s3)'], ['outG', 'OUT GOOD', 'var(--s3)']].map(function (x) {
+        return '<div><div class="kc-sub">' + x[1] + '</div>' + Kpi.chart({ cats: mesi, h: 110, short: true, series: [{ nome: x[1], col: x[2], vals: v(x[0]) }] }) + '</div>';
+      }).join('') + '</div></div>';
+    // RMA delivered + spedizioni
+    h += '<div class="kpi-grid">' +
+      '<div class="card"><div class="card-t" style="font-size:15px;margin-bottom:8px">RMA delivered</div>' + Kpi.chart({ cats: mesi, stack: true, h: 150, series: [{ nome: 'GOOD', col: 'var(--s1)', vals: v('outG') }, { nome: 'NEW/REUSE', col: 'var(--s2)', vals: v('outNR') }, { nome: 'BALANCING', col: 'var(--s3)', vals: v('outB') }] }) + '</div>' +
+      '<div class="card"><div class="card-t" style="font-size:15px;margin-bottom:8px">Spedizioni (DDT distinti)</div>' + Kpi.chart({ cats: mesi, h: 150, series: [{ nome: 'Spedizioni', col: 'var(--s7)', vals: mesi.map(function (m) { return Object.keys(M[m].ddt).length; }) }] }) + '</div></div>';
+    // spedizioni per destino nel mese
+    var nn = function (x) { return x === null ? '<span style="color:var(--muted)">—</span>' : n(x); }, T = { s: 0, d: 0 };
+    C.D.forEach(function (d) { T.s += d.schede; T.d += d.ddt; });
+    h += '<div class="card"><div class="card-t" style="font-size:15px">Shipment ' + esc(Kpi.lab(Kpi.mese)) + ' per destino</div><div class="hint" style="margin-bottom:8px">Colli, bancali e peso solo per le spedizioni create dal tool (lo storico migrato non li ha). ASP = destino che non è un riparatore.</div>' +
+      '<div class="tbl-wrap"><table><thead><tr><th>Destino</th><th></th><th>Nr schede</th><th>Spedizioni</th><th>Colli</th><th>Bancali</th><th>Peso kg</th></tr></thead><tbody>' +
+      C.D.map(function (d) { return '<tr><td>' + esc(d.g) + '</td><td>' + (d.asp ? '<span class="pill p-amber">ASP</span>' : '<span class="pill p-blue">repairer</span>') + '</td><td class="mono">' + n(d.schede) + '</td><td class="mono">' + n(d.ddt) + '</td><td class="mono">' + nn(d.colli) + '</td><td class="mono">' + nn(d.bancali) + '</td><td class="mono">' + nn(d.kg) + '</td></tr>'; }).join('') +
+      '<tr style="font-weight:700"><td>Totale</td><td></td><td class="mono">' + n(T.s) + '</td><td class="mono">' + n(T.d) + '</td><td></td><td></td><td></td></tr></tbody></table></div></div>';
+    // giacenza attuale
+    var G = C.G, tec = Object.keys(G.tec).sort(function (a, b) { return G.tec[b] - G.tec[a]; }), gr = Object.keys(G.tab).sort(function (a, b) { return G.tab[b].tot - G.tab[a].tot; });
+    h += '<div class="card"><div class="card-t" style="font-size:15px">Giacenza HUB attuale</div><div class="hint" style="margin-bottom:8px">Fotografia di oggi (a magazzino, anche bloccati / in attesa). Buffer = GOOD + NEW + REUSE + BALANCING; righe per gruppo articoli, colonne per tecnologia (da ARTICOLI).</div>' +
+      '<div class="stats"><div class="stat"><b>' + n(G.buffer) + '</b><span>buffer good</span></div><div class="stat"><b>' + n(G.faulty) + '</b><span>faulty hub transito</span></div><div class="stat"><b>' + n(G.scrap) + '</b><span>scrap / dismissed</span></div>' +
+      ['GOOD', 'NEW', 'REUSE', 'BALANCING'].filter(function (t) { return G.tipi[t]; }).map(function (t) { return '<div class="stat"><b>' + n(G.tipi[t]) + '</b><span>di cui ' + esc(t) + '</span></div>'; }).join('') + '</div>' +
+      '<div class="tbl-wrap"><table><thead><tr><th>Gruppo articoli</th>' + tec.map(function (t) { return '<th>' + esc(t) + '</th>'; }).join('') + '<th>Totale</th></tr></thead><tbody>' +
+      gr.map(function (g) { return '<tr><td>' + esc(g) + '</td>' + tec.map(function (t) { return '<td class="mono">' + (G.tab[g][t] ? n(G.tab[g][t]) : '') + '</td>'; }).join('') + '<td class="mono"><b>' + n(G.tab[g].tot) + '</b></td></tr>'; }).join('') +
+      '<tr style="font-weight:700"><td>Totale</td>' + tec.map(function (t) { return '<td class="mono">' + n(G.tec[t]) + '</td>'; }).join('') + '<td class="mono">' + n(G.buffer) + '</td></tr></tbody></table></div></div>';
+    // blocchi VLT
+    var B = Blk.attivi().slice().sort(function (a, b) { return L.normDate(b.data).localeCompare(L.normDate(a.data)); });
+    h += '<div class="card"><div class="row"><div class="card-t" style="font-size:15px">Blocchi VLT registrati</div><div class="spacer"></div><button class="btn ghost sm" onclick="Blk.apri()">⛔ Registra blocco VLT</button></div>' +
+      '<div class="hint" style="margin:6px 0 8px">Questi giorni non si contano nei KPI dei tempi.</div>' +
+      (B.length ? '<div class="tbl-wrap"><table><thead><tr><th>Giorno</th><th>Motivo</th><th>Registrato da</th><th></th></tr></thead><tbody>' + B.map(function (r) { return '<tr><td class="mono">' + esc(L.itDate(r.data)) + '</td><td>' + esc(r.motivo) + '</td><td>' + esc(Dash.nome(r.creato_da, '')) + ' · ' + esc(Sto.dataOra(r.creato_il)) + '</td><td>' + (App.isAdmin ? '<button class="btn ghost sm" onclick="Blk.annulla(\'' + esc(r.id_blocco) + '\')">Annulla</button>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>' : '<div class="empty">Nessun blocco registrato</div>') +
+      (C.note.length ? '<div class="hint" style="margin-top:10px">Nelle note dei movimenti c\'è "' + Blk.NOTA + '" in giorni non registrati come blocco: ' + C.note.map(function (x) { return '<button class="btn ghost sm" style="padding:1px 8px" onclick="Blk.apri(\'' + x[0] + '\')">' + esc(L.itDate(x[0])) + '</button> (' + x[1] + ' righe)'; }).join(' · ') + '. Clicca un giorno per registrarlo, se fu davvero un blocco.</div>' : '') + '</div>';
+    $('kpiBody').innerHTML = h;
+  },
+  excel: function () {
+    var C = Kpi.dati; if (!C) return;
+    var rowsK = []; C.K.forEach(function (k) { k.mesi.forEach(function (m) { rowsK.push(['KPI' + k.def.n, k.def.tipi.join('+'), m.m, m.n, m.p[0], k.s[0][0] + ' gg ≥ ' + k.s[0][1] + '%', m.p[1] === undefined ? '' : m.p[1], k.s[1] ? k.s[1][0] + ' gg ≥ ' + k.s[1][1] + '%' : '']); }); });
+    var tec = Object.keys(C.G.tec);
+    Xls.scarica('KPI_FLM_' + Kpi.mese, [
+      { nome: 'KPI tempi', headers: ['KPI', 'Tipo', 'Mese', 'Pezzi', '% soglia 1', 'Target 1', '% soglia 2', 'Target 2'], rows: rowsK },
+      { nome: 'Volumi', headers: ['Mese', 'IN FAULTY', 'IN GOOD', 'IN NEW/REUSE', 'OUT FAULTY', 'OUT GOOD', 'OUT NEW/REUSE', 'OUT BALANCING', 'Spedizioni (DDT)'], rows: C.mesi.map(function (m) { var o = C.M[m]; return [m, o.inF, o.inG, o.inNR, o.outF, o.outG, o.outNR, o.outB, Object.keys(o.ddt).length]; }) },
+      { nome: 'Shipment ' + Kpi.mese, headers: ['Destino', 'Tipo', 'Nr schede', 'Spedizioni', 'Colli', 'Bancali', 'Peso kg'], rows: C.D.map(function (d) { return [d.g, d.asp ? 'ASP' : 'REPAIRER', d.schede, d.ddt, d.colli === null ? '' : d.colli, d.bancali === null ? '' : d.bancali, d.kg === null ? '' : d.kg]; }) },
+      { nome: 'Giacenza attuale', headers: ['Gruppo articoli'].concat(tec, ['Totale']), rows: Object.keys(C.G.tab).map(function (g) { return [g].concat(tec.map(function (t) { return C.G.tab[g][t] || 0; }), [C.G.tab[g].tot]); }) },
+      { nome: 'Blocchi VLT', headers: ['Giorno', 'Motivo', 'Registrato da', 'Registrato il'], rows: Blk.attivi().map(function (r) { return [L.normDate(r.data), r.motivo, r.creato_da, r.creato_il]; }) }
+    ]);
+  }
+};
+
 var Dash = {
   periodo: '30', metrica: 'tot', op: '', dati: null,
   MET: { tot: 'Totale operazioni', in: 'Ingressi', ack: 'Uscite ACK', rma: 'Uscite RMA / balancing', spunte: 'Pezzi spuntati ACK' },
