@@ -3593,7 +3593,17 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
           <div class="step-body">✕ annulla il carico (il pezzo torna in giacenza senza RMA). ⏸ lo mette in pending con un motivo.</div>
         </div>
       </div>
-    </div><div class="infobox info"><span class="ib-icon">ℹ️</span><div class="ib-body">Il tab <strong>Carichi NEW/REUSE</strong> in alto gestisce invece le pratiche col cliente: file inviato al Service Desk, ritorno lavorato e messa in uscita RMA.</div></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">4</span>
+        <div>
+          <div class="step-title">Pratiche col cliente (tab Carichi NEW/REUSE)</div>
+          <div class="step-body">A ogni ingresso NEW/REUSE il tool crea il file per il Service Desk / cliente.</div>
+        </div>
+      </div>
+      <div class="step-detail"><ul class="checklist "><li><span>Colonne gialle da compilare: <strong>RMA</strong> (facoltativo: RMA già destinato a quel pezzo), <strong>DESTINAZIONE</strong> (menu a tendina) e <strong>MATERIAL SAP CODE</strong>.</span></li><li><span>Il <strong>material</strong> è già proposto dal P/N (anagrafica articoli), con il commento <em>"Verificare esattezza del material"</em>: il cliente lo corregge se serve. Se il P/N non è in anagrafica la cella è vuota con il commento "inseriscilo".</span></li><li><span><strong>⬆ Carica file lavorato</strong> salva solo il file (stato <em>lavorata dal cliente</em>) e mostra cosa controllare: RMA senza destinazione o il contrario, cifre sbagliate, RMA ripetuti o già usati, destinazioni sconosciute, material mancante.</span></li><li><span>Per l'uscita serve sempre il clic su <strong>Metti in uscita RMA</strong>: anteprima riga per riga, solo le righe corrette diventano carichi (RMA, destinazione, PO e material sulla scheda).</span></li></ul></div>
+    </div><div class="infobox info"><span class="ib-icon">ℹ️</span><div class="ib-body">Il caricamento del file lavorato non manda nulla in uscita: è solo il passaggio delle informazioni del cliente. L'uscita parte dal clic su <strong>Metti in uscita RMA</strong>.</div></div>
   </div>
   <div class="nav-btns">
     <button class="nbtn prev" onclick="goto('e',8)">← RMA · Ritorni in giacenza</button>
@@ -3903,20 +3913,30 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
           
         </div>
       </div>
-      <div class="step-detail"><div class="gtbl"><div class="gtbl-head" style="display:flex"><div class="gtbl-th" style="flex:1">Sezione</div><div class="gtbl-th" style="flex:1">Come si calcola</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">KPI₁ · KPI₂ · KPI₃</div><div class="gtbl-cell" style="flex:1">Allineamento VLT di FAULTY, GOOD e NEW/REUSE: giorni lavorativi dalla <em>data in hub</em> alla <em>registrazione VLT</em>. % entro le due soglie e target (✓ in target / ✗ fuori target)</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Volumi</div><div class="gtbl-cell" style="flex:1">IN FAULTY/GOOD per mese di registrazione VLT; OUT FAULTY/GOOD per data out</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">RMA delivered</div><div class="gtbl-cell" style="flex:1">Uscite GOOD, NEW/REUSE e BALANCING per mese</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Spedizioni e Shipment per destino</div><div class="gtbl-cell" style="flex:1">DDT distinti per mese; schede per destino nel mese (ASP o repairer). Colli, bancali e peso solo per le spedizioni create dal tool</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Giacenza HUB attuale</div><div class="gtbl-cell" style="flex:1">Buffer (GOOD+NEW+REUSE+BALANCING), FAULTY in transito, SCRAP; tabella per gruppo articoli e tecnologia (da Anagrafiche → Articoli)</div></div></div></div>
+      <div class="step-detail"><div class="gtbl"><div class="gtbl-head" style="display:flex"><div class="gtbl-th" style="flex:1">Sezione</div><div class="gtbl-th" style="flex:1">Come si calcola</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">KPI₁ · KPI₂ · KPI₃</div><div class="gtbl-cell" style="flex:1">Allineamento VLT di FAULTY, GOOD e NEW/REUSE: giorni lavorativi dalla <em>data in hub</em> alla <em>registrazione VLT</em>. % entro le due soglie e target (✓ in target / ✗ fuori target)</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">KPI₆</div><div class="gtbl-cell" style="flex:1">Delivery FAULTY al riparatore: giorni lavorativi dal giorno in cui la scheda risulta <em>in ACK su VLT</em> all'uscita (DDT ACK). Il tool registra da solo quel giorno a ogni lettura del VLT (foglio ACK_VLT). Calcolo effettivo dal primo giorno di tracciamento; i mesi prima mostrano i valori della BPR (barre chiare, Admin → KPI storico). Dettaglio per riparatore nel mese</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Volumi</div><div class="gtbl-cell" style="flex:1">IN FAULTY/GOOD per mese di registrazione VLT; OUT FAULTY/GOOD per data out</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">RMA delivered</div><div class="gtbl-cell" style="flex:1">Uscite GOOD, NEW/REUSE e BALANCING per mese</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Spedizioni e Shipment per destino</div><div class="gtbl-cell" style="flex:1">DDT distinti per mese; schede per destino nel mese (ASP o repairer). Colli, bancali e peso solo per le spedizioni create dal tool</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Giacenza HUB attuale</div><div class="gtbl-cell" style="flex:1">Buffer (GOOD+NEW+REUSE+BALANCING), FAULTY in transito, SCRAP; tabella per gruppo articoli e tecnologia (da Anagrafiche → Articoli)</div></div></div></div>
     </div>
     <div class="step">
       <div class="step-header">
         <span class="step-num purple">3</span>
         <div>
           <div class="step-title">Giorni lavorativi</div>
-          <div class="step-body">Non si contano sabato, domenica, i festivi (parametro <code>kpi_festivi</code>, Pasquetta automatica) e i <strong>giorni di blocco VLT</strong> registrati.</div>
+          <div class="step-body">Non si contano sabato, domenica, i festivi (parametro <code>kpi_festivi</code>, Pasquetta automatica), i <strong>giorni di blocco VLT</strong> e le <strong>chiusure ATS</strong>. Per il KPI₆ non si contano anche i giorni in cui <strong>quel riparatore</strong> è chiuso.</div>
         </div>
       </div>
     </div>
     <div class="step">
       <div class="step-header">
         <span class="step-num purple">4</span>
+        <div>
+          <div class="step-title">Chiusure programmate (solo admin)</div>
+          <div class="step-body"><strong>📅 Chiusura</strong> nel tab KPI, oppure Admin → <strong>Chiusure programmate</strong> (accanto al Calendario uscite). Scegli ATS o Ditta, dal / al (compresi) e motivo.</div>
+        </div>
+      </div>
+      <div class="step-detail"><ul class="checklist "><li><span><strong>ATS</strong> (la nostra azienda chiusa): giorni esclusi da tutti i KPI.</span></li><li><span><strong>Ditta</strong>: scrivi <code>TELEBIT</code> per tutte le sedi o la destinazione precisa (es. <code>TELEBIT MI - FASTWEB</code>).</span></li><li><span>ACK: la scheda del riparatore chiuso è segnata in rosso e <strong>Avvia spunta</strong> non parte; le FAULTY restano in hub.</span></li><li><span>Uscite RMA: GOOD, BALANCING e carichi per quella destinazione vanno <strong>da soli in pending</strong> ("Chiusura programmata: …"); i ritorni in giacenza verso di lei non si abbinano.</span></li><li><span>Alla riapertura GOOD e BALANCING tornano da sole in uscita <strong>senza RMA</strong>: il vecchio resta nelle note come "RMA Precedente …" e serve quello nuovo. I carichi NEW/REUSE restano in pending con l'avviso: 🗑 Elimina annulla il carico, poi si rifà con il nuovo RMA.</span></li><li><span>Per togliere una chiusura: Annulla (con motivo) o stato ANNULLATA in Admin. Tutto finisce nel Log.</span></li></ul></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">5</span>
         <div>
           <div class="step-title">Registrare un blocco VLT</div>
           <div class="step-body">Quando VLT è bloccato: <strong>⛔ Blocco VLT</strong> (tab Ingresso o KPI) → giorno e motivo → <strong>Registra blocco</strong>.</div>
@@ -3926,10 +3946,10 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
     </div>
     <div class="step">
       <div class="step-header">
-        <span class="step-num purple">5</span>
+        <span class="step-num purple">6</span>
         <div>
           <div class="step-title">KPI non ancora presenti</div>
-          <div class="step-body">KPI₅ (consegna GOOD dalla apertura RMA), KPI₆ (consegna FAULTY al riparatore), dismissioni e anomalie VLT (F2/F3) arriveranno quando ne avremo definito con precisione il calcolo o avremo l'estrazione VLT delle anomalie.</div>
+          <div class="step-body">KPI₅ (consegna GOOD dalla apertura RMA), dismissioni e anomalie VLT (F2/F3) arriveranno quando ne avremo definito con precisione il calcolo o avremo l'estrazione VLT delle anomalie.</div>
         </div>
       </div>
     </div>
@@ -3956,7 +3976,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
           <div class="step-body">In <strong>Admin</strong> scegli la sezione, modifica le celle, <strong>+ Riga</strong> per aggiungere e <strong>Salva modifiche</strong>.</div>
         </div>
       </div>
-      <div class="step-detail"><div class="gtbl"><div class="gtbl-head" style="display:flex"><div class="gtbl-th" style="flex:1">Sezione</div><div class="gtbl-th" style="flex:1">Contenuto</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Operatori</div><div class="gtbl-cell" style="flex:1">Email, nome, sigla, ruolo, attivo</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Riparatori / Alias riparatori VLT</div><div class="gtbl-cell" style="flex:1">Dati DDT ACK; nome come scritto in VLT → codice riparatore (es. CRC, CReC e CR&amp;C → CRC: stesso ACK)</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Depositi VLT</div><div class="gtbl-cell" style="flex:1">Codice deposito → destinazione (mittente e destinazione GOOD)</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Controparti</div><div class="gtbl-cell" style="flex:1">Mittenti e destinazioni con indirizzo per i DDT RMA</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Calendario uscite</div><div class="gtbl-cell" style="flex:1">Riparatori in uscita per giorno</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Vettori · Regole barcode</div><div class="gtbl-cell" style="flex:1">Prefisso AWB; estrazione seriale/PN dal barcode</div></div></div></div>
+      <div class="step-detail"><div class="gtbl"><div class="gtbl-head" style="display:flex"><div class="gtbl-th" style="flex:1">Sezione</div><div class="gtbl-th" style="flex:1">Contenuto</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Operatori</div><div class="gtbl-cell" style="flex:1">Email, nome, sigla, ruolo, attivo</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Riparatori / Alias riparatori VLT</div><div class="gtbl-cell" style="flex:1">Dati DDT ACK; nome come scritto in VLT → codice riparatore (es. CRC, CReC e CR&amp;C → CRC: stesso ACK)</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Depositi VLT</div><div class="gtbl-cell" style="flex:1">Codice deposito → destinazione (mittente e destinazione GOOD)</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Controparti</div><div class="gtbl-cell" style="flex:1">Mittenti e destinazioni con indirizzo per i DDT RMA</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Calendario uscite</div><div class="gtbl-cell" style="flex:1">Riparatori in uscita per giorno</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Chiusure programmate</div><div class="gtbl-cell" style="flex:1">Ferie ATS e chiusure delle ditte (KPI, ACK, uscite RMA)</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">KPI storico (BPR)</div><div class="gtbl-cell" style="flex:1">Valori KPI dei mesi non calcolati dal tool</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Vettori · Regole barcode</div><div class="gtbl-cell" style="flex:1">Prefisso AWB; estrazione seriale/PN dal barcode</div></div></div></div>
     </div>
     <div class="step">
       <div class="step-header">
@@ -4040,7 +4060,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
           
         </div>
       </div>
-      <div class="step-detail"><div class="gtbl"><div class="gtbl-head" style="display:flex"><div class="gtbl-th" style="flex:1">Se cambia…</div><div class="gtbl-th" style="flex:1">Dove si cambia</div><div class="gtbl-th" style="flex:1">Esempio / nota</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">I festivi</div><div class="gtbl-cell mono" style="flex:1">Parametri → kpi_festivi</div><div class="gtbl-cell" style="flex:1">MM-GG ogni anno (es. 08-15) o AAAA-MM-GG per un giorno solo; Pasquetta è automatica. Aggiungi qui il santo patrono se il magazzino chiude</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">I target dei KPI</div><div class="gtbl-cell mono" style="flex:1">Parametri → kpi1_target / kpi2_target / kpi3_target</div><div class="gtbl-cell" style="flex:1">giorni:percentuale, due soglie (oggi 1:95,2:100 e per NEW/REUSE 5:80,7:100)</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Un giorno di blocco VLT</div><div class="gtbl-cell mono" style="flex:1">Tab Ingresso o KPI → ⛔ Blocco VLT</div><div class="gtbl-cell" style="flex:1">Annullabile solo da un admin</div></div></div></div>
+      <div class="step-detail"><div class="gtbl"><div class="gtbl-head" style="display:flex"><div class="gtbl-th" style="flex:1">Se cambia…</div><div class="gtbl-th" style="flex:1">Dove si cambia</div><div class="gtbl-th" style="flex:1">Esempio / nota</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">I festivi</div><div class="gtbl-cell mono" style="flex:1">Parametri → kpi_festivi</div><div class="gtbl-cell" style="flex:1">MM-GG ogni anno (es. 08-15) o AAAA-MM-GG per un giorno solo; Pasquetta è automatica. Aggiungi qui il santo patrono se il magazzino chiude</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">I target dei KPI</div><div class="gtbl-cell mono" style="flex:1">Parametri → kpi1_target … kpi6_target</div><div class="gtbl-cell" style="flex:1">giorni:percentuale, due soglie (oggi 1:95,2:100; NEW/REUSE 5:80,7:100; KPI₆ 6:95,11:100)</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Ferie ATS o chiusura di una ditta</div><div class="gtbl-cell mono" style="flex:1">Admin → Chiusure programmate (o tab KPI → 📅 Chiusura)</div><div class="gtbl-cell" style="flex:1">Solo admin. Esclude i giorni dai KPI, blocca ACK e uscite verso la ditta chiusa</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">I valori BPR dei mesi passati</div><div class="gtbl-cell mono" style="flex:1">Admin → KPI storico (BPR)</div><div class="gtbl-cell" style="flex:1">kpi, mese AAAA-MM, perc_1, perc_2: usati dove il tool non calcola</div></div><div class="gtbl-row"><div class="gtbl-cell" style="flex:1">Un giorno di blocco VLT</div><div class="gtbl-cell mono" style="flex:1">Tab Ingresso o KPI → ⛔ Blocco VLT</div><div class="gtbl-cell" style="flex:1">Annullabile solo da un admin</div></div></div></div>
     </div>
     <div class="step">
       <div class="step-header">
