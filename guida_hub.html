@@ -312,7 +312,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
   <button class="mod-btn active-p" id="mbtn-p" onclick="switchModule('p')"><span class="mod-icon">📋</span>Presenze</button>
   <button class="mod-btn" id="mbtn-s" onclick="switchModule('s')"><span class="mod-icon">📦</span>Spedizioni AWB</button>
   <button class="mod-btn" id="mbtn-g" onclick="switchModule('g')"><span class="mod-icon">🟢</span>GRN Manager</button>
-  <button class="mod-btn" id="mbtn-e" onclick="switchModule('e')"><span class="mod-icon">🚚</span>Easyloader</button>
+  <button class="mod-btn" id="mbtn-e" onclick="switchModule('e')"><span class="mod-icon">🚚</span>Fastweb FLM</button>
 </div>
 
 <div class="layout">
@@ -3064,12 +3064,12 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
      ════════════════════════════════ -->
 <div class="module-panel" id="panel-e">
 
-<!-- ══ E0: Easyloader Hub FLM ══ -->
+<!-- ══ E0: ATS - Fastweb FLM ══ -->
 <div class="chapter active" id="e-ch-0">
   <div class="chapter-header">
     <div class="ch-tag purple">Introduzione · Passo 1 di 18</div>
-    <h1 class="ch-title">Easyloader<br>Hub FLM</h1>
-    <p class="ch-desc">Easyloader è il modulo dell'Hub che gestisce tutto il magazzino FLM: ingressi, uscite ACK verso i riparatori, uscite RMA verso le ASP, balancing, pratiche Juniper, giacenza e chiusure su VLT. Sostituisce i vecchi fogli Easyloader, Inventario giornaliero, RMA giornalieri e ACK: i dati sono in un unico database Google (DB_EASYLOADER).</p>
+    <h1 class="ch-title">ATS - Fastweb FLM</h1>
+    <p class="ch-desc">ATS - Fastweb FLM è il modulo dell'Hub che gestisce tutto il magazzino FLM: ingressi, uscite ACK verso i riparatori, uscite RMA verso le ASP, balancing, pratiche Juniper, giacenza e chiusure su VLT. Sostituisce i vecchi fogli Easyloader, Inventario giornaliero, RMA giornalieri e ACK: i dati sono in un unico database Google (DB_EASYLOADER).</p>
   </div>
   <div class="steps">
     <div class="step">
@@ -3077,7 +3077,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
         <span class="step-num purple">1</span>
         <div>
           <div class="step-title">Apri il modulo dall'Hub</div>
-          <div class="step-body">Dal menu laterale dell'Hub (☰) clicca <strong>Easyloader</strong>, oppure la scheda <strong>Easyloader</strong> nella home. Il modulo si apre dentro l'Hub.</div>
+          <div class="step-body">Dal menu laterale dell'Hub (☰) clicca <strong>ATS - Fastweb FLM</strong>, oppure la sua scheda nella home. Il modulo si apre dentro l'Hub.</div>
         </div>
       </div>
     </div>
@@ -3315,6 +3315,16 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
     <div class="step">
       <div class="step-header">
         <span class="step-num purple">5</span>
+        <div>
+          <div class="step-title">Schede lette ma non in ACK (Spare false)</div>
+          <div class="step-body">Spesso si barcoda tutto lo scaffale. Se leggi una scheda che <strong>non è nella lista</strong>, l'app la segnala in rosso: <em>SPARE FALSE · stato VLT … — NON va in uscita (resta ferma in hub)</em>, la traccia nell'elenco <strong>Spare false</strong> e la lascia in giacenza.</div>
+        </div>
+      </div>
+      <div class="step-detail"><ul class="checklist amber"><li><span>Se lo stato è cambiato davvero (es. <strong>stato VLT aggiornato dopo le 7:00</strong>, dopo l'estrazione del mattino), premi <strong>➕ Metti in ACK</strong> sulla riga: vedi lo stato VLT e il riparatore, scegli o scrivi il <strong>motivo</strong> (obbligatorio) e confermi.</span></li><li><span>La scheda entra nell'ACK come spuntata, con la nota <code>AGGIUNTO IN SPUNTA: motivo (stato VLT: …)</code>; la segnalazione si chiude come risolta e nel Log resta ACK_AGGIUNTO_IN_SPUNTA con operatore, stato e motivo.</span></li><li><span>Se il riparatore su VLT è diverso da quello dell'ACK, l'app lo avvisa prima di confermare.</span></li><li><span>Si possono aggiungere solo FAULTY in giacenza non bloccate; ✕ toglie una lettura fatta per errore.</span></li></ul></div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">6</span>
         <div>
           <div class="step-title">Chiudi, colli e DDT</div>
           <div class="step-body">Con il palmarino, prima di chiudere l'app chiede di <strong>confermare l'operatore</strong> ("Confermo, sono RF" oppure Cambia operatore): sarà la sigla OP dei movimenti e del DDT. <strong>Chiudi spunta</strong>, inserisci colli e pesi (<strong>+ Collo</strong>, misure proposte) e premi <strong>Genera DDT</strong>: numero dalla serie ACK, movimenti OUT, PDF su Drive. Poi <strong>Stampa DDT</strong>.</div>
@@ -3988,7 +3998,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
   <div class="complete-screen">
     <div class="complete-icon">📦</div>
     <div class="complete-title purple">Guida completata!</div>
-    <p class="complete-sub">Hai visto tutte le funzioni del modulo Easyloader. Puoi rileggere qualsiasi sezione dal menu laterale.</p>
+    <p class="complete-sub">Hai visto tutte le funzioni del modulo ATS - Fastweb FLM. Puoi rileggere qualsiasi sezione dal menu laterale.</p>
     <div style="display:flex;gap:12px;justify-content:center;flex-wrap:wrap;margin-top:20px"><button class="nbtn prev" onclick="goto('e',0)" style="border-radius:8px">↩ Ricomincia dall'inizio</button></div>
   </div>
   </div>
@@ -4029,7 +4039,7 @@ function switchModule(mod) {
   document.getElementById('mbtn-'+mod).className = 'mod-btn ' + cls;
 
   // Aggiorna sidebar logo
-  var subs = {p:'📋 Modulo Presenze', s:'📦 Spedizioni AWB', g:'🟢 GRN Manager', e:'🚚 Easyloader FLM'};
+  var subs = {p:'📋 Modulo Presenze', s:'📦 Spedizioni AWB', g:'🟢 GRN Manager', e:'🚚 ATS - Fastweb FLM'};
   document.getElementById('sb-sub').textContent = subs[mod];
 
   // Vai alla sezione corrente del modulo
