@@ -70,7 +70,8 @@ button{font-family:var(--ff-sans)}
 .view.active{display:block}
 
 /* elementi */
-.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px;margin-bottom:14px}
+.card{background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:12px 14px;margin-bottom:10px}
+.card > .hint{margin-top:4px !important}
 .card-h{display:flex;align-items:center;gap:10px;margin-bottom:12px}
 .card-t{font-family:var(--ff-cond);font-size:18px;font-weight:700;letter-spacing:.5px}
 .grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(170px,1fr));gap:10px 12px}
@@ -100,9 +101,9 @@ a.btn{text-decoration:none;display:inline-block}
 .scan-row{display:grid;grid-template-columns:minmax(150px,220px) minmax(320px,1fr) minmax(200px,280px) auto;gap:10px;align-items:start}
 .scan-row .btn{margin-top:19px}
 @media (max-width:900px){.scan-row{grid-template-columns:1fr 1fr}}
-.stats{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
-.stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:8px 14px;min-width:110px}
-.stat b{font-family:var(--ff-cond);font-size:22px;font-weight:800;display:block}
+.stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
+.stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:6px 12px;min-width:96px}
+.stat b{font-family:var(--ff-cond);font-size:20px;font-weight:800;display:block}
 .stat span{font-size:10px;letter-spacing:1px;text-transform:uppercase;color:var(--muted)}
 .tbl-wrap{overflow:auto;border:1px solid var(--border);border-radius:10px;max-height:62vh}
 table{width:100%;border-collapse:collapse;font-size:12.5px}
@@ -428,11 +429,13 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
     <!-- GIACENZE -->
     <div class="view" id="view-newreuse">
       <div class="card"><div class="row">
-        <div class="hint" style="flex:1;line-height:1.5">Ogni ingresso NEW/REUSE crea il file per il Service Desk nella cartella <b>CARICHI NEW REUSE</b>. ✉ manda la mail con il link · ⬆ carica il file lavorato dal cliente (sostituisce quello su Drive) · 📦 mette tutto il file in uscita RMA.</div>
-        <label style="font-size:12px;color:var(--subtle);display:flex;gap:6px;align-items:center"><input type="checkbox" id="nrTutte" onchange="Nr.render()"> anche spedite</label>
-        <button class="btn ghost sm" onclick="Nr.loaded=false;Nr.show()">↻</button>
+        <div class="fg" style="flex:1;min-width:240px"><span class="fl">Cerca</span><input class="fc mono" id="nrQ" placeholder="pratica, mittente, PO/MRN, DDT, AWB, note" oninput="clearTimeout(Nr._qt);Nr._qt=setTimeout(function(){Nr.render()},200)"></div>
+        <div class="fg"><span class="fl">Tipo</span><select class="fc" id="nrTipo" onchange="Nr.render()"><option value="">Tutti</option><option>NEW</option><option>REUSE</option></select></div>
+        <div class="fg"><span class="fl">Stato</span><select class="fc" id="nrStato" onchange="Nr.render()"><option value="ATT">Da completare (non spedite)</option><option value="DA_INVIARE">Da inviare</option><option value="INVIATA">Inviate al SD</option><option value="LAVORATA">Lavorate dal cliente</option><option value="IN_USCITA">In uscita RMA</option><option value="SPEDITA">Spedite</option><option value="">Tutte</option></select></div>
+        <div class="spacer"></div>
+        <button class="btn ghost sm" onclick="Nr.loaded=false;Nr.show()">↻ Aggiorna</button>
         <button class="btn ghost sm" onclick="Nr.grid&&Nr.grid.excel('Pratiche_NEW_REUSE')">⬇ Excel</button>
-      </div></div>
+      </div><div class="hint">Ogni ingresso NEW/REUSE crea il file per il Service Desk (cartella CARICHI NEW REUSE): ✉ mail con il link · ⬆ file lavorato dal cliente · 📦 tutto il file in uscita RMA.</div></div>
       <div class="stats" id="nrStats"></div>
       <div class="tbl-wrap"><table><thead id="nrHead"></thead><tbody id="nrRows"></tbody></table></div><div class="hint" id="nrFoot" style="margin-top:6px"></div>
     </div>
@@ -440,7 +443,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
     <div class="view" id="view-giacenze">
       <div class="card">
         <div class="row">
-          <div class="fg" style="flex:1;min-width:240px"><span class="fl">Cerca (seriale, P/N, FR, RMA, AWB, DDT, mittente, PO, ubicazione, nota)</span><input class="fc mono" id="gQ" oninput="Giacenze.debounce()"></div>
+          <div class="fg" style="flex:1;min-width:240px"><span class="fl">Cerca</span><input class="fc mono" id="gQ" placeholder="seriale, P/N, FR, RMA, AWB, DDT, mittente, PO, ubicazione, nota" oninput="Giacenze.debounce()"></div>
           <div class="fg"><span class="fl">Tipo</span><select class="fc" id="gTipo" onchange="Giacenze.render()"><option value="">Tutti</option></select></div>
           <div class="fg"><span class="fl">Magazzino</span><select class="fc" id="gMag" onchange="Giacenze.render()"><option value="">Tutti</option></select></div>
           <div class="fg"><span class="fl">Stato</span><select class="fc" id="gStato" onchange="Giacenze.render()"><option value="A_MAG">A magazzino (anche bloccati / in attesa)</option><option value="IN_GIACENZA">Disponibili</option><option value="BLOCCATO">Bloccati</option><option value="IN_ATTESA">In attesa</option><option value="IN_LAVORAZIONE">In lavorazione</option><option value="USCITO">Usciti</option><option value="ANNULLATO">Annullati</option><option value="RETTIFICATO">Tolti con rettifica</option><option value="">Tutti</option></select></div>
@@ -490,22 +493,29 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
     <!-- BALANCING -->
     <div class="view" id="view-balancing">
       <div class="card"><div class="row">
+        <div class="fg" style="flex:1;min-width:240px"><span class="fl">Cerca</span><input class="fc mono" id="balQ" placeholder="seriale, RMA, AWB, P/N, mittente, destinatario, note" oninput="clearTimeout(Bal._qt);Bal._qt=setTimeout(function(){Bal.render()},200)"></div>
+        <div class="fg"><span class="fl">Stato</span><select class="fc" id="balStato" onchange="Bal.render()"><option value="NO">Attese</option><option value="SI">Arrivate</option><option value="ANNULLATA">Annullate</option><option value="">Tutte</option></select></div>
+        <label style="font-size:12px;color:var(--subtle);display:flex;gap:6px;align-items:center;margin-bottom:9px"><input type="checkbox" onchange="Bal.tutte=this.checked;Bal.render()"> anche anni precedenti</label>
+        <div class="spacer"></div>
         <button class="btn sm" onclick="Bal.apri()">+ Nuova balancing</button>
         <label class="btn ghost sm" style="cursor:pointer">⬆ Importa Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Bal.importaX(this)"></label>
-        <button class="btn ghost sm" onclick="Bal.grid.excel('Balancing')">⬇ Excel</button>
         <button class="btn ghost sm" onclick="Bal.modello(['MITTENTE','DATA INBOUND','AWB MITTENTE','SERIALE','PN','RMA','DESTINATARIO','CONFERMA PN','INFO EXTRA MAGAZZINO','NOTE'],'modello_balancing.xlsx')">Modello Excel</button>
-        <div class="spacer"></div>
-        <label style="font-size:12px;color:var(--subtle);display:flex;gap:6px;align-items:center"><input type="checkbox" onchange="Bal.tutte=this.checked;Bal.render()"> anche gli anni precedenti</label>
-      </div><div class="hint" style="margin-top:8px">Previsioni di arrivo inserite dal Service Desk. Quando il magazzino registra l'ingresso BALANCING, la riga diventa "arrivata" da sola (gestito = SI).</div></div>
+        <button class="btn ghost sm" onclick="Bal.grid.excel('Balancing')">⬇ Excel</button>
+      </div><div class="hint">Previsioni di arrivo del Service Desk: quando il magazzino registra l'ingresso BALANCING la riga diventa "arrivata" da sola. Clicca una riga attesa per modificarla o annullarla.</div></div>
       <div class="stats" id="balStats"></div>
       <div class="tbl-wrap"><table><thead id="balHead"></thead><tbody id="balRows"></tbody></table></div><div class="hint" id="balFoot" style="margin-top:6px"></div>
     </div>
 
     <!-- JUNIPER -->
     <div class="view" id="view-juniper">
-      <div class="card"><div class="row"><button class="btn sm" onclick="Jun.apri()">+ Nuova pratica</button> <button class="btn ghost sm" onclick="Jun.grid.excel('Juniper')">⬇ Excel</button>
+      <div class="card"><div class="row">
+        <div class="fg" style="flex:1;min-width:240px"><span class="fl">Cerca</span><input class="fc mono" id="junQ" placeholder="FR, case, RMA, seriali, model, AWB, note" oninput="clearTimeout(Jun._qt);Jun._qt=setTimeout(function(){Jun.render()},200)"></div>
+        <div class="fg"><span class="fl">Stato</span><select class="fc" id="junStato" onchange="Jun.render()"><option value="ATT">Attive (non chiuse né annullate)</option><option value="APERTA">Aperte</option><option value="FAULTY_SPEDITA">Faulty spedite</option><option value="GOOD_IN_USCITA">Good in uscita</option><option value="GOOD_SPEDITA">Good spedite</option><option value="CHIUSA">Chiuse</option><option value="ANNULLATA">Annullate</option><option value="">Tutte</option></select></div>
+        <div class="spacer"></div>
+        <button class="btn sm" onclick="Jun.apri()">+ Nuova pratica</button>
         <label class="btn ghost sm" style="cursor:pointer">⬆ Importa Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Jun.importa(this,{fr:['FR JUNIPER','FR'],case_number:['CASE NUMBER'],rma:['RMA'],faulty_model_id:['MODEL ID'],faulty_seriale:['SERIALE'],faulty_pn:['PART NUMBER'],data_ricezione_faulty:['DATA RICEZIONE FAULTY'],awb_ups_faulty:['AWB UPS PER FAULTY'],data_uscita_faulty:['DATA USCITA FAULTY'],note:['NOTE']})"></label>
-      </div><div class="hint" style="margin-top:8px">Pratiche fuori processo: faulty spedite a Juniper via UPS e good ricevute in sostituzione. Clicca una riga per modificarla.</div></div>
+        <button class="btn ghost sm" onclick="Jun.grid.excel('Juniper')">⬇ Excel</button>
+      </div><div class="hint">Pratiche fuori processo: faulty spedite a Juniper via UPS e good ricevute in sostituzione. Clicca una riga per modificarla o annullarla.</div></div>
       <div class="stats" id="junStats"></div>
       <div class="tbl-wrap"><table><thead id="junHead"></thead><tbody id="junRows"></tbody></table></div><div class="hint" id="junFoot" style="margin-top:6px"></div>
     </div>
@@ -874,7 +884,7 @@ var Modal = {
     document.querySelector('#modal .modal').classList.remove('wide');
     var b = $('mBtns'); b.innerHTML = '';
     (buttons || [{ label: 'OK' }]).forEach(function (x) {
-      var e = document.createElement('button'); e.className = 'btn ' + (x.cls || ''); e.textContent = x.label;
+      var e = document.createElement('button'); e.className = 'btn ' + (x.cls || ''); e.textContent = x.label; if (x.title) e.title = x.title;
       e.onclick = function () { if (!x.keep) Modal.close(); if (x.fn) x.fn(); }; b.appendChild(e);
     });
     $('modal').classList.add('show');
@@ -2705,6 +2715,8 @@ Grid.prototype.altri = function () { this.limit += 1000; this.render(); };
 Grid.prototype.render = function (rifaiTesta) {
   var self = this, o = this.o, all = o.rows(), th = $(o.thead), tb = $(o.tbody);
   if (!th || !tb) return;
+  var qq = o.cerca ? L.up(o.cerca()) : '';
+  if (qq) all = all.filter(function (r) { return o.cols.some(function (c) { return !c.noXls && L.up(self.val(c, r)).indexOf(qq) >= 0; }); });
   if (rifaiTesta || !th.dataset.g) { th.innerHTML = this.head(); th.dataset.g = '1'; th.classList.add('g-head'); }
   var list = all.filter(function (r) { return self.match(r); });
   var sc = this.sort && o.cols.find(function (x) { return x.k === self.sort; });
@@ -3749,16 +3761,16 @@ var Rma = {
     if (s === 'inv') return '<div class="row" style="justify-content:flex-end">' + imp + ann + xl + xr + ' <button class="btn ghost sm" onclick="Rma.etichette()" title="Etichetta 10x5 solo per le schede con variazione di destino (tra le righe filtrate)">🏷 Etichette RMA</button>' + (Rma.ieri().length ? ' <button class="btn sm" onclick="Rma.associaIeri()" title="Gli RMA giacenza aperti ieri diventano RMA creato; i più vecchi li controlla il Service Desk">✓ Associa RMA di ieri (' + Rma.ieri().length + ')</button>' : '') + ' <button class="btn sm" ' + (nD ? '' : 'disabled') + ' onclick="Rma.salva()">Salva modifiche' + (nD ? ' (' + nD + ')' : '') + '</button></div>' + info;
     if (s === 'rit') return '<div class="row" style="justify-content:flex-end">' + imp + ann + xl + '</div>' + info;
     if (s === 'car') return '<div class="row">' +
-      '<div class="fg" style="width:240px"><span class="fl">Seriale *</span><input class="fc mono" id="carSer" autocomplete="off" placeholder="spara il seriale" onkeydown="if(event.key===\'Enter\'){event.preventDefault();$(\'carRma\').focus()}" oninput="Rma.carInfo()"><span class="hint" id="carHint"></span></div>' +
+      '<div class="fg" style="width:240px"><span class="fl">Seriale *</span><input class="fc mono" id="carSer" autocomplete="off" placeholder="spara il seriale" onkeydown="if(event.key===\'Enter\'){event.preventDefault();$(\'carRma\').focus()}" oninput="Rma.carInfo()"></div>' +
       '<div class="fg" style="width:120px"><span class="fl">RMA</span><input class="fc mono" id="carRma" autocomplete="off" placeholder="anche dopo"></div>' +
       '<div class="fg" style="width:220px"><span class="fl">Destinazione *</span><input class="fc" id="carDest" list="dlControparti" autocomplete="off"></div>' +
       '<div class="fg" style="width:130px"><span class="fl">PO / MRN</span><input class="fc mono" id="carPo" autocomplete="off"></div>' +
       '<div class="fg" style="width:180px"><span class="fl">Note</span><input class="fc" id="carNote" autocomplete="off" onkeydown="if(event.key===\'Enter\'){event.preventDefault();Rma.carAggiungi()}"></div>' +
-      '<button class="btn" style="margin-bottom:18px" onclick="Rma.carAggiungi()">Aggiungi</button><div class="spacer"></div>' +
-      '<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;align-items:flex-end;margin:0 0 18px auto;flex:1 1 420px"><label class="btn ghost sm" style="cursor:pointer">⬆ Importa Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Rma.carImporta(this)"></label>' +
+      '<button class="btn" onclick="Rma.carAggiungi()">Aggiungi</button></div>' +
+      '<div class="row" style="margin-top:8px;align-items:center"><div style="flex:1;min-width:260px"><div class="hint" id="carHint" style="color:var(--text)"></div><div class="hint" title="Excel RMA / Importa RMA: RMA e destinazione dei carichi già aperti (filtrati qui sotto), compilati dal Service Desk e reimportati. Importa Excel: colonne SERIALE, RMA, DESTINAZIONE, PO, NOTE (anche PV DESTINO, P.O, SERIAL).">Nuovi carichi: solo NEW/REUSE in giacenza, l\'RMA si può dare anche dopo · Excel RMA / Importa RMA aggiornano i carichi aperti filtrati.</div></div>' +
+      '<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;margin-left:auto"><label class="btn ghost sm" style="cursor:pointer">⬆ Importa Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Rma.carImporta(this)"></label>' +
       '<button class="btn ghost sm" onclick="Rma.carModello()">Modello Excel</button> <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button>' + xr + '</div></div>' +
-      '<div class="hint">⬇ Excel RMA / ⬆ Importa RMA: RMA e destinazione dei carichi già aperti (filtrati qui sotto), compilati dal Service Desk e reimportati.</div>' +
-      '<div class="hint">Nuovi carichi: solo pezzi NEW/REUSE in giacenza. Excel: colonne SERIALE, RMA, DESTINAZIONE, PO, NOTE (anche PV DESTINO, P.O, SERIAL). L\'RMA si può dare anche dopo.</div>';
+      '';
     return '<div class="row"><div class="fg" style="width:160px"><span class="fl">Giorno di uscita</span><input class="fc" type="date" id="uscData2" value="' + esc($('uscData').value) + '" onchange="$(\'uscData\').value=this.value;Rma.render()"></div><div class="spacer"></div>' +
       '<button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button> <button class="btn green" id="uscTutti" onclick="Rma.emettiTutti()">Genera i DDT pronti</button></div>' +
       '<div class="hint" style="margin-top:8px">Un DDT per destinazione (serie RMA). Pronta = colli e peso salvati + AWB. Le schede ci sono già per tutte le destinazioni di oggi: puoi mettere colli e AWB subito. I pezzi senza RMA restano non spuntati e si spuntano da soli appena l\'RMA c\'è; se al DDT ne manca qualcuno, l\'app chiede conferma.</div>';
@@ -4557,7 +4569,8 @@ Crud.prototype.apri = function (id) {
   var o = r ? r : (this.c.nuovo ? this.c.nuovo() : {});
   var bt = [{ label: 'Annulla', cls: 'ghost' }];
   if (r && this.c.azioni) this.c.azioni(r).forEach(function (b) { bt.unshift(b); });
-  if (r && this.c.elimina) bt.unshift({ label: '🗑 ' + this.c.elimina.label, cls: 'red', keep: true, fn: function () { self.elimina(id); } });
+  if (r && this.c.elimina && (!this.c.eliminabile || this.c.eliminabile(r) === true)) bt.unshift({ label: '🗑 ' + this.c.elimina.label, cls: 'red', keep: true, title: this.c.elimina.tip || '', fn: function () { self.elimina(id); } });
+  else if (r && this.c.elimina && this.c.eliminabile) bt.unshift({ label: '🗑 ' + this.c.elimina.label, cls: 'red', keep: true, title: this.c.eliminabile(r), fn: function () { toast(self.c.eliminabile(r), 'ko'); } });
   bt.push({ label: 'Salva', cls: 'green', keep: true, fn: function () { self.salva(id); } });
   Modal.html((r ? 'Modifica · ' : 'Nuovo · ') + this.c.titolo + (r ? ' ' + id : ''), this.form(o, !r), bt, true);
 };
@@ -4597,10 +4610,14 @@ Crud.prototype.inserisci = async function (objs) {
 };
 Crud.prototype.elimina = async function (id) {
   var self = this, t = this.t(), r = t.rows.find(function (x) { return x[self.c.id] === id; }), el = this.c.elimina;
-  if (!confirm(el.domanda + '\n\n' + id)) return;
+  var mot = prompt(el.domanda + '\n\n' + id + '\n\nMotivo (obbligatorio):', ''); if (mot === null) return; mot = L.s(mot); if (!mot) { toast('Serve il motivo', 'ko'); return; }
   try {
-    var upd = Object.keys(el.set).map(function (k) { r[k] = el.set[k]; return { range: t.cell(k, r._r), values: [[el.set[k]]] }; });
-    await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', [App.log('ANNULLA', t.name, id, el.set)])]);
+    var now = L.nowStamp(), set = Object.assign({}, el.set);
+    if ('note' in t.idx) set.note = (L.s(r.note) ? L.s(r.note) + ' | ' : '') + 'ANNULLATA ' + now.slice(0, 16) + ' da ' + Auth.email.split('@')[0] + ': ' + mot;
+    if ('rev' in t.idx) set.rev = String((parseInt(r.rev, 10) || 1) + 1); if ('modificato_il' in t.idx) { set.modificato_il = now; set.modificato_da = Auth.email; }
+    var prima = {}; Object.keys(set).forEach(function (k) { prima[k] = r[k]; });
+    var upd = Object.keys(set).filter(function (k) { return k in t.idx; }).map(function (k) { r[k] = set[k]; return { range: t.cell(k, r._r), values: [[set[k]]] }; });
+    await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', [App.log('ANNULLA', t.name, id, { motivo: mot, prima: prima, dopo: set })])]);
     Modal.close(); toast('Fatto', 'ok'); this.render();
   } catch (e) { this.err('Errore: ' + e.message); }
 };
@@ -4627,7 +4644,7 @@ Crud.prototype.show = async function () {
   this.render();
 };
 Crud.prototype.render = function () {
-  if (!this.grid) { var self = this; this.grid = new Grid('crud_' + this.name, Object.assign({ thead: this.c.thead, tbody: this.c.tbody, foot: this.c.foot }, this.c.grid, { rows: function () { return self.c.rows(self.t().rows); } })); if (this.c.filtriIniziali) this.grid.f = this.c.filtriIniziali; }
+  if (!this.grid) { var self = this; this.grid = new Grid('crud_' + this.name, Object.assign({ thead: this.c.thead, tbody: this.c.tbody, foot: this.c.foot }, this.c.grid, { rows: function () { return self.c.rows(self.t().rows); }, cerca: function () { var e = self.c.cerca && $(self.c.cerca); return e ? e.value : ''; } })); if (this.c.filtriIniziali) this.grid.f = this.c.filtriIniziali; }
   this.grid.render(); if (this.c.dopo) this.c.dopo();
 };
 
@@ -4645,17 +4662,18 @@ var Bal = new Crud('bal', {
     var d = DB.t.BALANCING.rows.find(function (x) { return x.id_balancing !== id && L.up(x.seriale) === L.up(o.seriale) && L.up(x.gestito) === 'NO'; });
     return d ? 'Seriale già presente in una balancing aperta (' + d.id_balancing + ')' : '';
   },
-  elimina: { label: 'Annulla balancing', domanda: 'Annullare questa balancing? Non verrà più proposta all\'ingresso.', set: { gestito: 'ANNULLATA' } },
-  rows: function (R) { return R.filter(function (r) { return Bal.tutte || DB.daQuestAnno(r.data_inbound); }); },
-  filtriIniziali: { gestito: 'NO' },
+  elimina: { label: 'Annulla balancing', tip: 'Annullando la balancing la riga esce dalle attese e non viene più proposta all\'ingresso: resta nel foglio come ANNULLATA (filtro Stato → Annullate) con il motivo nelle note, e ne resta traccia nel LOG.', domanda: 'Annullare questa balancing? Esce dalle attese e non verrà più proposta all\'ingresso (resta come ANNULLATA, tracciata nel LOG).', set: { gestito: 'ANNULLATA' } },
+  cerca: 'balQ',
+  rows: function (R) { var st = $('balStato') ? $('balStato').value : 'NO'; return R.filter(function (r) { return (Bal.tutte || DB.daQuestAnno(r.data_inbound)) && (!st || L.up(r.gestito) === st); }); },
+  filtriIniziali: {},
   grid: {
     empty: 'Nessuna balancing', sort: 'data_inbound', dir: -1,
     rowAttr: function (r) { return L.up(r.gestito) === 'SI' || L.up(r.gestito) === 'ANNULLATA' ? 'class="r-off"' : 'class="r-edit" onclick="Bal.apri(\'' + r.id_balancing + '\')" title="Clicca per modificare"'; },
     cols: [
-      { k: 'id_balancing', label: 'ID', cls: 'mono' }, { k: 'mittente', label: 'Mittente', filter: 'select' }, { k: 'data_inbound', label: 'Data inbound', cls: 'mono', get: function (r) { return L.normDate(r.data_inbound); } },
+      { k: 'id_balancing', label: 'ID', cls: 'mono' }, { k: 'mittente', label: 'Mittente', filter: 'select' }, { k: 'data_inbound', label: 'Data inbound', cls: 'mono', filter: 'date', get: function (r) { return L.normDate(r.data_inbound); } },
       { k: 'awb_mittente', label: 'AWB', filter: 'text', cls: 'mono' }, { k: 'seriale', label: 'Seriale', filter: 'text', cls: 'mono' }, { k: 'pn', label: 'P/N', filter: 'select', cls: 'mono' },
       { k: 'rma', label: 'RMA', filter: 'text', cls: 'mono' }, { k: 'destinatario', label: 'Destinatario', filter: 'select' }, { k: 'conferma_pn', label: 'Conferma P/N', cls: 'mono' },
-      { k: 'info_extra', label: 'Info extra', filter: 'text' }, { k: 'gestito', label: 'Gestito', filter: 'select' }, { k: 'data_gestione', label: 'Arrivata il', cls: 'mono', get: function (r) { return L.s(r.data_gestione).slice(0, 10); } }, { k: 'id_unita', label: 'Unità', cls: 'mono' }
+      { k: 'info_extra', label: 'Info extra', filter: 'text' }, { k: 'gestito', label: 'Gestito', filter: 'select' }, { k: 'data_gestione', label: 'Arrivata il', cls: 'mono', filter: 'date', get: function (r) { return L.s(r.data_gestione).slice(0, 10); } }, { k: 'id_unita', label: 'Unità', cls: 'mono' }
     ]
   },
   dopo: function () {
@@ -4689,19 +4707,23 @@ var Jun = new Crud('jun', {
     { k: 'stato', label: 'Stato', type: 'select', opts: ['APERTA', 'FAULTY_SPEDITA', 'GOOD_IN_USCITA', 'GOOD_SPEDITA', 'CHIUSA'] }, { k: 'note', label: 'Note', type: 'area' }
   ],
   nuovo: function () { return { stato: 'APERTA' }; },
+  puoModificare: function (r) { return r.stato !== 'ANNULLATA'; },
+  elimina: { label: 'Annulla pratica', tip: 'Annullando la pratica Juniper la riga esce dalle attive: resta nel foglio come ANNULLATA (filtro Stato → Annullate) con il motivo nelle note, e ne resta traccia nel LOG.', domanda: 'Annullare questa pratica Juniper? Esce dalle attive (resta come ANNULLATA, tracciata nel LOG).', set: { stato: 'ANNULLATA' } },
+  eliminabile: function (r) { return r.stato === 'APERTA' || r.stato === 'FAULTY_SPEDITA' ? true : (r.stato === 'GOOD_IN_USCITA' ? 'La GOOD è in uscita RMA: annulla prima il carico (RMA → Carichi NEW/REUSE), poi la pratica' : 'Pratica già ' + L.s(r.stato).toLowerCase().replace('_', ' ') + ': non si annulla'); },
+  cerca: 'junQ',
   azioni: function (r) { return r.stato === 'CHIUSA' || r.stato === 'GOOD_SPEDITA' ? [] : [{ label: '📦 Metti GOOD in uscita RMA', cls: 'ghost', keep: true, fn: function () { Jun.inUscita(r.id_juniper); } }]; },
-  rows: function (R) { return R; },
+  rows: function (R) { var st = $('junStato') ? $('junStato').value : 'ATT'; return R.filter(function (r) { return st === 'ATT' ? ['CHIUSA', 'ANNULLATA', 'GOOD_SPEDITA'].indexOf(r.stato) < 0 : (!st || r.stato === st); }); },
   filtriIniziali: {},
   grid: {
     empty: 'Nessuna pratica Juniper', sort: 'id_juniper', dir: -1,
-    rowAttr: function (r) { return 'class="r-edit" onclick="Jun.apri(\'' + r.id_juniper + '\')" title="Clicca per modificare"'; },
+    rowAttr: function (r) { return r.stato === 'ANNULLATA' ? 'class="r-off" title="' + esc(r.note) + '"' : 'class="r-edit" onclick="Jun.apri(\'' + r.id_juniper + '\')" title="Clicca per modificare o annullare"'; },
     cols: [
       { k: 'id_juniper', label: 'ID', cls: 'mono' }, { k: 'fr', label: 'FR', filter: 'text', cls: 'mono' }, { k: 'case_number', label: 'Case', filter: 'text', cls: 'mono' }, { k: 'rma', label: 'RMA', filter: 'text', cls: 'mono' },
       { k: 'faulty_model_id', label: 'Model faulty', filter: 'select', cls: 'mono' }, { k: 'faulty_seriale', label: 'Seriale faulty', filter: 'text', cls: 'mono' },
-      { k: 'data_ricezione_faulty', label: 'Ricez. faulty', cls: 'mono', get: function (r) { return L.normDate(r.data_ricezione_faulty); } }, { k: 'awb_ups_faulty', label: 'AWB UPS', filter: 'text', cls: 'mono' },
-      { k: 'data_uscita_faulty', label: 'Uscita faulty', cls: 'mono', get: function (r) { return L.normDate(r.data_uscita_faulty); } }, { k: 'good_seriale', label: 'Seriale good', filter: 'text', cls: 'mono' },
-      { k: 'good_data_ricezione', label: 'Ricez. good', cls: 'mono', get: function (r) { return L.normDate(r.good_data_ricezione); } },
-      { k: 'stato', label: 'Stato', filter: 'select', html: function (r) { return '<span class="pill ' + ({ APERTA: 'p-amber', FAULTY_SPEDITA: 'p-blue', GOOD_IN_USCITA: 'p-violet', GOOD_SPEDITA: 'p-teal', CHIUSA: 'p-green' }[r.stato] || '') + '">' + esc(r.stato) + '</span>'; } },
+      { k: 'data_ricezione_faulty', label: 'Ricez. faulty', cls: 'mono', filter: 'date', get: function (r) { return L.normDate(r.data_ricezione_faulty); } }, { k: 'awb_ups_faulty', label: 'AWB UPS', filter: 'text', cls: 'mono' },
+      { k: 'data_uscita_faulty', label: 'Uscita faulty', cls: 'mono', filter: 'date', get: function (r) { return L.normDate(r.data_uscita_faulty); } }, { k: 'good_seriale', label: 'Seriale good', filter: 'text', cls: 'mono' },
+      { k: 'good_data_ricezione', label: 'Ricez. good', cls: 'mono', filter: 'date', get: function (r) { return L.normDate(r.good_data_ricezione); } },
+      { k: 'stato', label: 'Stato', filter: 'select', html: function (r) { return '<span class="pill ' + ({ APERTA: 'p-amber', FAULTY_SPEDITA: 'p-blue', GOOD_IN_USCITA: 'p-violet', GOOD_SPEDITA: 'p-teal', CHIUSA: 'p-green', ANNULLATA: '' }[r.stato] || '') + '">' + esc(r.stato) + '</span>'; } },
       { k: 'note', label: 'Note', filter: 'text' }
     ]
   },
@@ -4733,7 +4755,7 @@ Jun.dopoAck = async function (s, R, nDdt, oggi) {
   try {
     var t = await Jun.tab(), lista = [], senza = [];
     R.forEach(function (x) {
-      var p = t.rows.find(function (j) { return j.stato !== 'CHIUSA' && !L.s(j.data_uscita_faulty) && ((x.fr && L.s(j.fr) === L.s(x.fr)) || (x.seriale && L.up(j.faulty_seriale) === L.up(x.seriale))); });
+      var p = t.rows.find(function (j) { return j.stato !== 'CHIUSA' && j.stato !== 'ANNULLATA' && !L.s(j.data_uscita_faulty) && ((x.fr && L.s(j.fr) === L.s(x.fr)) || (x.seriale && L.up(j.faulty_seriale) === L.up(x.seriale))); });
       if (!p) { senza.push(x.fr || x.seriale); return; }
       // la GOOD può essere già uscita prima: allora con la faulty la pratica si chiude
       lista.push({ r: p, ch: { stato: p.stato === 'GOOD_SPEDITA' ? 'CHIUSA' : (p.stato === 'GOOD_IN_USCITA' ? 'GOOD_IN_USCITA' : 'FAULTY_SPEDITA'), fr: L.s(p.fr) || L.s(x.fr), data_uscita_faulty: oggi, awb_ups_faulty: L.s(p.awb_ups_faulty) || L.s(s.awb), note: Jun.nota(p, 'faulty uscita con DDT ACK ' + nDdt + ' del ' + L.itDate(oggi)) } });
@@ -4749,7 +4771,7 @@ Jun.dopoRma = async function (P, s, nDdt, oggi) {
   try {
     var t = await Jun.tab(), lista = [];
     P.forEach(function (p) {
-      var j = t.rows.find(function (x) { return x.stato !== 'CHIUSA' && L.s(x.good_seriale) && L.up(x.good_seriale) === L.up(p.u.seriale); });
+      var j = t.rows.find(function (x) { return x.stato !== 'CHIUSA' && x.stato !== 'ANNULLATA' && L.s(x.good_seriale) && L.up(x.good_seriale) === L.up(p.u.seriale); });
       if (!j) return;
       var fOk = !!L.s(j.data_uscita_faulty) || j.stato === 'FAULTY_SPEDITA';
       lista.push({ r: j, ch: { stato: fOk ? 'CHIUSA' : 'GOOD_SPEDITA', note: Jun.nota(j, 'GOOD spedita a ' + s.destinatario + ' con DDT ' + nDdt + (s.awb ? ' AWB ' + s.awb : '') + ' del ' + L.itDate(oggi) + (fOk ? ' · gestita e chiusa' : ' · la pratica si chiude quando esce la faulty')) } });
@@ -4811,8 +4833,8 @@ Jun.salvaUscita = async function (id, idU) {
 };
 
 // ─ GOOD Juniper arrivata prima della faulty: la pratica (seriale good) dà l'FR quando c'è; altrimenti l'FR si associa all'arrivo della faulty
-Jun.perGood = function (ser) { var t = DB.t.JUNIPER, s = L.up(ser); if (!t || !s) return null; return t.rows.find(function (j) { return j.stato !== 'CHIUSA' && L.up(j.good_seriale) === s; }) || null; };
-Jun.perFaulty = function (ser, fr) { var t = DB.t.JUNIPER, s = L.up(ser); if (!t) return null; return t.rows.find(function (j) { return j.stato !== 'CHIUSA' && ((s && L.up(j.faulty_seriale) === s) || (fr && L.s(j.fr) === L.s(fr))); }) || null; };
+Jun.perGood = function (ser) { var t = DB.t.JUNIPER, s = L.up(ser); if (!t || !s) return null; return t.rows.find(function (j) { return j.stato !== 'CHIUSA' && j.stato !== 'ANNULLATA' && L.up(j.good_seriale) === s; }) || null; };
+Jun.perFaulty = function (ser, fr) { var t = DB.t.JUNIPER, s = L.up(ser); if (!t) return null; return t.rows.find(function (j) { return j.stato !== 'CHIUSA' && j.stato !== 'ANNULLATA' && ((s && L.up(j.faulty_seriale) === s) || (fr && L.s(j.fr) === L.s(fr))); }) || null; };
 // dopo il caricamento di FAULTY: pratica trovata dal seriale faulty → FR sulla pratica e sulla GOOD già in giacenza (con i suoi movimenti)
 Jun.dopoIngresso = async function (pezzi, oggi) {
   try {
@@ -5080,17 +5102,18 @@ var Nr = {
     if (!Nr.loaded) return;
     if (!Nr.grid) Nr.grid = new Grid('nr', {
       thead: 'nrHead', tbody: 'nrRows', foot: 'nrFoot', sort: 'id_pratica', dir: -1, empty: 'Nessuna pratica: si creano da sole con gli ingressi NEW/REUSE',
-      rows: function () { return Nr.t().rows.filter(function (p) { return p.stato !== 'ELIMINATA' && ($('nrTutte').checked || p.stato !== 'SPEDITA'); }); },
+      rows: function () { var st = $('nrStato').value, tp = $('nrTipo').value; return Nr.t().rows.filter(function (p) { return p.stato !== 'ELIMINATA' && (st === 'ATT' ? p.stato !== 'SPEDITA' : (!st || p.stato === st)) && (!tp || p.tipo === tp); }); },
+      cerca: function () { return $('nrQ').value; },
       cols: [
         { k: 'id_pratica', label: 'ID', cls: 'mono' },
-        { k: 'data', label: 'Data', cls: 'mono', get: function (p) { return L.normDate(p.data); } },
+        { k: 'data', label: 'Data', cls: 'mono', filter: 'date', get: function (p) { return L.normDate(p.data); } },
         { k: 'tipo', label: 'Tipo', filter: 'select', html: function (p) { return Pill.tipo(p.tipo); } },
         { k: 'mittente', label: 'Mittente', filter: 'select' },
         { k: 'po_mrn', label: 'PO/MRN', filter: 'text', cls: 'mono' },
         { k: 'ddt', label: 'DDT', filter: 'text', cls: 'mono' },
         { k: 'n_pezzi', label: 'Pezzi', cls: 'mono' },
         { k: 'stato', label: 'Stato', filter: 'select', html: function (p) { var s = Nr.STATI[p.stato] || ['', p.stato]; return '<span class="pill ' + s[0] + '">' + esc(s[1]) + '</span>'; } },
-        { k: 'lavorata_il', label: 'Lavorata il', cls: 'mono nw', get: function (p) { return L.s(p.lavorata_il).slice(0, 16); } },
+        { k: 'lavorata_il', label: 'Lavorata il', cls: 'mono nw', filter: 'date', get: function (p) { return L.s(p.lavorata_il).slice(0, 16); } },
         { k: 'az', label: 'Azioni', noXls: true, html: function (p) {
           var id = esc(p.id_pratica), b = function (t, fn, tit, cls) { return '<button class="btn ' + (cls || 'ghost') + ' sm" style="padding:3px 8px" title="' + tit + '" onclick="' + fn + '">' + t + '</button> '; };
           if (!p.file_id) return b('↻ Crea file', 'Nr.ricrea(\'' + id + '\')', 'Crea il file della pratica');
@@ -5101,8 +5124,10 @@ var Nr = {
             b('📋', 'Nr.cedolino(\'' + id + '\')', 'Stampa cedolino (P/N, quantità, posizione)') +
             (App.isAdmin ? b('🗑', 'Nr.chiediElimina(\'' + id + '\')', 'Elimina pratica e file (solo admin, con password)') : '') + '</span>';
         } },
-        { k: 'note', label: 'Note', filter: 'text' }
-      ]
+        { k: 'note', label: 'Note', filter: 'text' },
+        { k: 'awb', label: 'AWB', filter: 'text', cls: 'mono' }
+      ],
+      hidden: ['awb']
     });
     Nr.grid.render();
     var R = Nr.t().rows, n = function (s) { return R.filter(function (p) { return p.stato === s; }).length; };
