@@ -3043,7 +3043,7 @@ var Ack = {
         var desc = 'SPARE FALSE in ACK ' + s.destinatario + ': ' + (v ? 'stato VLT "' + v.stato + '"' + (v.riparatore ? ', riparatore ' + v.riparatore : '') : (fr ? 'FR non in VLT' : 'non trovato in giacenza né in VLT'));
         var o = { data: L.nowStamp(), tipo: 'SPARE_FALSE', id_unita: u ? u.id_unita : '', seriale: u ? u.seriale : (v ? v.f_mat_serial_no : raw), fr: fr, id_spedizione: s.id_spedizione, descrizione: desc, stato: 'APERTA', aperta_da: App.chi().email, rev: 1 };
         var x = Ack.pushRow(DB.t.ANOMALIE, o, null); Ack.qA.push(x); Ack.qPush([]);
-        Ack.fb('✗ SPARE FALSE · ' + (fr ? 'FR ' + fr : raw) + (v ? ' · ' + v.stato : '') + ' — non spedire', 'err');
+        Ack.fb('✗ SPARE FALSE · ' + (fr ? 'FR ' + fr : raw) + (v ? ' · stato VLT: ' + v.stato : '') + ' — NON va in uscita' + (u && u.tipo === 'FAULTY' && u.stato === 'IN_GIACENZA' ? ' (resta ferma in hub). Se lo stato è cambiato: ➕ Metti in ACK nell\'elenco Spare false' : ''), 'err');
       }
     }
     Ack.renderDet(); Ack.renderCards();
@@ -3071,6 +3071,43 @@ var Ack = {
     var s = Ack.byId(Ack.cur), r = DB.t.SPEDIZIONI_RIGHE.rows.find(function (x) { return x.id_riga === id; });
     if (!s || s.stato !== 'IN_SPUNTA' || !r || r.esito !== 'SPUNTATO') return;
     Ack.setR(r, 'DA_SPUNTARE'); Ack.fb('↺ Spunta annullata: FR ' + r.fr + ' · ' + r.seriale, 'warn'); Ack.renderDet(); Ack.renderCards();
+  },
+  // ─ SPARE FALSE messo comunque in ACK (es. stato VLT cambiato dopo l'estrazione del mattino): conferma + motivo, tutto tracciato
+  MOTIVI_AGG: ['Cambiato stato su VLT dopo le 7:00', 'Autorizzato dal Service Desk', 'FR in ACK su VLT ma non ancora nel foglio'],
+  sfUnita: function (a) {
+    var u = a && a.id_unita && DB.t.UNITA.rows.find(function (x) { return x.id_unita === a.id_unita; });
+    return u && u.tipo === 'FAULTY' && u.stato === 'IN_GIACENZA' && !Giacenze.bloccato(u.id_unita) ? u : null;
+  },
+  sfInAck: function (i) {
+    var s = Ack.byId(Ack.cur), a = Ack.spareFalse(Ack.cur)[i]; if (!s || s.stato !== 'IN_SPUNTA' || !a) return;
+    var u = Ack.sfUnita(a); if (!u) { toast('Si può mettere in ACK solo una FAULTY in giacenza (non bloccata)', 'ko'); return; }
+    if (Ack.righe(s.id_spedizione).some(function (r) { return r.id_unita === u.id_unita && r.esito !== 'RIMOSSO'; })) { toast('Già nella lista di questo ACK', 'ko'); return; }
+    var v = DB.vltMap[u.fr], ripV = v ? App.aliasRip(v.riparatore) : '', diverso = ripV && L.up(ripV) !== L.up(App.aliasRip(s.destinatario));
+    $('dlMotivi').innerHTML = Ack.MOTIVI_AGG.map(function (m) { return '<option value="' + esc(m) + '">'; }).join('');
+    var ok = async function () {
+      var motivo = L.s($('mMotivo').value); if (!motivo) { $('mMotivo').classList.add('err'); $('mMotivo').focus(); return; }
+      Modal.close();
+      try {
+        await Ack.flush();
+        var t = DB.t.SPEDIZIONI_RIGHE, chi = App.chi(), now = L.nowStamp(), stV = v ? v.stato : 'FR non in VLT';
+        var o = { id_spedizione: s.id_spedizione, id_unita: u.id_unita, seriale: u.seriale, pn: u.pn, fr: u.fr, rma: u.rma, esito: 'SPUNTATO', spuntato_da: chi.email, spuntato_il: now,
+          note: 'AGGIUNTO IN SPUNTA: ' + motivo + ' (stato VLT: ' + stV + ')' };
+        var r = await API.append(DB.id, 'SPEDIZIONI_RIGHE', [t.toRow(o)]); o.id_riga = 'SR' + L.pad(r - 1, 6);
+        var tA = DB.t.ANOMALIE, upd = [{ range: t.cell('id_riga', r), values: [[o.id_riga]] }];
+        a.stato = 'RISOLTA'; a.nota_risoluzione = 'messo in ACK ' + s.id_spedizione + ': ' + motivo;
+        if (a._r) upd.push({ range: tA.cell('stato', a._r), values: [['RISOLTA']] }, { range: tA.cell('nota_risoluzione', a._r), values: [[a.nota_risoluzione]] });
+        await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', [App.log('ACK_AGGIUNTO_IN_SPUNTA', 'SPEDIZIONI', s.id_spedizione, { fr: u.fr, seriale: u.seriale, id_unita: u.id_unita, stato_vlt: stV, riparatore_vlt: v ? v.riparatore : '', riparatore_ack: s.destinatario, motivo: motivo })])]);
+        Ack.pushRow(t, o, r); Ack.opTocca();
+        Ack.fb('✓ FR ' + u.fr + ' messo in ACK · ' + motivo, 'ok'); Ack.renderDet(); Ack.renderCards();
+      } catch (e) { Modal.open('Non aggiunto', e.message); }
+    };
+    Modal.html('Metti in ACK FR ' + esc(u.fr),
+      '<div style="font-size:13px;line-height:1.6">' + esc(u.seriale) + ' · ' + esc(u.pn) + '<br>Stato VLT attuale: <b>' + esc(v ? v.stato : 'FR non in VLT') + '</b>' + (v && v.riparatore ? ' · riparatore VLT <b>' + esc(v.riparatore) + '</b>' : '') +
+      '<br>Non era nella lista di questo ACK. Mettilo in uscita solo se è stato davvero cambiato (es. stato VLT aggiornato dopo l\'estrazione del mattino).</div>' +
+      (diverso ? '<div class="fb err" style="margin-top:8px">⚠ Il riparatore su VLT (' + esc(ripV) + ') è diverso da quello di questo ACK (' + esc(s.destinatario) + ')</div>' : '') +
+      '<div class="fg" style="margin-top:10px"><span class="fl">Motivo *</span><input class="fc" id="mMotivo" list="dlMotivi" autocomplete="off" placeholder="scegli o scrivi il motivo"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Metti in ACK', cls: 'green', keep: true, fn: ok }]);
+    setTimeout(function () { var e = $('mMotivo'); if (e) { e.focus(); e.onkeydown = function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); ok(); } }; } }, 50);
   },
   annullaSf: function (i) {
     var a = Ack.spareFalse(Ack.cur)[i]; if (!a) return;
@@ -3327,7 +3364,7 @@ var Ack = {
       }).join('') : '<tr><td colspan="8" class="empty">Nessun FR in stato ACK per questo riparatore</td></tr>') + '</tbody></table></div>';
     if (sf.length) html += '<div class="card-h" style="margin-top:14px"><div class="card-t" style="font-size:15px;color:var(--red)">SPARE FALSE · letti ma non in lista (non si spediscono, finiscono nell\'export FR da chiudere)</div></div>' +
       '<div class="tbl-wrap" style="max-height:30vh"><table><thead><tr><th>FR</th><th>Seriale</th><th>Descrizione</th><th>Letto</th><th></th></tr></thead><tbody>' +
-      sf.map(function (a, i) { return '<tr class="r-err"><td class="mono">' + esc(a.fr) + '</td><td class="mono">' + esc(a.seriale) + '</td><td style="font-size:11.5px">' + esc(a.descrizione) + '</td><td class="mono" style="font-size:11px">' + esc(a.data) + '</td><td>' + (edit ? '<button class="ico-btn" title="Letto per errore" onclick="Ack.annullaSf(' + i + ')">✕</button>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>';
+      sf.map(function (a, i) { return '<tr class="r-err"><td class="mono">' + esc(a.fr) + '</td><td class="mono">' + esc(a.seriale) + '</td><td style="font-size:11.5px">' + esc(a.descrizione) + '</td><td class="mono" style="font-size:11px">' + esc(a.data) + '</td><td class="nw">' + (edit ? (Ack.sfUnita(a) ? '<button class="btn ghost sm" title="Stato cambiato (es. su VLT dopo le 7:00): mettilo comunque in uscita con un motivo" onclick="Ack.sfInAck(' + i + ')">➕ Metti in ACK</button> ' : '') + '<button class="ico-btn" title="Letto per errore" onclick="Ack.annullaSf(' + i + ')">✕</button>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>';
     // colli
     var col = edit ? (Ack.colli[s.id_spedizione] || []) : Ack.colliDb(s.id_spedizione).map(function (c) { return { tipo: c.tipo_collo, misura: [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X'), peso: c.peso_kg }; });
     var tot = col.reduce(function (a, c) { return a + (parseFloat(String(c.peso).replace(',', '.')) || 0); }, 0);
