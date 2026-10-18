@@ -424,10 +424,11 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
           <div class="fg" style="flex:1;min-width:240px"><span class="fl">Cerca (seriale, P/N, FR, RMA, AWB, DDT, mittente, PO, ubicazione, nota)</span><input class="fc mono" id="gQ" oninput="Giacenze.debounce()"></div>
           <div class="fg"><span class="fl">Tipo</span><select class="fc" id="gTipo" onchange="Giacenze.render()"><option value="">Tutti</option></select></div>
           <div class="fg"><span class="fl">Magazzino</span><select class="fc" id="gMag" onchange="Giacenze.render()"><option value="">Tutti</option></select></div>
-          <div class="fg"><span class="fl">Stato</span><select class="fc" id="gStato" onchange="Giacenze.render()"><option value="A_MAG">A magazzino (anche bloccati / in attesa)</option><option value="IN_GIACENZA">Disponibili</option><option value="BLOCCATO">Bloccati</option><option value="IN_ATTESA">In attesa</option><option value="IN_LAVORAZIONE">In lavorazione</option><option value="USCITO">Usciti</option><option value="ANNULLATO">Annullati</option><option value="">Tutti</option></select></div>
+          <div class="fg"><span class="fl">Stato</span><select class="fc" id="gStato" onchange="Giacenze.render()"><option value="A_MAG">A magazzino (anche bloccati / in attesa)</option><option value="IN_GIACENZA">Disponibili</option><option value="BLOCCATO">Bloccati</option><option value="IN_ATTESA">In attesa</option><option value="IN_LAVORAZIONE">In lavorazione</option><option value="USCITO">Usciti</option><option value="ANNULLATO">Annullati</option><option value="RETTIFICATO">Tolti con rettifica</option><option value="">Tutti</option></select></div>
           <div class="spacer"></div>
           <button class="btn ghost sm" onclick="Giacenze.grid().scegli()" title="Mostra o nascondi colonne">⚙ Colonne</button>
           <button class="btn ghost sm" onclick="Giacenze.excel()">⬇ Excel</button>
+          <button class="btn ghost sm" id="gRett" style="display:none" onclick="Rett.aggiungi()" title="Solo admin: aggiungi un pezzo presente a scaffale ma mancante a sistema (movimento interno, non va in fatturazione)">＋ Rettifica: aggiungi pezzo</button>
         </div>
       </div>
       <div class="stats" id="gStats"></div>
@@ -1876,6 +1877,7 @@ var Giacenze = {
   },
   render: function () {
     if (!$('gHead')) return;
+    if ($('gRett')) $('gRett').style.display = App.isAdmin ? '' : 'none';
     var g = Giacenze.grid(); g.render();
     var list = g.visibili || [], by = {}; list.forEach(function (u) { by[u.tipo] = (by[u.tipo] || 0) + 1; });
     var nb = list.filter(function (u) { return u.stato === 'BLOCCATO'; }).length, na = list.filter(function (u) { return u.stato === 'IN_ATTESA'; }).length;
@@ -1910,7 +1912,8 @@ var Giacenze = {
       '<details open style="margin-top:10px"><summary style="cursor:pointer;font-size:13px">Varia i dati della scheda <span class="hint">(es. FR aborted: cambia solo il numero; seriale, P/N, tipo, FR, RMA e riparatore si aggiornano anche nei movimenti)</span></summary><div class="g-var">' +
       Giacenze.VAR_F.map(function (f) { return '<div class="fg"><span class="fl">' + f[1] + '</span>' + campo(f) + '</div>'; }).join('') + '</div></details>' +
       '<div class="hint" id="gvErr" style="margin-top:8px"></div>',
-      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Salva', keep: true, fn: function () { Giacenze.salva(id); } }], true);
+      [{ label: 'Annulla', cls: 'ghost' }].concat(App.isAdmin && gestibile ? [{ label: '🗑 Rettifica: togli dalla giacenza', cls: 'red', keep: true, fn: function () { Rett.togli(id); } }] : [])
+        .concat([{ label: 'Salva', keep: true, fn: function () { Giacenze.salva(id); } }]), true);
   },
   salva: async function (id) {
     var tU = DB.t.UNITA, u = tU.rows.find(function (x) { return x.id_unita === id; }), ch = {}, err = function (t) { $('gvErr').textContent = t; $('gvErr').className = 'hint err'; };
@@ -2008,14 +2011,99 @@ var Spec = {
   },
   applica: function (loc) { loc.forEach(function (x) { x[0][x[1]] = x[2]; }); },
   // movimento VARIAZIONE (INT) + LOG, come la gestione in giacenza
-  traccia: async function (H, u, testo, logDet, azione, foglio, rec) {
+  traccia: async function (H, u, testo, logDet, azione, foglio, rec, causale) {
     var now = L.nowStamp(), tM = H.MOVIMENTI, x = u || {};
-    var mov = { data_ora: now, direzione: 'INT', causale: 'VARIAZIONE', id_unita: x.id_unita || '', seriale: x.seriale || '', pn: x.pn || '', mnft: x.mnft || '', tipo: x.tipo || '', fr: x.fr || '', rma: x.rma || '', riparatore: x.riparatore || '', operatore: Auth.email, operatore_sigla: App.me.sigla || '', note: testo, origine: 'APP' };
+    var mov = { data_ora: now, direzione: 'INT', causale: causale || 'VARIAZIONE', id_unita: x.id_unita || '', seriale: x.seriale || '', pn: x.pn || '', mnft: x.mnft || '', tipo: x.tipo || '', fr: x.fr || '', rma: x.rma || '', riparatore: x.riparatore || '', operatore: Auth.email, operatore_sigla: App.me.sigla || '', note: testo, origine: 'APP' };
     var res = await Promise.all([API.append(DB.id, 'MOVIMENTI', [tM.toRow(mov)]), API.append(DB.id, 'LOG', [H.LOG.toRow({ data_ora: now, utente: Auth.email, azione: azione, foglio: foglio, id_record: rec, dettaglio: JSON.stringify(logDet) })])]);
     var rM = res[0], base = parseInt(DB.param('mov_id_base', ''), 10) || 0;
     if (rM) { mov.id_mov = 'MV' + (base + rM); await API.batchUpdate(DB.id, [{ range: tM.cell('id_mov', rM), values: [[mov.id_mov]] }]).catch(function () { }); }
     if (Sto.dati.cur) { Sto.COLS.forEach(function (c) { if (!(c in mov)) mov[c] = ''; }); Sto.dati.cur.push(mov); }
     return mov;
+  }
+};
+
+// ─ RETTIFICA INVENTARIO (solo admin): togli un pezzo che non c'è / aggiungi un pezzo che manca a sistema.
+//   Movimento interno (direzione INT, causale RETTIFICA_OUT / RETTIFICA_IN): non entra nell'export Easyloader; Log con motivo.
+var Rett = {
+  togli: function (id) {
+    if (!App.isAdmin) return;
+    var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); if (!u) return;
+    if (Giacenze.A_MAG.indexOf(u.stato) < 0 || u.stato === 'IN_LAVORAZIONE') { toast('Si può togliere solo un pezzo in giacenza (non in lavorazione)', 'ko'); return; }
+    Modal.html('Rettifica: togli ' + u.seriale,
+      '<div style="font-size:13px;line-height:1.6">' + Pill.tipo(u.tipo) + ' ' + esc(u.id_unita) + (u.fr ? ' · FR ' + esc(u.fr) : '') + ' · ' + esc(u.pn) + (u.ubicazione ? ' · ' + esc(u.ubicazione) : '') +
+      '<br>Il pezzo esce dalla giacenza come <b>tolto con rettifica</b> (non è un\'uscita: niente DDT, niente fatturazione). Resta tracciato con un movimento interno e nel Log.</div>' +
+      '<div class="fg" style="margin-top:10px"><span class="fl">Motivo *</span><input class="fc" id="rtMotivo" autocomplete="off" placeholder="es. non presente a scaffale all\'inventario del …"></div><div class="hint" id="rtErr"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Togli dalla giacenza', cls: 'red', keep: true, fn: async function () {
+        var motivo = L.s($('rtMotivo').value); if (!motivo) { $('rtErr').textContent = 'Scrivi il motivo'; $('rtErr').className = 'hint err'; return; }
+        Modal.progress('Salvataggio…');
+        try {
+          var tU = DB.t.UNITA, last = L.colLetter(tU.header.length - 1), cur = (await API.batchGet(DB.id, [API.q('UNITA') + '!A' + u._r + ':' + last + u._r]))[0][0] || [];
+          if (L.s(cur[tU.idx.id_unita]) !== u.id_unita) throw new Error('la scheda non è più al suo posto: premi Aggiorna e riprova');
+          if (L.s(cur[tU.idx.rev]) !== L.s(u.rev)) throw new Error('la scheda è stata modificata da un altro utente: premi Aggiorna e riprova');
+          var now = L.nowStamp(), prima = u.stato;
+          var ch = { stato: 'RETTIFICATO', data_out: L.isoToday(), note: [L.s(u.note).split(' | fonte:')[0], 'RETTIFICA (tolto): ' + motivo].filter(Boolean).join(' | '), modificato_il: now, modificato_da: App.chi().email, rev: (parseInt(u.rev, 10) || 1) + 1 };
+          await API.batchUpdate(DB.id, Object.keys(ch).filter(function (h) { return h in tU.idx; }).map(function (h) { return { range: tU.cell(h, u._r), values: [[String(ch[h])]] }; }));
+          Object.keys(ch).forEach(function (h) { u[h] = String(ch[h]); });
+          var H = await Ingresso.heads();
+          await Spec.traccia(H, u, 'RETTIFICA INVENTARIO · tolto dalla giacenza: ' + motivo, { seriale: u.seriale, fr: u.fr, tipo: u.tipo, stato_prima: prima, motivo: motivo }, 'RETTIFICA_TOLTO', 'UNITA', u.id_unita, 'RETTIFICA_OUT');
+          Modal.close(); toast(u.seriale + ' tolto dalla giacenza (rettifica)', 'ok'); Giacenze.render(); App.syncInfo();
+        } catch (e) { Modal.progress(''); $('rtErr').textContent = e.message; $('rtErr').className = 'hint err'; }
+      } }]);
+    setTimeout(function () { var e = $('rtMotivo'); if (e) e.focus(); }, 60);
+  },
+  // dati proposti dal seriale: ultimo FR su VLT (P/N, riparatore, material, deposito) e ultimo pezzo noto in UNITA
+  proponi: function () {
+    var ser = L.up($('rtSer').value).trim(); if (!ser) return;
+    var L0 = (DB.vltBySer[ser] || DB.vltBySer[L.up(L.afterSpace(ser))] || []).slice().sort(function (a, b) { return (parseInt(b.fr_id, 10) || 0) - (parseInt(a.fr_id, 10) || 0); });
+    var v = L0[0], old = DB.t.UNITA.rows.filter(function (x) { return L.up(x.seriale) === ser; }).pop();
+    var set = function (id, val) { var e = $(id); if (e && !L.s(e.value) && L.s(val)) e.value = val; };
+    if (v) { set('rtFr', v.fr_id); set('rtPn', v.f_mat_tmpn); set('rtRip', App.aliasRip(v.riparatore)); }
+    if (old) { set('rtPn', old.pn); set('rtMnft', old.mnft); set('rtRip', old.riparatore); if (!v) set('rtFr', old.fr); }
+    var gia = DB.t.UNITA.rows.find(function (x) { return L.up(x.seriale) === ser && Giacenze.A_MAG.indexOf(x.stato) >= 0; });
+    $('rtInfo').innerHTML = gia ? '<span style="color:var(--red)">Già in giacenza: ' + esc(gia.id_unita) + ' (' + esc(gia.tipo) + ', ' + esc(gia.stato) + ')</span>' : (v ? 'VLT: FR ' + esc(v.fr_id) + ' · ' + esc(v.stato) : (old ? 'Ultima scheda: ' + esc(old.id_unita) + ' · ' + esc(old.stato) : 'Seriale non trovato su VLT né in giacenza'));
+  },
+  aggiungi: function () {
+    if (!App.isAdmin) return;
+    var mags = DB.t.MAGAZZINI.rows.map(function (m) { return m.codice; });
+    var f = function (lab, id, extra) { return '<div class="fg"><span class="fl">' + lab + '</span>' + (extra || '<input class="fc mono" id="' + id + '" autocomplete="off">') + '</div>'; };
+    Modal.html('Rettifica: aggiungi pezzo',
+      '<div style="font-size:13px;margin-bottom:8px">Per un pezzo <b>presente a scaffale ma mancante a sistema</b>. Non è un ingresso: niente movimento IN, non va in fatturazione. Resta tracciato con un movimento interno e nel Log.</div>' +
+      '<div class="g-var">' +
+      f('Seriale *', 'rtSer', '<input class="fc mono" id="rtSer" autocomplete="off" onchange="Rett.proponi()" onkeydown="if(event.key===\'Enter\'){event.preventDefault();Rett.proponi()}">') +
+      f('Tipo *', 'rtTipo', '<select class="fc" id="rtTipo" onchange="Rett.mag()">' + TIPI.map(function (t) { return '<option>' + t + '</option>'; }).join('') + '</select>') +
+      f('FR', 'rtFr') + f('P/N *', 'rtPn') + f('MNFT', 'rtMnft') + f('Riparatore', 'rtRip') +
+      f('Magazzino', 'rtMag', '<select class="fc" id="rtMag">' + mags.map(function (m) { return '<option>' + esc(m) + '</option>'; }).join('') + '</select>') +
+      f('Ubicazione', 'rtUbi') + f('Destinazione (GOOD)', 'rtDest', '<input class="fc" id="rtDest" list="dlControparti" autocomplete="off" placeholder="vuoto = dal deposito VLT">') +
+      '</div><div class="hint" id="rtInfo" style="margin-top:6px"></div>' +
+      '<div class="fg" style="margin-top:8px"><span class="fl">Motivo *</span><input class="fc" id="rtMotivo" autocomplete="off" placeholder="es. trovato a scaffale all\'inventario del …"></div><div class="hint" id="rtErr"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Aggiungi in giacenza', cls: 'green', keep: true, fn: function () { Rett.salvaNuovo(); } }], true);
+    Rett.mag(); setTimeout(function () { var e = $('rtSer'); if (e) e.focus(); }, 60);
+  },
+  mag: function () { var t = $('rtTipo') && $('rtTipo').value, e = $('rtMag'); if (!e) return; var m = t === 'NEW' || t === 'REUSE' ? 'HUB_MAGAZZINO' : (t === 'SCRAP' ? 'SCRAP' : 'HUB_GUASTI'); if ([].some.call(e.options, function (o) { return o.value === m; })) e.value = m; },
+  salvaNuovo: async function () {
+    var err = function (t) { $('rtErr').textContent = t; $('rtErr').className = 'hint err'; };
+    var g = function (id) { return L.s($(id).value); };
+    var ser = g('rtSer').toUpperCase(), tipo = g('rtTipo'), fr = L.frKey(g('rtFr')), pn = g('rtPn').toUpperCase(), motivo = g('rtMotivo');
+    if (!ser) return err('Il seriale è obbligatorio');
+    if (!pn) return err('Il P/N è obbligatorio');
+    if (fr && !/^\d+$/.test(fr)) return err('FR deve essere un numero');
+    if (!motivo) return err('Scrivi il motivo');
+    var gia = DB.t.UNITA.rows.find(function (x) { return L.up(x.seriale) === ser && Giacenze.A_MAG.indexOf(x.stato) >= 0; });
+    if (gia) return err('Seriale già in giacenza: ' + gia.id_unita);
+    Modal.progress('Salvataggio…');
+    try {
+      var tU = DB.t.UNITA, now = L.nowStamp(), chi = App.chi(), v = fr ? DB.vltMap[fr] : null, dest = g('rtDest');
+      if (!dest && tipo === 'GOOD' && v) { var dep = DB.t.DEPOT_VLT.rows.find(function (d) { return d.depot_vlt === v.depot_origine; }); if (dep) dest = dep.destinazione; }
+      var o = { seriale: ser, pn: pn, mnft: g('rtMnft').toUpperCase(), material: v ? L.s(v.f_mat_material) : '', tipo: tipo, fr: fr, riparatore: g('rtRip'), magazzino: g('rtMag'), ubicazione: g('rtUbi').toUpperCase(),
+        stato: 'IN_GIACENZA', destinazione_prevista: dest, data_in: L.isoToday(), note: 'RETTIFICA (aggiunto): ' + motivo, rev: 1, creato_il: now, creato_da: chi.email };
+      var rU = await API.append(DB.id, 'UNITA', [tU.toRow(o)]), uBase = parseInt(DB.param('unita_id_base', '0'), 10) || 0;
+      o.id_unita = 'U' + L.pad(uBase + rU - 1, 7);
+      await API.batchUpdate(DB.id, [{ range: tU.cell('id_unita', rU), values: [[o.id_unita]] }]);
+      var x = {}; tU.header.forEach(function (h) { x[h] = o[h] === undefined ? '' : String(o[h]); }); x._r = rU; tU.rows.push(x);
+      var H = await Ingresso.heads();
+      await Spec.traccia(H, x, 'RETTIFICA INVENTARIO · aggiunto in giacenza: ' + motivo, { seriale: ser, fr: fr, tipo: tipo, pn: pn, motivo: motivo }, 'RETTIFICA_AGGIUNTO', 'UNITA', o.id_unita, 'RETTIFICA_IN');
+      Modal.close(); toast(ser + ' aggiunto in giacenza (' + o.id_unita + ')', 'ok'); Giacenze.render(); App.syncInfo();
+    } catch (e) { Modal.progress(''); err(e.message); }
   }
 };
 
