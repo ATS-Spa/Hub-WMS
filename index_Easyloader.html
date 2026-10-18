@@ -1228,7 +1228,15 @@ var App = {
       Modal.close(); toast('Dati aggiornati', 'ok');
     } catch (e) { Modal.close(); toast('Errore aggiornamento: ' + e.message, 'ko'); }
   },
-  log: function (azione, foglio, id, dett) { return [L.nowStamp(), Auth.email, azione, foglio, id, JSON.stringify(dett || {})]; }
+  // account condiviso (palmarino ACK): chi lavora davvero è l'operatore scelto con il PIN
+  condiviso: function () { return !!(App.me && L.up(App.me.condiviso) === 'SI'); },
+  opAtt: null,
+  chi: function () { return App.condiviso() && App.opAtt ? App.opAtt : { email: Auth.email, sigla: (App.me && App.me.sigla) || '', nome: (App.me && App.me.nome) || '' }; },
+  log: function (azione, foglio, id, dett) {
+    var c = App.chi(); dett = dett || {};
+    if (c.email !== Auth.email) dett = Object.assign({ account: Auth.email, operatore: c.sigla }, dett);
+    return [L.nowStamp(), c.email || Auth.email, azione, foglio, id, JSON.stringify(dett)];
+  }
 };
 
 // ───────────────────────── INGRESSO ─────────────────────────
@@ -2139,13 +2147,13 @@ var Cal = {
 var Admin = {
   sez: 'OPERATORI', dirty: {},
   // campi a scelta fissa (menu a tendina, sempre lo stesso testo)
-  OPZ: { ruolo: ['OPERATORE', 'ADMIN'], attivo: ['SI', 'NO'], ack_include_as: ['NO', 'SI'],
+  OPZ: { ruolo: ['OPERATORE', 'ADMIN'], attivo: ['SI', 'NO'], condiviso: ['NO', 'SI'], ack_include_as: ['NO', 'SI'],
     stato: { CALENDARIO_USCITE: ['PIANIFICATA', 'IN_CORSO', 'CHIUSA', 'ANNULLATA'] }, tipo: { CONTROPARTI: ['DESTINAZIONE', 'MITTENTE', 'MITTENTE,DESTINAZIONE'] } },
   opz: function (h) { if (h === 'ruolo') return Admin.ruoli(); var o = Admin.OPZ[h]; return !o ? null : (Array.isArray(o) ? o : (o[Admin.sez] || null)); },
   // ruoli: OPERATORE e ADMIN sempre presenti; gli altri da PARAMETRI 'ruoli' (separati da ; o ,), per ora solo descrittivi
   ruoli: function () { var a = Admin.OPZ.ruolo.slice(); L.s(DB.param('ruoli', '')).split(/[;,]/).forEach(function (x) { x = L.up(L.s(x)); if (x && a.indexOf(x) < 0) a.push(x); }); return a; },
   CONF: {
-    OPERATORI: { title: 'Operatori', hint: 'Email Gmail di accesso per ogni sigla. Ruolo ADMIN = può modificare la configurazione e vede Admin e Dashboard (salvando si aggiorna anche la protezione Google). Altri ruoli (da Parametri → ruoli) sono per ora solo descrittivi: valgono come OPERATORE. Attivo NO = non entra.', cols: ['email', 'nome', 'sigla', 'ruolo', 'attivo'], add: true },
+    OPERATORI: { title: 'Operatori', hint: 'Email Gmail di accesso per ogni sigla. Ruolo ADMIN = può modificare la configurazione e vede Admin e Dashboard (salvando si aggiorna anche la protezione Google). Altri ruoli (da Parametri → ruoli) sono per ora solo descrittivi: valgono come OPERATORE. Attivo NO = non entra. Condiviso SI = account usato da più persone (palmarino ACK): prima della spunta si sceglie l\'operatore con il suo PIN (4-6 cifre, salvato cifrato).', cols: ['email', 'nome', 'sigla', 'ruolo', 'attivo', 'condiviso', 'pin'], add: true },
     RIPARATORI: { title: 'Riparatori', hint: 'Dati stampati sul DDT ACK. ack_include_as = SI fa entrare gli AS nell\'ACK del giorno.', cols: ['codice', 'ragione_sociale', 'indirizzo', 'ack_include_as', 'mnft_default', 'attivo', 'note'], add: true },
     RIPARATORI_ALIAS: { title: 'Alias riparatori VLT', hint: 'Nome riparatore come scritto in VLT → codice riparatore.', cols: ['nome_vlt', 'codice_riparatore'], add: true },
     DEPOT_VLT: { title: 'Depositi VLT', hint: 'Codice deposito VLT → destinazione: usato per mittente e destinazione GOOD.', cols: ['depot_vlt', 'destinazione', 'sigla', 'destinazione_conversione'], add: true },
@@ -2170,6 +2178,9 @@ var Admin = {
     $('admCal').style.display = Admin.sez === 'CALENDARIO_USCITE' ? '' : 'none';
     if (acc) { document.querySelectorAll('#admTabs .subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-ACCESSI'); }); Accessi.render(); return; }
     if ($('accSuperBox')) $('accSuperBox').style.display = 'none';
+    if (Admin.sez === 'OPERATORI' && DB.t.OPERATORI && !('pin' in DB.t.OPERATORI.idx) && !Admin._ec) {
+      Admin._ec = true; DB.ensureCols('OPERATORI', ['condiviso', 'pin']).then(function () { Admin.render(); }).catch(function (e) { toast('Colonne condiviso/PIN non aggiunte: ' + e.message, 'ko'); });
+    }
     var c = Admin.CONF[Admin.sez], t = DB.t[Admin.sez];
     document.querySelectorAll('.subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-' + Admin.sez); });
     $('admTitle').textContent = c.title; $('admHint').textContent = c.hint;
@@ -2181,6 +2192,7 @@ var Admin = {
         var d = Admin.dirty[i] && Admin.dirty[i][h] !== undefined;
         var v = d ? Admin.dirty[i][h] : r[h];
         var op = Admin.opz(h);
+        if (h === 'pin' && Admin.sez === 'OPERATORI') return '<td><input class="edit-cell' + (d ? ' dirty' : '') + '" type="password" inputmode="numeric" autocomplete="new-password" style="width:11ch" placeholder="' + (L.s(r.pin) ? '•••• impostato' : 'nessun PIN') + '" value="' + (d ? esc(v) : '') + '" onchange="Admin.set(' + i + ',\'pin\',this.value)"></td>';
         if (op) { var lst = op.indexOf(L.s(v)) < 0 && L.s(v) ? [L.s(v)].concat(op) : op;
           return '<td><select class="edit-cell' + (d ? ' dirty' : '') + '" onchange="Admin.set(' + i + ',\'' + h + '\',this.value)">' + (L.s(v) ? '' : '<option value=""></option>') + lst.map(function (x) { return '<option' + (x === L.s(v) ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></td>'; }
         return '<td><input class="edit-cell' + (d ? ' dirty' : '') + '" value="' + esc(v) + '" onchange="Admin.set(' + i + ',\'' + h + '\',this.value)"></td>';
@@ -2192,6 +2204,13 @@ var Admin = {
   save: async function () {
     var t = DB.t[Admin.sez], keys = Object.keys(Admin.dirty);
     if (!keys.length) { toast('Nessuna modifica'); return; }
+    if (Admin.sez === 'OPERATORI') {   // PIN: 4-6 cifre, salvato come impronta sha256 (mai in chiaro)
+      for (var pk = 0; pk < keys.length; pk++) { var dp = Admin.dirty[keys[pk]];
+        if (dp.pin !== undefined && dp.pin !== '' && !/^sha256:/i.test(dp.pin)) {
+          if (!/^\d{4,6}$/.test(dp.pin)) { toast('PIN di ' + (t.rows[keys[pk]].sigla || 'riga ' + (+keys[pk] + 1)) + ': servono da 4 a 6 cifre', 'ko'); return; }
+          dp.pin = 'sha256:' + (await Nr.sha(dp.pin));
+        } }
+    }
     try {
       var upd = [], nuove = [], logs = [];
       keys.forEach(function (k) {
@@ -2200,6 +2219,7 @@ var Admin = {
         if (Admin.sez === 'OPERATORI' && r.email) r.email = r.email.toLowerCase();
         if (r._new) nuove.push(r);
         else { upd.push({ range: API.q(t.name) + '!A' + r._r + ':' + L.colLetter(t.header.length - 1) + r._r, values: [t.toRow(r)] }); }
+        if ('pin' in ch) { prima.pin = prima.pin ? '(impostato)' : ''; ch = Object.assign({}, ch, { pin: ch.pin ? '(cambiato)' : '(tolto)' }); }
         logs.push(App.log(r._new ? 'CREA' : 'MODIFICA', t.name, r[t.header[0]], { prima: prima, dopo: ch }));
       });
       if (Admin.sez === 'OPERATORI' && Prot.attive()) {
@@ -2564,6 +2584,14 @@ DB.ensureSheet = async function (name, header) {
   await API.batchUpdate(DB.id, [{ range: API.q(name) + '!A1', values: [header] }]);
   DB.t[name] = new Table(name, header, []); return DB.t[name];
 };
+// colonne nuove su un foglio esistente (in coda all'intestazione), poi ricarica il foglio
+DB.ensureCols = async function (name, cols) {
+  var t = DB.t[name]; if (!t || !t.header.length) return t;
+  var manc = cols.filter(function (c) { return !(c in t.idx); }); if (!manc.length) return t;
+  var a = t.header.length;
+  await API.batchUpdate(DB.id, [{ range: API.q(name) + '!' + L.colLetter(a) + '1:' + L.colLetter(a + manc.length - 1) + '1', values: [manc] }]);
+  await DB.loadTables([name]); return DB.t[name];
+};
 // rettifiche VLT attive: il dato VLT resta com'è, l'app usa il valore corretto
 DB.applyRett = function () {
   var t = DB.t.VLT_RETTIFICHE; if (!t || !DB.vlt) return;
@@ -2718,7 +2746,7 @@ var Ack = {
     Ack._loghi = Promise.all([uno(Ack.LOGHI.sx), uno(Ack.LOGHI.dx)]).then(function (r) { Ack._lg = { sx: r[0], dx: r[1] }; if (!r[0] || !r[1]) Ack._loghi = null; return Ack._lg; });
     return Ack._loghi;
   },
-  load: async function () { Ack.loghi(); await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_RIGHE', 'SPEDIZIONI_COLLI', 'DDT_REGISTRO', 'ANOMALIE']); await Ack.ensurePending(); Ack.loaded = true; },
+  load: async function () { Ack.loghi(); await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_RIGHE', 'SPEDIZIONI_COLLI', 'DDT_REGISTRO', 'ANOMALIE']); await Ack.ensurePending(); try { await DB.ensureCols('SPEDIZIONI', ['operatore_sigla', 'operatore_email']); } catch (e) { } Ack.loaded = true; },
   // ─ ACK PENDING: FR tolti da un ACK, con il motivo (foglio ACK_PENDING, creato dall'app se non c'è)
   PEND_H: ['id_pending', 'data', 'riparatore', 'fr', 'seriale', 'pn', 'id_unita', 'id_spedizione', 'motivo', 'stato', 'rimosso_da', 'risolto_il', 'risolto_da', 'id_spedizione_uscita', 'nota_risoluzione'],
   MOTIVI: ['Pezzo non trovato a scaffale', 'Pezzo danneggiato / da verificare', 'Seriale o TPN non corrispondente', 'Bloccato dal Service Desk', 'In attesa di autorizzazione'],
@@ -2900,7 +2928,7 @@ var Ack = {
   },
   setR: function (r, esito) {
     var t = DB.t.SPEDIZIONI_RIGHE;
-    r.esito = esito; r.spuntato_da = esito === 'SPUNTATO' ? Auth.email : ''; r.spuntato_il = esito === 'SPUNTATO' ? L.nowStamp() : '';
+    r.esito = esito; r.spuntato_da = esito === 'SPUNTATO' ? App.chi().email : ''; Ack.opTocca(); r.spuntato_il = esito === 'SPUNTATO' ? L.nowStamp() : '';
     Ack.qPush(['esito', 'spuntato_da', 'spuntato_il'].map(function (h) { return { range: t.cell(h, r._r), values: [[r[h]]] }; }));
   },
 
@@ -2923,7 +2951,60 @@ var Ack = {
       Modal.close(); Ack.apri(s.id_spedizione);
     } catch (e) { Modal.open('Errore avvio ACK', e.message); }
   },
+  // ─ operatore sul palmarino (account condiviso): uno per scheda, scelto con PIN, cambiabile; dopo N minuti fermo si richiede il PIN
+  _op: {},
+  opMin: function () { return Math.max(1, parseInt(DB.param('ack_operatore_minuti', '15'), 10) || 15); },
+  opValido: function (s) { var o = s && Ack._op[s.id_spedizione]; return !!(o && Date.now() - o.ts < Ack.opMin() * 60000); },
+  opTocca: function () { var o = Ack.cur && Ack._op[Ack.cur]; if (o) o.ts = Date.now(); },
+  operatori: function () {
+    var visti = {}, out = [];
+    DB.t.OPERATORI.rows.forEach(function (o) { var sg = L.up(o.sigla); if (!sg || visti[sg] || L.up(o.attivo) === 'NO' || L.up(o.condiviso) === 'SI') return; visti[sg] = 1; out.push(o); });
+    return out.sort(function (a, b) { return L.s(a.nome || a.sigla).localeCompare(L.s(b.nome || b.sigla)); });
+  },
+  scegliOp: function (s, titolo) {
+    return new Promise(function (res) {
+      var ops = Ack.operatori(), pre = L.up(s.operatore_sigla);
+      Modal.html(titolo || ('Chi sta spuntando? · ' + s.destinatario),
+        '<div style="font-size:13px;margin-bottom:10px">Il palmarino è condiviso: scegli il tuo nome e inserisci il tuo PIN. Resta valido per questa scheda finché lavori (dopo ' + Ack.opMin() + ' minuti fermo viene richiesto).</div>' +
+        '<div class="fg"><span class="fl">Operatore</span><select class="fc" id="opSel">' + ops.map(function (o) { return '<option value="' + esc(o.sigla) + '"' + (L.up(o.sigla) === pre ? ' selected' : '') + '>' + esc(o.sigla + ' · ' + (o.nome || o.email)) + '</option>'; }).join('') + '</select></div>' +
+        '<div class="fg" style="margin-top:8px"><span class="fl">PIN</span><input class="fc mono" id="opPin" type="password" inputmode="numeric" autocomplete="off" maxlength="6" onkeydown="if(event.key===\'Enter\'){event.preventDefault();document.getElementById(\'opOk\').click()}"></div>' +
+        '<div class="fb err" id="opErr" style="margin-top:6px"></div>',
+        [{ label: 'Annulla', cls: 'ghost', fn: function () { res(false); } },
+         { label: 'Conferma', cls: 'green', keep: true, fn: async function () {
+           var sg = $('opSel').value, o = ops.find(function (x) { return x.sigla === sg; }), pin = L.s($('opPin').value);
+           if (!o) return;
+           var obbl = L.up(DB.param('ack_pin_obbligatorio', 'SI')) !== 'NO', ref = L.s(o.pin);
+           if (!ref && obbl) { $('opErr').textContent = 'PIN non impostato per ' + o.sigla + ': chiedi a un admin (Admin → Operatori → pin)'; return; }
+           if (ref) { var h = 'sha256:' + (await Nr.sha(pin)); if (h.toLowerCase() !== ref.toLowerCase()) { $('opErr').textContent = 'PIN errato'; $('opPin').value = ''; $('opPin').focus(); return; } }
+           var chi = { email: L.s(o.email).toLowerCase() || Auth.email, sigla: o.sigla, nome: o.nome || L.s(o.email).split('@')[0] || o.sigla, ts: Date.now() };
+           Ack._op[s.id_spedizione] = chi; App.opAtt = chi;
+           Modal.close();
+           var primaOp = L.s(s.operatore_sigla);
+           if (L.up(primaOp) !== L.up(chi.sigla)) {
+             try { await API.batchUpdate(DB.id, Ack.setS(s, { operatore_sigla: chi.sigla, operatore_email: chi.email }));
+               await API.append(DB.id, 'LOG', [App.log(primaOp ? 'ACK_CAMBIO_OPERATORE' : 'ACK_OPERATORE', 'SPEDIZIONI', s.id_spedizione, { riparatore: s.destinatario, prima: primaOp, dopo: chi.sigla })]);
+             } catch (e) { toast('Operatore non salvato sulla scheda: ' + e.message, 'ko'); }
+           }
+           res(true);
+         } }]);
+      setTimeout(function () { var e = $('opPin'); if (e) e.focus(); }, 80);
+    });
+  },
+  cambiaOp: async function () { var s = Ack.byId(Ack.cur); if (!s) return; if (await Ack.scegliOp(s, 'Cambia operatore · ' + s.destinatario)) { toast('Operatore: ' + App.opAtt.sigla, 'ok'); Ack.render(); } },
+  // prima di chiudere: conferma esplicita dell'operatore (o cambio)
+  confermaOp: function (s) {
+    return new Promise(function (res) {
+      var o = Ack._op[s.id_spedizione] || {};
+      Modal.open('Operatore della spunta', 'Chiudo la spunta ' + s.destinatario + ' come:\n\n' + (o.sigla || '?') + ' · ' + (o.nome || '') + '\n\nSe non sei tu, premi "Cambia operatore".',
+        [{ label: 'Annulla', cls: 'ghost', fn: function () { res(false); } },
+         { label: 'Cambia operatore', cls: 'ghost', fn: async function () { delete Ack._op[s.id_spedizione]; if (await Ack.scegliOp(s, 'Cambia operatore · ' + s.destinatario)) res(await Ack.confermaOp(s)); else res(false); } },
+         { label: 'Confermo, sono ' + (o.sigla || ''), cls: 'green', fn: function () { res(true); } }]);
+    });
+  },
   apri: function (id) {
+    var s0 = Ack.byId(id);
+    if (App.condiviso() && s0 && s0.stato === 'IN_SPUNTA' && !Ack.opValido(s0)) { Ack.scegliOp(s0).then(function (ok) { if (ok) Ack.apri(id); }); return; }
+    if (App.condiviso() && Ack._op[id]) App.opAtt = Ack._op[id];
     if (Ack.cur !== id) Ack._fb = null;
     Ack.cur = id; var s = Ack.byId(id);
     if (s && !Ack.colli[id]) {
@@ -2944,6 +3025,7 @@ var Ack = {
   scan: function () {
     var s = Ack.byId(Ack.cur); var raw = L.s($('ackScan').value); $('ackScan').value = '';
     if (!s || s.stato !== 'IN_SPUNTA' || !raw) return;
+    if (App.condiviso() && !Ack.opValido(s)) { Ack.fb('Inattivo da più di ' + Ack.opMin() + ' minuti: reinserisci il PIN e rispara', 'warn'); Ack.scegliOp(s).then(function (ok) { if (ok) Ack.apri(s.id_spedizione); }); return; }
     var R = Ack.righe(s.id_spedizione), k = L.frKey(raw), ser = L.up(L.estraiSeriale(raw, Ingresso.regole()));
     var r = R.find(function (x) { return x.fr === k; }) || R.find(function (x) { var xs = L.up(x.seriale); return xs && (xs === ser || xs === L.up(raw) || L.up(L.afterSpace(xs)) === ser); });
     if (r) {
@@ -2959,7 +3041,7 @@ var Ack = {
       if (gia) { Ack.fb('SPARE FALSE già segnalato: ' + (fr ? 'FR ' + fr : raw), 'warn'); }
       else {
         var desc = 'SPARE FALSE in ACK ' + s.destinatario + ': ' + (v ? 'stato VLT "' + v.stato + '"' + (v.riparatore ? ', riparatore ' + v.riparatore : '') : (fr ? 'FR non in VLT' : 'non trovato in giacenza né in VLT'));
-        var o = { data: L.nowStamp(), tipo: 'SPARE_FALSE', id_unita: u ? u.id_unita : '', seriale: u ? u.seriale : (v ? v.f_mat_serial_no : raw), fr: fr, id_spedizione: s.id_spedizione, descrizione: desc, stato: 'APERTA', aperta_da: Auth.email, rev: 1 };
+        var o = { data: L.nowStamp(), tipo: 'SPARE_FALSE', id_unita: u ? u.id_unita : '', seriale: u ? u.seriale : (v ? v.f_mat_serial_no : raw), fr: fr, id_spedizione: s.id_spedizione, descrizione: desc, stato: 'APERTA', aperta_da: App.chi().email, rev: 1 };
         var x = Ack.pushRow(DB.t.ANOMALIE, o, null); Ack.qA.push(x); Ack.qPush([]);
         Ack.fb('✗ SPARE FALSE · ' + (fr ? 'FR ' + fr : raw) + (v ? ' · ' + v.stato : '') + ' — non spedire', 'err');
       }
@@ -2971,12 +3053,12 @@ var Ack = {
     var s = Ack.byId(r.id_spedizione), tP = DB.t.ACK_PENDING;
     if (ripristina) {
       var p = Ack.pendingDi(r);
-      if (p) Ack.qPush(Ack.setP(p, { stato: 'ANNULLATO', risolto_il: L.nowStamp(), risolto_da: Auth.email, nota_risoluzione: 'rimozione annullata in spunta' }));
+      if (p) Ack.qPush(Ack.setP(p, { stato: 'ANNULLATO', risolto_il: L.nowStamp(), risolto_da: App.chi().email, nota_risoluzione: 'rimozione annullata in spunta' }));
       Ack.setR(r, 'DA_SPUNTARE'); Ack.renderDet(); Ack.renderCards(); return;
     }
     var motivo = await Ack.chiediMotivo(r); if (!motivo) return;
     try {
-      var o = { data: L.nowStamp(), riparatore: s ? s.destinatario : '', fr: r.fr, seriale: r.seriale, pn: r.pn, id_unita: r.id_unita, id_spedizione: r.id_spedizione, motivo: motivo, stato: 'APERTO', rimosso_da: Auth.email };
+      var o = { data: L.nowStamp(), riparatore: s ? s.destinatario : '', fr: r.fr, seriale: r.seriale, pn: r.pn, id_unita: r.id_unita, id_spedizione: r.id_spedizione, motivo: motivo, stato: 'APERTO', rimosso_da: App.chi().email };
       var rr = await API.append(DB.id, 'ACK_PENDING', [tP.toRow(o)]);
       o.id_pending = 'P' + L.pad(rr - 1, 6);
       await API.batchUpdate(DB.id, [{ range: tP.cell('id_pending', rr), values: [[o.id_pending]] }]);
@@ -3028,6 +3110,10 @@ var Ack = {
     if (err.length) { Modal.open('Colli e peso', err.join('\n')); return; }
     var peso = col.reduce(function (a, x) { return a + parseFloat(String(x.peso).replace(',', '.')); }, 0);
     var sf = Ack.spareFalse(s.id_spedizione).length;
+    if (App.condiviso()) {
+      if (!Ack.opValido(s) && !(await Ack.scegliOp(s))) return;
+      if (!(await Ack.confermaOp(s))) return;
+    }
     if (!(await Modal.confirm('Chiudi spunta ' + s.destinatario, sp.length + ' pezzi · ' + col.length + ' colli · ' + Math.round(peso * 100) / 100 + ' kg' + (sf ? '\n' + sf + ' SPARE FALSE segnalati (non spediti)' : '') + (s.awb ? '\n\nAWB presente: genero subito DDT e uscita.' : '\n\nIl DDT si genera da solo quando il Service Desk inserisce l\'AWB.')))) return;
     Modal.open('Chiusura spunta', 'Salvo colli e peso…', []);
     try {
@@ -3037,7 +3123,8 @@ var Ack = {
       objs.forEach(function (o, i) { o.id_collo = 'C' + L.pad(r + i - 1, 6); });
       var upd = [{ range: tC.cell('id_collo', r) + ':' + tC.col('id_collo') + (r + objs.length - 1), values: objs.map(function (o) { return [o.id_collo]; }) }];
       objs.forEach(function (o, i) { Ack.pushRow(tC, o, r + i); });
-      upd = upd.concat(Ack.setS(s, { stato: 'PRONTA', n_pezzi: sp.length, n_colli: col.length, peso_tot_kg: Math.round(peso * 100) / 100 }));
+      var chiC = App.chi();
+      upd = upd.concat(Ack.setS(s, { stato: 'PRONTA', n_pezzi: sp.length, n_colli: col.length, peso_tot_kg: Math.round(peso * 100) / 100, operatore_sigla: chiC.sigla, operatore_email: chiC.email }));
       await API.batchUpdate(DB.id, upd);
       await API.append(DB.id, 'LOG', [App.log('ACK_CHIUSA_SPUNTA', 'SPEDIZIONI', s.id_spedizione, { pezzi: sp.length, colli: col.length, peso: peso, spare_false: sf })]);
       lsS('colli_' + s.id_spedizione, null); delete Ack.colli[s.id_spedizione];
@@ -3088,7 +3175,7 @@ var Ack = {
       if (s.stato !== 'PRONTA') throw new Error('La spunta non è chiusa (stato ' + s.stato + ')');
       if (!L.s(s.awb)) throw new Error('Manca l\'AWB');
       var R = Ack.righe(id).filter(function (r) { return r.esito === 'SPUNTATO'; });
-      var now = L.nowStamp(), me = Auth.email, oggi = L.isoToday(), anno = oggi.slice(0, 4), sigla = App.me.sigla || '';
+      var chiE = App.chi(), now = L.nowStamp(), me = L.s(s.operatore_email) || chiE.email, oggi = L.isoToday(), anno = oggi.slice(0, 4), sigla = L.s(s.operatore_sigla) || chiE.sigla;   // OP = chi ha fatto la spunta
       // 1. numero DDT: riga nel registro (append atomico) → progressivo = base + righe ACK dell'anno che la precedono
       Modal.progress('1/6 numero DDT');
       var heads = await API.batchGet(DB.id, ['DDT_REGISTRO', 'MOVIMENTI', 'LOG'].map(function (n) { return API.q(n) + '!1:1'; }));
@@ -3221,6 +3308,9 @@ var Ack = {
       (edit ? '<span class="hint" id="ackSave"></span><button class="btn ghost sm" onclick="Ack.aggiornaLista()">Aggiorna lista da VLT</button><button class="btn green" onclick="Ack.chiudi()">Chiudi spunta</button>' : '') +
       (s.stato === 'PRONTA' ? '<button class="btn ghost sm" onclick="Ack.riapri()">Riapri spunta</button>' : '') +
       '<button class="btn ghost sm" onclick="Ack.excel(\'' + s.id_spedizione + '\')">⬇ Excel</button> <button class="btn ghost sm" onclick="Ack.cur=null;Ack.render()">Chiudi pannello</button></div>';
+    var opS = App.condiviso() && edit ? Ack._op[s.id_spedizione] : null;
+    if (opS) html += '<div class="row" style="align-items:center;margin:4px 0 8px"><span class="pill p-violet">👤 ' + esc(opS.sigla) + ' · ' + esc(opS.nome) + '</span><button class="btn ghost sm" onclick="Ack.cambiaOp()">Cambia operatore</button></div>';
+    else if (L.s(s.operatore_sigla)) html += '<div class="hint" style="margin:2px 0 8px">👤 Operatore: <b>' + esc(s.operatore_sigla) + '</b></div>';
     if (edit) html += '<div class="fg" style="max-width:560px"><span class="fl">Spara FR o seriale</span><input class="fc scan-big" id="ackScan" autocomplete="off" placeholder="FR / seriale" onkeydown="if(event.key===\'Enter\'||event.key===\'Tab\'){event.preventDefault();Ack.scan()}"><div class="fb" id="ackFb"></div></div>';
     html += '<div class="stats" style="margin-top:10px"><div class="stat"><b>' + n.tot + '</b><span>attesi</span></div><div class="stat"><b style="color:var(--green)">' + n.sp + '</b><span>spuntati</span></div>' +
       '<div class="stat"><b' + (n.da + n.man ? ' style="color:var(--red)"' : '') + '>' + (n.da + n.man) + '</b><span>mancanti</span></div>' + (n.rim ? '<div class="stat"><b>' + n.rim + '</b><span>rimossi</span></div>' : '') +
