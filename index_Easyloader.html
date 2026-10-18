@@ -627,6 +627,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
           <input class="fc" id="admQ" placeholder="filtra…" style="width:200px" oninput="Admin.render()">
           <button class="btn ghost sm" id="admAdd" onclick="Admin.addRow()">+ Riga</button>
           <label class="btn ghost sm" id="admCal" style="cursor:pointer;display:none" title="Importa il calendario aggiornato (xlsx): sostituisce quello esistente">⬆ Importa calendario<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Cal.importa(this)"></label>
+          <label class="btn ghost sm" id="admKpiImp" style="cursor:pointer;display:none" title="Excel con colonne kpi, mese, perc_1, perc_2, fonte: aggiorna i mesi già presenti e aggiunge i nuovi">⬆ Importa Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Admin.importaKpi(this)"></label>
           <button class="btn ghost sm" id="admXls" onclick="Admin.excel()">⬇ Excel</button>
           <button class="btn sm" id="admSave" onclick="Admin.save()">Salva modifiche</button></div>
         <div id="spzBox"></div>
@@ -1657,7 +1658,7 @@ var Ingresso = {
       throw new Error('Salvataggio incompleto.\nScritti: ' + (ok.join(', ') || 'nessuno') + '\nNON scritti: ' + ko.join(', '));
     }
     var rR = res[0].value, rU = res[1].value, rM = res[2].value;
-    var idR = 'R' + L.pad(rR - 1, 6), uBase = parseInt(DB.param('unita_id_base', '0'), 10) || 0;
+    var idR = 'R' + L.pad(DB.rid('RICEZIONI', rR), 6), uBase = parseInt(DB.param('unita_id_base', '0'), 10) || 0;
     uObjs.forEach(function (o, i) { o.id_unita = 'U' + L.pad(uBase + rU + i - 1, 7); o._r = rU + i; o.id_ricezione = idR; });
     var mBase = parseInt(DB.param('mov_id_base', ''), 10);
     if (isNaN(mBase)) {   // prima scrittura dall'app: allineo la numerazione all'ultimo ID migrato
@@ -1680,7 +1681,7 @@ var Ingresso = {
     await Promise.all([
       API.batchUpdate(DB.id, upd),
       API.append(DB.id, 'LOG', [tL.toRow({ data_ora: now, utente: me, azione: 'CREA', foglio: 'RICEZIONI', id_record: idR, dettaglio: JSON.stringify({ tipo: T.tipo, pezzi: n, mittente: T.mittente, unita: uObjs[0].id_unita + '…' + uObjs[n - 1].id_unita }) })]),
-      anom.length ? API.append(DB.id, 'ANOMALIE', anom).then(function (rA) { return API.batchUpdate(DB.id, [{ range: tA.cell('id_anomalia', rA) + ':' + tA.col('id_anomalia') + (rA + anom.length - 1), values: anom.map(function (x, i) { return ['A' + L.pad(rA + i - 1, 6)]; }) }]); }) : null
+      anom.length ? API.append(DB.id, 'ANOMALIE', anom).then(function (rA) { return API.batchUpdate(DB.id, [{ range: tA.cell('id_anomalia', rA) + ':' + tA.col('id_anomalia') + (rA + anom.length - 1), values: anom.map(function (x, i) { return ['A' + L.pad(DB.rid('ANOMALIE', rA + i), 6)]; }) }]); }) : null
     ]);
     // aggiorno la giacenza in memoria
     uObjs.forEach(function (o) { var x = {}; tU.header.forEach(function (h) { x[h] = o[h] === undefined ? '' : String(o[h]); }); x._r = o._r; tU.rows.push(x); });
@@ -1724,7 +1725,7 @@ var Ingresso = {
         upd.push({ range: tM.cell('note', rM), values: [[[mn && mn[0] ? L.s(mn[0][0]) : '', nota].filter(Boolean).join(' | ')]] });
       }
       // pezzi della ricezione: uno in meno
-      var rR = parseInt(L.s(u.id_ricezione).replace(/^R/, ''), 10) + 1;
+      var rR = parseInt(L.s(u.id_ricezione).replace(/^R/, ''), 10) + 1 - (parseInt(DB.param('idbase_RICEZIONI', '0'), 10) || 0);
       if (rR > 1 && ('n_pezzi' in tR.idx)) {
         var rc = (await API.batchGet(DB.id, [tR.cell('id_ricezione', rR) + ':' + tR.col('n_pezzi') + rR]))[0][0] || [];
         if (L.s(rc[0]) === u.id_ricezione) upd.push({ range: tR.cell('n_pezzi', rR), values: [[String(Math.max(0, (parseInt(rc[tR.idx.n_pezzi], 10) || 1) - 1))]] });
@@ -1859,12 +1860,14 @@ var Giacenze = {
   // dati dell'ingresso (AWB, DDT, mittente, vettore, PO, operatore, data e ora) dal movimento IN della scheda
   movIn: function (u) { return (Giacenze._mi || {})[u.id_mov_in] || {}; },
   indice: function () {
-    var R = Sto.dati.cur; if (!R || Giacenze._miN === R.length) return;
-    var m = {}; R.forEach(function (r) { if (r.direzione === 'IN') m[r.id_mov] = r; }); Giacenze._mi = m; Giacenze._miN = R.length;
+    var R = Sto.dati.cur, A = Sto.dati[String(new Date().getFullYear() - 1)] || []; if (!R || Giacenze._miN === R.length + A.length) return;
+    var m = {}; A.concat(R).forEach(function (r) { if (r.direzione === 'IN') m[r.id_mov] = r; }); Giacenze._mi = m; Giacenze._miN = R.length + A.length;
   },
   carica: async function () {
     if (Sto.dati.cur) return;
     try { Sto.dati.cur = await Sto.colsSafe(DB.id, 'MOVIMENTI'); Giacenze.render(); } catch (e) { toast('Movimenti non caricati: ' + e.message, 'ko'); }
+    // archivio dell'anno prima (in cache): serve per i pezzi entrati l'anno scorso e ancora in giacenza
+    try { var y = String(new Date().getFullYear() - 1), c = await DB.cacheGet('arch_' + y); if (!c) { var f = await API.findInFolder(CFG.FOLDER_ID, 'DB_ARCHIVIO_' + y); if (f) { c = { ts: Date.now(), rows: await Sto.colsSafe(f.id, 'MOVIMENTI') }; await DB.cacheSet('arch_' + y, c); } } if (c) { Sto.dati[y] = c.rows; Giacenze.render(); } } catch (e) { }
   },
   filtra: function (u) {
     var st = $('gStato').value, tipo = $('gTipo').value, mag = $('gMag').value, q = L.up($('gQ').value);
@@ -2303,7 +2306,7 @@ var Admin = {
     REGOLE_BARCODE: { title: 'Regole barcode', hint: 'Estrazione seriale/PN dal barcode, in ordine di priorità.', cols: ['priorita', 'prefisso', 'lunghezza', 'condizione_extra', 'riparatore', 'seriale_da', 'seriale_lung', 'pn_da', 'pn_lung', 'pn_prefisso', 'note'], add: true }
   },
   init: function () {
-    $('admTabs').innerHTML = '<span class="subtab" id="adm-ACCESSI" onclick="Admin.open(\'ACCESSI\')">🔑 Accessi admin</span><span class="subtab" id="adm-SPAZIO" onclick="Admin.open(\'SPAZIO\')">💾 Spazio database</span>' + Object.keys(Admin.CONF).map(function (k) { return '<span class="subtab" id="adm-' + k + '" onclick="Admin.open(\'' + k + '\')">' + esc(Admin.CONF[k].title) + '</span>'; }).join('');
+    $('admTabs').innerHTML = '<span class="subtab" id="adm-ACCESSI" onclick="Admin.open(\'ACCESSI\')">🔑 Accessi admin</span><span class="subtab" id="adm-SPAZIO" onclick="Admin.open(\'SPAZIO\')">💾 Spazio database</span>' + (App.isOwner ? '<span class="subtab" id="adm-ARCHIVIO" onclick="Admin.open(\'ARCHIVIO\')">🗄 Archiviazione annuale</span>' : '') + Object.keys(Admin.CONF).map(function (k) { return '<span class="subtab" id="adm-' + k + '" onclick="Admin.open(\'' + k + '\')">' + esc(Admin.CONF[k].title) + '</span>'; }).join('');
   },
   excel: function () { var c = Admin.CONF[Admin.sez]; Xls.scarica(Admin.sez, [Object.assign({ nome: Admin.sez }, Xls.oggetti(DB.t[Admin.sez].rows, c.cols.map(function (h) { return [h, h]; })))]); },
   open: function (k) {
@@ -2311,9 +2314,10 @@ var Admin = {
     Admin.sez = k; Admin.dirty = {}; $('admQ').value = ''; Admin.render();
   },
   render: function () {
-    var acc = Admin.sez === 'ACCESSI', spz = Admin.sez === 'SPAZIO';
+    var acc = Admin.sez === 'ACCESSI', arc = Admin.sez === 'ARCHIVIO', spz = Admin.sez === 'SPAZIO' || arc;
     ['admAdd', 'admQ', 'admSave', 'admXls'].forEach(function (id) { $(id).style.display = acc || spz ? 'none' : ''; });
-    $('spzBox').style.display = spz ? '' : 'none';
+    $('spzBox').style.display = spz ? '' : 'none'; if ($('admKpiImp')) $('admKpiImp').style.display = Admin.sez === 'KPI_STORICO' ? '' : 'none';
+    if (arc) { document.querySelectorAll('#admTabs .subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-ARCHIVIO'); }); if ($('accSuperBox')) $('accSuperBox').style.display = 'none'; $('admCal').style.display = 'none'; Arc.render(); return; }
     if (spz) { document.querySelectorAll('#admTabs .subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-SPAZIO'); }); if ($('accSuperBox')) $('accSuperBox').style.display = 'none'; $('admCal').style.display = 'none'; Spz.render(); return; }
     $('admCal').style.display = Admin.sez === 'CALENDARIO_USCITE' ? '' : 'none';
     if (acc) { document.querySelectorAll('#admTabs .subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-ACCESSI'); }); Accessi.render(); return; }
@@ -2339,6 +2343,28 @@ var Admin = {
         return '<td><input class="edit-cell' + (d ? ' dirty' : '') + '" value="' + esc(v) + '" onchange="Admin.set(' + i + ',\'' + h + '\',this.value)"></td>';
       }).join('') + '</tr>';
     }).join('');
+  },
+  // KPI storico (BPR) da Excel: chiave kpi + mese, aggiorna o aggiunge
+  importaKpi: async function (inp) {
+    var f = inp.files && inp.files[0]; inp.value = ''; if (!f) return;
+    try {
+      var rows = await leggiFoglio(f), t = await Chi.foglio('KPI_STORICO'), by = {}, upd = [], nuovi = [], err = [];
+      t.rows.forEach(function (r) { by[L.up(r.kpi) + '|' + L.s(r.mese).slice(0, 7)] = r; });
+      var num = function (v) { v = L.s(v).replace('%', '').replace(',', '.'); if (v === '') return ''; var x = parseFloat(v); if (isNaN(x)) return null; if (x > 0 && x <= 1) x = x * 100; return String(Math.round(x * 10) / 10); };   // 0,955 (formato %) = 95,5
+      rows.forEach(function (r, i) {
+        var k = L.up(campo(r, ['kpi', 'KPI'])).replace(/\s+/g, ''), m = L.normDate(campo(r, ['mese', 'MESE'])).slice(0, 7), p1 = num(campo(r, ['perc_1', 'PERC_1', '% soglia 1'])), p2 = num(campo(r, ['perc_2', 'PERC_2', '% soglia 2'])), fo = campo(r, ['fonte', 'FONTE']);
+        if (!k && !m) return;
+        if (!/^KPI\d$/.test(k) || !/^\d{4}-\d{2}$/.test(m) || p1 === null || p2 === null) { err.push('riga ' + (i + 2) + ': ' + [k, m, campo(r, ['perc_1']), campo(r, ['perc_2'])].join(' ')); return; }
+        var o = { kpi: k, mese: m, perc_1: p1, perc_2: p2, fonte: fo || 'Import ' + f.name }, ex = by[k + '|' + m];
+        if (ex) { Object.keys(o).forEach(function (h) { if (h in t.idx && L.s(ex[h]) !== L.s(o[h])) { ex[h] = o[h]; upd.push({ range: t.cell(h, ex._r), values: [[o[h]]] }); } }); }
+        else { nuovi.push(o); by[k + '|' + m] = o; }
+      });
+      if (!(await Modal.confirm('Importa KPI storico', (nuovi.length + ' mesi nuovi, ' + upd.length + ' valori aggiornati') + (err.length ? '\n\nRighe scartate:\n' + err.slice(0, 10).join('\n') : '')))) return;
+      if (upd.length) await API.batchUpdate(DB.id, upd);
+      if (nuovi.length) { var r0 = await API.append(DB.id, 'KPI_STORICO', nuovi.map(function (o) { return t.toRow(o); })); nuovi.forEach(function (o, i) { Ack.pushRow(t, o, r0 + i); }); }
+      await API.append(DB.id, 'LOG', [App.log('IMPORT_KPI_STORICO', 'KPI_STORICO', f.name, { nuovi: nuovi.length, aggiornati: upd.length, scartate: err.length })]);
+      toast('KPI storico: ' + nuovi.length + ' nuovi, ' + upd.length + ' aggiornati', 'ok'); Admin.render();
+    } catch (e) { toast('Import non riuscito: ' + e.message, 'ko'); }
   },
   set: function (i, h, v) { Admin.dirty[i] = Admin.dirty[i] || {}; Admin.dirty[i][h] = L.s(v); Admin.render(); },
   addRow: function () { var t = DB.t[Admin.sez]; var o = { _r: null, _new: true }; t.header.forEach(function (h) { o[h] = ''; }); if (Admin.sez === 'OPERATORI') { o.ruolo = 'OPERATORE'; o.attivo = 'SI'; } t.rows.push(o); Admin.dirty[t.rows.length - 1] = {}; Admin.render(); },
@@ -3055,7 +3081,7 @@ var Ack = {
     var rp = Ack.rip(cod), t = DB.t.SPEDIZIONI, now = L.nowStamp();
     var o = Object.assign({ tipo: 'ACK', data: d, destinatario: rp.codice || cod, destinazione_estesa: [rp.ragione_sociale, rp.indirizzo].filter(Boolean).join(' - '), stato: 'BOZZA', n_pezzi: 0, rev: 1, creato_il: now, creato_da: Auth.email }, extra || {});
     var r = await API.append(DB.id, 'SPEDIZIONI', [t.toRow(o)]);
-    o.id_spedizione = 'S' + L.pad(r - 1, 6);
+    o.id_spedizione = 'S' + L.pad(DB.rid('SPEDIZIONI', r), 6);
     await API.batchUpdate(DB.id, [{ range: t.cell('id_spedizione', r), values: [[o.id_spedizione]] }]);
     return Ack.pushRow(t, o, r);
   },
@@ -3070,7 +3096,7 @@ var Ack = {
         esito: a.flag === 'BAN' ? 'ESCLUSO_BAN' : 'DA_SPUNTARE', flag_vlt: a.flag, note: a.u ? '' : 'non in giacenza' };
     });
     var r = await API.append(DB.id, 'SPEDIZIONI_RIGHE', objs.map(function (o) { return t.toRow(o); }));
-    objs.forEach(function (o, i) { o.id_riga = 'SR' + L.pad(r + i - 1, 6); });
+    objs.forEach(function (o, i) { o.id_riga = 'SR' + L.pad(DB.rid('SPEDIZIONI_RIGHE', r + i), 6); });
     await API.batchUpdate(DB.id, [{ range: t.cell('id_riga', r) + ':' + t.col('id_riga') + (r + objs.length - 1), values: objs.map(function (o) { return [o.id_riga]; }) }]);
     objs.forEach(function (o, i) { Ack.pushRow(t, o, r + i); });
     return objs.length;
@@ -3093,7 +3119,7 @@ var Ack = {
           if (a.length) {
             var tA = DB.t.ANOMALIE, r;
             try { r = await API.append(DB.id, 'ANOMALIE', a.map(function (x) { return tA.toRow(x); })); } catch (e) { Ack.qA = a.concat(Ack.qA); throw e; }
-            a.forEach(function (x, i) { x._r = r + i; x.id_anomalia = 'A' + L.pad(r + i - 1, 6); });
+            a.forEach(function (x, i) { x._r = r + i; x.id_anomalia = 'A' + L.pad(DB.rid('ANOMALIE', r + i), 6); });
             Ack.q.push({ range: tA.cell('id_anomalia', r) + ':' + tA.col('id_anomalia') + (r + a.length - 1), values: a.map(function (x) { return [x.id_anomalia]; }) });
             a.filter(function (x) { return x._annulla; }).forEach(function (x) { Ack.q.push({ range: tA.cell('stato', x._r), values: [['RISOLTA']] }); });
           }
@@ -3270,7 +3296,7 @@ var Ack = {
         var t = DB.t.SPEDIZIONI_RIGHE, chi = App.chi(), now = L.nowStamp(), stV = v ? v.stato : 'FR non in VLT';
         var o = { id_spedizione: s.id_spedizione, id_unita: u.id_unita, seriale: u.seriale, pn: u.pn, fr: u.fr, rma: u.rma, esito: 'SPUNTATO', spuntato_da: chi.email, spuntato_il: now,
           note: 'AGGIUNTO IN SPUNTA: ' + motivo + ' (stato VLT: ' + stV + ')' };
-        var r = await API.append(DB.id, 'SPEDIZIONI_RIGHE', [t.toRow(o)]); o.id_riga = 'SR' + L.pad(r - 1, 6);
+        var r = await API.append(DB.id, 'SPEDIZIONI_RIGHE', [t.toRow(o)]); o.id_riga = 'SR' + L.pad(DB.rid('SPEDIZIONI_RIGHE', r), 6);
         var tA = DB.t.ANOMALIE, upd = [{ range: t.cell('id_riga', r), values: [[o.id_riga]] }];
         a.stato = 'RISOLTA'; a.nota_risoluzione = 'messo in ACK ' + s.id_spedizione + ': ' + motivo;
         if (a._r) upd.push({ range: tA.cell('stato', a._r), values: [['RISOLTA']] }, { range: tA.cell('nota_risoluzione', a._r), values: [[a.nota_risoluzione]] });
@@ -3335,7 +3361,7 @@ var Ack = {
       var tC = DB.t.SPEDIZIONI_COLLI;
       var objs = col.map(function (x, i) { var m = L.misura(x.misura); return { id_spedizione: s.id_spedizione, n_collo: i + 1, tipo_collo: x.tipo || 'PLT', lunghezza_cm: m[0], larghezza_cm: m[1], altezza_cm: m[2], peso_kg: String(x.peso).replace(',', '.') }; });
       var r = await API.append(DB.id, 'SPEDIZIONI_COLLI', objs.map(function (o) { return tC.toRow(o); }));
-      objs.forEach(function (o, i) { o.id_collo = 'C' + L.pad(r + i - 1, 6); });
+      objs.forEach(function (o, i) { o.id_collo = 'C' + L.pad(DB.rid('SPEDIZIONI_COLLI', r + i), 6); });
       var upd = [{ range: tC.cell('id_collo', r) + ':' + tC.col('id_collo') + (r + objs.length - 1), values: objs.map(function (o) { return [o.id_collo]; }) }];
       objs.forEach(function (o, i) { Ack.pushRow(tC, o, r + i); });
       var chiC = App.chi();
@@ -4411,7 +4437,7 @@ var Rma = {
       tC.rows = tC.rows.filter(function (c) { return c.id_spedizione !== s.id_spedizione; });
       var objs = col.map(function (x, i) { var m = L.misura(x.misura); return { id_spedizione: s.id_spedizione, n_collo: i + 1, tipo_collo: x.tipo || 'COLLO', lunghezza_cm: m[0], larghezza_cm: m[1], altezza_cm: m[2], peso_kg: String(x.peso).replace(',', '.') }; });
       var r = await API.append(DB.id, 'SPEDIZIONI_COLLI', objs.map(function (o) { return tC.toRow(o); }));
-      objs.forEach(function (o, i) { o.id_collo = 'C' + L.pad(r + i - 1, 6); Ack.pushRow(tC, o, r + i); });
+      objs.forEach(function (o, i) { o.id_collo = 'C' + L.pad(DB.rid('SPEDIZIONI_COLLI', r + i), 6); Ack.pushRow(tC, o, r + i); });
       var peso = objs.reduce(function (a, o) { return a + parseFloat(o.peso_kg); }, 0);
       await API.batchUpdate(DB.id, [{ range: tC.cell('id_collo', r) + ':' + tC.col('id_collo') + (r + objs.length - 1), values: objs.map(function (o) { return [o.id_collo]; }) }]
         .concat(Ack.setS(s, { stato: 'PRONTA', n_colli: objs.length, peso_tot_kg: Math.round(peso * 100) / 100, awb: awb, vettore: vet })));
@@ -4420,7 +4446,7 @@ var Rma = {
   },
   creaSped: async function (d, dest, cp) {
     var t = DB.t.SPEDIZIONI, o = { tipo: 'RMA', data: d, destinatario: cp ? cp.codice : dest, destinazione_estesa: cp ? cp.indirizzo_completo : '', stato: 'BOZZA', n_pezzi: 0, rev: 1, creato_il: L.nowStamp(), creato_da: Auth.email };
-    var r = await API.append(DB.id, 'SPEDIZIONI', [t.toRow(o)]); o.id_spedizione = 'S' + L.pad(r - 1, 6);
+    var r = await API.append(DB.id, 'SPEDIZIONI', [t.toRow(o)]); o.id_spedizione = 'S' + L.pad(DB.rid('SPEDIZIONI', r), 6);
     await API.batchUpdate(DB.id, [{ range: t.cell('id_spedizione', r), values: [[o.id_spedizione]] }]);
     return Ack.pushRow(t, o, r);
   },
@@ -4494,7 +4520,7 @@ var Rma = {
       DB.t.PARAMETRI.rows.push({ chiave: 'mov_out_id_base', valore: String(oBase) });
     }
     var n = P.length, upd = [
-      { range: tR.cell('id_riga', rS) + ':' + tR.col('id_riga') + (rS + n - 1), values: righe.map(function (o, i) { return ['SR' + L.pad(rS + i - 1, 6)]; }) },
+      { range: tR.cell('id_riga', rS) + ':' + tR.col('id_riga') + (rS + n - 1), values: righe.map(function (o, i) { return ['SR' + L.pad(DB.rid('SPEDIZIONI_RIGHE', rS + i), 6)]; }) },
       { range: tM.cell('id_mov', rM) + ':' + tM.col('id_mov') + (rM + n - 1), values: mObjs.map(function (o, i) { return ['OUT' + (oBase + rM + i)]; }) }
     ];
     // 3. giacenza, ritorni, carichi, spedizione
@@ -4509,7 +4535,7 @@ var Rma = {
     });
     upd = upd.concat(Ack.setS(s, { stato: 'SPEDITA', n_ddt: nDdt, data_ddt: oggi, n_pezzi: n, rev: (parseInt(s.rev, 10) || 1) + 1 }));
     await API.batchUpdate(DB.id, upd);
-    righe.forEach(function (o, i) { o.id_riga = 'SR' + L.pad(rS + i - 1, 6); Ack.pushRow(tR, o, rS + i); });
+    righe.forEach(function (o, i) { o.id_riga = 'SR' + L.pad(DB.rid('SPEDIZIONI_RIGHE', rS + i), 6); Ack.pushRow(tR, o, rS + i); });
     // 4. PDF su Drive
     try {
       var link = await Drive.upload('DDT RMA ' + nDdt + ' ' + s.destinatario + ' ' + oggi + '.pdf', Rma.pdf(id).output('blob'));
@@ -6015,7 +6041,7 @@ var AckV = {
     AckV.indice();
   },
   indice: function () {
-    var m = {}; (DB.t.ACK_VLT ? DB.t.ACK_VLT.rows : []).forEach(function (r) { var d = L.normDate(r.data_ack); if (!r.fr || !d) return; var x = m[r.fr]; if (!x || d < x.d) m[r.fr] = { d: d, ini: L.up(r.origine) === 'INIZIALE', rip: r.riparatore }; });
+    var m = {}; (DB.t.ACK_VLT ? DB.t.ACK_VLT.rows : []).concat(window.Kpi && Kpi.archAck || []).forEach(function (r) { var d = L.normDate(r.data_ack); if (!r.fr || !d) return; var x = m[r.fr]; if (!x || d < x.d) m[r.fr] = { d: d, ini: L.up(r.origine) === 'INIZIALE', rip: r.riparatore }; });
     AckV.map = m;
   },
   inizio: function () { var m = null; (DB.t.ACK_VLT ? DB.t.ACK_VLT.rows : []).forEach(function (r) { var d = L.normDate(r.data_ack); if (d && (!m || d < m)) m = d; }); return m; },
@@ -6073,6 +6099,7 @@ var Kpi = {
         var c = forza ? null : await DB.cacheGet('arch_' + y);
         if (!c) { var f = await API.findInFolder(CFG.FOLDER_ID, 'DB_ARCHIVIO_' + y); if (!f) throw new Error('file DB_ARCHIVIO_' + y + ' non trovato'); c = { ts: Date.now(), rows: await Sto.colsSafe(f.id, 'MOVIMENTI') }; await DB.cacheSet('arch_' + y, c); }
         Sto.dati[y] = c.rows; Kpi.arch = c.rows; Kpi.archNota = '';
+        try { var fa = await API.findInFolder(CFG.FOLDER_ID, 'DB_ARCHIVIO_' + y); var av = fa ? (await API.batchGet(fa.id, [API.q('ACK_VLT')]))[0] : []; Kpi.archAck = av && av.length ? new Table('ACK_VLT', av[0], av.slice(1)).rows : []; } catch (e2) { Kpi.archAck = []; }
       } catch (e) { Kpi.arch = []; Kpi.archNota = 'Archivio ' + y + ' non caricato (' + e.message + '): i mesi del ' + y + ' restano vuoti.'; }
       Kpi._archY = y;
     })());
@@ -6119,7 +6146,7 @@ var Kpi = {
   calcola: function () {
     var mesi = Kpi.mesi(), M = {}, sel = Kpi.mese, R = (Sto.dati.cur || []).concat(Kpi.arch || []);
     Kpi._blk = Blk.giorni(); Kpi._ats = Chi.giorniAts(); Kpi._cd = {}; Kpi._gg = {}; Kpi._fest = null; Kpi._al = null; Kpi._rip = null;
-    var t6 = {}, r6 = {}, ini6 = AckV.inizio(); if (!AckV.map) AckV.indice();
+    var t6 = {}, r6 = {}, ini6 = AckV.inizio(); AckV.indice();
     mesi.forEach(function (m) { M[m] = { inF: 0, inG: 0, outF: 0, outG: 0, inNR: 0, outNR: 0, outB: 0, ddt: {}, k: {} }; });
     var tempi = { 1: {}, 2: {}, 3: {} }, dest = {}, idSped = {};
     R.forEach(function (r) {
@@ -6144,7 +6171,9 @@ var Kpi = {
     // percentuali entro le soglie
     var K = Kpi.DEF.map(function (def) {
       var s = Kpi.soglie(def.n, def.def);
-      return { def: def, s: s, mesi: mesi.map(function (m) { var v = tempi[def.n][m] || []; return { m: m, n: v.length, p: s.map(function (t) { return v.length ? Math.round(v.filter(function (x) { return x <= t[0]; }).length / v.length * 1000) / 10 : null; }) }; }) };
+      var BK = {}; (DB.t.KPI_STORICO ? DB.t.KPI_STORICO.rows : []).forEach(function (b) { if (L.up(b.kpi) === 'KPI' + def.n) BK[L.s(b.mese).slice(0, 7)] = b; });
+      var nm = function (x) { x = parseFloat(String(x).replace(',', '.')); return isNaN(x) ? null : x; };
+      return { def: def, s: s, mesi: mesi.map(function (m) { var v = tempi[def.n][m] || []; if (!v.length && BK[m]) return { m: m, n: 0, p: [nm(BK[m].perc_1), nm(BK[m].perc_2)], bpr: true }; return { m: m, n: v.length, p: s.map(function (t) { return v.length ? Math.round(v.filter(function (x) { return x <= t[0]; }).length / v.length * 1000) / 10 : null; }) }; }) };
     });
     var s6 = Kpi.soglie(6, '6:95,11:100'), BS = {};
     (DB.t.KPI_STORICO ? DB.t.KPI_STORICO.rows : []).forEach(function (b) { if (L.up(b.kpi) === 'KPI6') BS[L.s(b.mese).slice(0, 7)] = b; });
@@ -6215,8 +6244,8 @@ var Kpi = {
     h += '<div class="kpi-grid">' + C.K.map(function (k) {
       var s1 = k.s[0], s2 = k.s[1] || s1, m = k.mesi[i];
       return '<div class="card"><div class="kc-head"><div><div class="card-t" style="font-size:15px">' + esc(k.def.tit) + '</div><div class="hint">' + esc(k.def.sub) + ' · target ' + s1[1] + '% in ' + s1[0] + ' gg lav. – ' + s2[1] + '% in ' + s2[0] + ' gg lav.</div></div>' + Kpi.esito(k, i) + '</div>' +
-        Kpi.chart({ cats: mesi, pct: true, h: 140, series: [{ nome: 'entro ' + s1[0] + ' gg', col: 'var(--s1)', vals: k.mesi.map(function (x) { return x.p[0]; }) }, { nome: 'entro ' + s2[0] + ' gg', col: 'var(--s2)', vals: k.mesi.map(function (x) { return x.p[1] === undefined ? null : x.p[1]; }) }],
-          target: { v: s1[1], label: 'target ' + s1[1] + '%' }, extra: function (j) { return '\npezzi: ' + k.mesi[j].n; } }) +
+        Kpi.chart({ cats: mesi, pct: true, h: 140, series: [{ nome: 'entro ' + s1[0] + ' gg', col: 'var(--s1)', vals: k.mesi.map(function (x) { return x.p[0]; }), ghost: k.mesi.map(function (x) { return !!x.bpr; }) }, { nome: 'entro ' + s2[0] + ' gg', col: 'var(--s2)', vals: k.mesi.map(function (x) { return x.p[1] === undefined ? null : x.p[1]; }), ghost: k.mesi.map(function (x) { return !!x.bpr; }) }],
+          target: { v: s1[1], label: 'target ' + s1[1] + '%' }, extra: function (j) { return k.mesi[j].bpr ? '\nvalore della presentazione BPR' : '\npezzi: ' + k.mesi[j].n; } }) +
         '<div class="hint" style="margin-top:6px">' + esc(Kpi.lab(Kpi.mese)) + ': ' + pc(m.p[0]) + ' entro ' + s1[0] + ' gg · ' + pc(m.p[1] === undefined ? null : m.p[1]) + ' entro ' + s2[0] + ' gg · ' + n(m.n) + ' pezzi</div></div>';
     }).join('') + '</div>';
     // KPI6
@@ -6464,6 +6493,167 @@ var Spz = {
     } catch (e) { }
   }
 };
+
+// ───────────────────────── ARCHIVIAZIONE ANNUALE (solo super admin) ─────────────────────────
+// L'anno chiuso va in DB_ARCHIVIO_<anno>: movimenti, schede uscite, spedizioni, DDT, ricezioni, log, ACK VLT, anomalie chiuse, ritorni evasi.
+// Regola di sicurezza: dai fogli con ID ricavato dalla riga si toglie solo il BLOCCO INIZIALE di righe (prefisso) e la base dell'ID
+// sale dello stesso numero, così gli ID esistenti restano validi e i nuovi continuano senza doppioni. Prima di cancellare: copia di
+// sicurezza del database, scrittura dell'archivio e verifica (righe, prima e ultima riga identiche).
+var Arc = {
+  PWD: '43a28b267c649e649b40186378952c6e63aaf404f613ff150324d3041d314053',
+  oggi: function () { return L.isoToday(); },
+  anno: function () { return parseInt(Arc.oggi().slice(0, 4), 10) - 1; },
+  // fogli: come si sceglie cosa archiviare; tipo 'pre' = blocco iniziale, 'sparse' = righe qualsiasi (solo UNITA: l'ID non dipende dalla riga dopo l'archiviazione)
+  FOGLI: [
+    { n: 'MOVIMENTI', tipo: 'pre', base: ['mov_id_base', 'mov_out_id_base'], ok: function (r, A) { var d = L.normDate(r.data_ora); return d && d < A; } },
+    { n: 'RICEZIONI', tipo: 'pre', base: ['idbase_RICEZIONI'], ok: function (r, A) { var d = L.normDate(r.data_arrivo) || L.normDate(r.creato_il); return d && d < A; } },
+    { n: 'SPEDIZIONI', tipo: 'pre', base: ['idbase_SPEDIZIONI'], ok: function (r, A) { var d = L.normDate(r.data); return d && d < A && (r.stato === 'SPEDITA' || r.stato === 'ANNULLATA'); } },
+    { n: 'SPEDIZIONI_RIGHE', tipo: 'pre', base: ['idbase_SPEDIZIONI_RIGHE'], ok: function (r, A, X) { return !!X.sped[r.id_spedizione]; } },
+    { n: 'SPEDIZIONI_COLLI', tipo: 'pre', base: ['idbase_SPEDIZIONI_COLLI'], ok: function (r, A, X) { return !!X.sped[r.id_spedizione]; } },
+    { n: 'DDT_REGISTRO', tipo: 'pre', ok: function (r, A) { return L.s(r.anno) && parseInt(r.anno, 10) < parseInt(A, 10); } },
+    { n: 'ANOMALIE', tipo: 'pre', base: ['idbase_ANOMALIE'], ok: function (r, A) { var d = L.normDate(r.data); return d && d < A && L.up(r.stato) !== 'APERTA'; } },
+    { n: 'RMA_RITORNI', tipo: 'pre', ok: function (r, A) { var d = L.normDate(r.data_apertura); return d && d < A && r.stato !== 'DA_EVADERE' && r.stato !== 'ASSEGNATA'; } },
+    { n: 'ACK_VLT', tipo: 'pre', ok: function (r, A, X) { var d = L.normDate(r.data_ack); return d && d < A && !X.inHub[r.id_unita]; } },
+    { n: 'LOG', tipo: 'pre', ok: function (r, A) { var d = L.normDate(r.data_ora); return d && d < A; } },
+    { n: 'UNITA', tipo: 'sparse', ok: function (r, A) { var d = L.normDate(r.data_out) || L.normDate(r.modificato_il) || L.normDate(r.creato_il); return ['USCITO', 'ANNULLATO', 'RETTIFICATO'].indexOf(r.stato) >= 0 && d && d < A; } }
+  ],
+  piano: null, log: [],
+  // lettura completa e calcolo di cosa si sposta (nessuna scrittura)
+  prepara: async function () {
+    var Y = Arc.anno(), A = (Y + 1) + '-01-01', P = { anno: Y, A: A, fogli: [], esiste: null, avvisi: [] };
+    P.esiste = await API.findInFolder(CFG.FOLDER_ID, 'DB_ARCHIVIO_' + Y);
+    var nomi = Arc.FOGLI.map(function (f) { return f.n; }), vals = [];
+    for (var i = 0; i < nomi.length; i++) { try { vals.push((await API.batchGet(DB.id, [API.q(nomi[i])]))[0]); } catch (e) { vals.push(null); } }
+    var T = {}; nomi.forEach(function (n, i) { if (vals[i] && vals[i].length) T[n] = { h: vals[i][0].map(L.s), raw: vals[i], t: new Table(n, vals[i][0], vals[i].slice(1)) }; });
+    var X = { sped: {}, inHub: {} };
+    if (T.UNITA) T.UNITA.t.rows.forEach(function (u) { if (Giacenze.A_MAG.indexOf(u.stato) >= 0) X.inHub[u.id_unita] = 1; });
+    Arc.FOGLI.forEach(function (f) {
+      var tt = T[f.n]; if (!tt) { P.fogli.push({ f: f, assente: true }); return; }
+      // righe vere del foglio (anche quelle che Table scarta perché vuote contano per la posizione)
+      var dati = tt.raw.slice(1), objs = dati.map(function (v, i) { var o = { _r: i + 2 }; tt.h.forEach(function (h, j) { o[h] = v[j] === undefined || v[j] === null ? '' : String(v[j]); }); return o; });
+      var sel = [];
+      if (f.tipo === 'pre') { for (var k = 0; k < objs.length; k++) { var vuota = tt.h.every(function (h) { return objs[k][h] === ''; }); if (!vuota && !f.ok(objs[k], A, X)) break; sel.push(k); } }
+      else objs.forEach(function (o, k) { if (f.ok(o, A, X)) sel.push(k); });
+      if (f.n === 'SPEDIZIONI') sel.forEach(function (k) { X.sped[objs[k].id_spedizione] = 1; });
+      var restaVecchie = f.tipo === 'pre' ? objs.slice(sel.length).filter(function (o) { return f.ok(o, A, X); }).length : 0;
+      P.fogli.push({ f: f, h: tt.h, n: objs.length, sel: sel, righe: sel.map(function (k) { return dati[k]; }), objs: objs, resta: restaVecchie });
+      if (restaVecchie) P.avvisi.push(f.n + ': ' + restaVecchie + ' righe del ' + Y + ' restano nel database perché vengono dopo righe del ' + (Y + 1) + ' (o ancora aperte): verranno archiviate l\'anno prossimo.');
+    });
+    // UNITA: ID massimo (anche delle schede archiviate) per far continuare la numerazione
+    var u = P.fogli.find(function (x) { return x.f.n === 'UNITA'; });
+    if (u && !u.assente) { var mx = 0; u.objs.forEach(function (o) { var m = /^U(\d+)$/.exec(L.s(o.id_unita)); if (m) mx = Math.max(mx, parseInt(m[1], 10)); }); u.maxId = mx; }
+    Arc.piano = P; return P;
+  },
+  render: async function () {
+    $('admTitle').textContent = 'Archiviazione annuale';
+    $('admHint').textContent = 'Solo super admin. Sposta l\'anno chiuso in DB_ARCHIVIO_<anno> (file a parte, con il suo limite di celle). Prima fa una copia di sicurezza del database e verifica l\'archivio: se qualcosa non torna si ferma senza cancellare.';
+    $('admHead').innerHTML = ''; $('admRows').innerHTML = '<tr><td class="empty">Leggo il database e preparo il piano (nessuna modifica)…</td></tr>'; $('spzBox').innerHTML = '';
+    try { await Arc.prepara(); Arc.disegna(); } catch (e) { $('admRows').innerHTML = '<tr><td class="empty">Errore: ' + esc(e.message) + '</td></tr>'; }
+  },
+  disegna: function () {
+    var P = Arc.piano, n = function (x) { return (x || 0).toLocaleString('it-IT'); }, tot = 0;
+    P.fogli.forEach(function (x) { if (!x.assente) tot += x.sel.length; });
+    var blocco = !App.isOwner ? 'Solo il super admin (proprietario del file) può archiviare.' : (P.esiste ? 'Esiste già il file DB_ARCHIVIO_' + P.anno + ': archiviazione già fatta (o da controllare a mano).' : (!tot ? 'Niente da archiviare per il ' + P.anno + '.' : ''));
+    $('spzBox').innerHTML = '<div class="card" style="margin-bottom:10px;background:var(--card)"><div class="row" style="align-items:center"><div style="flex:1"><b>Anno da archiviare: ' + P.anno + '</b> · ' + n(tot) + ' righe da spostare in <span class="mono">DB_ARCHIVIO_' + P.anno + '</span>' +
+      '<div class="hint">Fallo quando nessuno sta usando l\'app (le righe si spostano). Dopo, tutti devono premere ↻ Aggiorna o riaprire l\'app.</div>' + (P.avvisi.length ? '<div class="hint" style="color:var(--amber)">' + P.avvisi.map(esc).join('<br>') + '</div>' : '') + (blocco ? '<div class="hint" style="color:var(--red)">' + esc(blocco) + '</div>' : '') + '</div>' +
+      '<button class="btn red" ' + (blocco ? 'disabled' : '') + ' onclick="Arc.chiedi()">🗄 Archivia anno ' + P.anno + '</button></div></div>';
+    $('admHead').innerHTML = '<tr><th>Foglio</th><th>Righe ora</th><th>Da archiviare</th><th>Restano</th><th>Regola</th></tr>';
+    var REG = { MOVIMENTI: 'movimenti con data fino al 31/12', RICEZIONI: 'ricezioni fino al 31/12', SPEDIZIONI: 'spedizioni spedite o annullate fino al 31/12', SPEDIZIONI_RIGHE: 'righe delle spedizioni archiviate', SPEDIZIONI_COLLI: 'colli delle spedizioni archiviate', DDT_REGISTRO: 'DDT dell\'anno', ANOMALIE: 'anomalie chiuse', RMA_RITORNI: 'ritorni evasi / non più in VLT', ACK_VLT: 'date ACK di schede non più in hub', LOG: 'registro fino al 31/12', UNITA: 'schede uscite, annullate o rettificate entro il 31/12 (quelle in giacenza restano)' };
+    $('admRows').innerHTML = P.fogli.map(function (x) { return x.assente ? '<tr><td>' + esc(x.f.n) + '</td><td colspan="4" class="hint">foglio non presente</td></tr>' : '<tr><td>' + esc(x.f.n) + '</td><td class="mono">' + n(x.n) + '</td><td class="mono"><b>' + n(x.sel.length) + '</b></td><td class="mono">' + n(x.n - x.sel.length) + '</td><td class="hint">' + esc(REG[x.f.n] || '') + '</td></tr>'; }).join('');
+  },
+  chiedi: function () {
+    if (!App.isOwner) { toast('Solo il super admin', 'ko'); return; }
+    var P = Arc.piano;
+    Modal.html('🗄 Archivia anno ' + P.anno, '<div style="font-size:13px;line-height:1.6">Operazione <b>non annullabile</b> dall\'app (resta la copia di sicurezza su Drive).<br>1. copia di sicurezza del database · 2. crea DB_ARCHIVIO_' + P.anno + ' · 3. verifica · 4. toglie le righe dal database · 5. aggiorna le numerazioni.</div>' +
+      '<label style="display:flex;gap:8px;margin:10px 0;font-size:13px"><input type="checkbox" id="arcNessuno"> Nessun altro sta usando l\'app in questo momento</label>' +
+      '<div class="fg"><span class="fl">Password archiviazione</span><input class="fc" type="password" id="arcPwd" autocomplete="new-password"></div><div id="arcErr" class="hint" style="color:var(--red)"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Archivia', cls: 'red', keep: true, fn: async function () {
+        if (!$('arcNessuno').checked) { $('arcErr').textContent = 'Conferma che nessuno sta usando l\'app'; return; }
+        if ((await Nr.sha($('arcPwd').value)) !== Arc.PWD) { $('arcErr').textContent = 'Password errata'; return; }
+        Arc.esegui();
+      } }]);
+  },
+  passo: function (t) { Arc.log.push(L.nowStamp().slice(11) + ' ' + t); Modal.progress(t); },
+  esegui: async function () {
+    var P = Arc.piano, Y = P.anno, nomeA = 'DB_ARCHIVIO_' + Y, fase = 'preparazione', backup = null, arcId = null;
+    Arc.log = []; Modal.open('Archiviazione ' + Y, 'Non chiudere la pagina finché non finisce.', []);
+    try {
+      // 0. il piano va rifatto adesso (dati freschi)
+      Arc.passo('Rileggo il database…'); P = await Arc.prepara(); if (P.esiste) throw new Error(nomeA + ' esiste già');
+      var F = P.fogli.filter(function (x) { return !x.assente && x.sel.length; });
+      if (!F.length) throw new Error('niente da archiviare');
+      // 1. copia di sicurezza
+      fase = 'copia di sicurezza'; Arc.passo('1/5 Copia di sicurezza del database…');
+      backup = await API.call('https://www.googleapis.com/drive/v3/files/' + DB.id + '/copy?supportsAllDrives=true&fields=id,name', { method: 'POST', body: JSON.stringify({ name: 'BACKUP ' + CFG.DB_MAIN + ' prima archiviazione ' + Y + ' (' + L.nowStamp().replace(/:/g, '.') + ')', parents: [CFG.FOLDER_ID] }) });
+      // 2. archivio: file nuovo con un foglio per ogni tabella, griglia della misura giusta
+      fase = 'creazione archivio'; Arc.passo('2/5 Creo ' + nomeA + '…');
+      var f = await API.call('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id', { method: 'POST', body: JSON.stringify({ name: nomeA, mimeType: 'application/vnd.google-apps.spreadsheet', parents: [CFG.FOLDER_ID] }) });
+      arcId = f.id;
+      var meta = await API.call(API.S + arcId + '?fields=' + encodeURIComponent('sheets(properties(sheetId))'));
+      var req = [{ addSheet: { properties: { title: 'LEGGIMI', gridProperties: { rowCount: 6, columnCount: 2 } } } }].concat(F.map(function (x) { return { addSheet: { properties: { title: x.f.n, gridProperties: { rowCount: x.sel.length + 1, columnCount: Math.max(1, x.h.length) } } } }; }));
+      req.push({ deleteSheet: { sheetId: meta.sheets[0].properties.sheetId } });
+      await API.call(API.S + arcId + ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: req }) });
+      await API.batchUpdate(arcId, [{ range: API.q('LEGGIMI') + '!A1', values: [['Archivio', nomeA], ['Creato il', L.nowStamp()], ['Da', Auth.email], ['Database', CFG.DB_MAIN], ['Copia di sicurezza', backup.name || ''], ['Nota', 'Sola lettura: l\'app legge da qui movimenti e KPI dell\'anno.']] }]);
+      for (var i = 0; i < F.length; i++) {
+        var x = F[i], tutte = [x.h].concat(x.righe.map(function (r) { var o = r.slice(0, x.h.length); while (o.length < x.h.length) o.push(''); return o; }));
+        for (var k = 0; k < tutte.length; k += 4000) { Arc.passo('2/5 ' + x.f.n + ': ' + Math.min(k + 4000, tutte.length) + ' / ' + tutte.length + ' righe'); await API.batchUpdate(arcId, [{ range: API.q(x.f.n) + '!A' + (k + 1), values: tutte.slice(k, k + 4000) }]); }
+      }
+      // 3. verifica: numero di righe e prima/ultima riga identiche
+      fase = 'verifica'; Arc.passo('3/5 Verifico l\'archivio…');
+      for (var j = 0; j < F.length; j++) {
+        var y = F[j], last = y.sel.length + 1, cl = L.colLetter(y.h.length - 1);
+        var v = await API.batchGet(arcId, [API.q(y.f.n) + '!A1:' + cl + '2', API.q(y.f.n) + '!A' + last + ':' + cl + last, API.q(y.f.n) + '!A:A']);
+        var norm = function (r) { return JSON.stringify((r || []).map(L.s).concat(Array(y.h.length).fill('')).slice(0, y.h.length)); };
+        if (norm(v[0][0]) !== norm(y.h)) throw new Error(y.f.n + ': intestazione diversa nell\'archivio');
+        if (norm(v[0][1]) !== norm(y.righe[0])) throw new Error(y.f.n + ': prima riga diversa nell\'archivio');
+        if (norm(v[1][0]) !== norm(y.righe[y.righe.length - 1])) throw new Error(y.f.n + ': ultima riga diversa nell\'archivio');
+        var nA = v[2].length; if (nA > last || nA < last - 50) throw new Error(y.f.n + ': righe nell\'archivio ' + (nA - 1) + ' invece di ' + y.sel.length);
+      }
+      // 4. tolgo le righe dal database (prima di tutto rileggo le righe usate per essere sicuro che nulla sia cambiato)
+      fase = 'cancellazione dal database'; Arc.passo('4/5 Controllo che il database non sia cambiato…');
+      var Q = await Arc.prepara(); F.forEach(function (x) { var z = Q.fogli.find(function (q) { return q.f.n === x.f.n; }); if (!z || z.n !== x.n || z.sel.length !== x.sel.length) throw new Error(x.f.n + ' è cambiato durante l\'archiviazione: niente cancellato, riprova quando nessuno lavora'); });
+      var sid = {}; ((await API.call(API.S + DB.id + '?fields=' + encodeURIComponent('sheets(properties(sheetId,title))'))).sheets || []).forEach(function (s) { sid[s.properties.title] = s.properties.sheetId; });
+      var del = [];
+      F.forEach(function (x) {
+        if (x.f.tipo === 'pre') del.push({ deleteDimension: { range: { sheetId: sid[x.f.n], dimension: 'ROWS', startIndex: 1, endIndex: 1 + x.sel.length } } });
+        else {   // righe sparse: blocchi contigui, dal fondo verso l'alto
+          var gr = [], s0 = null, p0 = null; x.sel.forEach(function (k) { var r = k + 1; if (s0 === null) { s0 = r; p0 = r; } else if (r === p0 + 1) p0 = r; else { gr.push([s0, p0]); s0 = r; p0 = r; } }); if (s0 !== null) gr.push([s0, p0]);
+          gr.reverse().forEach(function (g) { del.push({ deleteDimension: { range: { sheetId: sid[x.f.n], dimension: 'ROWS', startIndex: g[0], endIndex: g[1] + 1 } } }); });
+        }
+      });
+      Arc.passo('4/5 Tolgo ' + F.reduce(function (a, x) { return a + x.sel.length; }, 0).toLocaleString('it-IT') + ' righe dal database…');
+      for (var d = 0; d < del.length; d += 400) await API.call(API.S + DB.id + ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: del.slice(d, d + 400) }) });
+      // 5. numerazioni: la base sale di quante righe sono state tolte dal blocco iniziale; UNITA riparte dall'ID massimo
+      fase = 'numerazioni'; Arc.passo('5/5 Aggiorno le numerazioni…');
+      await DB.loadTables(['PARAMETRI']);
+      var par = {};
+      F.forEach(function (x) {
+        (x.f.base || []).forEach(function (k) { var cur = DB.param(k, ''); if (/^idbase_/.test(k) || L.s(cur) !== '') par[k] = String((parseInt(cur, 10) || 0) + x.sel.length); });
+        if (x.f.n === 'UNITA') par.unita_id_base = String(x.maxId + 2 - (x.n - x.sel.length + 2));
+      });
+      await Arc.parametri(par);
+      await API.append(DB.id, 'LOG', [App.log('ARCHIVIAZIONE_ANNO', 'DATABASE', nomeA, { anno: Y, archivio: arcId, copia_sicurezza: backup.id, righe: F.map(function (x) { return x.f.n + ' ' + x.sel.length; }), parametri: par })]);
+      try { await DB.cacheSet('arch_' + Y, null); } catch (e) { }
+      Arc.passo('Fatto');
+      Modal.html('Archiviazione ' + Y + ' completata', '<div style="font-size:13px;line-height:1.7">Creato <b>' + esc(nomeA) + '</b> e verificato.<br>Righe spostate: ' + F.map(function (x) { return esc(x.f.n) + ' ' + x.sel.length.toLocaleString('it-IT'); }).join(' · ') + '<br>Copia di sicurezza: ' + esc(backup.name || backup.id) + '<br>Numerazioni aggiornate: ' + Object.keys(par).map(function (k) { return '<span class="mono">' + esc(k) + ' = ' + esc(par[k]) + '</span>'; }).join(', ') + '<br><br><b>Ora tutti devono premere ↻ Aggiorna (o riaprire l\'app).</b></div>',
+        [{ label: 'Ricarica l\'app', fn: function () { location.reload(); } }]);
+    } catch (e) {
+      Modal.html('Archiviazione interrotta', '<div style="font-size:13px;line-height:1.7">Fase: <b>' + esc(fase) + '</b><br>Errore: ' + esc(e.message) + '<br><br>' +
+        (fase === 'cancellazione dal database' || fase === 'numerazioni' ? '<b style="color:var(--red)">Attenzione: il database potrebbe essere già stato modificato.</b> Non lavorare e controlla con la copia di sicurezza ' + esc(backup ? (backup.name || backup.id) : '') + '.' : 'Il database <b>non è stato toccato</b>.' + (arcId ? ' Il file ' + esc(nomeA) + ' creato a metà va cestinato a mano prima di riprovare.' : '')) +
+        '</div><div class="hint" style="margin-top:8px;white-space:pre-wrap">' + esc(Arc.log.join('\n')) + '</div>', [{ label: 'Chiudi' }], true);
+      try { await API.append(DB.id, 'LOG', [App.log('ARCHIVIAZIONE_ERRORE', 'DATABASE', nomeA, { fase: fase, errore: e.message, passi: Arc.log })]); } catch (x) { }
+    }
+  },
+  parametri: async function (par) {
+    var t = DB.t.PARAMETRI, upd = [], nuovi = [];
+    Object.keys(par).forEach(function (k) { var r = t.rows.find(function (x) { return x.chiave === k; }); if (r) { r.valore = par[k]; upd.push({ range: t.cell('valore', r._r), values: [[par[k]]] }); } else nuovi.push(t.toRow({ chiave: k, valore: par[k], descrizione: /^idbase_/.test(k) ? 'Base ID del foglio ' + k.slice(7) + ' (ID = prefisso + base + riga - 1): aggiornata dall\'archiviazione annuale, non toccare' : 'Aggiornato dall\'archiviazione annuale' })); });
+    if (upd.length) await API.batchUpdate(DB.id, upd);
+    if (nuovi.length) await API.append(DB.id, 'PARAMETRI', nuovi);
+    await DB.loadTables(['PARAMETRI']);
+  }
+};
+// ID ricavato dalla riga (con la base che sale a ogni archiviazione)
+DB.rid = function (sheet, r) { return r - 1 + (parseInt(DB.param('idbase_' + sheet, '0'), 10) || 0); };
 
 // ───────────────────────── ACCESSI ADMIN ─────────────────────────
 // ───────────────────────── PROTEZIONE CONFIGURAZIONE (livello 1) ─────────────────────────
