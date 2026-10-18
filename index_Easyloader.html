@@ -1879,8 +1879,8 @@ var Giacenze = {
         { k: 'fr', label: 'FR', filter: 'text', cls: 'mono' },
         { k: 'stato_vlt', label: 'Stato VLT', filter: 'select', cls: 'nw', get: function (u) { var v = u.fr && DB.vltMap[u.fr]; return v ? L.s(v.stato) : (u.fr ? '— non in VLT' : ''); } },
         { k: 'rma', label: 'RMA', filter: 'text', cls: 'mono' },
-        { k: 'data_in', label: 'Data in hub', cls: 'mono nw', get: function (u) { return L.s(mi(u).data_ora) || L.s(u.data_in); }, html: function (u) { return esc(Sto.dataOra(mi(u).data_ora || u.data_in)); } },
-        { k: 'data_vlt', label: 'Data reg. VLT', cls: 'mono', get: function (u) { return L.normDate(mi(u).data_registrazione_vlt); } },
+        { k: 'data_in', label: 'Data in hub', cls: 'mono nw', filter: 'date', get: function (u) { return L.s(mi(u).data_ora) || L.s(u.data_in); }, html: function (u) { return esc(Sto.dataOra(mi(u).data_ora || u.data_in)); } },
+        { k: 'data_vlt', label: 'Data reg. VLT', cls: 'mono', filter: 'date', get: function (u) { return L.normDate(mi(u).data_registrazione_vlt); } },
         { k: 'po', label: 'PO/MRN', filter: 'text', cls: 'mono', get: sp('po_mrn') },
         { k: 'mittente', label: 'Mittente', filter: 'select', get: sp('controparte') },
         { k: 'awb', label: 'AWB', filter: 'text', cls: 'mono', get: sp('awb') },
@@ -1905,9 +1905,9 @@ var Giacenze = {
         { k: 'id_ricezione', label: 'ID ricezione', cls: 'mono' },
         { k: 'id_mov_in', label: 'ID mov. IN', cls: 'mono' },
         { k: 'id_spedizione', label: 'ID spedizione', cls: 'mono' },
-        { k: 'data_out', label: 'Data out', cls: 'mono' },
+        { k: 'data_out', label: 'Data out', cls: 'mono', filter: 'date' },
         { k: 'creato_da', label: 'Creato da', filter: 'select', get: function (u) { return L.s(u.creato_da).split('@')[0]; } },
-        { k: 'modificato', label: 'Ultima modifica', cls: 'mono nw', get: function (u) { return L.s(u.modificato_il) ? L.s(u.modificato_il) + ' · ' + L.s(u.modificato_da).split('@')[0] : ''; } }
+        { k: 'modificato', label: 'Ultima modifica', cls: 'mono nw', filter: 'date', get: function (u) { return L.s(u.modificato_il) ? L.s(u.modificato_il) + ' · ' + L.s(u.modificato_da).split('@')[0] : ''; } }
       ]
     });
   },
@@ -2648,6 +2648,7 @@ Grid.prototype.match = function (r, skip) {
   var self = this;
   return this.o.cols.every(function (c) {
     var fv = self.f[c.k]; if (!fv || c.k === skip) return true;
+    if (c.filter === 'date') { var d = L.normDate(self.val(c, r)), rg = Grid.dataRange(fv); return /^\d{4}-\d{2}-\d{2}$/.test(d) && d >= rg[0] && d <= rg[1]; }
     var v = L.up(self.val(c, r));
     if (c.filter === 'select') return fv === '(vuoto)' ? v === '' : v === L.up(fv);
     return v.indexOf(L.up(fv)) >= 0;
@@ -2668,11 +2669,35 @@ Grid.prototype.head = function () {
   var h2 = '<tr class="g-filters">' + this.vc().map(function (c) {
     if (c.filter === 'select') return '<th><select class="g-f" id="gf_' + self.name + '_' + c.k + '" onchange="' + g + '.filtra(\'' + c.k + '\',this.value)"></select></th>';
     if (c.filter === 'text') return '<th><input class="g-f" id="gf_' + self.name + '_' + c.k + '" value="' + esc(self.f[c.k] || '') + '" placeholder="filtra" oninput="' + g + '.filtraT(\'' + c.k + '\',this.value)"></th>';
+    if (c.filter === 'date') { var cur = self.f[c.k] || '', cu = /^R:/.test(cur);
+      return '<th><select class="g-f' + (cur ? ' g-on' : '') + '" id="gf_' + self.name + '_' + c.k + '" onchange="' + g + '.filtraD(\'' + c.k + '\',this.value)">' +
+        Grid.DATE.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === cur ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') +
+        (cu ? '<option value="' + esc(cur) + '" selected>' + esc(Grid.dataLab(cur)) + '</option>' : '') + '<option value="R">intervallo…</option></select></th>'; }
     return '<th></th>';
   }).join('') + '</tr>';
   return h1 + h2;
 };
 Grid.prototype.ordina = function (k) { if (this.sort === k) { if (this.dir > 0) this.dir = -1; else { this.sort = null; this.dir = 1; } } else { this.sort = k; this.dir = 1; } this.render(true); };
+// filtro date nelle colonne: periodi rapidi o intervallo dal/al (compresi)
+Grid.DATE = [['', 'tutte'], ['oggi', 'oggi'], ['ieri', 'ieri'], ['7', 'ultimi 7 giorni'], ['30', 'ultimi 30 giorni'], ['mese', 'questo mese'], ['mesep', 'mese scorso'], ['anno', 'quest\'anno']];
+Grid.dataRange = function (fv) {
+  var d = new Date(), iso = function (x) { return L.isoToday(x); }, oggi = iso(d);
+  if (fv === 'oggi') return [oggi, oggi];
+  if (fv === 'ieri') { d.setDate(d.getDate() - 1); return [iso(d), iso(d)]; }
+  if (fv === '7' || fv === '30') { d.setDate(d.getDate() - (+fv - 1)); return [iso(d), oggi]; }
+  if (fv === 'mese') return [oggi.slice(0, 8) + '01', oggi];
+  if (fv === 'mesep') { var a = new Date(d.getFullYear(), d.getMonth() - 1, 1), b = new Date(d.getFullYear(), d.getMonth(), 0); return [iso(a), iso(b)]; }
+  if (fv === 'anno') return [oggi.slice(0, 4) + '-01-01', oggi];
+  var m = /^R:([\d-]*):([\d-]*)$/.exec(fv || ''); return m ? [m[1] || '0000-00-00', m[2] || '9999-99-99'] : ['0000-00-00', '9999-99-99'];
+};
+Grid.dataLab = function (fv) { var r = Grid.dataRange(fv); return (r[0] === '0000-00-00' ? '…' : L.itDate(r[0])) + ' – ' + (r[1] === '9999-99-99' ? '…' : L.itDate(r[1])); };
+Grid.prototype.filtraD = function (k, v) {
+  var self = this;
+  if (v !== 'R') { this.filtra(k, v); return; }
+  var r = /^R:/.test(this.f[k] || '') ? Grid.dataRange(this.f[k]) : ['', ''];
+  Modal.html('Filtra per data', '<div class="row"><div class="fg"><span class="fl">Dal</span><input class="fc" type="date" id="gdDa" value="' + (r[0] !== '0000-00-00' ? r[0] : '') + '"></div><div class="fg"><span class="fl">Al (compreso)</span><input class="fc" type="date" id="gdA" value="' + (r[1] !== '9999-99-99' ? r[1] : '') + '"></div></div><div class="hint">Puoi lasciare vuoto uno dei due.</div>',
+    [{ label: 'Annulla', cls: 'ghost', fn: function () { self.render(true); } }, { label: 'Applica', fn: function () { var a = $('gdDa').value, b = $('gdA').value; if (a && b && b < a) { var t = a; a = b; b = t; } self.f[k] = (a || b) ? 'R:' + a + ':' + b : ''; if (!self.f[k]) delete self.f[k]; self.limit = self.o.limit || 500; self.render(true); } }]);
+};
 Grid.prototype.filtra = function (k, v) { if (v) this.f[k] = v; else delete this.f[k]; this.limit = this.o.limit || 500; this.render(); };
 Grid.prototype.filtraT = function (k, v) { var self = this; clearTimeout(this._t); this._t = setTimeout(function () { self.filtra(k, L.s(v)); }, 200); };
 Grid.prototype.reset = function () { this.f = {}; this.render(true); };
@@ -3721,8 +3746,8 @@ var Rma = {
     var ann = Rma.attivi().length ? ' <button class="btn ghost sm" onclick="Rma.annullaImport()" title="Annulla i ritorni dell\'ultimo import (es. file sbagliato): poi puoi caricarne uno nuovo">🗑 Annulla import ritorni</button>' : '';
     var xr = ' <button class="btn ghost sm" onclick="Rma.excelRma()" title="Schede filtrate da far compilare al Service Desk (RMA creato e nuova destinazione), poi da reimportare">⬇ Excel RMA</button>' +
       ' <label class="btn ghost sm" style="cursor:pointer" title="Reimporta l Excel RMA compilato: anteprima e anomalie prima di confermare">⬆ Importa RMA<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Rma.importaRma(this)"></label>';
-    if (s === 'inv') return '<div class="row">' + imp + ann + xl + xr + ' <button class="btn ghost sm" onclick="Rma.etichette()" title="Etichetta 10x5 solo per le schede con variazione di destino (tra le righe filtrate)">🏷 Etichette RMA</button>' + (Rma.ieri().length ? ' <button class="btn sm" onclick="Rma.associaIeri()" title="Gli RMA giacenza aperti ieri diventano RMA creato; i più vecchi li controlla il Service Desk">✓ Associa RMA di ieri (' + Rma.ieri().length + ')</button>' : '') + '<div class="spacer"></div><button class="btn sm" ' + (nD ? '' : 'disabled') + ' onclick="Rma.salva()">Salva modifiche' + (nD ? ' (' + nD + ')' : '') + '</button></div>' + info;
-    if (s === 'rit') return '<div class="row">' + imp + ann + xl + '</div>' + info;
+    if (s === 'inv') return '<div class="row" style="justify-content:flex-end">' + imp + ann + xl + xr + ' <button class="btn ghost sm" onclick="Rma.etichette()" title="Etichetta 10x5 solo per le schede con variazione di destino (tra le righe filtrate)">🏷 Etichette RMA</button>' + (Rma.ieri().length ? ' <button class="btn sm" onclick="Rma.associaIeri()" title="Gli RMA giacenza aperti ieri diventano RMA creato; i più vecchi li controlla il Service Desk">✓ Associa RMA di ieri (' + Rma.ieri().length + ')</button>' : '') + ' <button class="btn sm" ' + (nD ? '' : 'disabled') + ' onclick="Rma.salva()">Salva modifiche' + (nD ? ' (' + nD + ')' : '') + '</button></div>' + info;
+    if (s === 'rit') return '<div class="row" style="justify-content:flex-end">' + imp + ann + xl + '</div>' + info;
     if (s === 'car') return '<div class="row">' +
       '<div class="fg" style="width:240px"><span class="fl">Seriale *</span><input class="fc mono" id="carSer" autocomplete="off" placeholder="spara il seriale" onkeydown="if(event.key===\'Enter\'){event.preventDefault();$(\'carRma\').focus()}" oninput="Rma.carInfo()"><span class="hint" id="carHint"></span></div>' +
       '<div class="fg" style="width:120px"><span class="fl">RMA</span><input class="fc mono" id="carRma" autocomplete="off" placeholder="anche dopo"></div>' +
@@ -3730,9 +3755,10 @@ var Rma = {
       '<div class="fg" style="width:130px"><span class="fl">PO / MRN</span><input class="fc mono" id="carPo" autocomplete="off"></div>' +
       '<div class="fg" style="width:180px"><span class="fl">Note</span><input class="fc" id="carNote" autocomplete="off" onkeydown="if(event.key===\'Enter\'){event.preventDefault();Rma.carAggiungi()}"></div>' +
       '<button class="btn" style="margin-bottom:18px" onclick="Rma.carAggiungi()">Aggiungi</button><div class="spacer"></div>' +
-      '<label class="btn ghost sm" style="cursor:pointer;margin-bottom:18px">⬆ Importa Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Rma.carImporta(this)"></label>' +
-      '<button class="btn ghost sm" style="margin-bottom:18px" onclick="Rma.carModello()">Modello Excel</button> <button class="btn ghost sm" style="margin-bottom:18px" onclick="Rma.excel()">⬇ Excel</button></div>' +
-      '<div class="hint">Solo pezzi NEW/REUSE in giacenza. Excel: colonne SERIALE, RMA, DESTINAZIONE, PO, NOTE (anche PV DESTINO, P.O, SERIAL).</div>';
+      '<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;align-items:flex-end;margin:0 0 18px auto;flex:1 1 420px"><label class="btn ghost sm" style="cursor:pointer">⬆ Importa Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Rma.carImporta(this)"></label>' +
+      '<button class="btn ghost sm" onclick="Rma.carModello()">Modello Excel</button> <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button>' + xr + '</div></div>' +
+      '<div class="hint">⬇ Excel RMA / ⬆ Importa RMA: RMA e destinazione dei carichi già aperti (filtrati qui sotto), compilati dal Service Desk e reimportati.</div>' +
+      '<div class="hint">Nuovi carichi: solo pezzi NEW/REUSE in giacenza. Excel: colonne SERIALE, RMA, DESTINAZIONE, PO, NOTE (anche PV DESTINO, P.O, SERIAL). L\'RMA si può dare anche dopo.</div>';
     return '<div class="row"><div class="fg" style="width:160px"><span class="fl">Giorno di uscita</span><input class="fc" type="date" id="uscData2" value="' + esc($('uscData').value) + '" onchange="$(\'uscData\').value=this.value;Rma.render()"></div><div class="spacer"></div>' +
       '<button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button> <button class="btn green" id="uscTutti" onclick="Rma.emettiTutti()">Genera i DDT pronti</button></div>' +
       '<div class="hint" style="margin-top:8px">Un DDT per destinazione (serie RMA). Pronta = colli e peso salvati + AWB. Le schede ci sono già per tutte le destinazioni di oggi: puoi mettere colli e AWB subito. I pezzi senza RMA restano non spuntati e si spuntano da soli appena l\'RMA c\'è; se al DDT ne manca qualcuno, l\'app chiede conferma.</div>';
@@ -3975,7 +4001,7 @@ var Rma = {
     return m;   // MAIUSCOLO → nome come in anagrafica
   },
   excelRma: async function () {
-    var vis = (Rma.grids.inv && Rma.grids.inv.visibili) || Rma.inventario(), c = Rma.ctx();
+    var soloCar = Rma.sez === 'car', vis = soloCar ? [] : ((Rma.grids.inv && Rma.grids.inv.visibili) || Rma.inventario()), c = Rma.ctx();
     var rows = vis.filter(function (u) { return u.tipo === 'GOOD' || u.tipo === 'BALANCING'; }).map(function (u) {
       var v = Rma.varia(u), a = Rma.ritDi(u), o = Rma.origine(u), att = v ? v.nuova : L.s(Rma.dv(u, 'dest'));
       var orig = u.tipo === 'GOOD' ? (o[0] || (v ? v.prima : '') || att) : att;   // dove andava (deposito VLT dell'FR) → dove va adesso
@@ -3984,7 +4010,7 @@ var Rma = {
     });
     // carichi NEW/REUSE aperti: come le GOOD, l'RMA (e la destinazione) si possono dare da qui
     var UU = {}; DB.t.UNITA.rows.forEach(function (u) { UU[u.id_unita] = u; });
-    Rma.carichi().forEach(function (k) { var u = UU[k.id_unita] || {}; rows.push([k.pn, L.mat(u.material) || c.materialDi(u), k.id_unita, k.seriale, '', k.tipo, u.mnft || '', '', k.destinazione, k.destinazione, '', L.s(k.rma), '', '', '', '', 'CARICO ' + k.id_carico]); });
+    (soloCar ? ((Rma.grids.car && Rma.grids.car.visibili) || Rma.carichi()) : Rma.carichi()).forEach(function (k) { var u = UU[k.id_unita] || {}; rows.push([k.pn, L.mat(u.material) || c.materialDi(u), k.id_unita, k.seriale, '', k.tipo, u.mnft || '', '', k.destinazione, k.destinazione, '', L.s(k.rma), '', '', '', '', 'CARICO ' + k.id_carico]); });
     if (!rows.length) { toast('Nessuna scheda GOOD/BALANCING o carico tra le righe filtrate', 'ko'); return; }
     var D = Rma.destinazioni(), dest = Object.keys(D).map(function (k) { return D[k]; }).sort();
     var istr = ['1. Compila solo le colonne gialle: NUOVA DESTINAZIONE (menu a tendina, solo se il pezzo deve andare altrove) e RMA CREATO.',
@@ -3993,7 +4019,7 @@ var Rma = {
       '4. Non cambiare ID UNITA e SERIALE: servono per riconoscere la scheda. RMA di ' + Rma.cifre().join(' o ') + ' cifre. Lo stesso RMA può stare su più righe solo se la destinazione è la stessa.',
       '4b. Le righe con NOTE SD "CARICO …" sono carichi NEW/REUSE: si compilano allo stesso modo.',
       '5. Poi in RMA → Inventario giornaliero premi "⬆ Importa RMA": vedi l anteprima e confermi.'];
-    var nome = 'Excel_RMA_' + L.isoToday() + '.xlsx';
+    var nome = (soloCar ? 'Excel_RMA_carichi_' : 'Excel_RMA_') + L.isoToday() + '.xlsx';
     try {
       await Lib.exceljs();
       var wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('RMA', { views: [{ state: 'frozen', ySplit: 1, xSplit: 2 }] }   /* P/N e MATERIAL sempre a vista: servono per creare l RMA */);
@@ -5203,8 +5229,8 @@ var Sto = {
       tipo: { k: 'tipo', label: 'Type', filter: 'select', html: function (r) { return r.tipo ? Pill.tipo(r.tipo) : ''; } },
       fr: { k: 'fr', label: 'FR', filter: 'text', cls: 'mono' },
       rma: { k: 'rma', label: sez === 'IN' ? 'RMA balancing' : 'RMA', filter: 'text', cls: 'mono' },
-      data: { k: 'data_ora', label: sez === 'OUT' ? 'Data out' : (sez === 'IN' ? 'Data in hub' : 'Data'), cls: 'mono nw', get: function (r) { return L.s(r.data_ora); }, html: function (r) { return esc(Sto.dataOra(r.data_ora)); } },
-      vlt: { k: 'data_registrazione_vlt', label: 'Data received and verify (reg. VLT)', cls: 'mono', get: function (r) { return L.normDate(r.data_registrazione_vlt); } },
+      data: { k: 'data_ora', label: sez === 'OUT' ? 'Data out' : (sez === 'IN' ? 'Data in hub' : 'Data'), cls: 'mono nw', filter: 'date', get: function (r) { return L.s(r.data_ora); }, html: function (r) { return esc(Sto.dataOra(r.data_ora)); } },
+      vlt: { k: 'data_registrazione_vlt', label: 'Data received and verify (reg. VLT)', cls: 'mono', filter: 'date', get: function (r) { return L.normDate(r.data_registrazione_vlt); } },
       po: { k: 'po_mrn', label: sez === 'OUT' ? 'PO new / MRN' : 'PO/MRN', filter: 'text', cls: 'mono' },
       cp: { k: 'controparte', label: sez === 'OUT' ? 'Destino' : (sez === 'IN' ? 'Mittente' : 'Controparte'), filter: 'select' },
       awb: { k: 'awb', label: 'AWB', filter: 'text', cls: 'mono' },
@@ -5217,7 +5243,7 @@ var Sto = {
       rip: { k: 'riparatore', label: sez === 'OUT' ? 'Repair' : 'Repairer', filter: 'select' },
       note: { k: 'note', label: 'Note', filter: 'text' },
       pos: { k: 'posizione_note', label: 'Posizione e note new/reuse', filter: 'text' },
-      merci: { k: 'data_in_merci', label: 'Data in merci', cls: 'mono', get: function (r) { return L.normDate(r.data_in_merci); } },
+      merci: { k: 'data_in_merci', label: 'Data in merci', cls: 'mono', filter: 'date', get: function (r) { return L.normDate(r.data_in_merci); } },
       anom: { k: 'anomalia', label: 'Anomalia', filter: 'text' },
       caus: { k: 'causale', label: 'Causale', filter: 'select' },
       dirz: { k: 'direzione', label: 'Dir.', filter: 'select', get: Sto.dir },
