@@ -4002,8 +4002,15 @@ var Rma = {
   },
   excel: function () {
     if (Rma.sez !== 'usc') { Rma.grid(Rma.sez).excel({ inv: 'Inventario_giornaliero', rit: 'Ritorni_in_giacenza', car: 'Carichi_NEW_REUSE' }[Rma.sez]); return; }
-    var rows = []; Rma.gruppi().forEach(function (g) { (g.s && g.s.stato === 'SPEDITA' ? [] : g.pezzi).forEach(function (p) { rows.push([g.dest, p.u.seriale, p.u.pn, p.u.tipo, p.rma, p.po || '', p.fonte, p.manca ? 'MANCA RMA' : (Rma.escl()[p.u.id_unita] ? 'ESCLUSO OGGI' : ''), g.s ? g.s.stato : 'DA PREPARARE', g.s ? g.s.awb : '', g.s ? g.s.n_ddt : '']); }); });
-    Xls.scarica('Uscite_RMA_' + $('uscData').value, [{ nome: 'Uscite RMA', headers: ['Destinazione', 'Seriale', 'P/N', 'Tipo', 'RMA', 'PO', 'Fonte', 'Escluso', 'Stato', 'AWB', 'DDT'], rows: rows }]);
+    // da spedire: pezzi in uscita; spedite: righe del DDT (la giacenza non li ha più)
+    var rows = [], U = {}; DB.t.UNITA.rows.forEach(function (u) { U[u.id_unita] = u; });
+    Rma.gruppi().forEach(function (g) {
+      var s = g.s, sp = s && s.stato === 'SPEDITA', col = s ? Ack.colliDb(s.id_spedizione) : [], kg = col.reduce(function (a, c) { return a + (parseFloat(String(c.peso_kg).replace(',', '.')) || 0); }, 0);
+      var coda = [s ? s.stato : 'DA PREPARARE', s ? s.awb : '', s ? s.vettore : '', s ? s.n_ddt : '', s && s.n_ddt ? L.itDate(s.data_ddt) : '', col.length || '', col.length ? Math.round(kg * 100) / 100 : ''];
+      if (sp) Ack.righe(s.id_spedizione).filter(function (r) { return r.esito === 'SPUNTATO'; }).forEach(function (r) { var u = U[r.id_unita] || {}; rows.push([g.dest, r.seriale, r.pn, u.tipo || '', r.rma, '', r.note, ''].concat(coda)); });
+      else g.pezzi.forEach(function (p) { rows.push([g.dest, p.u.seriale, p.u.pn, p.u.tipo, p.rma, p.po || '', p.fonte, p.manca ? 'MANCA RMA' : (Rma.escl()[p.u.id_unita] ? 'ESCLUSO OGGI' : '')].concat(coda)); });
+    });
+    Xls.scarica('Uscite_RMA_' + $('uscData').value, [{ nome: 'Uscite RMA', headers: ['Destinazione', 'Seriale', 'P/N', 'Tipo', 'RMA', 'PO', 'Fonte / note DDT', 'Escluso', 'Stato', 'AWB', 'Vettore', 'DDT', 'Data DDT', 'Colli', 'Peso kg'], rows: rows }]);
   },
   // etichette 10x5 per le righe filtrate dell'inventario con un RMA: destinazione di uscita (variazione) e ID scheda
   etichette: function () {
