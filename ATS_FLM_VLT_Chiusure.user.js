@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ATS FLM → VLT · Chiusure
 // @namespace    ats-spa.flm
-// @version      1.0.5
+// @version      1.0.7
 // @description  Chiude su VLT ingressi del giorno (op. linea), ACK, RMA e spare ferme in HUB con i dati dell'app "ATS - Fastweb FLM". Sostituisce i 4 script con i CSV.
 // @match        https://logistictoolvf.net.vodafone.it/*
 // @match        https://ats-spa.github.io/*
@@ -26,7 +26,7 @@
 */
 (function () {
   'use strict';
-  var VER = '1.0.5';
+  var VER = '1.0.7';
   var VLT_HOST = 'logistictoolvf.net.vodafone.it';
   var K = { CODA: 'ats_coda', STATO: 'ats_stato_', PEND: 'ats_esiti_pending', RICH: 'ats_richiesta', APP: 'ats_app_url', VIVO: 'ats_vlt_vivo', RUN: 'ats_run', UI: 'ats_ui', RICEVUTI: 'ats_esiti_ricevuti' };
   // esiti da consegnare = scritti da VLT (PEND) meno quelli già confermati dall'app (RICEVUTI): ognuno scrive solo la sua chiave
@@ -375,7 +375,7 @@
       o.click(); await sleep(250); return true;
     };
     var attendiOperatore = async function (it, S0, avvisi) {
-      var t0 = Date.now(), auto = !!get(K.UI, {}).rmaAuto;
+      var t0 = Date.now(), auto = false;   // RMA: salva sempre l'operatore dopo il controllo dei seriali
       UI.seriali(it, avvisi, auto);
       if (auto && !avvisi.length) { try { await salva(RX_RMA); UI.seriali(null); return esitoOk(S0, 'Shipped From CW', 'salvato in automatico · AWB ' + (it.awb || '')); } catch (e) { UI.seriali(it, [e.message], false); } }
       RUN.attesa = null;
@@ -408,38 +408,56 @@
     // con pausa/ferma, conferma del salvataggio e senza riaprire due volte lo stesso RMA). Esiti nell'app (procedura MNF).
     var mnf = async function () {
       if (RUN.on) return;
-      if (!/#\/rma/i.test(location.hash) || !$('input#currentSearch')) { UI.log('⚠ MNF: apri prima la lista RMA di VLT (filtrata su To Ship From CW), poi riprova.'); return; }
+      if (location.href.indexOf('/rma') < 0) { UI.log('⚠ MNF: apri prima la lista RMA di VLT (https://logistictoolvf.net.vodafone.it/#/rma?page=1), poi riprova.'); return; }
       var righe = function () { return $$('table tbody tr').filter(function (r) { return r.offsetParent && $$('td', r).length > 1; }); };
       var n0 = righe().length;
       if (!n0) { UI.log('MNF: nessuna riga nella lista.'); return; }
       if (!confirm('Material Not Found\n\nPorto in "Material Not Found" gli RMA "To Ship From CW" della lista a video (' + n0 + ' righe in questa pagina).\nGli altri stati non vengono toccati.\n\nProcedo?')) return;
       var c = { id: 'MNF' + oggi().replace(/-/g, ''), proc: 'MNF', nome: 'RMA Material Not Found', giorno: oggi(), items: [] };
       RUN.on = true; RUN.stop = false; RUN.pausa = false; UI.agg(); UI.log('▶ MNF: avvio');
-      var fatti = {}, nOk = 0, nSalt = 0;
+      var fatti = {}, nOk = 0, nSalt = 0, fermo = false;
       try {
         while (!RUN.stop) {
           while (RUN.pausa && !RUN.stop) await sleep(300);
           await attendi(function () { return righe().length || null; }, 15000);
-          var tr = righe().find(function (r) { var id = norm(($$('td', r)[0] || {}).textContent); return id && !fatti[id] && norm(r.textContent).indexOf('material not found') < 0; });
+          // come lo script originale: la prima riga della lista (saltando quelle già fatte in questo giro)
+          var chiave = function (r) { return norm(r.textContent).slice(0, 160); };
+          var tr = righe().find(function (r) { return !fatti[chiave(r)] && norm(r.textContent).indexOf('material not found') < 0; });
           if (!tr) break;
-          var rma = String(($$('td', tr)[0] || {}).textContent || '').trim(); fatti[norm(rma)] = 1;
+          fatti[chiave(tr)] = 1;
+          var rma = ($$('td', tr).map(function (td) { return td.textContent.trim(); }).find(function (t) { return /^\d{5,8}$/.test(t); })) || String(($$('td', tr)[0] || {}).textContent || '').trim() || '?';
           UI.ora('MNF · RMA ' + rma);
           var ed = $$('a, button', tr).find(function (x) { return x.textContent.trim() === 'Modifica'; }) || $$('a, button', tr).find(function (x) { return x.querySelector('svg[data-icon="pencil-alt"],svg[data-icon="pencil"]'); });
           if (!ed) { UI.log('✗ ' + rma + ' · tasto Modifica non trovato'); break; }
           ed.click();
-          var sel = await attendi(function () { var x = $('select#field_rmaStatus'); return x && x.options.length > 1 && testoSel(x) ? x : null; }, 15000);
+          var sel = await attendi(function () { var x = $('select#field_rmaStatus'); return x && x.options.length > 1 && x.selectedIndex >= 0 ? x : null; }, 15000);
           var it = { k: 'MNF:' + rma, rma: rma }, r;
           if (!sel) { r = { esito: 'ERRORE', dettaglio: 'scheda RMA non caricata' }; }
           else {
             await sleep(400); var S0 = testoSel(sel);
             if (norm(S0) !== 'to ship from cw') { await esciForm(); r = { esito: 'SALTATO', stato_prima: S0, stato_dopo: S0, dettaglio: 'stato non To Ship From CW' }; nSalt++; }
             else {
-              try { await scegli('select#field_rmaStatus', 'Material Not Found'); await salva(RX_RMA); r = esitoOk(S0, 'Material Not Found'); nOk++; }
-              catch (e) { if (e instanceof Ferma) throw e; r = { esito: 'ERRORE', stato_prima: S0, dettaglio: e.message }; if ($('select#field_rmaStatus')) await esciForm(); }
+              // passi identici allo script originale: stato → change → 1 s → clic su "Salva" → si torna alla lista
+              var o = Array.prototype.slice.call(sel.options).find(function (x) { return x.text.trim() === 'Material Not Found'; });
+              if (!o) { r = { esito: 'ERRORE', stato_prima: S0, dettaglio: '"Material Not Found" non presente tra gli stati' }; await esciForm(); }
+              else {
+                sel.value = o.value; sel.dispatchEvent(new Event('change', { bubbles: true }));
+                await sleep(1000);
+                var sv = $$('span, button').find(function (el) { return el.textContent.trim() === 'Salva'; });
+                if (!sv) { r = { esito: 'ERRORE', stato_prima: S0, dettaglio: 'tasto Salva non trovato' }; await esciForm(); }
+                else {
+                  var t0 = Date.now(); sv.click(); await sleep(3000);
+                  var lista = await attendi(function () { return !$('select#field_rmaStatus') && righe().length ? 1 : null; }, 15000);
+                  var ko = NET.filter(function (e) { return e.t0 >= t0 && (e.m === 'PUT' || e.m === 'POST' || e.m === 'PATCH') && e.s >= 400; });
+                  if (lista) { r = esitoOk(S0, 'Material Not Found'); nOk++; }
+                  else { r = { esito: 'ERRORE', stato_prima: S0, dettaglio: 'la lista non è tornata dopo il salvataggio' + (ko.length ? ' (VLT ' + ko[ko.length - 1].s + msgServer(ko[ko.length - 1].b) + ')' : '') }; fermo = true; }
+                }
+              }
             }
           }
           c.items.push(it); registra(c, it, r);
           UI.log((r.esito === 'OK' ? '✓ ' : r.esito === 'SALTATO' ? '» ' : '✗ ') + rma + ' · ' + (r.stato_dopo || '') + (r.dettaglio ? ' · ' + r.dettaglio : ''));
+          if (fermo) { UI.log('■ MNF fermato: controlla la pagina VLT'); break; }
           await attendi(function () { return $('input#currentSearch'); }, 10000); await sleep(800);
         }
       } catch (e) { if (!(e instanceof Ferma)) UI.log('✗ MNF: ' + e.message); }
@@ -584,9 +602,8 @@
         else h += '<div class="info">Nessuna coda. Inviala dall\'app (tab Chiusure VLT) o prendila qui sotto.</div>';
         if (RUN.on) h += '<button data-a="pausa" class="' + (RUN.pausa ? 'v' : 'g') + '">' + (RUN.pausa ? '▶ Riprendi' : '⏸ Pausa') + '</button><button data-a="stop" class="r">■ Ferma</button>';
         else if (c) h += '<button data-a="avvia" class="v"' + (n.da + n.ERRORE ? '' : ' disabled') + '>▶ ' + (n.OK + n.GIA_FATTO + n.SALTATO + n.ERRORE ? 'Riprendi' : 'Avvia') + '</button><button data-a="prova" class="g" title="Fa una sola scheda e si ferma">Prova 1</button><button data-a="errori" class="g"' + (n.ERRORE ? '' : ' disabled') + '>↻ Riprova errori</button><button data-a="report" class="g">⬇ Report</button>';
-        if (!RUN.on) h += '<div style="margin-top:6px"><select data-a="proc"><option value="INGRESSI">Ingressi del giorno</option><option value="ACK">ACK del giorno</option><option value="RMA">RMA del giorno</option><option value="FERME">Spare ferme in HUB</option></select> <button data-a="chiedi" class="g">📥 Prendi dati da ATS</button></div>' +
-          '<div style="margin-top:4px"><button data-a="mnf" class="r" title="Lista RMA a video: To Ship From CW → Material Not Found">🔧 RMA → Material Not Found (lista a video)</button></div>';
-        if (c && c.proc === 'RMA') h += '<div style="margin-top:4px"><label><input type="checkbox" data-a="rmaAuto"' + (cfg.rmaAuto ? ' checked' : '') + '> RMA: salva da solo (senza controllo seriali)</label></div>';
+        if (!RUN.on) h += '<div style="margin-top:6px"><select data-a="proc"><option value="INGRESSI">Ingressi del giorno</option><option value="ACK">ACK del giorno</option><option value="RMA">RMA del giorno</option><option value="FERME">Spare ferme in HUB</option><option value="MNF">RMA → Material Not Found (lista a video)</option></select> ' +
+          ((cfg.proc || 'INGRESSI') === 'MNF' ? '<button data-a="mnf" class="r" title="Lista RMA a video: To Ship From CW → Material Not Found">🔧 Avvia MNF</button>' : '<button data-a="chiedi" class="g">📥 Prendi dati da ATS</button>') + '</div>';
         if (UI._ser) {
           var s = UI._ser;
           h += '<div class="ser"><b>RMA ' + esc(s.it.rma) + '</b> · ' + esc(s.it.dest || '') + ' · AWB ' + esc(s.it.awb || '—') + (s.avvisi || []).map(function (a) { return '<div class="warn">⚠ ' + esc(a) + '</div>'; }).join('') +
@@ -597,7 +614,7 @@
         h += '<div class="ora">' + esc(UI._ora) + '</div><div class="log">' + esc(UI._log.join('\n')) + '</div></div>';
         UI.el.innerHTML = h;
         var l = $('#atsVlt .log'); if (l) l.scrollTop = 99999;
-        var ps = $('#atsVlt select[data-a="proc"]'); if (ps) { ps.value = cfg.proc || 'INGRESSI'; ps.onchange = function () { cfg.proc = ps.value; set(K.UI, cfg); }; }
+        var ps = $('#atsVlt select[data-a="proc"]'); if (ps) { ps.value = cfg.proc || 'INGRESSI'; ps.onchange = function () { cfg.proc = ps.value; set(K.UI, cfg); UI.agg(); }; }
         $$('#atsVlt [data-a]').forEach(function (b) {
           var a = b.getAttribute('data-a'); if (a === 'proc') return;
           if (a === 'rmaAuto') { b.onchange = function () { cfg.rmaAuto = b.checked; set(K.UI, cfg); }; return; }
