@@ -589,6 +589,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
         <button class="btn ghost sm" style="margin-bottom:2px" onclick="Sto.colonneScegli()" title="Mostra o nascondi colonne">⚙ Colonne</button>
         <button class="btn ghost sm" style="margin-bottom:2px" onclick="Sto.excelVista()" title="Le righe della scheda aperta, con i filtri">⬇ Excel vista</button>
         <button class="btn sm" style="margin-bottom:2px" onclick="Sto.excelEasyloader()" title="File come l'Easyloader: fogli INBOUND e OUTBOUND del periodo scelto">⬇ Excel Easyloader</button>
+        <label class="btn ghost sm" id="stoImp" style="margin-bottom:2px;cursor:pointer;display:none" title="Solo admin: movimenti dimenticati (file con le colonne di MOVIMENTI). I doppioni vengono saltati, gli ID li assegna il tool">⬆ Importa movimenti mancanti<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Sto.importaMancanti(this)"></label>
       </div></div>
       <div class="subtabs" id="stoTabs" style="margin-bottom:10px"></div>
       <div class="tbl-wrap"><table><thead id="stoHead"></thead><tbody id="stoRows"></tbody></table></div><div class="hint" id="stoFoot" style="margin-top:6px"></div>
@@ -5394,7 +5395,58 @@ var Sto = {
     if (Sto._init) return; Sto._init = true;
     var d = new Date(); $('stoA').value = L.isoToday(d); d.setDate(d.getDate() - 29); $('stoDa').value = L.isoToday(d);
   },
+  // movimenti dimenticati (es. un giorno non importato dall'Easyloader): file con le colonne di MOVIMENTI, ID assegnati come fa l'app
+  importaMancanti: async function (inp) {
+    var f = inp.files && inp.files[0]; inp.value = ''; if (!f) return;
+    if (!App.isAdmin) { toast('Solo admin', 'ko'); return; }
+    try {
+      var rows = await leggiFoglio(f);
+      if (!rows.length || !('DIREZIONE' in rows[0]) || !('SERIALE' in rows[0])) { Modal.open('Importa movimenti', 'Il file deve avere le colonne di MOVIMENTI (almeno direzione, seriale, data_ora, tipo).'); return; }
+      Modal.open('Importa movimenti', 'Rileggo i movimenti per evitare doppioni…', []);
+      Sto.dati.cur = await Sto.colsSafe(DB.id, 'MOVIMENTI'); Modal.close();
+      var chiave = function (o) { var d = o.direzione === 'IN' ? L.normDate(o.data_registrazione_vlt) || L.normDate(o.data_ora) : L.normDate(o.data_ora); return o.direzione + '|' + L.up(o.seriale) + '|' + L.up(o.tipo) + '|' + d; };
+      var gia = {}; Sto.dati.cur.forEach(function (r) { gia[chiave(r)] = r.id_mov || '1'; });
+      var uSer = {}; DB.t.UNITA.rows.forEach(function (u) { var k = L.up(u.seriale); if (k && (!uSer[k] || u.stato === 'IN_GIACENZA')) uSer[k] = u; });
+      var visti = {}, list = rows.map(function (r, i) {
+        var o = {}; Sto.COLS.forEach(function (c) { o[c] = L.s(r[L.up(c)]); }); o.direzione = L.up(o.direzione); o._riga = i + 2;
+        ['data_ora', 'data_registrazione_vlt', 'data_in_merci'].forEach(function (c) { if (o[c]) o[c] = L.normDate(o[c]); });
+        if (o.direzione !== 'IN' && o.direzione !== 'OUT') o._err = 'direzione deve essere IN o OUT';
+        else if (!o.seriale || !o.data_ora || !o.tipo) o._err = 'mancano seriale, data_ora o tipo';
+        else if (gia[chiave(o)]) o._err = 'già presente (' + gia[chiave(o)] + ')';
+        else if (visti[chiave(o)]) o._err = 'ripetuto nel file';
+        if (!o._err) { visti[chiave(o)] = 1; if (!o.id_unita && uSer[L.up(o.seriale)]) o.id_unita = uSer[L.up(o.seriale)].id_unita; if (!o.causale) o.causale = o.direzione === 'IN' ? 'INGRESSO' : ({ FAULTY: 'ACK', GOOD: 'RMA', NEW: 'RMA', REUSE: 'RMA', BALANCING: 'BALANCING' }[o.tipo] || ''); if (!o.origine) o.origine = 'IMPORT ' + f.name; }
+        return o;
+      }).filter(function (o) { return o.seriale || o._err; });
+      var ok = list.filter(function (o) { return !o._err; }), ko = list.filter(function (o) { return o._err; }), cnt = {};
+      ok.forEach(function (o) { var k = o.direzione + ' ' + o.tipo; cnt[k] = (cnt[k] || 0) + 1; });
+      Modal.html('Importa movimenti mancanti · ' + f.name, '<div style="font-size:13px;margin-bottom:8px"><b style="color:var(--green)">' + ok.length + '</b> da importare (' + Object.keys(cnt).map(function (k) { return k + ' ' + cnt[k]; }).join(', ') + ') · <b style="color:var(--red)">' + ko.length + '</b> saltati. Gli ID IN/OUT li assegna il tool (numerazione del database); l\'ID originale resta in "origine".</div>' +
+        '<div class="tbl-wrap modal-scroll"><table><thead><tr><th>Riga</th><th>Dir</th><th>Tipo</th><th>Seriale</th><th>FR</th><th>Data in hub</th><th>Reg. VLT</th><th>Controparte</th><th>Origine</th><th>Esito</th></tr></thead><tbody>' +
+        ko.concat(ok).slice(0, 400).map(function (o) { return '<tr class="' + (o._err ? 'r-err' : '') + '"><td class="mono">' + o._riga + '</td><td>' + esc(o.direzione) + '</td><td>' + esc(o.tipo) + '</td><td class="mono">' + esc(o.seriale) + '</td><td class="mono">' + esc(o.fr) + '</td><td class="mono">' + esc(L.itDate(o.data_ora)) + '</td><td class="mono">' + esc(L.itDate(o.data_registrazione_vlt)) + '</td><td>' + esc(o.controparte) + '</td><td class="hint">' + esc(o.origine) + '</td><td style="font-size:11.5px;color:' + (o._err ? 'var(--red)' : 'var(--green)') + '">' + esc(o._err || 'ok') + '</td></tr>'; }).join('') + '</tbody></table></div>',
+        [{ label: 'Annulla', cls: 'ghost' }].concat(ok.length ? [{ label: 'Importa ' + ok.length + ' movimenti', cls: 'green', fn: function () { Sto.scriviMancanti(ok, f.name); } }] : []), true);
+    } catch (e) { Modal.open('Importa movimenti', 'Errore: ' + e.message); }
+  },
+  scriviMancanti: async function (ok, nome) {
+    Modal.open('Importa movimenti', 'Salvo ' + ok.length + ' movimenti…', []);
+    try {
+      var tM = (await Ingresso.heads()).MOVIMENTI, now = L.nowStamp();
+      ok.forEach(function (o) { o.operatore = o.operatore || Auth.email; });
+      var rM = await API.append(DB.id, 'MOVIMENTI', ok.map(function (o) { return tM.toRow(o); }));
+      var base = async function (k, prossimo, desc) {
+        var b = parseInt(DB.param(k, ''), 10); if (!isNaN(b)) return b;
+        b = (parseInt(DB.param(prossimo, '0'), 10) || 0) - rM;
+        await API.append(DB.id, 'PARAMETRI', [DB.t.PARAMETRI.toRow({ chiave: k, valore: String(b), descrizione: desc })]); DB.t.PARAMETRI.rows.push({ chiave: k, valore: String(b) }); return b;
+      };
+      var mB = await base('mov_id_base', 'id_in_prossimo', 'ID movimento = prefisso IN/OUT + (mov_id_base + riga in MOVIMENTI).');
+      var oB = await base('mov_out_id_base', 'id_out_prossimo', 'ID uscita = OUT + (mov_out_id_base + riga in MOVIMENTI).');
+      ok.forEach(function (o, i) { o.id_mov = (o.direzione === 'IN' ? 'IN' + (mB + rM + i) : 'OUT' + (oB + rM + i)); });
+      await API.batchUpdate(DB.id, [{ range: tM.cell('id_mov', rM) + ':' + tM.col('id_mov') + (rM + ok.length - 1), values: ok.map(function (o) { return [o.id_mov]; }) }]);
+      await API.append(DB.id, 'LOG', [App.log('IMPORT_MOVIMENTI', 'MOVIMENTI', ok[0].id_mov + (ok.length > 1 ? '…' + ok[ok.length - 1].id_mov : ''), { file: nome, righe: ok.length, in: ok.filter(function (o) { return o.direzione === 'IN'; }).length, out: ok.filter(function (o) { return o.direzione === 'OUT'; }).length })]);
+      Sto.dati.cur = null; await Sto.carica(true); Sto.render(true); Modal.close();
+      toast(ok.length + ' movimenti importati (' + ok[0].id_mov + ' … ' + ok[ok.length - 1].id_mov + ')', 'ok');
+    } catch (e) { Modal.open('Importa movimenti', 'Errore: ' + e.message + '\nControlla in Movimenti prima di riprovare (il controllo doppioni evita di caricarli due volte).'); }
+  },
   show: async function () {
+    if ($('stoImp')) $('stoImp').style.display = App.isAdmin ? '' : 'none';
     Sto.init(); Sto.tabs();
     try { await Sto.carica(false); Sto.render(true); } catch (e) { $('stoRows').innerHTML = '<tr><td class="empty">Errore: ' + esc(e.message) + '</td></tr>'; }
   },
