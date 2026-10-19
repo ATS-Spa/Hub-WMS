@@ -466,8 +466,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
           <div class="fg" style="width:220px"><span class="fl">Riparatore fuori calendario</span><select class="fc" id="ackExtra"></select></div>
           <button class="btn ghost sm" onclick="Ack.aggiungiExtra()">+ Aggiungi</button>
           <div class="spacer"></div>
-          <button class="btn ghost sm" onclick="Ack.mailGiorno()" title="Una mail a Service Desk e bollettazione con tutte le destinazioni del giorno: destinatario, indirizzo, DDT, AWB, colli, misure e peso">✉ Mail bollettazione (tutte)</button>
-          <button class="btn ghost sm" onclick="Ack.cfgMail()" title="Destinatari della mail ACK">⚙ Destinatari</button>
+          <button class="btn ghost sm" onclick="Ack.mailGiorno()" title="Una mail con tutte le destinazioni del giorno: destinatario, indirizzo, DDT con link, AWB, colli, misure e peso (destinatari in Admin → ✉ Mail)">✉ Mail bollettazione (tutte)</button>
           <button class="btn ghost sm" onclick="Ack.ricaricaVlt()" title="Rilegge subito il foglio VLT">↻ VLT</button>
           <button class="btn ghost sm" onclick="Ack.export()" title="Riscrive il foglio EXPORT_FR_DA_CHIUDERE letto dallo script VLT">Aggiorna export FR da chiudere</button>
         </div>
@@ -1560,11 +1559,10 @@ var Ingresso = {
   },
   onAwbSilent: function () { var v = L.vettoreDaAwb($('inAwb').value, DB.t.VETTORI.rows); if (v && !L.s($('inVettore').value)) $('inVettore').value = v; },
   mailLink: function (c, T) {
-    var to = DB.param('mail_sd', 'servicedesk@atsgruppo.eu'), cc = DB.param('mail_cc', '');
     var subj, body;
     if (c.mail.tipo === 'bal') { subj = 'BALANCING RMA ' + c.rma + ' ricevuta da ' + T.mittente; body = DB.param('testo_mail_balancing', ''); }
     else { subj = 'OPEN ' + c.tipo + ' ' + c.fr + ' ricevuta da ' + T.mittente; body = DB.param('testo_mail_faulty_open', ''); }
-    return 'mailto:' + to + '?subject=' + encodeURIComponent(subj) + (cc ? '&cc=' + encodeURIComponent(cc) : '') + '&body=' + encodeURIComponent(body);
+    return Mail.link('ingresso', subj, body);
   },
   render: function () {
     var T = Ingresso.T(), C = Ingresso.computed;
@@ -1573,7 +1571,7 @@ var Ingresso = {
     else tb.innerHTML = C.map(function (c, i) {
       var cls = c.err ? 'r-err' : (c.warn ? 'r-warn' : '');
       var m = c.msgs.map(function (x) { return '<div class="msg ' + x[0] + '">' + esc(x[1]) + '</div>'; }).join('');
-      var mail = c.mail ? '<a class="mail" href="' + Ingresso.mailLink(c, T) + '">✉ scrivi mail</a>' : '';
+      var mail = c.mail ? '<a class="mail" ' + Ingresso.mailLink(c, T) + '>✉ scrivi mail</a>' : '';
       function ed(f, val, min) { return '<input class="edit-cell mono' + (Ingresso.rows[i].man[f] !== undefined ? ' dirty' : '') + '" style="width:calc(' + Math.max(min || 8, Math.min(60, L.s(val).length + 1)) + 'ch + 16px)" oninput="this.style.width=\'calc(\'+Math.max(' + (min || 8) + ',Math.min(60,this.value.length+1))+\'ch + 16px)\'" value="' + esc(val) + '" onchange="Ingresso.edit(' + i + ',\'' + f + '\',this.value)">'; }
       return '<tr class="' + cls + '"><td>' + (i + 1) + '</td><td class="mono">' + esc(c.fr) + '</td><td class="mono">' + esc(c.rma) + '</td>' +
         '<td class="nw">' + ed('ser', c.ser, 12) + '</td><td class="nw">' + ed('pn', c.pn, 8) + (c.pn && c.pnAnag !== undefined ? (c.pnAnag ? ' <span title="P/N presente in anagrafica articoli" style="color:var(--green)">✓</span>' : ' <span title="P/N NON presente in anagrafica articoli' + (c.pnSimile ? ' (simile: ' + esc(c.pnSimile) + ')' : '') + '" style="color:var(--amber)">✗</span>') : '') + '</td><td class="nw">' + ed('mnft', c.mnft, 6) + '</td>' +
@@ -2309,7 +2307,7 @@ var Admin = {
     REGOLE_BARCODE: { title: 'Regole barcode', hint: 'Estrazione seriale/PN dal barcode, in ordine di priorità.', cols: ['priorita', 'prefisso', 'lunghezza', 'condizione_extra', 'riparatore', 'seriale_da', 'seriale_lung', 'pn_da', 'pn_lung', 'pn_prefisso', 'note'], add: true }
   },
   init: function () {
-    $('admTabs').innerHTML = '<span class="subtab" id="adm-ACCESSI" onclick="Admin.open(\'ACCESSI\')">🔑 Accessi admin</span><span class="subtab" id="adm-SPAZIO" onclick="Admin.open(\'SPAZIO\')">💾 Spazio database</span>' + (App.isOwner ? '<span class="subtab" id="adm-ARCHIVIO" onclick="Admin.open(\'ARCHIVIO\')">🗄 Archiviazione annuale</span>' : '') + Object.keys(Admin.CONF).map(function (k) { return '<span class="subtab" id="adm-' + k + '" onclick="Admin.open(\'' + k + '\')">' + esc(Admin.CONF[k].title) + '</span>'; }).join('');
+    $('admTabs').innerHTML = '<span class="subtab" id="adm-ACCESSI" onclick="Admin.open(\'ACCESSI\')">🔑 Accessi admin</span><span class="subtab" id="adm-SPAZIO" onclick="Admin.open(\'SPAZIO\')">💾 Spazio database</span><span class="subtab" id="adm-MAIL" onclick="Admin.open(\'MAIL\')">✉ Mail</span>' + (App.isOwner ? '<span class="subtab" id="adm-ARCHIVIO" onclick="Admin.open(\'ARCHIVIO\')">🗄 Archiviazione annuale</span>' : '') + Object.keys(Admin.CONF).map(function (k) { return '<span class="subtab" id="adm-' + k + '" onclick="Admin.open(\'' + k + '\')">' + esc(Admin.CONF[k].title) + '</span>'; }).join('');
   },
   excel: function () { var c = Admin.CONF[Admin.sez]; Xls.scarica(Admin.sez, [Object.assign({ nome: Admin.sez }, Xls.oggetti(DB.t[Admin.sez].rows, c.cols.map(function (h) { return [h, h]; })))]); },
   open: function (k) {
@@ -2317,9 +2315,10 @@ var Admin = {
     Admin.sez = k; Admin.dirty = {}; $('admQ').value = ''; Admin.render();
   },
   render: function () {
-    var acc = Admin.sez === 'ACCESSI', arc = Admin.sez === 'ARCHIVIO', spz = Admin.sez === 'SPAZIO' || arc;
+    var acc = Admin.sez === 'ACCESSI', arc = Admin.sez === 'ARCHIVIO', mai = Admin.sez === 'MAIL', spz = Admin.sez === 'SPAZIO' || arc || mai;
     ['admAdd', 'admQ', 'admSave', 'admXls'].forEach(function (id) { $(id).style.display = acc || spz ? 'none' : ''; });
     $('spzBox').style.display = spz ? '' : 'none'; if ($('admKpiImp')) $('admKpiImp').style.display = Admin.sez === 'KPI_STORICO' ? '' : 'none';
+    if (mai) { document.querySelectorAll('#admTabs .subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-MAIL'); }); if ($('accSuperBox')) $('accSuperBox').style.display = 'none'; $('admCal').style.display = 'none'; Mail.render(); return; }
     if (arc) { document.querySelectorAll('#admTabs .subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-ARCHIVIO'); }); if ($('accSuperBox')) $('accSuperBox').style.display = 'none'; $('admCal').style.display = 'none'; Arc.render(); return; }
     if (spz) { document.querySelectorAll('#admTabs .subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-SPAZIO'); }); if ($('accSuperBox')) $('accSuperBox').style.display = 'none'; $('admCal').style.display = 'none'; Spz.render(); return; }
     $('admCal').style.display = Admin.sez === 'CALENDARIO_USCITE' ? '' : 'none';
@@ -2496,6 +2495,7 @@ var Chv = {
         righe.forEach(function (r) {
           var s = byId[r.id_spedizione], rma = L.s(r.rma);
           if (!rma) { scarti.push({ k: 'RMA:' + r.seriale, motivo: 'pezzo senza RMA (' + r.seriale + ')' }); return; }
+          if (!L.s(s.awb)) { scarti.push({ k: 'RMA:' + rma, motivo: 'RMA ' + rma + ' (' + s.destinatario + ') senza AWB' }); return; }
           if (!g[rma]) { g[rma] = { k: 'RMA:' + rma, rma: rma, awb: L.s(s.awb), dest: s.destinatario, ddt: s.n_ddt, note: Chv.notaRma(s), serials: [] }; ord.push(rma); }
           if (L.s(r.seriale) && g[rma].serials.indexOf(r.seriale) < 0) g[rma].serials.push(r.seriale);
         });
@@ -2570,7 +2570,7 @@ var Chv = {
     try { await Chv.tab(); } catch (e) { $('chvBox').innerHTML = '<div class="empty">Errore: ' + esc(e.message) + '</div>'; return; }
     Chv.render();
   },
-  ricarica: async function () { try { await DB.loadTables(['VLT_CHIUSURE']); } catch (e) { } Chv.render(); },
+  ricarica: async function () { Chv._cnt = null; try { await DB.loadTables(['VLT_CHIUSURE']); } catch (e) { } Chv.render(); },
   render: async function () {
     var box = $('chvBox'); if (!box) return;
     var b = Chv.bridge, giorno = Chv.giorno();
@@ -2578,13 +2578,13 @@ var Chv = {
       : (document.documentElement.getAttribute('data-ats-vlt') ? '<span class="pill p-amber">● script VLT presente ma non risponde</span> <span class="hint">aggiorna lo script all\'ultima versione e ricarica la pagina</span>'
         : '<span class="pill p-amber">● script VLT non rilevato</span> <span class="hint">installalo (o aggiornalo) in Tampermonkey e ricarica la pagina; nell\'Hub lo script deve poter girare nei frame</span>');
     var es = ((DB.t.VLT_CHIUSURE || {}).rows || []).filter(function (r) { return r.giorno === giorno; });
-    var html = '<div class="ack-grid">';
+    var html = '<div class="row" style="margin-bottom:8px"><span class="pill p-violet" id="chvTot">schede da chiudere …</span></div><div class="ack-grid">';
     Object.keys(Chv.PROC).forEach(function (p) {
       var mine = es.filter(function (r) { return r.procedura === p; }), last = {};
       mine.forEach(function (r) { last[r.chiave] = r.esito; });
       var n = { OK: 0, GIA_FATTO: 0, ERRORE: 0, SALTATO: 0 }; Object.keys(last).forEach(function (k) { n[last[k]] = (n[last[k]] || 0) + 1; });
       html += '<div class="ack-card"><div class="t">' + esc(Chv.PROC[p]) + '</div><div class="hint">' + esc(Chv.DESC[p]) + '</div>' +
-        '<div class="ack-nums"><span>chiuse <b>' + n.OK + '</b></span><span>già a posto <b>' + n.GIA_FATTO + '</b></span><span' + (n.ERRORE ? ' style="border-color:var(--red)"' : '') + '>errori <b>' + n.ERRORE + '</b></span><span>saltate <b>' + n.SALTATO + '</b></span></div>' +
+        '<div class="ack-nums"><span id="chvN_' + p + '" class="pill p-violet" title="Schede in coda per il giorno scelto">da chiudere …</span><span>chiuse <b>' + n.OK + '</b></span><span>già a posto <b>' + n.GIA_FATTO + '</b></span><span' + (n.ERRORE ? ' style="border-color:var(--red)"' : '') + '>errori <b>' + n.ERRORE + '</b></span><span>saltate <b>' + n.SALTATO + '</b></span></div>' +
         '<div class="row"><button class="btn sm" onclick="Chv.invia(\'' + p + '\')"' + (b ? '' : ' disabled') + '>▶ Invia a VLT</button><button class="btn ghost sm" onclick="Chv.vedi(\'' + p + '\')">👁 Vedi coda</button><button class="btn ghost sm" onclick="Chv.excel(\'' + p + '\')">⬇ Excel</button></div></div>';
     });
     html += '</div>';
@@ -2595,11 +2595,97 @@ var Chv = {
         var c = { OK: 'p-green', GIA_FATTO: 'p-teal', ERRORE: 'p-red', SALTATO: 'p-amber' }[r.esito] || '';
         return '<tr' + (r.esito === 'ERRORE' ? ' class="r-err"' : '') + '><td class="mono">' + esc(L.s(r.data_ora).slice(11, 16)) + '</td><td>' + esc(r.procedura) + '</td><td class="mono">' + esc(L.s(r.chiave).replace(/^\w+:/, '')) + '</td><td><span class="pill ' + c + '">' + esc(r.esito) + '</span></td><td>' + esc(r.stato_prima) + '</td><td>' + esc(r.stato_dopo) + '</td><td>' + esc(r.dettaglio) + '</td></tr>';
       }).join('') : '<tr><td colspan="7" class="empty">Nessun esito per questo giorno</td></tr>') + '</tbody></table></div></div>';
-    box.innerHTML = html;
+    box.innerHTML = html; Chv.conta(giorno);
+  },
+  // totale schede da chiudere per procedura (code ricostruite dal database, in cache 60 s)
+  _cnt: null,
+  conta: async function (giorno) {
+    var c = Chv._cnt;
+    if (!c || c.g !== giorno || Date.now() - c.ts > 60000) {
+      c = Chv._cnt = { g: giorno, ts: Date.now(), n: {} };
+      for (var p in Chv.PROC) { try { var x = await Chv.costruisci(p, giorno); c.n[p] = x.items.map(function (it) { return it.k; }); } catch (e) { c.n[p] = null; } }
+    }
+    var tot = 0, tutte = 0;
+    Object.keys(Chv.PROC).forEach(function (p) {
+      var el = $('chvN_' + p), K = c.n[p]; if (!el) return;
+      if (!K) { el.innerHTML = 'da chiudere ?'; return; }
+      var f = Chv.fatti(p, giorno), da = K.filter(function (k) { return !Chv.FATTO[f[k]]; }).length; tot += da; tutte += K.length;
+      el.innerHTML = 'da chiudere <b>' + da + '</b> / ' + K.length;
+    });
+    if ($('chvTot')) $('chvTot').innerHTML = 'Schede da chiudere il ' + esc(L.itDate(giorno)) + ': <b>' + tot + '</b> su ' + tutte;
   }
 };
 
 // ───────────────────────── EXPORT FR DA CHIUDERE (letto dallo script esterno VLT) ─────────────────────────
+// ───────────────────────── MAIL: destinatari per tab (PARAMETRI mail_<tab>_a / mail_<tab>_cc), scelti all'invio ─────────────────────────
+var Mail = {
+  TIPI: {
+    ingresso: { nome: 'Ingresso · balancing e FR in OPEN', a: function () { return [DB.param('mail_sd', 'servicedesk@atsgruppo.eu')]; } },
+    ack: { nome: 'ACK · uscite ai riparatori', a: function () { return [DB.param('mail_sd', ''), DB.param('mail_bollettazione', '')]; } },
+    rma: { nome: 'RMA · uscite e DDT', a: function () { return [DB.param('mail_sd', ''), DB.param('mail_bollettazione', '')]; } },
+    nr: { nome: 'Carichi NEW/REUSE', a: function () { return [DB.param('mail_new_reuse', '') || DB.param('mail_sd', '')]; } }
+  },
+  lista: function (v) { var o = [], vis = {}; [].concat(v).join(',').split(/[,;\s]+/).forEach(function (x) { x = L.s(x); if (x && x.indexOf('@') > 0 && !vis[x.toLowerCase()]) { vis[x.toLowerCase()] = 1; o.push(x); } }); return o; },
+  // parametro presente (anche vuoto) = vale quello; assente = indirizzi di prima (mail_sd, mail_cc…)
+  a: function (t) { var v = DB.param('mail_' + t + '_a', null); return Mail.lista(v === null ? Mail.TIPI[t].a() : v); },
+  cc: function (t) { var v = DB.param('mail_' + t + '_cc', null); return Mail.lista(v === null ? DB.param('mail_cc', '') : v); },
+  _k: [],
+  // per i link nelle tabelle: onclick che apre la scelta destinatari
+  link: function (t, subj, body) { Mail._k.push([t, subj, body]); return 'href="#" onclick="Mail.apriK(' + (Mail._k.length - 1) + ');return false"'; },
+  apriK: function (i) { var x = Mail._k[i]; if (x) Mail.apri(x[0], x[1], x[2]); },
+  apri: function (t, subj, body, dopo) {
+    var A = Mail.a(t), C = Mail.cc(t).filter(function (x) { return A.indexOf(x) < 0; }), T = Mail.TIPI[t] || { nome: t };
+    var riga = function (x, r) { return '<tr><td><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="mlSel" data-m="' + esc(x) + '" checked> ' + esc(x) + '</label></td><td><select class="fc mlRuolo" style="width:80px;padding:3px 6px"><option' + (r === 'A' ? ' selected' : '') + '>A</option><option' + (r === 'CC' ? ' selected' : '') + '>CC</option></select></td></tr>'; };
+    Modal.html('Mail · ' + T.nome, '<div class="hint" style="margin-bottom:6px"><b>' + esc(subj) + '</b></div>' +
+      '<table style="width:auto"><tbody>' + A.map(function (x) { return riga(x, 'A'); }).join('') + C.map(function (x) { return riga(x, 'CC'); }).join('') + '</tbody></table>' +
+      (A.length + C.length ? '' : '<div class="hint warn">Nessun destinatario impostato: Admin → ✉ Mail.</div>') +
+      '<div class="fg" style="margin-top:8px"><span class="fl">Altri destinatari (A), separati da virgola</span><input class="fc" id="mlAltri" placeholder="nome@dominio.it"></div>' +
+      '<div class="hint" style="margin-top:6px">Togli la spunta a chi non deve riceverla. Destinatari fissi in Admin → ✉ Mail.</div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: '✉ Apri mail', cls: 'green', keep: true, fn: function () {
+        var to = [], cc = [];
+        document.querySelectorAll('#mBody .mlSel').forEach(function (cb) { if (!cb.checked) return; var r = cb.closest('tr').querySelector('.mlRuolo').value; (r === 'CC' ? cc : to).push(cb.getAttribute('data-m')); });
+        to = to.concat(Mail.lista($('mlAltri').value));
+        if (!to.length && cc.length) to.push(cc.shift());
+        if (!to.length) { toast('Scegli almeno un destinatario', 'ko'); return; }
+        Modal.close(); Mail.invia(to, cc, subj, body); if (dopo) dopo();
+      } }]);
+  },
+  // apre il client di posta; il testo va sempre anche negli appunti (le mail lunghe superano il limite dei link mailto)
+  invia: function (to, cc, subj, body) {
+    var copiato = false;
+    try { if (navigator.clipboard) { navigator.clipboard.writeText(body).catch(function () { }); copiato = true; } } catch (e) { }
+    var base = 'mailto:' + to.join(',') + '?subject=' + encodeURIComponent(subj) + (cc.length ? '&cc=' + encodeURIComponent(cc.join(',')) : '');
+    var url = base + '&body=' + encodeURIComponent(body);
+    if (url.length > 1900) url = base + '&body=' + encodeURIComponent('(testo lungo: incolla qui con Ctrl+V)\n\n');
+    location.href = url;
+    if (copiato) toast('Testo della mail copiato anche negli appunti', 'ok');
+  },
+  // Admin → ✉ Mail
+  render: function () {
+    $('admTitle').textContent = 'Destinatari mail'; $('admHint').textContent = 'Per ogni tab che invia mail: A e CC (più indirizzi separati da virgola). Al momento dell\'invio si può togliere qualcuno o aggiungerne altri. Salvati in Parametri (mail_<tab>_a / mail_<tab>_cc).';
+    $('admHead').innerHTML = ''; $('admRows').innerHTML = '';
+    $('spzBox').innerHTML = '<div class="tbl-x"><table><thead><tr><th>Tab</th><th>A</th><th>CC</th></tr></thead><tbody>' + Object.keys(Mail.TIPI).map(function (t) {
+      return '<tr><td><b>' + esc(Mail.TIPI[t].nome) + '</b><div class="hint mono">mail_' + t + '_a / _cc</div></td><td><input class="fc" style="min-width:320px" id="ml_' + t + '_a" value="' + esc(Mail.a(t).join(', ')) + '"></td><td><input class="fc" style="min-width:260px" id="ml_' + t + '_cc" value="' + esc(Mail.cc(t).join(', ')) + '"></td></tr>';
+    }).join('') + '</tbody></table></div><div class="row" style="margin-top:10px"><div class="spacer"></div><button class="btn green" onclick="Mail.salva()">Salva destinatari</button></div>';
+  },
+  salva: async function () {
+    try {
+      await DB.loadTables(['PARAMETRI']); var t = DB.t.PARAMETRI, upd = [], nuovi = [], log = {};
+      Object.keys(Mail.TIPI).forEach(function (tp) {
+        ['a', 'cc'].forEach(function (r) {
+          var k = 'mail_' + tp + '_' + r, v = Mail.lista($('ml_' + tp + '_' + r).value).join(','), row = t.rows.find(function (x) { return x.chiave === k; });
+          if (row) { if (L.s(row.valore) !== v) { upd.push({ range: t.cell('valore', row._r), values: [[v]] }); log[k] = { prima: row.valore, dopo: v }; row.valore = v; } }
+          else { nuovi.push({ chiave: k, valore: v, descrizione: 'Destinatari ' + (r === 'a' ? 'A' : 'CC') + ' mail · ' + Mail.TIPI[tp].nome }); log[k] = { dopo: v }; }
+        });
+      });
+      if (upd.length) await API.batchUpdate(DB.id, upd);
+      if (nuovi.length) { var r0 = await API.append(DB.id, 'PARAMETRI', nuovi.map(function (o) { return t.toRow(o); })); nuovi.forEach(function (o, i) { o._r = r0 + i; t.rows.push(o); }); }
+      if (Object.keys(log).length) await API.append(DB.id, 'LOG', [App.log('PARAMETRI_MAIL', 'PARAMETRI', 'mail', log)]);
+      toast(Object.keys(log).length ? 'Destinatari salvati' : 'Nessuna modifica', 'ok'); Mail.render();
+    } catch (e) { Modal.open('Errore', e.message); }
+  }
+};
+
 var Export = {
   righe: function () {
     var st = {}; L.s(DB.param('vlt_stati_fr_da_chiudere', '')).split(';').forEach(function (x) { if (L.s(x)) st[L.s(x)] = 1; });
@@ -2910,11 +2996,11 @@ var Ddt = {
     return d;
   },
   // cedolini: una pagina per collo con la destinazione in grande
-  cedolini: function (p) {
+  cedolini: function (p, d0) {
     var J = window.jspdf && window.jspdf.jsPDF; if (!J) throw new Error('libreria PDF non caricata');
-    var d = new J({ unit: 'mm', format: 'a5', orientation: 'landscape' }), n = Math.max(1, (p.colli || []).length);
+    var d = d0 || new J({ unit: 'mm', format: 'a5', orientation: 'landscape' }), n = Math.max(1, (p.colli || []).length);
     for (var i = 0; i < n; i++) {
-      if (i) d.addPage();
+      if (i || d0) d.addPage();
       d.setFont('helvetica', 'bold'); d.setFontSize(11); d.text('DESTINAZIONE', 12, 16);
       d.setFontSize(26); d.text(d.splitTextToSize(L.s(p.destinatario), 186), 12, 30);
       d.setFont('helvetica', 'normal'); d.setFontSize(13); d.text(d.splitTextToSize(L.s(p.indirizzo), 186), 12, 56);
@@ -3449,7 +3535,6 @@ var Ack = {
   },
   // AWB inserito dopo il DDT: SPEDIZIONI + MOVIMENTI OUT della spedizione + PDF rigenerato e sostituito su Drive
   awbDopoDdt: async function (s, awb, vet) {
-    if (L.s(s.awb) && !App.isAdmin) throw new Error('AWB già inserito: può correggerlo solo un admin');
     if (L.s(s.awb) === awb && L.s(s.vettore) === vet) { toast('Nessuna modifica', 'ok'); return; }
     var id = s.id_spedizione, prima = { awb: s.awb, vettore: s.vettore };
     Modal.open('AWB su DDT ' + s.n_ddt, 'Non chiudere la pagina.', []);
@@ -3470,18 +3555,19 @@ var Ack = {
       Modal.progress('3/4 PDF DDT');
       var pdfOk = '';
       try {
-        await Ack.loghi(); var blob = Ack.pdf(id).output('blob'), fid = Drive.idDa(s.link_pdf);
+        var rma = s.tipo === 'RMA'; await Ack.loghi(); if (rma) { try { await Lib.qr(); } catch (e) { } }
+        var blob = (rma ? Rma.pdf(id) : Ack.pdf(id)).output('blob'), fid = Drive.idDa(s.link_pdf);
         if (fid) { await Drive.sostituisci(fid, blob); pdfOk = 'PDF su Drive aggiornato.'; }
         else {
-          var link = await Drive.upload('DDT ACK ' + s.n_ddt + ' ' + s.destinatario + ' ' + L.normDate(s.data_ddt) + '.pdf', blob);
+          var link = await Drive.upload('DDT ' + (rma ? 'RMA ' : 'ACK ') + s.n_ddt + ' ' + s.destinatario + ' ' + L.normDate(s.data_ddt) + '.pdf', blob);
           await API.batchUpdate(DB.id, Ack.setS(s, { link_pdf: link })); pdfOk = 'PDF salvato in STORICO DDT.';
         }
       } catch (e) { pdfOk = 'PDF non aggiornato su Drive (' + e.message + '): usa "Stampa DDT".'; }
       Modal.progress('4/4 log');
-      await API.append(DB.id, 'LOG', [App.log('ACK_AWB_DOPO_DDT', 'SPEDIZIONI', id, { ddt: s.n_ddt, prima: prima, dopo: { awb: awb, vettore: vet }, movimenti: nMov })]);
-      Ack.render();
+      await API.append(DB.id, 'LOG', [App.log(s.tipo === 'RMA' ? 'RMA_AWB_DOPO_DDT' : 'ACK_AWB_DOPO_DDT', 'SPEDIZIONI', id, { ddt: s.n_ddt, prima: prima, dopo: { awb: awb, vettore: vet }, movimenti: nMov })]);
+      if (s.tipo === 'RMA') Rma.render(); else Ack.render();
       Modal.open('AWB inserito', 'DDT ' + s.n_ddt + ' · AWB ' + awb + ' ' + vet + '\nMovimenti aggiornati: ' + nMov + '\n' + pdfOk,
-        [{ label: 'Chiudi', cls: 'ghost' }, { label: 'Stampa DDT', fn: function () { Ack.stampa(id); } }]);
+        [{ label: 'Chiudi', cls: 'ghost' }, { label: 'Stampa DDT', fn: function () { if (s.tipo === 'RMA') Rma.stampa(id); else Ack.stampa(id); } }]);
     } catch (e) { Modal.open('Errore AWB', e.message); }
   },
 
@@ -3568,16 +3654,15 @@ var Ack = {
     return Ddt.pdf({ numero: s.n_ddt, data: s.data_ddt, destinatario: rp.ragione_sociale || s.destinatario, indirizzo: rp.indirizzo || '', vettore: s.vettore, awb: L.s(s.awb) || 'DA ASSEGNARE', colli: Ack.colliDb(id),
       cols: [{ h: 'FR', w: 26 }, { h: 'S/N', w: 70 }, { h: 'P/N', w: 50 }, { h: 'NOTE' }], righe: R.map(function (r) { return [r.fr, r.seriale, r.pn, r.flag_vlt]; }) });
   },
+  cedolini: function (id) {
+    var w = window.open('', '_blank');
+    try { var s = Ack.byId(id), rp = Ack.rip(s.destinatario); Ddt.apri(Ddt.cedolini({ destinatario: rp.ragione_sociale || s.destinatario, indirizzo: rp.indirizzo || '', numero: s.n_ddt, awb: s.awb, vettore: s.vettore, colli: Ack.colliDb(id) }), w); }
+    catch (e) { if (w) w.close(); Modal.open('Cedolini', e.message); }
+  },
   stampa: async function (id) {
     var w = window.open('', '_blank');
     try { await Ack.loghi(); Ddt.apri(Ack.pdf(id), w); }
     catch (e) { if (w) w.close(); Modal.open('Stampa DDT', e.message); }
-  },
-  // destinatari: Service Desk + bollettazione (param mail_bollettazione, più indirizzi separati da virgola)
-  mailTo: function () {
-    var v = {}, out = [];
-    [DB.param('mail_sd', ''), DB.param('mail_bollettazione', '')].join(',').split(/[,;\s]+/).forEach(function (x) { x = L.s(x); if (x && !v[x.toLowerCase()]) { v[x.toLowerCase()] = 1; out.push(x); } });
-    return out.join(',');
   },
   // blocco testo di una destinazione: destinatario, indirizzo, DDT, AWB, pezzi, colli con tipo/misure/peso
   mailBlocco: function (s, i) {
@@ -3591,7 +3676,7 @@ var Ack = {
       '   Pezzi: ' + (n.sp || s.n_pezzi || 0) + '\n';
     if (cl.length) t += '   Colli: ' + cl.length + ' · peso totale ' + Math.round(tot * 100) / 100 + ' kg\n' + cl.map(function (c, k) { return '     ' + (k + 1) + '. ' + (c.tipo_collo || 'PLT') + ' ' + c.lunghezza_cm + 'x' + c.larghezza_cm + 'x' + c.altezza_cm + ' cm · ' + c.peso_kg + ' kg'; }).join('\n') + '\n';
     else t += '   Colli: da inserire (spunta non chiusa)\n';
-    if (s.link_pdf) t += '   PDF DDT: ' + s.link_pdf + '\n';
+    t += '   Link DDT (PDF): ' + (s.link_pdf || (s.n_ddt ? 'non salvato su Drive' : 'dopo la generazione del DDT')) + '\n';
     return t;
   },
   mailTesto: function (ids) {
@@ -3610,19 +3695,10 @@ var Ack = {
     });
     return { subj: subj, body: body + '\nGrazie' };
   },
-  mail: function (id) { var m = Ack.mailTesto([id]); if (!m) return '#'; var cc = DB.param('mail_cc', ''); return 'mailto:' + Ack.mailTo() + '?subject=' + encodeURIComponent(m.subj) + (cc ? '&cc=' + encodeURIComponent(cc) : '') + '&body=' + encodeURIComponent(m.body); },
-  // apre il client di posta; il testo va sempre anche negli appunti (le mail lunghe superano il limite dei link mailto)
   inviaMail: function (ids) {
     var m = Ack.mailTesto(ids); if (!m) { toast('Nessuna spedizione', 'ko'); return; }
-    var to = Ack.mailTo(), cc = DB.param('mail_cc', '');
-    if (!to) { toast('Nessun destinatario: imposta mail_sd / mail_bollettazione in Parametri', 'ko'); return; }
-    var copiato = false;
-    try { if (navigator.clipboard) { navigator.clipboard.writeText(m.body).catch(function () { }); copiato = true; } } catch (e) { }
-    var url = 'mailto:' + to + '?subject=' + encodeURIComponent(m.subj) + (cc ? '&cc=' + encodeURIComponent(cc) : '') + '&body=' + encodeURIComponent(m.body);
-    if (url.length > 1900) url = 'mailto:' + to + '?subject=' + encodeURIComponent(m.subj) + (cc ? '&cc=' + encodeURIComponent(cc) : '') + '&body=' + encodeURIComponent('(testo lungo: incolla qui con Ctrl+V)\n\n');
-    location.href = url;
-    if (copiato) toast('Testo della mail copiato anche negli appunti', 'ok');
-    ids.forEach(Ack.mailInviata);
+    var s0 = Ack.byId(ids[0]);
+    Mail.apri(s0 && s0.tipo === 'RMA' ? 'rma' : 'ack', m.subj, m.body, function () { ids.forEach(Ack.mailInviata); });
   },
   // mail unica con tutte le destinazioni del giorno (spunte chiuse o spedite)
   mailGiorno: function () {
@@ -3630,23 +3706,6 @@ var Ack = {
     var ids = Ack.giro(d).map(function (c) { return Ack.sped(d, c); }).filter(function (s) { return s && (s.stato === 'PRONTA' || s.stato === 'SPEDITA'); }).map(function (s) { return s.id_spedizione; });
     if (!ids.length) { toast('Nessuna spunta chiusa il ' + L.itDate(d), 'ko'); return; }
     Ack.inviaMail(ids);
-  },
-  // destinatari della bollettazione (admin)
-  cfgMail: function () {
-    var cur = L.s(DB.param('mail_bollettazione', ''));
-    if (!App.isAdmin) { Modal.open('Destinatari mail ACK', 'A: ' + (Ack.mailTo() || '-') + '\nCC: ' + (DB.param('mail_cc', '') || '-') + '\n\nLi modifica un admin.'); return; }
-    Modal.html('Destinatari mail ACK', '<div class="hint" style="margin-bottom:8px">Service Desk (mail_sd): <b>' + esc(DB.param('mail_sd', '') || '-') + '</b> · CC: <b>' + esc(DB.param('mail_cc', '') || '-') + '</b></div>' +
-      '<div class="fg"><span class="fl">Bollettazione (più indirizzi separati da virgola)</span><input class="fc" id="ackMailB" value="' + esc(cur) + '" placeholder="bollettazione@..."></div>',
-      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Salva', cls: 'green', fn: async function () {
-        var v = L.s($('ackMailB').value).replace(/\s*[;,]\s*/g, ',');
-        try {
-          await DB.loadTables(['PARAMETRI']); var t = DB.t.PARAMETRI, r = t.rows.find(function (x) { return x.chiave === 'mail_bollettazione'; });
-          if (r) { await API.batchUpdate(DB.id, [{ range: t.cell('valore', r._r), values: [[v]] }]); r.valore = v; }
-          else { await API.append(DB.id, 'PARAMETRI', [t.toRow({ chiave: 'mail_bollettazione', valore: v, descrizione: 'Destinatari bollettazione della mail ACK (oltre al Service Desk), separati da virgola' })]); t.rows.push({ chiave: 'mail_bollettazione', valore: v }); }
-          await API.append(DB.id, 'LOG', [App.log('PARAMETRO', 'PARAMETRI', 'mail_bollettazione', { prima: cur, dopo: v })]);
-          toast('Destinatari salvati', 'ok');
-        } catch (e) { Modal.open('Errore', e.message); }
-      } }]);
   },
   mailInviata: function (id) { var s = Ack.byId(id); if (s && s._r) API.batchUpdate(DB.id, Ack.setS(s, { mail_sd_inviata: L.nowStamp() })).catch(function () { }); },
 
@@ -3673,10 +3732,11 @@ var Ack = {
       if (s && s.stato === 'PRONTA') btn += ' <button class="btn sm green"' + (L.s(s.awb) ? '' : ' title="Senza AWB: DDT per la bollettazione, l\'AWB si inserisce dopo e il PDF si aggiorna"') + ' onclick="Ack.genera(\'' + s.id_spedizione + '\')">Genera DDT' + (L.s(s.awb) ? '' : ' (senza AWB)') + '</button>';
       if (s && s.n_ddt) btn += ' <button class="btn sm" onclick="Ack.stampa(\'' + s.id_spedizione + '\')">Stampa DDT</button>' + (s.link_pdf ? ' <a class="mail" target="_blank" href="' + esc(s.link_pdf) + '">PDF su Drive</a>' : '');
       if (s && s.stato !== 'BOZZA') btn += ' <a class="mail" href="#" onclick="Ack.inviaMail([\'' + s.id_spedizione + '\']);return false" title="Mail a Service Desk e bollettazione: destinatario, indirizzo, DDT, AWB, colli, misure e peso">✉ mail</a>';
+      if (s && (s.stato === 'PRONTA' || s.stato === 'SPEDITA')) btn += ' <button class="btn ghost sm" onclick="Ack.cedolini(\'' + s.id_spedizione + '\')" title="Un foglio per collo/pallet con destinazione, DDT e AWB">Cedolini</button>';
       if (s && s.n_ddt && !L.s(s.awb)) btn += ' <span class="pill p-amber" title="DDT emesso: inserisci l\'AWB appena la bollettazione lo comunica">AWB da inserire</span>';
       var np = Ack.pending(cod).length;
       btn += ' <button class="btn ghost sm"' + (np ? ' style="border-color:var(--amber);color:var(--amber)"' : '') + ' onclick="Ack.vediPending(\'' + esc(cod) + '\')" title="FR tolti dagli ACK di questo riparatore, con il motivo">ACK Pending' + (np ? ' (' + np + ')' : '') + '</button>';
-      var lock = s && s.n_ddt && L.s(s.awb) && !App.isAdmin ? ' disabled' : '';
+      var lock = '';
       return '<div class="ack-card' + (s && Ack.cur === s.id_spedizione ? ' sel' : '') + '">' +
         '<div class="row" style="align-items:center"><span class="t">' + esc(cod) + '</span><div class="spacer"></div><span class="pill ' + (PILL[st] || '') + '">' + esc(st.replace('_', ' ')) + '</span></div>' +
         '<div class="hint">' + esc(rp.ragione_sociale || '') + (rp.indirizzo ? ' · ' + esc(rp.indirizzo) : '') + (s && s.n_ddt ? ' · <b>DDT ' + esc(s.n_ddt) + '</b>' : '') + '</div>' +
@@ -3949,7 +4009,7 @@ var Rma = {
       '<button class="btn ghost sm" onclick="Rma.carModello()">Modello Excel</button> <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button>' + xr + '</div></div>' +
       '';
     return '<div class="row"><div class="fg" style="width:160px"><span class="fl">Giorno di uscita</span><input class="fc" type="date" id="uscData2" value="' + esc($('uscData').value) + '" onchange="$(\'uscData\').value=this.value;Rma.render()"></div><div class="spacer"></div>' +
-      '<button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button> <button class="btn ghost sm" onclick="Rma.mailGiorno()" title="Una mail a Service Desk e bollettazione con tutte le destinazioni del giorno: indirizzo, DDT, AWB, colli, misure e peso">✉ Mail bollettazione</button> <button class="btn green" id="uscTutti" onclick="Rma.emettiTutti()">Genera i DDT pronti</button></div>' +
+      '<button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button> <button class="btn ghost sm" onclick="Rma.cedoliniTutti()" title="Tutti i cedolini delle destinazioni della pagina in un solo PDF (un foglio per collo)">🖨 Tutti i cedolini</button> <button class="btn ghost sm" onclick="Rma.mailGiorno()" title="Una mail a Service Desk e bollettazione con tutte le destinazioni del giorno: indirizzo, DDT, AWB, colli, misure e peso">✉ Mail bollettazione</button> <button class="btn green" id="uscTutti" onclick="Rma.emettiTutti()">Genera i DDT pronti</button></div>' +
       '<div class="hint" style="margin-top:8px">Un DDT per destinazione (serie RMA). Pronta = colli e peso salvati + AWB. Le schede ci sono già per tutte le destinazioni di oggi: puoi mettere colli e AWB subito. I pezzi senza RMA restano non spuntati e si spuntano da soli appena l\'RMA c\'è; se al DDT ne manca qualcuno, l\'app chiede conferma.</div>';
   },
   render: function (rifai) {
@@ -4545,7 +4605,7 @@ var Rma = {
       var x = g[k]; x.s = Rma.sped(d, x.dest); x.mancanti = x.pezzi.filter(function (p) { return p.manca; });
       x.pezzi = x.pezzi.filter(function (p) { return !p.manca; }).concat(x.mancanti);
       x.attivi = x.pezzi.filter(function (p) { return !p.manca && !esc0[p.u.id_unita]; });
-      x.pronta = x.s && x.s.stato === 'PRONTA' && L.s(x.s.awb) && x.attivi.length > 0; return x;
+      x.pronta = x.s && x.s.stato === 'PRONTA' && x.attivi.length > 0; return x;
     });
   },
   renderUscite: function () {
@@ -4555,7 +4615,7 @@ var Rma = {
     $('rmaStats').innerHTML = '<div class="stat"><b>' + G.length + '</b><span>destinazioni</span></div><div class="stat"><b>' + tot + '</b><span>pezzi da spedire</span></div>' + (nM ? '<div class="stat"><b style="color:var(--amber)">' + nM + '</b><span>senza RMA</span></div>' : '') + '<div class="stat"><b style="color:var(--violet)">' + nP + '</b><span>pronte per ddt</span></div><div class="stat"><b style="color:var(--green)">' + sped + '</b><span>spedite</span></div>';
     var PILL = { BOZZA: 'p-blue', PRONTA: 'p-violet', SPEDITA: 'p-green' };
     $('rmaUsc').innerHTML = Rma.pendCard() + (G.length ? '<div class="ack-grid usc-grid">' + G.map(function (g) {
-      var s = g.s, k = Ack.key(g.dest), cp = Rma.cp(g.dest), st = s ? s.stato : 'DA PREPARARE', done = s && s.stato === 'SPEDITA', lock = done ? ' disabled' : '';
+      var s = g.s, k = Ack.key(g.dest), cp = Rma.cp(g.dest), st = s ? s.stato : 'DA PREPARARE', done = s && s.stato === 'SPEDITA', lock = '';
       var col = done ? Ack.colliDb(s.id_spedizione).map(function (c) { return { tipo: c.tipo_collo, misura: [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X'), peso: c.peso_kg }; })
         : (Rma.colli[k] || (s ? Ack.colliDb(s.id_spedizione).map(function (c) { return { tipo: c.tipo_collo, misura: [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X'), peso: c.peso_kg }; }) : []));
       if (!done && !Rma.colli[k]) Rma.colli[k] = col.length ? col : [{ tipo: 'COLLO', misura: '', peso: '' }];
@@ -4563,7 +4623,7 @@ var Rma = {
       var peso = col.reduce(function (a, c) { return a + (parseFloat(String(c.peso).replace(',', '.')) || 0); }, 0);
       var bt = done ? '<button class="btn sm" onclick="Rma.stampa(\'' + s.id_spedizione + '\')">Stampa DDT</button> <button class="btn ghost sm" onclick="Rma.cedolini(\'' + s.id_spedizione + '\')">Cedolini</button>' + (s.link_pdf ? ' <a class="mail" target="_blank" href="' + esc(s.link_pdf) + '">PDF su Drive</a>' : '') +
           (App.isAdmin ? ' <button class="btn ghost sm" title="Riapre la scheda per correggere pezzi, colli, peso o AWB: poi Rigenera DDT (stesso numero, il PDF viene sostituito). Tutto tracciato nel LOG." onclick="Rma.riapriDdt(\'' + s.id_spedizione + '\')">↺ Riapri DDT</button>' : '')
-        : (s && s.n_ddt ? '<span class="pill p-amber" title="DDT riaperto: correggi e rigenera">DDT ' + esc(s.n_ddt) + ' riaperto</span> ' : '') + '<button class="btn sm green"' + (g.pronta ? '' : ' disabled title="Servono colli/peso salvati, AWB e almeno un pezzo"') + ' onclick="Rma.emettiUno(\'' + esc(g.dest) + '\')">' + (s && s.n_ddt ? 'Rigenera DDT' : 'Genera DDT') + '</button> <button class="btn ghost sm" onclick="Rma.cedolini(null,\'' + esc(g.dest) + '\')">Cedolini</button>';
+        : (s && s.n_ddt ? '<span class="pill p-amber" title="DDT riaperto: correggi e rigenera">DDT ' + esc(s.n_ddt) + ' riaperto</span> ' : '') + '<button class="btn sm green"' + (g.pronta ? '' : ' disabled title="Servono colli/peso salvati e almeno un pezzo"') + ' onclick="Rma.emettiUno(\'' + esc(g.dest) + '\')">' + (s && s.n_ddt ? 'Rigenera DDT' : 'Genera DDT') + (s && !L.s(s.awb) ? ' (senza AWB)' : '') + '</button> <button class="btn ghost sm" onclick="Rma.cedolini(null,\'' + esc(g.dest) + '\')">Cedolini</button>';
       var lista = (done ? Ack.righe(s.id_spedizione).filter(function (r) { return r.esito !== 'RIMOSSO'; }).map(function (r) { return { u: { id_unita: r.id_unita, seriale: r.seriale, pn: r.pn, tipo: '' }, rma: r.rma, fonte: r.note }; }) : g.pezzi);
       return '<div class="ack-card">' +
         '<div class="row" style="align-items:center"><span class="t">' + esc(g.dest) + '</span><div class="spacer"></div><span class="pill ' + (PILL[st] || '') + '">' + esc(st) + '</span></div>' +
@@ -4582,8 +4642,9 @@ var Rma = {
         }).join('') + '</tbody></table><div class="row" style="gap:6px"><button class="btn ghost sm" onclick="Rma.collo(\'' + k + '\',0,\'add\')">+ Collo</button><button class="btn sm' + (Rma.colliSalvati(s, col) ? ' ghost' : '') + '" onclick="Rma.salvaColli(\'' + esc(g.dest) + '\')">' + (Rma.colliSalvati(s, col) ? '✓ Colli salvati' : 'Salva colli e peso') + '</button></div>') +
         '<div class="row"><div class="fg" style="flex:1;min-width:130px"><span class="fl">AWB</span><input class="fc mono" id="uawb_' + k + '" value="' + esc(Rma.awbTmp[k] !== undefined ? Rma.awbTmp[k].awb : (s ? s.awb : '')) + '"' + lock + ' oninput="var v=L.vettoreDaAwb(this.value,DB.t.VETTORI.rows);if(v)$(\'uvet_' + k + '\').value=v;Rma.awbTmp[\'' + k + '\']={awb:this.value,vet:$(\'uvet_' + k + '\').value}"></div>' +
         '<div class="fg" style="width:110px"><span class="fl">Vettore</span><input class="fc" id="uvet_' + k + '" list="dlVettori" value="' + esc(Rma.awbTmp[k] !== undefined ? Rma.awbTmp[k].vet : (s ? s.vettore : '')) + '"' + lock + ' oninput="Rma.awbTmp[\'' + k + '\']={awb:$(\'uawb_' + k + '\').value,vet:this.value}"></div>' +
-        (done ? '' : '<button class="btn sm' + (s && L.s(s.awb) && Rma.awbTmp[k] === undefined ? ' ghost' : '') + '" onclick="Rma.salvaAwbRma(\'' + esc(g.dest) + '\')">' + (s && L.s(s.awb) && Rma.awbTmp[k] === undefined ? '✓ AWB salvato' : 'Salva AWB') + '</button>') + '</div>' +
-        '<div class="row" style="align-items:center">' + bt + '</div></div>';
+        '<button class="btn sm' + (s && L.s(s.awb) && Rma.awbTmp[k] === undefined ? ' ghost' : '') + '" onclick="Rma.salvaAwbRma(\'' + esc(g.dest) + '\')">' + (s && L.s(s.awb) && Rma.awbTmp[k] === undefined ? '✓ AWB salvato' : 'Salva AWB') + '</button></div>' +
+        (done && !L.s(s.awb) ? '<div><span class="pill p-amber" title="DDT emesso: inserisci l\'AWB appena la bollettazione lo comunica">AWB da inserire</span></div>' : '') +
+        '<div class="row" style="align-items:center">' + bt + (s && (s.stato === 'PRONTA' || s.stato === 'SPEDITA') ? ' <a class="mail" href="#" onclick="Rma._npz[\'' + s.id_spedizione + '\']=' + g.attivi.length + ';Ack.inviaMail([\'' + s.id_spedizione + '\']);return false">✉ mail</a>' : '') + '</div></div>';
     }).join('') + '</div>' : '<div class="card empty">Nessun pezzo da far uscire: GOOD e BALANCING in giacenza con destinazione, o carichi NEW/REUSE.</div>');
   },
   collo: function (k, i, f, v) { var c = Rma.colli[k] = Rma.colli[k] || []; if (f === 'del') c.splice(i, 1); else if (f === 'add') c.push({ tipo: (c[c.length - 1] || {}).tipo || 'COLLO', misura: '', peso: '' }); else c[i][f] = L.s(v).toUpperCase(); Rma.renderUscite(); },
@@ -4599,7 +4660,7 @@ var Rma = {
     try {
       await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_COLLI']);
       var s = Rma.sped(d, dest), cp = Rma.cp(dest);
-      if (s && s.stato === 'SPEDITA') { toast('Già spedita: AWB non modificabile', 'ko'); Rma.render(); return; }
+      if (s && s.stato === 'SPEDITA') { if (!awb) throw new Error('Inserisci l\'AWB'); await Ack.awbDopoDdt(s, awb, vet); delete Rma.awbTmp[k]; Rma.render(); return; }
       if (!s) s = await Rma.creaSped(d, dest, cp);
       var prima = { awb: s.awb, vettore: s.vettore };
       await Promise.all([API.batchUpdate(DB.id, Ack.setS(s, { awb: awb, vettore: vet })), API.append(DB.id, 'LOG', [App.log('RMA_AWB', 'SPEDIZIONI', s.id_spedizione, { destinazione: dest, prima: prima, dopo: { awb: awb, vettore: vet } })])]);
@@ -4640,11 +4701,11 @@ var Rma = {
     return m.length ? '\n\n⚠ RMA NON ANCORA CREATO per pezzi delle stesse destinazioni:\n' + m.map(function (g) { return '• ' + g.dest + ': ' + g.mancanti.map(function (p) { return p.u.seriale; }).join(', '); }).join('\n') + '\n\nSe vai avanti escono senza questi pezzi (restano in giacenza).' : '';
   },
   emettiUno: async function (dest) {
-    var g = Rma.gruppi().find(function (x) { return L.up(x.dest) === L.up(dest); }), w = g ? Rma.mancaRma([g]) : '';
-    if (w && !(await Modal.confirm('Manca RMA · ' + dest, 'Genero il DDT per ' + dest + ' con ' + g.attivi.length + ' pezzi.' + w))) return;
+    var g = Rma.gruppi().find(function (x) { return L.up(x.dest) === L.up(dest); }), w = g ? Rma.mancaRma([g]) : '', noAwb = g && g.s && !L.s(g.s.awb);
+    if ((w || noAwb) && !(await Modal.confirm((noAwb ? 'DDT senza AWB · ' : 'Manca RMA · ') + dest, 'Genero il DDT per ' + dest + ' con ' + g.attivi.length + ' pezzi.' + (noAwb ? '\n\nSenza AWB: il DDT prende il numero e i pezzi escono ora (AWB "DA ASSEGNARE" sul PDF). Quando la bollettazione comunica l\'AWB inseriscilo nella scheda e premi Salva AWB: si aggiornano movimenti, spedizione e il PDF su Drive.' : '') + w))) return;
     await Rma.emettiLista([dest]);
   },
-  emettiTutti: async function () { var G = Rma.gruppi().filter(function (g) { return g.pronta; }); if (!G.length) return; if (!(await Modal.confirm('Genera ' + G.length + ' DDT', G.map(function (g) { return g.dest + ' · ' + g.attivi.length + ' pezzi · AWB ' + g.s.awb; }).join('\n') + Rma.mancaRma(G)))) return; await Rma.emettiLista(G.map(function (g) { return g.dest; })); },
+  emettiTutti: async function () { var G = Rma.gruppi().filter(function (g) { return g.pronta; }); if (!G.length) return; if (!(await Modal.confirm('Genera ' + G.length + ' DDT', G.map(function (g) { return g.dest + ' · ' + g.attivi.length + ' pezzi · AWB ' + (L.s(g.s.awb) || 'DA ASSEGNARE'); }).join('\n') + Rma.mancaRma(G)))) return; await Rma.emettiLista(G.map(function (g) { return g.dest; })); },
   // DDT multipli: uno per destinazione, numerati in sequenza dalla serie RMA
   emettiLista: async function (dests) {
     if (Rma.busy) return; Rma.busy = true;
@@ -4672,7 +4733,7 @@ var Rma = {
     if (!g || !g.s) throw new Error('spedizione non preparata');
     var s = g.s, P = g.attivi.filter(function (p) { return p.u.stato === 'IN_GIACENZA' || p.u.stato === 'IN_LAVORAZIONE'; });
     if (s.n_ddt && s.stato !== 'PRONTA') throw new Error('DDT già emesso (' + s.n_ddt + ')');
-    if (s.stato !== 'PRONTA' || !L.s(s.awb)) throw new Error('mancano colli o AWB');
+    if (s.stato !== 'PRONTA') throw new Error('mancano colli e peso salvati');
     if (!P.length) throw new Error('nessun pezzo in giacenza');
     if (s.n_ddt) return Rma.riemetti(s, P);
     var now = L.nowStamp(), me = Auth.email, oggi = L.isoToday(), anno = oggi.slice(0, 4), sigla = App.me.sigla || '', id = s.id_spedizione;
@@ -4734,11 +4795,25 @@ var Rma = {
   },
   pdfParams: function (id) {
     var s = DB.t.SPEDIZIONI.rows.find(function (x) { return x.id_spedizione === id; }), cp = Rma.cp(s.destinatario);
-    return { numero: s.n_ddt, data: s.data_ddt, destinatario: s.destinatario, indirizzo: s.destinazione_estesa || (cp ? cp.indirizzo_completo : ''), vettore: s.vettore, awb: s.awb, colli: Ack.colliDb(id), qr: true,
+    return { numero: s.n_ddt, data: s.data_ddt, destinatario: s.destinatario, indirizzo: s.destinazione_estesa || (cp ? cp.indirizzo_completo : ''), vettore: s.vettore, awb: L.s(s.awb) || 'DA ASSEGNARE', colli: Ack.colliDb(id), qr: true,
       cols: [{ h: 'RMA', w: 26 }, { h: 'S/N', w: 62 }, { h: 'P/N', w: 46 }, { h: 'NOTE' }], righe: Ack.righe(id).filter(function (r) { return r.esito !== 'RIMOSSO'; }).map(function (r) { return [r.rma, r.seriale, r.pn, r.note]; }) };
   },
   pdf: function (id) { return Ddt.pdf(Rma.pdfParams(id)); },
   _npz: {},
+  cedoliniTutti: function () {
+    var w = window.open('', '_blank');
+    try {
+      var doc = null;
+      Rma.gruppi().forEach(function (g) {
+        var s = g.s, k = Ack.key(g.dest), cp = Rma.cp(g.dest), loc = (Rma.colli[k] || []).filter(function (c) { return L.s(c.misura) || L.s(c.peso); });
+        var col = s && s.stato === 'SPEDITA' ? Ack.colliDb(s.id_spedizione) : (loc.length ? loc : (s ? Ack.colliDb(s.id_spedizione) : []));
+        if (!col.length) return;
+        doc = Ddt.cedolini({ destinatario: s ? s.destinatario : g.dest, indirizzo: (s && s.destinazione_estesa) || (cp ? cp.indirizzo_completo : ''), numero: s ? s.n_ddt : '', awb: s ? s.awb : '', vettore: s ? s.vettore : '', colli: col }, doc);
+      });
+      if (!doc) { if (w) w.close(); toast('Nessuna destinazione con colli inseriti', 'ko'); return; }
+      Ddt.apri(doc, w);
+    } catch (e) { if (w) w.close(); Modal.open('Cedolini', e.message); }
+  },
   // mail unica delle uscite RMA del giorno (colli salvati o spedite)
   mailGiorno: function () {
     var G = Rma.gruppi().filter(function (g) { return g.s && (g.s.stato === 'PRONTA' || g.s.stato === 'SPEDITA'); });
@@ -5315,11 +5390,9 @@ var Nr = {
   // ─ mail con link al file
   mail: function (id) {
     var p = Nr.t().rows.find(function (x) { return x.id_pratica === id; }); if (!p) return;
-    var to = DB.param('mail_new_reuse', '') || DB.param('mail_sd', ''), cc = DB.param('mail_cc', '');
     var subj = p.tipo + ' PO ' + L.s(p.po_mrn) + ' DDT ' + L.s(p.ddt) + ' - ' + L.s(p.mittente) + ' (' + p.n_pezzi + ' pz)';
     var body = (DB.param('testo_mail_new_reuse', '') || 'Buongiorno,\nin allegato (link) il file dei materiali ' + p.tipo + ' ricevuti.') + '\n\nFile: ' + L.s(p.file_link) + '\n\nPO/MRN: ' + L.s(p.po_mrn) + '\nDDT: ' + L.s(p.ddt) + '\nMittente: ' + L.s(p.mittente) + '\nPezzi: ' + p.n_pezzi;
-    location.href = 'mailto:' + to + '?subject=' + encodeURIComponent(subj) + (cc ? '&cc=' + encodeURIComponent(cc) : '') + '&body=' + encodeURIComponent(body);
-    if (p.stato === 'DA_INVIARE') Nr.set(p, { stato: 'INVIATA', mail_inviata_il: L.nowStamp() }, 'NR_MAIL');
+    Mail.apri('nr', subj, body, function () { if (p.stato === 'DA_INVIARE') Nr.set(p, { stato: 'INVIATA', mail_inviata_il: L.nowStamp() }, 'NR_MAIL'); });
   },
   set: async function (p, ch, azione) {
     var t = Nr.t(), now = L.nowStamp(), all = Object.assign({}, ch, { rev: (parseInt(p.rev, 10) || 1) + 1, modificato_il: now, modificato_da: Auth.email }), upd = [], prima = {};
@@ -6720,7 +6793,7 @@ var Dash = {
     nomi.forEach(function (n, i) { col[n] = i < 7 ? 'var(--s' + (i + 1) + ')' : 'var(--s-altri)'; });
     var serie = nomi.filter(function (n) { return gg.some(function (g) { return giorni[g] && giorni[g][n]; }); });
     var html = '<div class="stats">' + ['tot', 'in', 'ack', 'rma', 'spunte'].map(function (k) { return '<div class="stat"><b>' + tot(k) + '</b><span>' + esc(Dash.MET[k]) + '</span></div>'; }).join('') +
-      '<div class="stat"><b>' + ops.length + '</b><span>operatori attivi</span></div></div>';
+      '<div class="stat"><b style="color:var(--green)">' + (tot('ack') + tot('rma')) + '</b><span>Schede uscite (ACK + RMA)</span></div><div class="stat"><b>' + ops.length + '</b><span>operatori attivi</span></div></div>';
     html += '<div class="dash-grid"><div class="card"><div class="card-t" style="font-size:15px;margin-bottom:10px">' + esc(Dash.MET[met]) + ' per operatore</div>' +
       (ops.length ? ops.map(function (p) {
         var v = p[met], w = Math.max(v ? 1.5 : 0, v / maxB * 100);
