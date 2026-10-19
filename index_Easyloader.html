@@ -398,7 +398,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
           <div class="fg"><span class="fl" id="lblFr">FR</span><input class="fc mono" id="scFr" autocomplete="off" placeholder="si compila dal seriale"><span class="hint" id="hFr"></span></div>
           <div class="fg"><span class="fl">Barcode seriale</span><input class="fc mono" id="scBc" autocomplete="off" placeholder="spara qui il seriale"><span class="hint" id="hBc"></span></div>
           <div class="fg" id="wrapPn"><span class="fl">P/N (NEW/REUSE, resta fisso)</span><input class="fc mono" id="scPn" autocomplete="off" placeholder="vuoto = dal barcode" onchange="Ingresso.pnFisso()"><span class="hint" id="hPn"></span></div>
-          <div class="fg" id="wrapUbi"><span class="fl">Ubicazione (NEW/REUSE)</span><input class="fc mono" id="scUbi" list="dlUbicazioni" autocomplete="off" placeholder="es. AB07CY"></div>
+          <div class="fg" id="wrapUbi"><span class="fl" id="lblUbi">Ubicazione</span><input class="fc mono" id="scUbi" list="dlUbicazioni" autocomplete="off" placeholder="es. AB07CY"></div>
           <div class="fg" id="wrapPlt"><span class="fl">Pallet</span><div style="display:flex;gap:6px"><input class="fc mono" id="scPlt" style="width:110px" autocomplete="off" placeholder="—" onchange="Pallet.imposta(this.value)"><button class="btn ghost sm" type="button" onclick="Pallet.nuovo()" title="Assegna il prossimo numero pallet (FLM …): l'ubicazione va riscritta">＋ Nuovo pallet</button></div></div>
           <button class="btn" id="btnAgg" onclick="Ingresso.aggiungi()">Aggiungi</button>
         </div>
@@ -1344,6 +1344,9 @@ var Ingresso = {
   },
   save: function () { lsS('draft_' + Auth.email, Ingresso.rows.length ? { testata: Ingresso.T(), rows: Ingresso.rows } : null); },
   needUbi: function () { var t = $('inTipo').value; return t === 'NEW' || t === 'REUSE'; },
+  // ubicazione: obbligatoria per NEW/REUSE, facoltativa per FAULTY e GOOD (stesso campo, resta impostata tra un pezzo e l'altro)
+  ubiTipo: function (t) { return t === 'NEW' || t === 'REUSE' || t === 'FAULTY' || t === 'GOOD'; },
+  mostraUbi: function () { return Ingresso.ubiTipo($('inTipo').value); },
   // P/N fisso per i carichi NEW/REUSE: vale per tutti i pezzi letti dopo, finché non lo cambi (resta anche se ricarichi la pagina)
   pnFisso: function (avvio) {
     var v = L.up($('scPn').value), prima = L.up(lsG('pn_fisso') || '');
@@ -1381,7 +1384,7 @@ var Ingresso = {
     if (Ingresso.needUbi() && !plt) { Pallet.nuovo(function () { Ingresso.aggiungi(); }); return; }   // primo pezzo: il pallet si crea da solo
     Ingresso.rows.push({ fr: fr, bc: bc, ubi: ub, plt: plt, ser: '', pn: '', man: pnF ? { pn: pnF } : {} });
     $('scFr').value = ''; $('scBc').value = ''; $('scFr').dataset.auto = '0'; $('scBc').dataset.auto = '0'; $('hFr').textContent = ''; $('hBc').textContent = '';
-    if (!Ingresso.needUbi()) $('scUbi').value = '';
+    if (!Ingresso.mostraUbi()) $('scUbi').value = '';
     Ingresso.fitScan(); Ingresso.ricalcola(); Ingresso.save(); $('scBc').focus();
   },
   del: function (i) { Ingresso.rows.splice(i, 1); Ingresso.ricalcola(); Ingresso.save(); },
@@ -1610,7 +1613,7 @@ var Ingresso = {
       return '<tr class="' + cls + '"><td>' + (i + 1) + '</td><td class="mono">' + esc(c.fr) + '</td><td class="mono">' + esc(c.rma) + '</td>' +
         '<td class="nw">' + ed('ser', c.ser, 12) + '</td><td class="nw">' + ed('pn', c.pn, 8) + (c.pn && c.pnAnag !== undefined ? (c.pnAnag ? ' <span title="P/N presente in anagrafica articoli" style="color:var(--green)">✓</span>' : ' <span title="P/N NON presente in anagrafica articoli' + (c.pnSimile ? ' (simile: ' + esc(c.pnSimile) + ')' : '') + '" style="color:var(--amber)">✗</span>') : '') + '</td><td class="nw">' + ed('mnft', c.mnft, 6) + '</td>' +
         '<td>' + esc(c.rip) + '</td><td style="font-size:11.5px;color:var(--subtle)">' + esc(c.statoVlt) + '</td>' +
-        '<td>' + ed('nota', c.nota, 10) + '</td><td>' + (c.tipo === 'NEW' || c.tipo === 'REUSE' ? '<input class="edit-cell edit-vis mono" style="width:calc(' + Math.max(12, Math.min(40, L.s(c.ubicazione).length + 2)) + 'ch + 16px)" list="dlUbicazioni" value="' + esc(c.ubicazione) + '" placeholder="✎ ubicazione" onchange="Ingresso.editUbi(' + i + ',this.value)">' + (c.plt ? '<div class="hint mono" style="font-size:10.5px">' + esc(c.plt) + '</div>' : '') : esc(c.destinazione)) + '</td>' +
+        '<td>' + ed('nota', c.nota, 10) + '</td><td>' + (c.tipo === 'FAULTY' || c.tipo === 'GOOD' ? (c.destinazione ? '<div>' + esc(c.destinazione) + '</div>' : '') + '<input class="edit-cell edit-vis mono" style="width:calc(' + Math.max(12, Math.min(40, L.s(c.ubicazione).length + 2)) + 'ch + 16px)" list="dlUbicazioni" value="' + esc(c.ubicazione) + '" placeholder="✎ ubicazione (facoltativa)" onchange="Ingresso.editUbi(' + i + ',this.value)">' : '') + (c.tipo === 'NEW' || c.tipo === 'REUSE' ? '<input class="edit-cell edit-vis mono" style="width:calc(' + Math.max(12, Math.min(40, L.s(c.ubicazione).length + 2)) + 'ch + 16px)" list="dlUbicazioni" value="' + esc(c.ubicazione) + '" placeholder="✎ ubicazione" onchange="Ingresso.editUbi(' + i + ',this.value)">' + (c.plt ? '<div class="hint mono" style="font-size:10.5px">' + esc(c.plt) + '</div>' : '') : (c.tipo === 'FAULTY' || c.tipo === 'GOOD' ? '' : esc(c.destinazione))) + '</td>' +
         '<td><div class="msgs">' + m + mail + (c.puoPend ? (c.pend ? ' <button class="btn ghost sm" onclick="Ingresso.nopend(' + i + ')">Annulla pending</button>' : ' <button class="btn sm" style="background:var(--amber);color:#111" onclick="Ingresso.pend(' + i + ')" title="Carica il pezzo senza FR: resta in attesa finché non arriva">⏳ Pending senza FR</button>') : '') + '</div></td><td><button class="ico-btn" title="Elimina" onclick="Ingresso.del(' + i + ')">✕</button></td></tr>';
     }).join('');
     var nErr = C.filter(function (c) { return c.err; }).length, nWarn = C.filter(function (c) { return c.warn && !c.err; }).length;
@@ -1619,7 +1622,7 @@ var Ingresso = {
       (nWarn ? '<div class="stat"><b style="color:var(--amber)">' + nWarn + '</b><span>da verificare</span></div>' : '');
     $('btnCarica').disabled = !C.length || nErr > 0;
     $('btnCarica').title = nErr ? 'Correggi le righe in rosso' : '';
-    $('wrapUbi').style.visibility = Ingresso.needUbi() ? 'visible' : 'hidden';
+    $('wrapUbi').style.visibility = Ingresso.mostraUbi() ? 'visible' : 'hidden'; $('lblUbi').textContent = Ingresso.needUbi() ? 'Ubicazione *' : 'Ubicazione (facoltativa)';
     $('wrapPn').style.display = Ingresso.needUbi() ? '' : 'none'; $('wrapPlt').style.display = Ingresso.needUbi() ? '' : 'none';
   },
   validaTestata: function (T) {
@@ -1675,7 +1678,7 @@ var Ingresso = {
     var rObj = { data_arrivo: T.data, mittente: T.mittente, awb: T.awb, vettore: T.vettore, ddt_mittente: T.ddt, po_mrn: T.po, tipo: T.tipo, flag_balancing: T.bal ? 'SI' : 'NO', n_pezzi: n, stato: 'CHIUSA', note: '', creato_il: now, creato_da: me };
     var uObjs = C.map(function (c) {
       return { seriale: c.ser, barcode_letto: c.bc, pn: c.pn, mnft: c.mnft, tipo: c.tipo, fr: c.fr, rma: c.rma, riparatore: c.rip, magazzino: mag(c.tipo),
-        ubicazione: (c.tipo === 'NEW' || c.tipo === 'REUSE') ? c.ubicazione : '', n_plt: (c.tipo === 'NEW' || c.tipo === 'REUSE') ? c.plt : '', stato: c.pend ? 'IN_ATTESA' : 'IN_GIACENZA', pending_fr: c.pend || '', destinazione_prevista: c.destinazione,
+        ubicazione: Ingresso.ubiTipo(c.tipo) ? L.up(c.ubicazione) : '', n_plt: (c.tipo === 'NEW' || c.tipo === 'REUSE') ? c.plt : '', stato: c.pend ? 'IN_ATTESA' : 'IN_GIACENZA', pending_fr: c.pend || '', destinazione_prevista: c.destinazione,
         data_in: T.data, note: c.nota, rev: 1, creato_il: now, creato_da: me };
     });
     var mObjs = C.map(function (c, i) {
@@ -1831,7 +1834,7 @@ var Ingresso = {
   excelLetti: function () {
     var T = Ingresso.T();
     Xls.scarica('Pezzi_letti_' + (T.tipo || ''), [{ nome: 'Pezzi letti', headers: ['#', 'Tipo', 'FR', 'RMA', 'Seriale', 'P/N', 'P/N in anagrafica', 'MNFT', 'Riparatore', 'Stato VLT', 'Nota', 'Destinazione / Ubicazione', 'Controlli', 'Mittente', 'AWB', 'DDT mittente', 'Data ingresso'],
-      rows: Ingresso.computed.map(function (c, i) { return [i + 1, c.tipo, c.fr, c.rma, c.ser, c.pn, c.pnAnag === undefined ? '' : (c.pnAnag ? 'SI' : 'NO'), c.mnft, c.rip, c.statoVlt, c.nota, c.tipo === 'NEW' || c.tipo === 'REUSE' ? c.ubicazione : c.destinazione, c.msgs.map(function (m) { return m[1]; }).join(' / '), T.mittente, T.awb, T.ddt, T.data]; }) }]);
+      rows: Ingresso.computed.map(function (c, i) { return [i + 1, c.tipo, c.fr, c.rma, c.ser, c.pn, c.pnAnag === undefined ? '' : (c.pnAnag ? 'SI' : 'NO'), c.mnft, c.rip, c.statoVlt, c.nota, c.tipo === 'NEW' || c.tipo === 'REUSE' ? c.ubicazione : [c.destinazione, c.ubicazione].filter(Boolean).join(' · '), c.msgs.map(function (m) { return m[1]; }).join(' / '), T.mittente, T.awb, T.ddt, T.data]; }) }]);
   },
   etichetteLetti: function () { var T = Ingresso.T(); Etichette.pezzi(Ingresso.computed.map(function (c) { return { fr: c.fr, seriale: c.ser, riparatore: c.rip, pn: c.pn, tipo: c.tipo, sotto: T.mittente }; })); },
   excelOggi: function () {
