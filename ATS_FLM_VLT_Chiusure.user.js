@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ATS FLM → VLT · Chiusure
 // @namespace    ats-spa.flm
-// @version      1.0.3
+// @version      1.0.4
 // @description  Chiude su VLT ingressi del giorno (op. linea), ACK, RMA e spare ferme in HUB con i dati dell'app "ATS - Fastweb FLM". Sostituisce i 4 script con i CSV.
 // @match        https://logistictoolvf.net.vodafone.it/*
 // @match        https://ats-spa.github.io/*
@@ -26,7 +26,7 @@
 */
 (function () {
   'use strict';
-  var VER = '1.0.3';
+  var VER = '1.0.4';
   var VLT_HOST = 'logistictoolvf.net.vodafone.it';
   var K = { CODA: 'ats_coda', STATO: 'ats_stato_', PEND: 'ats_esiti_pending', RICH: 'ats_richiesta', APP: 'ats_app_url', VIVO: 'ats_vlt_vivo', RUN: 'ats_run', UI: 'ats_ui', RICEVUTI: 'ats_esiti_ricevuti' };
   // esiti da consegnare = scritti da VLT (PEND) meno quelli già confermati dall'app (RICEVUTI): ognuno scrive solo la sua chiave
@@ -367,18 +367,28 @@
       UI.seriali(it, avvisi, auto);
       if (auto && !avvisi.length) { try { await salva(RX_RMA); UI.seriali(null); return esitoOk(S0, 'Shipped From CW', 'salvato in automatico · AWB ' + (it.awb || '')); } catch (e) { UI.seriali(it, [e.message], false); } }
       RUN.attesa = null;
+      var scrittura = function (e) { return e.t0 >= t0 && (e.m === 'PUT' || e.m === 'POST' || e.m === 'PATCH') && !/account|logout|authenticate|management|websocket|audit/i.test(e.u); };
+      var buone = function () { return NET.filter(function (e) { return scrittura(e) && e.s >= 200 && e.s < 300; }); };
+      var fatto = function (come) { UI.seriali(null); console.log('[ATS→VLT] RMA ' + it.rma + ' salvato (' + come + ')'); return esitoOk(S0, 'Shipped From CW', 'salvato dall\'operatore · AWB ' + (it.awb || '')); };
+      var segnalato = 0;
       while (true) {
         if (RUN.stop) { UI.seriali(null); throw new Ferma(); }
         if (RUN.attesa === 'salta') { RUN.attesa = null; UI.seriali(null); if ($('select#field_rmaStatus')) await esciForm(); return { esito: 'SALTATO', stato_prima: S0, stato_dopo: S0, dettaglio: 'saltato dall\'operatore' }; }
-        var r = null;
-        for (var i = NET.length - 1; i >= 0; i--) { var e = NET[i]; if (e.t0 >= t0 && (e.m === 'PUT' || e.m === 'POST' || e.m === 'PATCH') && RX_RMA.test(e.u)) { r = e; break; } }
-        if (r && r.s >= 200 && r.s < 300) { UI.seriali(null); await attendi(function () { return $('input#currentSearch'); }, 8000); return esitoOk(S0, 'Shipped From CW', 'salvato dall\'operatore · AWB ' + (it.awb || '')); }
-        if (r && (r.s === 0 || r.s >= 400)) { UI.seriali(it, ['VLT ha rifiutato il salvataggio (' + r.s + ')' + msgServer(r.b) + ': correggi e salva di nuovo, o Salta'], false); t0 = Date.now(); }
-        if (!$('select#field_rmaStatus') && !r) {
+        var ok = buone(), aperto = !!$('select#field_rmaStatus');
+        if (ok.length && !aperto) { await attendi(function () { return $('input#currentSearch'); }, 8000); return fatto(ok[ok.length - 1].m + ' ' + ok[ok.length - 1].u); }
+        if (ok.length && aperto && Date.now() - ok[ok.length - 1].t > 4000) return fatto('risposta OK, scheda ancora aperta');
+        if (!aperto) {
           await sleep(1500);
-          var r2 = NET.slice().reverse().find(function (e) { return e.t0 >= t0 && (e.m === 'PUT' || e.m === 'POST' || e.m === 'PATCH') && RX_RMA.test(e.u); });
-          if (r2 && r2.s >= 200 && r2.s < 300) { UI.seriali(null); return esitoOk(S0, 'Shipped From CW', 'salvato dall\'operatore · AWB ' + (it.awb || '')); }
-          UI.seriali(null); return { esito: 'SALTATO', stato_prima: S0, stato_dopo: S0, dettaglio: 'scheda chiusa senza salvare' }; }
+          ok = buone(); if (ok.length) return fatto(ok[ok.length - 1].u);
+          // nessuna risposta intercettata: controllo lo stato sulla lista di VLT
+          var rx = new RegExp('(^|[^0-9a-z])' + String(it.rma).trim() + '([^0-9a-z]|$)', 'i');
+          var tr = await attendi(function () { return $$('table tbody tr').find(function (r) { return rx.test(r.textContent); }); }, 4000);
+          if (tr && norm(tr.textContent).indexOf('shipped from cw') >= 0) return fatto('verificato dalla lista');
+          UI.seriali(null); return { esito: 'SALTATO', stato_prima: S0, stato_dopo: S0, dettaglio: 'scheda chiusa senza conferma del salvataggio: controlla su VLT' };
+        }
+        // errore solo se VLT ha risposto KO, nessuna risposta OK e la scheda è ancora aperta dopo 3 s
+        var ko = NET.filter(function (e) { return scrittura(e) && (e.s === 0 || e.s >= 400); });
+        if (ko.length > segnalato && Date.now() - ko[ko.length - 1].t > 3000) { segnalato = ko.length; var k = ko[ko.length - 1]; console.log('[ATS→VLT] risposta KO', k.m, k.u, k.s, k.b); UI.seriali(it, ['VLT ha rifiutato il salvataggio (' + k.s + ')' + msgServer(k.b) + ': correggi e salva di nuovo, o Salta'], false); }
         await sleep(300);
       }
     };
@@ -484,7 +494,7 @@
     // ── riquadro ──
     var UI = {
       el: null,
-      css: '#atsVlt{position:fixed;right:14px;bottom:14px;z-index:2147483000;font:13px/1.4 Arial,sans-serif;color:#e2e8f0}' +
+      css: '#atsVlt{position:fixed;right:14px;bottom:14px;z-index:2147483000;font:13px/1.4 Arial,sans-serif;color:#e2e8f0;zoom:1.35}' +
         '#atsVlt .box{width:340px;max-width:calc(100vw - 28px);background:#131929;border:1px solid #2f3d5c;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.45);padding:10px 12px}' +
         '#atsVlt .tit{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:.5px}#atsVlt .tit span{flex:1}' +
         '#atsVlt button{background:#3b82f6;color:#fff;border:0;border-radius:6px;padding:6px 9px;font:600 12px Arial,sans-serif;cursor:pointer;margin:2px 2px 2px 0}' +
@@ -495,7 +505,7 @@
         '#atsVlt .ora{font-size:12px;color:#fbbf24;min-height:16px;margin:4px 0;word-break:break-word}' +
         '#atsVlt .log{font:11px/1.45 Consolas,monospace;color:#cbd5e1;max-height:130px;overflow:auto;background:#0b0f18;border-radius:6px;padding:5px 7px;white-space:pre-wrap}' +
         '#atsVlt select{background:#1a2236;color:#e2e8f0;border:1px solid #2f3d5c;border-radius:6px;padding:5px;font-size:12px}' +
-        '#atsVlt .ser{margin-top:8px;border-top:1px solid #2f3d5c;padding-top:8px}#atsVlt .ser .r{display:flex;align-items:center;gap:6px;margin:3px 0}#atsVlt .ser .r code{flex:1;font:12px Consolas,monospace;user-select:all}' +
+        '#atsVlt .ser{margin-top:8px;border-top:1px solid #2f3d5c;padding-top:8px}#atsVlt .ser .r{display:flex;align-items:center;gap:6px;margin:3px 0}#atsVlt .ser .r code{flex:1;font:bold 14px Consolas,monospace;user-select:all;color:#f8fafc}#atsVlt .ser button.ok{background:#10b981;color:#fff;border-color:#10b981}' +
         '#atsVlt .warn{color:#fbbf24;font-size:12px}#atsVlt label{font-size:12px;color:#94a3b8}',
       monta: function () {
         if ($('#atsVlt')) return;
@@ -507,7 +517,7 @@
         c.items.forEach(function (it) { var e = st[it.k] && st[it.k].esito; if (e) n[e] = (n[e] || 0) + 1; else n.da++; });
         return n;
       },
-      _log: [], _ora: '', _ser: null,
+      _log: [], _ora: '', _ser: null, _cop: {},
       log: function (t) { UI._log.push(adesso().slice(11, 16) + ' ' + t); UI._log = UI._log.slice(-60); var l = $('#atsVlt .log'); if (l) { l.textContent = UI._log.join('\n'); l.scrollTop = 99999; } console.log('[ATS→VLT] ' + t); },
       ora: function (t) { UI._ora = t; var o = $('#atsVlt .ora'); if (o) o.textContent = t; },
       seriali: function (it, avvisi, auto) { UI._ser = it ? { it: it, avvisi: avvisi || [], auto: auto } : null; UI.agg(); },
@@ -527,7 +537,7 @@
           var s = UI._ser;
           h += '<div class="ser"><b>RMA ' + esc(s.it.rma) + '</b> · ' + esc(s.it.dest || '') + ' · AWB ' + esc(s.it.awb || '—') + (s.avvisi || []).map(function (a) { return '<div class="warn">⚠ ' + esc(a) + '</div>'; }).join('') +
             '<div class="info">Controlla i seriali e premi <b>Salva</b> su VLT: passo da solo al prossimo.</div>' +
-            (s.it.serials || []).map(function (x) { return '<div class="r"><code>' + esc(x) + '</code><button class="g" data-c="' + esc(x) + '">Copia</button></div>'; }).join('') +
+            (s.it.serials || []).map(function (x) { var fatto = UI._cop[s.it.rma + '|' + x]; return '<div class="r"><code>' + esc(x) + '</code><button class="g' + (fatto ? ' ok' : '') + '" data-c="' + esc(x) + '">' + (fatto ? '✓ Copiato' : 'Copia') + '</button></div>'; }).join('') +
             '<button class="g" data-a="salta">» Salta questo RMA</button></div>';
         }
         h += '<div class="ora">' + esc(UI._ora) + '</div><div class="log">' + esc(UI._log.join('\n')) + '</div></div>';
@@ -550,7 +560,7 @@
             if (a === 'chiedi') chiediDati(($('#atsVlt select[data-a="proc"]') || {}).value || 'INGRESSI');
           };
         });
-        $$('#atsVlt [data-c]').forEach(function (b) { b.onclick = function () { var v = b.getAttribute('data-c'); (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(function () { b.textContent = 'Copiato'; setTimeout(function () { b.textContent = 'Copia'; }, 1500); }, function () { b.textContent = '✗'; }); }; });
+        $$('#atsVlt [data-c]').forEach(function (b) { b.onclick = function () { var v = b.getAttribute('data-c'); (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(function () { if (UI._ser) UI._cop[UI._ser.it.rma + '|' + v] = 1; b.textContent = '✓ Copiato'; b.classList.add('ok'); }, function () { b.textContent = '✗'; }); }; });
       }
     };
     function esc(s) { return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
