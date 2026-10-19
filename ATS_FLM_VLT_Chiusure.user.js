@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ATS FLM → VLT · Chiusure
 // @namespace    ats-spa.flm
-// @version      1.0.2
+// @version      1.0.3
 // @description  Chiude su VLT ingressi del giorno (op. linea), ACK, RMA e spare ferme in HUB con i dati dell'app "ATS - Fastweb FLM". Sostituisce i 4 script con i CSV.
 // @match        https://logistictoolvf.net.vodafone.it/*
 // @match        https://ats-spa.github.io/*
@@ -26,7 +26,7 @@
 */
 (function () {
   'use strict';
-  var VER = '1.0.2';
+  var VER = '1.0.3';
   var VLT_HOST = 'logistictoolvf.net.vodafone.it';
   var K = { CODA: 'ats_coda', STATO: 'ats_stato_', PEND: 'ats_esiti_pending', RICH: 'ats_richiesta', APP: 'ats_app_url', VIVO: 'ats_vlt_vivo', RUN: 'ats_run', UI: 'ats_ui', RICEVUTI: 'ats_esiti_ricevuti' };
   // esiti da consegnare = scritti da VLT (PEND) meno quelli già confermati dall'app (RICEVUTI): ognuno scrive solo la sua chiave
@@ -303,15 +303,41 @@
     var chiudiRma = async function (it) {
       var inp = await attendi(function () { return $('input#currentSearch'); }, 12000);
       if (!inp) throw Errore('Apri la pagina RMA di VLT (non trovo la ricerca), poi premi Riprendi', 'PAGINA');
-      scrivi(inp, ''); await sleep(120); scrivi(inp, it.rma);
+      // come lo script RMA precedente: valore + solo evento "input" (niente change/blur, che su VLT lanciano ricerche a vuoto in ritardo)
+      var d = Object.getOwnPropertyDescriptor(W.HTMLInputElement.prototype, 'value');
+      var metti = function (v) { if (d && d.set) d.set.call(inp, v); else inp.value = v; inp.dispatchEvent(new Event('input', { bubbles: true })); };
+      try { inp.focus(); } catch (e) { }
+      if (norm(inp.value) !== norm(it.rma)) metti(String(it.rma)); await sleep(500);   // niente svuotamento: la ricerca a vuoto ricaricava tutta la lista in ritardo
+      var t0 = Date.now();
       var b = $('button.input-group-append.btn.btn-info') || $$('button').find(function (x) { return x.querySelector('svg[data-icon="search"]'); });
       if (b) b.click(); else inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
-      var rma = norm(it.rma);
-      var tr = await attendi(function () { return $$('table tbody tr').find(function (r) { return $$('td', r).some(function (td) { return norm(td.textContent) === rma; }); }); }, 12000, 200);
+      // aspetta la risposta della ricerca e che la tabella smetta di cambiare (le risposte in ritardo ridisegnano la lista)
+      await netAttendi(function (e) { return e.m === 'GET' && RX_RMA.test(e.u); }, 20000, t0);
+      var rx = new RegExp('(^|[^0-9a-z])' + String(it.rma).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^0-9a-z]|$)', 'i');
+      var righe = function () { return $$('table tbody tr').filter(function (r) { return r.offsetParent && $$('td', r).length > 1; }); };
+      var firma = '', stabile = 0, tr = null, fine = Date.now() + 15000;
+      while (Date.now() < fine) {
+        if (RUN.stop) throw new Ferma();
+        var R = righe(), f = R.length + '|' + (R[0] ? R[0].textContent : '');
+        var ultimaGet = NET.reduce(function (m, e) { return e.m === 'GET' && RX_RMA.test(e.u) && e.t0 >= t0 ? Math.max(m, e.t) : m; }, 0);
+        stabile = f === firma ? stabile + 1 : 0; firma = f;
+        if (stabile >= 3 && Date.now() - ultimaGet > 700) {
+          tr = R.find(function (r) { return rx.test(r.textContent); }) || (R.length === 1 ? R[0] : null);
+          if (tr) break;
+        }
+        await sleep(200);
+      }
       if (!tr) throw Errore('RMA ' + it.rma + ' non trovato su VLT', 'NON_TROVATO');
-      var ed = $$('button, a', tr).find(function (x) { return /modifica|edit/i.test(x.textContent.trim()) || x.querySelector('svg[data-icon="pencil-alt"],svg[data-icon="pencil"]'); });
+      var trova = function (r) { var x = $$('button, a', r); return x.find(function (b) { return b.textContent.trim() === 'Modifica'; }) || x.find(function (b) { return b.querySelector('svg[data-icon="pencil-alt"],svg[data-icon="pencil"]'); }) || x.find(function (b) { return /^(modifica|edit)$/i.test(b.textContent.trim()); }); };
+      var ed = trova(tr);
       if (!ed) throw Errore('Tasto Modifica non trovato');
       ed.click();
+      // se dopo 5 secondi la modifica non si è aperta (riga ridisegnata nel frattempo) riclicca una volta sulla riga attuale
+      var aperto = await attendi(function () { return $('select#field_rmaStatus'); }, 5000);
+      if (!aperto) {
+        var tr2 = righe().find(function (r) { return rx.test(r.textContent); }) || tr, ed2 = tr2 && document.contains(tr2) ? trova(tr2) : null;
+        if (ed2) { UI.log('↻ RMA ' + it.rma + ': la modifica non si era aperta, riclicco'); ed2.click(); }
+      }
       var sel = await attendi(function () { var s = $('select#field_rmaStatus'); return s && s.options.length > 1 && testoSel(s) ? s : null; }, 15000);
       if (!sel) throw Errore('La scheda RMA non si è caricata');
       await sleep(450);
@@ -319,6 +345,8 @@
       if (norm(S0) === 'shipped from cw') { await esciForm(); return { esito: 'GIA_FATTO', stato_prima: S0, stato_dopo: S0, dettaglio: 'già Shipped From CW' }; }
       await scegli('select#field_rmaStatus', 'Shipped From CW');
       var avvisi = [];
+      var form = sel.closest('form') || document.body, valori = $$('input, textarea', form).map(function (x) { return x.value; }).join(' ') + ' ' + form.textContent;
+      if (!rx.test(valori)) avvisi.push('controlla che la scheda aperta sia l\'RMA ' + it.rma);
       var dep = await attendi(function () { return $('input[role="combobox"]'); }, 5000);
       if (dep) { if (!(await deposito(dep))) avvisi.push('scegli tu il deposito di origine'); } else avvisi.push('campo deposito non trovato');
       var aw = $('input#field_awb'); if (aw) scrivi(aw, it.awb || ''); else avvisi.push('campo AWB non trovato');
