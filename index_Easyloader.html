@@ -2618,6 +2618,7 @@ var Chv = {
 
 // ───────────────────────── EXPORT FR DA CHIUDERE (letto dallo script esterno VLT) ─────────────────────────
 // ───────────────────────── MAIL: destinatari per tab (PARAMETRI mail_<tab>_a / mail_<tab>_cc), scelti all'invio ─────────────────────────
+var W0 = window;
 var Mail = {
   TIPI: {
     ingresso: { nome: 'Ingresso · balancing e FR in OPEN', a: function () { return [DB.param('mail_sd', 'servicedesk@atsgruppo.eu')]; } },
@@ -2633,28 +2634,37 @@ var Mail = {
   // per i link nelle tabelle: onclick che apre la scelta destinatari
   link: function (t, subj, body) { Mail._k.push([t, subj, body]); return 'href="#" onclick="Mail.apriK(' + (Mail._k.length - 1) + ');return false"'; },
   apriK: function (i) { var x = Mail._k[i]; if (x) Mail.apri(x[0], x[1], x[2]); },
-  apri: function (t, subj, body, dopo) {
+  apri: function (t, subj, body, dopo, html) {
     var A = Mail.a(t), C = Mail.cc(t).filter(function (x) { return A.indexOf(x) < 0; }), T = Mail.TIPI[t] || { nome: t };
     var riga = function (x, r) { return '<tr><td><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="mlSel" data-m="' + esc(x) + '" checked> ' + esc(x) + '</label></td><td><select class="fc mlRuolo" style="width:80px;padding:3px 6px"><option' + (r === 'A' ? ' selected' : '') + '>A</option><option' + (r === 'CC' ? ' selected' : '') + '>CC</option></select></td></tr>'; };
     Modal.html('Mail · ' + T.nome, '<div class="hint" style="margin-bottom:6px"><b>' + esc(subj) + '</b></div>' +
       '<table style="width:auto"><tbody>' + A.map(function (x) { return riga(x, 'A'); }).join('') + C.map(function (x) { return riga(x, 'CC'); }).join('') + '</tbody></table>' +
       (A.length + C.length ? '' : '<div class="hint warn">Nessun destinatario impostato: Admin → ✉ Mail.</div>') +
       '<div class="fg" style="margin-top:8px"><span class="fl">Altri destinatari (A), separati da virgola</span><input class="fc" id="mlAltri" placeholder="nome@dominio.it"></div>' +
-      '<div class="hint" style="margin-top:6px">Togli la spunta a chi non deve riceverla. Destinatari fissi in Admin → ✉ Mail.</div>',
+      '<div class="hint" style="margin-top:6px">Togli la spunta a chi non deve riceverla. Destinatari fissi in Admin → ✉ Mail.' + (html ? '<br><b>La tabella va negli appunti: quando si apre la mail premi Ctrl+V nel corpo.</b>' : '') + '</div>',
       [{ label: 'Annulla', cls: 'ghost' }, { label: '✉ Apri mail', cls: 'green', keep: true, fn: function () {
         var to = [], cc = [];
         document.querySelectorAll('#mBody .mlSel').forEach(function (cb) { if (!cb.checked) return; var r = cb.closest('tr').querySelector('.mlRuolo').value; (r === 'CC' ? cc : to).push(cb.getAttribute('data-m')); });
         to = to.concat(Mail.lista($('mlAltri').value));
         if (!to.length && cc.length) to.push(cc.shift());
         if (!to.length) { toast('Scegli almeno un destinatario', 'ko'); return; }
-        Modal.close(); Mail.invia(to, cc, subj, body); if (dopo) dopo();
+        Modal.close(); Mail.invia(to, cc, subj, body, html); if (dopo) dopo();
       } }]);
   },
   // apre il client di posta; il testo va sempre anche negli appunti (le mail lunghe superano il limite dei link mailto)
-  invia: function (to, cc, subj, body) {
+  invia: function (to, cc, subj, body, html) {
+    var base = 'mailto:' + to.join(',') + '?subject=' + encodeURIComponent(subj) + (cc.length ? '&cc=' + encodeURIComponent(cc.join(',')) : '');
+    // con la tabella: corpo vuoto e mail completa (tabella formattata) negli appunti → Ctrl+V nel corpo
+    if (html && W0.ClipboardItem && navigator.clipboard && navigator.clipboard.write) {
+      try {
+        navigator.clipboard.write([new W0.ClipboardItem({ 'text/html': new Blob([html], { type: 'text/html' }), 'text/plain': new Blob([body], { type: 'text/plain' }) })])
+          .then(function () { toast('Mail aperta: premi Ctrl+V nel corpo per incollare la tabella', 'ok'); })
+          .catch(function () { location.href = base + '&body=' + encodeURIComponent(body.length > 1500 ? body.slice(0, 1500) + '…' : body); });
+        location.href = base; return;
+      } catch (e) { }
+    }
     var copiato = false;
     try { if (navigator.clipboard) { navigator.clipboard.writeText(body).catch(function () { }); copiato = true; } } catch (e) { }
-    var base = 'mailto:' + to.join(',') + '?subject=' + encodeURIComponent(subj) + (cc.length ? '&cc=' + encodeURIComponent(cc.join(',')) : '');
     var url = base + '&body=' + encodeURIComponent(body);
     if (url.length > 1900) url = base + '&body=' + encodeURIComponent('(testo lungo: incolla qui con Ctrl+V)\n\n');
     location.href = url;
@@ -3664,41 +3674,44 @@ var Ack = {
     try { await Ack.loghi(); Ddt.apri(Ack.pdf(id), w); }
     catch (e) { if (w) w.close(); Modal.open('Stampa DDT', e.message); }
   },
-  // blocco testo di una destinazione: destinatario, indirizzo, DDT, AWB, pezzi, colli con tipo/misure/peso
-  mailBlocco: function (s, i) {
+  // dati di spedizione di una destinazione (niente dettaglio delle schede)
+  mailRiga: function (s) {
     var rma = s.tipo === 'RMA', cp = rma ? Rma.cp(s.destinatario) : null, rp = rma ? { ragione_sociale: '', indirizzo: s.destinazione_estesa || (cp ? cp.indirizzo_completo : '') } : Ack.rip(s.destinatario), cl = Ack.colliDb(s.id_spedizione);
-    var n = rma ? { sp: Ack.righe(s.id_spedizione).filter(function (r) { return r.esito !== 'RIMOSSO'; }).length || Rma._npz[s.id_spedizione] || 0 } : Ack.conta(Ack.righe(s.id_spedizione));
+    var pz = rma ? (Ack.righe(s.id_spedizione).filter(function (r) { return r.esito !== 'RIMOSSO'; }).length || Rma._npz[s.id_spedizione] || 0) : (Ack.conta(Ack.righe(s.id_spedizione)).sp || s.n_pezzi || 0);
     var tot = cl.reduce(function (a, c) { return a + (parseFloat(String(c.peso_kg).replace(',', '.')) || 0); }, 0);
-    var t = (i ? i + ') ' : '') + s.destinatario + (rp.ragione_sociale && L.up(rp.ragione_sociale) !== L.up(s.destinatario) ? ' - ' + rp.ragione_sociale : '') + '\n' +
-      '   Indirizzo: ' + (rp.indirizzo || '-') + '\n' +
-      '   DDT: ' + (s.n_ddt ? s.n_ddt + ' del ' + L.itDate(s.data_ddt) : (s.stato === 'PRONTA' ? 'da generare' : 'spunta in corso')) + '\n' +
-      '   AWB: ' + (L.s(s.awb) ? s.awb + ' ' + L.s(s.vettore) : 'DA ASSEGNARE') + '\n' +
-      '   Pezzi: ' + (n.sp || s.n_pezzi || 0) + '\n';
-    if (cl.length) t += '   Colli: ' + cl.length + ' · peso totale ' + Math.round(tot * 100) / 100 + ' kg\n' + cl.map(function (c, k) { return '     ' + (k + 1) + '. ' + (c.tipo_collo || 'PLT') + ' ' + c.lunghezza_cm + 'x' + c.larghezza_cm + 'x' + c.altezza_cm + ' cm · ' + c.peso_kg + ' kg'; }).join('\n') + '\n';
-    else t += '   Colli: da inserire (spunta non chiusa)\n';
-    t += '   Link DDT (PDF): ' + (s.link_pdf || (s.n_ddt ? 'non salvato su Drive' : 'dopo la generazione del DDT')) + '\n';
-    return t;
+    var tipi = {}; cl.forEach(function (c) { var k = (c.tipo_collo || 'PLT') + ' ' + c.lunghezza_cm + 'x' + c.larghezza_cm + 'x' + c.altezza_cm; tipi[k] = (tipi[k] || 0) + 1; });
+    return { dest: s.destinatario + (rp.ragione_sociale && L.up(rp.ragione_sociale) !== L.up(s.destinatario) ? ' - ' + rp.ragione_sociale : ''), ind: L.s(rp.indirizzo).replace(/\s+/g, ' '),
+      ddt: s.n_ddt ? s.n_ddt : (s.stato === 'PRONTA' ? 'da generare' : 'spunta in corso'), data: s.n_ddt ? L.itDate(s.data_ddt) : '', awb: L.s(s.awb) ? s.awb + (L.s(s.vettore) ? ' (' + s.vettore + ')' : '') : 'DA ASSEGNARE',
+      pz: pz, colli: Object.keys(tipi).map(function (k) { return tipi[k] + ' × ' + k + ' cm'; }), nColli: cl.length, peso: Math.round(tot * 100) / 100, link: L.s(s.link_pdf) };
   },
   mailTesto: function (ids) {
     var S = ids.map(Ack.byId).filter(Boolean); if (!S.length) return null;
-    var d = L.itDate(S[0].data), one = S.length === 1, s0 = S[0], T = s0.tipo === 'RMA' ? 'RMA' : 'ACK';
+    var d = L.itDate(S[0].data), one = S.length === 1, s0 = S[0], T = s0.tipo === 'RMA' ? 'RMA' : 'ACK', R = S.map(Ack.mailRiga);
     var subj = one ? T + ' ' + s0.destinatario + ' del ' + d + (s0.n_ddt ? ' - DDT ' + s0.n_ddt : '') + (s0.awb ? ' - AWB ' + s0.awb : '')
-      : T + ' del ' + d + ' - ' + S.length + ' destinazioni - DDT ' + S.map(function (x) { return x.n_ddt || '?'; }).join(', ');
-    var body = 'Ciao Ragazzi,\n\n' + (one ? T + ' in uscita:' : T + ' in uscita, ' + S.length + ' destinazioni:') + '\n\n' + S.map(function (x, k) { return Ack.mailBlocco(x, one ? 0 : k + 1); }).join('\n');
-    var noAwb = S.filter(function (x) { return x.n_ddt && !L.s(x.awb); });
-    if (noAwb.length) body += '\nPer favore assegnate l\'AWB a: ' + noAwb.map(function (x) { return x.destinatario + ' (DDT ' + x.n_ddt + ')'; }).join(', ') + '\n';
-    S.forEach(function (x) {
-      if (x.tipo === 'RMA') return;
-      var n = Ack.conta(Ack.righe(x.id_spedizione)), sf = Ack.spareFalse(x.id_spedizione), pre = one ? '' : x.destinatario + ' - ';
-      if (n.rim) body += '\n' + pre + 'FR attesi non spediti (restano in giacenza): ' + n.rim + '\n';
-      if (sf.length) body += '\n' + pre + 'SPARE FALSE (letti ma non in stato ACK su VLT), da sbloccare:\n' + sf.map(function (a) { var v = DB.vltMap[a.fr]; return 'FR ' + (a.fr || '-') + ' · ' + a.seriale + (v ? ' · ' + v.stato : ''); }).join('\n') + '\n';
-    });
-    return { subj: subj, body: body + '\nGrazie' };
+      : T + ' del ' + d + ' - ' + S.length + ' destinazioni';
+    var noAwb = S.filter(function (x) { return x.n_ddt && !L.s(x.awb); }).map(function (x) { return x.destinatario + ' (DDT ' + x.n_ddt + ')'; });
+    var intro = T + ' in uscita del ' + d + (one ? '' : ': ' + S.length + ' destinazioni') + '.';
+    // testo semplice (riserva): una riga per destinazione
+    var body = 'Ciao Ragazzi,\n\n' + intro + '\n\n' + R.map(function (r, k) {
+      return (one ? '' : (k + 1) + ') ') + r.dest + ' | DDT ' + r.ddt + (r.data ? ' del ' + r.data : '') + ' | AWB ' + r.awb + ' | ' + r.pz + ' pz | ' + (r.nColli ? r.nColli + (r.nColli === 1 ? ' collo, ' : ' colli, ') + r.peso + ' kg (' + r.colli.join(', ') + ')' : 'colli da inserire') +
+        '\n   ' + (r.ind || '-') + (r.link ? '\n   DDT: ' + r.link : '');
+    }).join('\n') + (noAwb.length ? '\n\nAWB da assegnare: ' + noAwb.join(', ') : '') + '\n\nGrazie';
+    // tabella per il corpo della mail (si incolla con Ctrl+V)
+    var th = 'style="background:#1f4e79;color:#fff;padding:5px 8px;border:1px solid #8ea9c1;text-align:left;font-weight:bold"', td = 'style="padding:5px 8px;border:1px solid #b7c7d6;vertical-align:top"', tdn = 'style="padding:5px 8px;border:1px solid #b7c7d6;vertical-align:top;text-align:right;white-space:nowrap"';
+    var e = function (x) { return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+    var html = '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">Ciao Ragazzi,<br><br>' + e(intro) + '<br><br>' +
+      '<table style="border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:10pt"><tr>' + ['#', 'Destinatario', 'Indirizzo', 'DDT', 'AWB', 'Pezzi', 'Colli', 'Peso kg', 'PDF DDT'].map(function (h) { return '<th ' + th + '>' + h + '</th>'; }).join('') + '</tr>' +
+      R.map(function (r, k) {
+        return '<tr' + (k % 2 ? ' style="background:#f2f6fa"' : '') + '><td ' + tdn + '>' + (k + 1) + '</td><td ' + td + '><b>' + e(r.dest) + '</b></td><td ' + td + '>' + e(r.ind || '-') + '</td><td ' + td + ' nowrap>' + e(r.ddt) + (r.data ? '<br><span style="color:#666">' + e(r.data) + '</span>' : '') + '</td>' +
+          '<td ' + td + ' nowrap>' + (r.awb === 'DA ASSEGNARE' ? '<b style="color:#c00000">DA ASSEGNARE</b>' : e(r.awb)) + '</td><td ' + tdn + '>' + r.pz + '</td><td ' + td + ' nowrap>' + (r.nColli ? r.colli.map(e).join('<br>') : '<span style="color:#c00000">da inserire</span>') + '</td>' +
+          '<td ' + tdn + '>' + (r.nColli ? r.peso : '') + '</td><td ' + td + '>' + (r.link ? '<a href="' + e(r.link) + '">apri</a>' : '-') + '</td></tr>';
+      }).join('') + '</table>' + (noAwb.length ? '<br><b>AWB da assegnare:</b> ' + e(noAwb.join(', ')) : '') + '<br><br>Grazie</div>';
+    return { subj: subj, body: body, html: html };
   },
   inviaMail: function (ids) {
     var m = Ack.mailTesto(ids); if (!m) { toast('Nessuna spedizione', 'ko'); return; }
     var s0 = Ack.byId(ids[0]);
-    Mail.apri(s0 && s0.tipo === 'RMA' ? 'rma' : 'ack', m.subj, m.body, function () { ids.forEach(Ack.mailInviata); });
+    Mail.apri(s0 && s0.tipo === 'RMA' ? 'rma' : 'ack', m.subj, m.body, function () { ids.forEach(Ack.mailInviata); }, m.html);
   },
   // mail unica con tutte le destinazioni del giorno (spunte chiuse o spedite)
   mailGiorno: function () {
