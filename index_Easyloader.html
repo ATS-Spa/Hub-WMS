@@ -587,7 +587,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
         <div class="spacer"></div>
         <button class="btn ghost sm" onclick="Chv.excel()" title="Tutte le code del giorno, un foglio per procedura">⬇ Excel tutte le code</button>
         <a class="btn ghost sm" href="ATS_FLM_VLT_Chiusure.user.js" target="_blank" title="Tampermonkey propone l'installazione o l'aggiornamento">📥 Installa script</a>
-        <a class="btn ghost sm" href="https://logistictoolvf.net.vodafone.it/" target="vlt">↗ Apri VLT</a>
+        <a class="btn ghost sm" href="https://logistictoolvf.net.vodafone.it/#/fail-rep" target="vlt" title="Pagina FR (ingressi, ACK, spare ferme)">↗ VLT FR</a> <a class="btn ghost sm" href="https://logistictoolvf.net.vodafone.it/#/rma" target="vlt" title="Pagina RMA">↗ VLT RMA</a>
       </div>
       <div style="margin-top:8px" id="chvBridge"></div>
       <div class="hint" style="margin-top:6px;line-height:1.5">Premi ▶ Invia a VLT: la coda passa allo script, che sulla scheda VLT mostra il riquadro <b>ATS</b> con ▶ Avvia. Puoi anche partire da VLT con "Prendi dati da ATS". Gli esiti tornano qui da soli; le schede già chiuse non vengono rimandate.</div></div>
@@ -2812,9 +2812,27 @@ var Chv = {
   vedi: async function (proc) {
     var p; try { p = await Busy.wrap(Chv.prepara(proc, Chv.giorno())); } catch (e) { Modal.open('Errore', e.message); return; }
     var f = Chv.fatti(proc, Chv.giorno());
-    var rows = p.tutti.map(function (it) { var e = f[it.k]; return '<tr' + (Chv.FATTO[e] ? ' class="r-off"' : (e === 'ERRORE' ? ' class="r-err"' : '')) + '><td class="mono">' + esc(it.fr || it.rma) + '</td><td class="mono">' + esc(it.seriale || (it.serials || []).join(' ')) + '</td><td>' + esc(it.stato_file || it.dest || '') + '</td><td>' + esc(it.note || it.awb || '') + '</td><td>' + esc(e || 'da fare') + '</td></tr>'; }).join('');
-    Modal.html(Chv.PROC[proc] + ' · ' + L.itDate(Chv.giorno()), '<div class="tbl-wrap modal-scroll"><table><thead><tr><th>' + (proc === 'RMA' ? 'RMA' : 'FR') + '</th><th>Seriale</th><th>' + (proc === 'ACK' || proc === 'RMA' ? 'Destinazione' : 'Stato VLT (file)') + '</th><th>' + (proc === 'ACK' || proc === 'RMA' ? 'AWB' : 'Nota') + '</th><th>Esito</th></tr></thead><tbody>' + (rows || '<tr><td colspan="5" class="empty">Nessuna scheda</td></tr>') + '</tbody></table></div>' +
-      (p.scarti.length ? '<div class="hint warn" style="margin-top:8px">Non inviabili: ' + p.scarti.map(function (s) { return esc(s.motivo); }).join(' · ') + '</div>' : ''), [{ label: 'Chiudi', cls: 'ghost' }, { label: '⬇ Excel', fn: function () { Chv.excel(proc); } }], true);
+    Chv._vedi = { proc: proc, tutti: p.tutti };
+    var rows = p.tutti.map(function (it, i) { var e = f[it.k]; return '<tr' + (Chv.FATTO[e] ? ' class="r-off"' : (e === 'ERRORE' ? ' class="r-err"' : '')) + '><td>' + (Chv.FATTO[e] ? '' : '<input type="checkbox" class="chvMan" data-i="' + i + '" data-e="' + esc(e || '') + '">') + '</td><td class="mono">' + esc(it.fr || it.rma) + '</td><td class="mono">' + esc(it.seriale || (it.serials || []).join(' ')) + '</td><td>' + esc(it.stato_file || it.dest || '') + '</td><td>' + esc(it.note || it.awb || '') + '</td><td>' + esc(e || 'da fare') + '</td></tr>'; }).join('');
+    Modal.html(Chv.PROC[proc] + ' · ' + L.itDate(Chv.giorno()), '<div class="hint" style="margin-bottom:6px">Schede chiuse davvero su VLT ma segnate "saltato" o "errore" (es. falso errore di salvataggio): spuntale e premi <b>✔ Segna come già chiuse</b>. In alternativa rimandale a VLT: lo script vede lo stato già finale e le segna "già a posto" da solo. <label style="margin-left:8px"><input type="checkbox" id="chvManSE"> seleziona saltate ed errori</label></div><div class="tbl-wrap modal-scroll"><table><thead><tr><th></th><th>' + (proc === 'RMA' ? 'RMA' : 'FR') + '</th><th>Seriale</th><th>' + (proc === 'ACK' || proc === 'RMA' ? 'Destinazione' : 'Stato VLT (file)') + '</th><th>' + (proc === 'ACK' || proc === 'RMA' ? 'AWB' : 'Nota') + '</th><th>Esito</th></tr></thead><tbody>' + (rows || '<tr><td colspan="6" class="empty">Nessuna scheda</td></tr>') + '</tbody></table></div>' +
+      (p.scarti.length ? '<div class="hint warn" style="margin-top:8px">Non inviabili: ' + p.scarti.map(function (s) { return esc(s.motivo); }).join(' · ') + '</div>' : ''), [{ label: 'Chiudi', cls: 'ghost' }, { label: '⬇ Excel', fn: function () { Chv.excel(proc); } }, { label: '✔ Segna come già chiuse', cls: 'green', keep: true, fn: function () { Chv.segnaMan(); } }], true);
+    var se = $('chvManSE'); if (se) se.onchange = function () { document.querySelectorAll('#mBody .chvMan').forEach(function (cb) { if (cb.getAttribute('data-e') === 'SALTATO' || cb.getAttribute('data-e') === 'ERRORE') cb.checked = se.checked; }); };
+  },
+  // correzione a mano: si aggiunge un esito GIA_FATTO (lo storico resta), con motivo e operatore; nel LOG
+  segnaMan: async function () {
+    var V = Chv._vedi; if (!V) return;
+    var sel = Array.prototype.slice.call(document.querySelectorAll('#mBody .chvMan')).filter(function (cb) { return cb.checked; }).map(function (cb) { return V.tutti[+cb.getAttribute('data-i')]; });
+    if (!sel.length) { toast('Spunta le schede da segnare', 'ko'); return; }
+    var mot = prompt('Segno ' + sel.length + ' schede come già chiuse su VLT.\nMotivo (es. chiuse su VLT, falso errore dello script):', 'chiuse su VLT, falso errore dello script');
+    if (mot === null) return; mot = L.s(mot) || 'chiuse su VLT';
+    try {
+      var t = await Chv.tab(), now = L.nowStamp(), g = Chv.giorno(), chi = App.chi();
+      var objs = sel.map(function (it, i) { return { id_esito: 'MAN|' + V.proc + '|' + it.k + '|' + Date.now() + i, data_ora: now, giorno: g, procedura: V.proc, chiave: it.k, esito: 'GIA_FATTO', stato_prima: '', stato_dopo: '', dettaglio: 'segnata a mano da ' + (chi.sigla || chi.email) + ': ' + mot, id_coda: 'MANUALE', operatore: chi.email || Auth.email }; });
+      var r = await API.append(DB.id, 'VLT_CHIUSURE', objs.map(function (o) { return t.toRow(o); }));
+      objs.forEach(function (o, i) { o._r = r + i; t.rows.push(o); });
+      await API.append(DB.id, 'LOG', [App.log('VLT_CHIUSURE_MANUALE', 'VLT_CHIUSURE', V.proc + ' ' + g, { schede: sel.map(function (it) { return it.fr || it.rma; }), motivo: mot })]);
+      Modal.close(); Chv._cnt = null; toast(sel.length + ' schede segnate come già chiuse', 'ok'); Chv.render();
+    } catch (e) { Modal.open('Errore', e.message); }
   },
   show: async function () {
     Chv.init(); Chv.ping(); setTimeout(function () { if (App.tab === 'chiusure') Chv.render(); }, 1200);
