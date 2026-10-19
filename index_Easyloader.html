@@ -4124,7 +4124,7 @@ var Rma = {
         if (snap && o.rma) {
           var sn = L.frKey(r['RMA AL DOWNLOAD']), ora = o.car ? L.s(o.car.rma) : L.s(u.rma);
           if (o.rma === sn) o.rma = '';
-          else if (sn !== ora && o.rma !== ora) o.err = 'RMA cambiato da un altro dopo il tuo download (era ' + (sn || 'vuoto') + ', ora ' + (ora || 'vuoto') + '): riscarica l Excel RMA';
+          else if (sn !== ora && o.rma !== ora) { o.note.push('⚠ nel frattempo un altro lo aveva cambiato (era ' + (sn || 'vuoto') + ', poi ' + (ora || 'vuoto') + '): vale il tuo'); o.avviso = true; }
         }
         if (o.rma) {
           if (u.tipo === 'BALANCING') o.err = 'balancing: l RMA non si cambia da qui';
@@ -4160,7 +4160,7 @@ var Rma = {
     }
     var lista = ko.concat(ok);   // le righe senza modifiche si contano soltanto
     Modal.html('Importa RMA · ' + esc(f.name),
-      '<div style="font-size:13px;margin-bottom:8px"><b style="color:var(--green)">' + ok.length + '</b> da importare · <b style="color:var(--red)">' + ko.length + '</b> anomalie (non importate) · ' + sk.length + ' senza modifiche</div>' +
+      '<div style="font-size:13px;margin-bottom:8px"><b style="color:var(--green)">' + ok.length + '</b> da importare' + (ok.filter(function (o) { return o.avviso; }).length ? ' (<b style="color:var(--amber)">' + ok.filter(function (o) { return o.avviso; }).length + ' cambiate nel frattempo da un altro: vale il tuo valore</b>)' : '') + ' · <b style="color:var(--red)">' + ko.length + '</b> anomalie (non importate) · ' + sk.length + ' senza modifiche</div>' +
       '<div style="max-height:55vh;overflow:auto"><table class="tbl"><thead><tr><th>Riga</th><th>Seriale</th><th>ID unità</th><th>RMA creato</th><th>Destinazione</th><th>Esito</th></tr></thead><tbody>' + lista.map(riga).join('') + '</tbody></table></div>',
       [{ label: 'Annulla', cls: 'ghost' }].concat(ok.length ? [{ label: 'Importa ' + ok.length + ' righe', keep: true, fn: function () { Rma.confermaImportRma(); } }] : []), true);
   },
