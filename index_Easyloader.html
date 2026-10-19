@@ -466,6 +466,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
           <div class="spacer"></div>
           <button class="btn ghost sm" onclick="Giacenze.grid().scegli()" title="Mostra o nascondi colonne">⚙ Colonne</button>
           <button class="btn ghost sm" onclick="Giacenze.excel()">⬇ Excel</button>
+          <button class="btn ghost sm" onclick="Bon.apri()" title="Ricarica l'Excel di Giacenze con i dati mancanti compilati (FR, material…): cambia solo quello che hai scritto. Serve la password">⬆ Bonifica da Excel</button>
           <button class="btn ghost sm" id="gRett" style="display:none" onclick="Rett.aggiungi()" title="Solo admin: aggiungi un pezzo presente a scaffale ma mancante a sistema (movimento interno, non va in fatturazione)">＋ Rettifica: aggiungi pezzo</button>
         </div>
       </div>
@@ -2305,6 +2306,179 @@ var Giacenze = {
       if (Sto.dati.cur) { Sto.COLS.forEach(function (c) { if (!(c in mov)) mov[c] = ''; }); Sto.dati.cur.push(mov); }
       Modal.close(); toast(u.id_unita + ': ' + caus.toLowerCase() + ' salvato' + (spM.loc.length ? ' · aggiornati anche ' + spM.loc.length + ' campi nei movimenti' : ''), 'ok'); Giacenze.render();
     } catch (e) { Modal.progress(''); err('Non salvato: ' + e.message); }
+  }
+};
+
+// ───────────────────────── BONIFICA DA EXCEL (Giacenze) ─────────────────────────
+// Ricarico l'Excel scaricato da Giacenze con le celle mancanti compilate: cambia solo quello che è scritto ed è diverso
+// (cella vuota = non toccare). Con l'FR si completano da VLT riparatore / material / P/N; material e MNFT anche dall'anagrafica.
+// Un pezzo IN ATTESA che riceve l'FR torna in giacenza come con "Assegna". Anteprima con spunta, poi salvataggio unico
+// con lo specchio nei movimenti / spedizioni, un movimento VARIAZIONE per scheda e il LOG. Per tutti, con la password.
+var Bon = {
+  // intestazione dell'Excel di Giacenze → campo della scheda
+  COL: { 'ID': 'id_unita', 'SERIALE': 'seriale', 'TIPO': 'tipo', 'FR': 'fr', 'RMA': 'rma', 'P/N': 'pn', 'MATERIAL': 'material', 'MNFT': 'mnft', 'RIPARATORE': 'riparatore', 'UBICAZIONE': 'ubicazione', 'DESTINAZIONE': 'destinazione_prevista', 'NOTA': 'note' },
+  CAMPI: ['seriale', 'tipo', 'fr', 'rma', 'pn', 'material', 'mnft', 'riparatore', 'ubicazione', 'destinazione_prevista', 'note'],
+  NOMI: { seriale: 'Seriale', tipo: 'Tipo', fr: 'FR', rma: 'RMA', pn: 'P/N', material: 'Material', mnft: 'MNFT', riparatore: 'Riparatore', ubicazione: 'Ubicazione', destinazione_prevista: 'Destinazione', note: 'Nota', stato: 'Stato' },
+  apri: function () {
+    Modal.html('⬆ Bonifica giacenze da Excel', '<div class="hint" style="margin-bottom:8px">Ricarica l\'Excel scaricato da <b>Giacenze</b> con le celle mancanti compilate. Cambia solo quello che hai scritto ed è diverso (<b>cella vuota = non tocca</b>); prima vedi l\'anteprima.</div>' +
+      '<div class="fg"><span class="fl">Password *</span><input class="fc" type="password" id="bonPwd" autocomplete="new-password"></div><div class="hint" id="bonErr" style="margin-top:6px"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Scegli il file…', cls: 'green', keep: true, fn: async function () {
+        var pw = $('bonPwd').value, par = L.s(DB.param('password_eliminazione', ''));
+        var ok = par ? (/^sha256:/i.test(par) ? (await Nr.sha(pw)) === par.slice(7).toLowerCase() : pw === par) : (await Nr.sha(pw)) === Nr.PWD;
+        if (!ok) { $('bonErr').textContent = 'Password errata'; $('bonErr').className = 'hint err'; return; }
+        Modal.close();
+        var f = document.createElement('input'); f.type = 'file'; f.accept = '.xlsx,.xls,.csv';
+        f.onchange = function () { if (f.files[0]) Bon.leggi(f.files[0]); };
+        f.click();
+      } }]);
+    setTimeout(function () { $('bonPwd').focus(); $('bonPwd').addEventListener('keydown', function (e) { if (e.key === 'Enter') document.querySelector('#mBtns .btn.green').click(); }); }, 50);
+  },
+  leggi: async function (file) {
+    var R;
+    try { R = await leggiFoglio(file); } catch (e) { toast('File non leggibile: ' + e.message, 'ko'); return; }
+    if (!R.length || !(('ID' in R[0]) || ('SERIALE' in R[0]))) { toast('Serve l\'Excel di Giacenze (colonna ID o Seriale)', 'ko'); return; }
+    var col = Object.keys(R[0]).filter(function (k) { return Bon.COL[k] && Bon.COL[k] !== 'id_unita'; }).map(function (k) { return [k, Bon.COL[k]]; });
+    if (!col.length) { toast('Nessuna colonna modificabile nel file', 'ko'); return; }
+    Bon._file = file.name; Bon.L = Bon.calcola(R, col); Bon.anteprima();
+  },
+  // P/N → material dall'anagrafica (ARTICOLI)
+  pnMat: function () {
+    if (Bon._pm) return Bon._pm; var m = {};
+    Object.keys(DB.matPn || {}).forEach(function (mat) { var p = L.up(DB.matPn[mat]); if (p && !m[p]) m[p] = mat; });
+    return Bon._pm = m;
+  },
+  calcola: function (R, col) {
+    var tU = DB.t.UNITA, byId = {}, bySer = {}, vis = {}, out = [];
+    tU.rows.forEach(function (u) { byId[u.id_unita] = u; if (Giacenze.A_MAG.indexOf(u.stato) >= 0) bySer[L.up(u.seriale)] = u; });
+    var stOk = L.s(DB.param('pending_fr_stati', 'Failed Material Sent;Open')).split(';').map(L.up).filter(Boolean), pm = Bon.pnMat();
+    var frUsati = {}; tU.rows.forEach(function (u) { if (L.s(u.fr) && Giacenze.A_MAG.indexOf(u.stato) >= 0) (frUsati[u.fr] = frUsati[u.fr] || []).push(u); });
+    R.forEach(function (o, k) {
+      var id = L.up(o['ID']), u = id ? byId[id] : bySer[L.up(o['SERIALE'])];
+      var it = { riga: k + 2, id: id || L.up(o['SERIALE']), u: u, ch: {}, auto: {}, avv: [], err: '' };
+      out.push(it);
+      if (!u) { it.err = 'Scheda non trovata'; return; }
+      it.id = u.id_unita; it.rev = L.s(u.rev);
+      if (vis[u.id_unita]) { it.err = 'Riga doppia nel file (riga ' + vis[u.id_unita] + ')'; return; } vis[u.id_unita] = it.riga;
+      if (Giacenze.A_MAG.indexOf(u.stato) < 0) { it.err = 'Non più in giacenza (' + u.stato + ')'; return; }
+      var notaOld = Spec.pulita(u.note);
+      col.forEach(function (c) {
+        var f = c[1], v = L.s(o[c[0]]);
+        if (!v) return;
+        if (/^(seriale|pn|tipo|material|mnft|ubicazione)$/.test(f)) v = L.up(v);
+        if (f === 'fr') v = L.frKey(v);
+        var att = f === 'note' ? notaOld : L.s(u[f]);
+        if (v !== att) it.ch[f] = v;
+      });
+      var ch = it.ch;
+      if (ch.tipo && TIPI.indexOf(ch.tipo) < 0) { it.avv.push('Tipo "' + ch.tipo + '" non valido: ignorato'); delete ch.tipo; }
+      if (ch.fr && !/^\d+$/.test(ch.fr)) { it.err = 'FR "' + ch.fr + '" non è un numero'; return; }
+      if (ch.seriale) { var d = bySer[ch.seriale]; if (d && d !== u) { it.err = 'Seriale ' + ch.seriale + ' già in giacenza su ' + d.id_unita; return; } it.avv.push('Cambio seriale ' + u.seriale + ' → ' + ch.seriale); }
+      if (ch.tipo) it.avv.push('Cambio tipo ' + u.tipo + ' → ' + ch.tipo);
+      var auto = function (f, v, perche) { if (!L.s(v) || f in ch || L.s(v) === L.s(u[f])) return; ch[f] = L.s(v); it.auto[f] = perche; };
+      if (ch.fr) {
+        var v = DB.vltMap[ch.fr];
+        if (!v) { it.err = 'FR ' + ch.fr + ' non trovato su VLT (o VLT da aggiornare)'; return; }
+        var ser = L.up(ch.seriale || u.seriale);
+        if (L.up(v.f_mat_serial_no) && L.up(v.f_mat_serial_no) !== ser && L.up(L.afterSpace(v.f_mat_serial_no)) !== L.up(L.afterSpace(ser))) it.avv.push('Seriale su VLT ' + v.f_mat_serial_no + ' diverso da ' + ser);
+        var alt = (frUsati[ch.fr] || []).filter(function (x) { return x !== u; });
+        if (alt.length) it.avv.push('FR già in giacenza su ' + alt.map(function (x) { return x.id_unita; }).join(', '));
+        if (stOk.length && stOk.indexOf(L.up(v.stato)) < 0) it.avv.push('Stato VLT "' + v.stato + '"');
+        if (L.s(u.fr)) it.avv.push('Cambio FR ' + u.fr + ' → ' + ch.fr);
+        it.vlt = v;
+        auto('riparatore', v.riparatore, 'da VLT');
+        if (!L.s(u.material)) auto('material', v.f_mat_material, 'da VLT');
+        if (!L.s(u.pn)) auto('pn', v.f_mat_tmpn, 'da VLT');
+        if (u.stato === 'IN_ATTESA' && L.s(u.pending_fr)) {
+          it.pend = true; ch.stato = 'IN_GIACENZA'; it.auto.stato = 'FR assegnato';
+          if (!('note' in ch)) {
+            var n = notaOld.replace(/PENDING FR: [^·|]*/, '').replace(/^\s*[·|]\s*/, '').replace(/\s*[·|]\s*$/, '').trim();
+            ch.note = [n, 'FR ' + ch.fr + ' assegnato il ' + L.itDate(L.isoToday()) + ' (era pending: ' + u.pending_fr + ')'].filter(Boolean).join(' · '); it.auto.note = 'tolto PENDING FR';
+          }
+          if ((ch.tipo || u.tipo) === 'GOOD' && !L.s(u.destinazione_prevista) && !ch.destinazione_prevista) { var dep = DB.t.DEPOT_VLT.rows.find(function (d) { return d.depot_vlt === v.depot_origine; }); if (dep) auto('destinazione_prevista', dep.destinazione, 'da depot VLT'); }
+        }
+      }
+      var pn = L.up(ch.pn || u.pn);
+      if (pn && !L.s(u.material)) auto('material', pm[pn], 'da anagrafica');
+      if (pn && (!L.s(u.mnft) || ch.pn)) auto('mnft', DB.artPn[pn], 'da anagrafica');
+      if (!Object.keys(ch).length) it.uguale = true;
+    });
+    return out;
+  },
+  anteprima: function () {
+    var Lst = Bon.L, mod = Lst.filter(function (x) { return !x.err && !x.uguale; }), err = Lst.filter(function (x) { return x.err; }), ug = Lst.filter(function (x) { return x.uguale; });
+    var cel = function (it) {
+      return Object.keys(it.ch).map(function (f) {
+        var a = f === 'note' ? Spec.pulita(it.u.note) : L.s(it.u[f]), au = it.auto[f];
+        return '<div style="white-space:nowrap' + (au ? ';color:var(--green)' : '') + '"><b>' + esc(Bon.NOMI[f] || f) + '</b> <span class="mono" style="color:var(--subtle)">' + esc(a || '—').slice(0, 60) + '</span> → <span class="mono">' + esc(it.ch[f]).slice(0, 80) + '</span>' + (au ? ' <span class="hint">(' + esc(au) + ')</span>' : '') + '</div>';
+      }).join('');
+    };
+    var righe = mod.map(function (it, i) {
+      return '<tr' + (it.avv.length ? ' class="r-warn"' : '') + '><td><input type="checkbox" class="bonSel" data-k="' + Lst.indexOf(it) + '"' + (it.avv.length ? '' : ' checked') + '></td><td class="mono">' + esc(it.id) + '</td><td class="mono">' + esc(it.u.seriale) + '</td><td>' + esc(it.u.stato) + '</td><td style="font-size:12px">' + cel(it) + '</td><td style="font-size:12px;color:var(--amber)">' + it.avv.map(esc).join('<br>') + '</td></tr>';
+    }).join('');
+    var nAvv = mod.filter(function (x) { return x.avv.length; }).length, nPend = mod.filter(function (x) { return x.pend; }).length;
+    Modal.html('Anteprima bonifica · ' + esc(Bon._file),
+      '<div class="row" style="gap:16px;flex-wrap:wrap;margin-bottom:6px"><span><b>' + mod.length + '</b> schede cambiano</span>' + (nPend ? '<span>di cui <b>' + nPend + '</b> in attesa che ricevono l\'FR (tornano in giacenza)</span>' : '') +
+        '<span><b>' + ug.length + '</b> restano uguali</span>' + (nAvv ? '<span style="color:var(--amber)"><b>' + nAvv + '</b> con avvisi (non spuntate)</span>' : '') + (err.length ? '<span style="color:var(--red)"><b>' + err.length + '</b> scartate</span>' : '') + '</div>' +
+      '<div class="hint">In <span style="color:var(--green)">verde</span> i dati completati in automatico. Le righe gialle hanno avvisi: spuntale solo se va bene così.</div>' +
+      (mod.length ? '<div class="tbl-wrap modal-scroll" style="max-height:46vh;margin-top:8px"><table><thead><tr><th><input type="checkbox" id="bonTutti"></th><th>ID</th><th>Seriale</th><th>Stato</th><th>Cambi (prima → dopo)</th><th>Avvisi</th></tr></thead><tbody>' + righe + '</tbody></table></div>' : '<div class="empty">Nessuna scheda da cambiare</div>') +
+      (err.length ? '<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--red)">' + err.length + ' righe scartate</summary><div style="font-size:12px;max-height:20vh;overflow:auto">' + err.map(function (x) { return 'riga ' + x.riga + ' · ' + esc(x.id) + ' · ' + esc(x.err); }).join('<br>') + '</div></details>' : ''),
+      [{ label: 'Annulla', cls: 'ghost' }].concat(mod.length ? [{ label: '💾 Salva le schede spuntate', cls: 'green', keep: true, fn: function () {
+        var sel = Array.prototype.slice.call(document.querySelectorAll('#mBody .bonSel')).filter(function (c) { return c.checked; }).map(function (c) { return Bon.L[+c.getAttribute('data-k')]; });
+        if (!sel.length) { toast('Spunta almeno una scheda', 'ko'); return; }
+        Bon.salva(sel);
+      } }] : []), true);
+    if ($('bonTutti')) $('bonTutti').onchange = function () { document.querySelectorAll('#mBody .bonSel').forEach(function (c) { c.checked = $('bonTutti').checked; }); };
+  },
+  salva: async function (sel) {
+    if (!(await Modal.confirm('Salva ' + sel.length + ' schede', 'Aggiorno le schede, i loro movimenti e le spedizioni collegate; per ogni scheda resta un movimento VARIAZIONE e il LOG.'))) return;
+    Modal.open('Bonifica in corso', 'Non chiudere la pagina.', []);
+    try {
+      if (sel.some(function (x) { return x.pend; })) await DB.ensureCols('UNITA', ['pending_fr', 'fr_assegnato_il']);
+      await DB.loadTables(['UNITA', 'ANOMALIE']);   // dati freschi: se qualcuno ha modificato una scheda dopo il download, la salto
+      var tU = DB.t.UNITA, tA = DB.t.ANOMALIE, byId = {}; tU.rows.forEach(function (u) { byId[u.id_unita] = u; });
+      var H = await Ingresso.heads(), tM = H.MOVIMENTI, now = L.nowStamp(), me = Auth.email, sg = App.me.sigla || '';
+      await Spec.mov(); var mr = await Spec.righe(tM);
+      await DB.loadTables(['SPEDIZIONI_RIGHE']); var tS = DB.t.SPEDIZIONI_RIGHE;
+      var upd = [], loc = [], movs = [], logs = [], fatti = [], saltati = [];
+      sel.forEach(function (it) {
+        var u = byId[it.id];
+        if (!u || L.s(u.rev) !== it.rev || Giacenze.A_MAG.indexOf(u.stato) < 0) { saltati.push(it.id + (u ? ' (modificata da altri dopo il download)' : ' (non trovata)')); return; }
+        var ch = Object.assign({}, it.ch);
+        if (ch.note !== undefined) ch.note = ch.note + Spec.fonte(u.note);
+        if (it.pend) { ch.pending_fr = ''; ch.fr_assegnato_il = now; }
+        var all = Object.assign({}, ch, { modificato_il: now, modificato_da: me, rev: (parseInt(u.rev, 10) || 1) + 1 }), prima = {};
+        Object.keys(all).forEach(function (h) { if (h in tU.idx) { prima[h] = u[h]; upd.push({ range: tU.cell(h, u._r), values: [[String(all[h])]] }); } });
+        // specchio nei movimenti IN/OUT e nelle righe di spedizione (solo dove c'è il valore vecchio)
+        var cambi = {}; Object.keys(ch).forEach(function (k) { if (Spec.CAMPI.indexOf(k) >= 0) cambi[k] = [L.s(u[k]), L.s(ch[k])]; });
+        var sp = Spec.movimenti(tM, mr, u.id_unita, cambi, null); upd = upd.concat(sp.upd); loc = loc.concat(sp.loc);
+        var mi = (Sto.dati.cur || []).find(function (m) { return m.id_mov === u.id_mov_in; }), rI = mi && mr[mi.id_mov];
+        if (rI && it.vlt && ('stato_vlt' in tM.idx)) { upd.push({ range: tM.cell('stato_vlt', rI), values: [[it.vlt.stato]] }); loc.push([mi, 'stato_vlt', it.vlt.stato]); }
+        if (rI && ('note' in ch) && ('note' in tM.idx) && (!L.s(mi.note) || L.s(mi.note) === Spec.pulita(u.note))) { var nn = Spec.pulita(ch.note); upd.push({ range: tM.cell('note', rI), values: [[nn]] }); loc.push([mi, 'note', nn]); }
+        var cs = Object.keys(cambi).filter(function (c) { return Spec.SPED.indexOf(c) >= 0 && (c in tS.idx); });
+        if (cs.length) tS.rows.forEach(function (r) { if (r.id_unita === u.id_unita) cs.forEach(function (c) { if (L.s(r[c]) === cambi[c][0]) { upd.push({ range: tS.cell(c, r._r), values: [[cambi[c][1]]] }); loc.push([r, c, cambi[c][1]]); } }); });
+        // anomalia FR mancante chiusa
+        if (it.pend) tA.rows.forEach(function (a) { if (a.id_unita === u.id_unita && a.tipo === 'FR_MANCANTE' && a.stato === 'APERTA') [['stato', 'RISOLTA'], ['risolta_il', now], ['risolta_da', me], ['nota_risoluzione', 'FR ' + ch.fr + ' assegnato (bonifica da Excel)'], ['fr', ch.fr]].forEach(function (x) { if (x[0] in tA.idx) { upd.push({ range: tA.cell(x[0], a._r), values: [[x[1]]] }); loc.push([a, x[0], x[1]]); } }); });
+        var desc = Object.keys(it.ch).map(function (k) { return (Bon.NOMI[k] || k) + ': ' + ((k === 'note' ? Spec.pulita(u.note) : L.s(u[k])) || '—') + ' → ' + (L.s(it.ch[k]) || '—'); });
+        var x = Object.assign({}, u, ch);
+        movs.push({ data_ora: now, direzione: 'INT', causale: 'VARIAZIONE', id_unita: u.id_unita, seriale: x.seriale, pn: x.pn, mnft: x.mnft, tipo: x.tipo, fr: x.fr, rma: x.rma, riparatore: x.riparatore, ubicazione_da: u.ubicazione, ubicazione_a: x.ubicazione, operatore: me, operatore_sigla: sg, note: 'Bonifica da Excel (' + Bon._file + ') · ' + desc.join(' · '), origine: 'APP' });
+        logs.push(App.log(it.pend ? 'BONIFICA_EXCEL_FR' : 'BONIFICA_EXCEL', 'UNITA', u.id_unita, { file: Bon._file, prima: prima, dopo: it.ch, automatici: it.auto, avvisi: it.avv }));
+        fatti.push([u, all]);
+      });
+      if (!fatti.length) { Modal.close(); Modal.open('Nessuna scheda salvata', saltati.join('\n')); return; }
+      for (var i = 0; i < upd.length; i += 400) await API.batchUpdate(DB.id, upd.slice(i, i + 400));
+      var r0 = await API.append(DB.id, 'MOVIMENTI', movs.map(function (m) { return tM.toRow(m); })), base = parseInt(DB.param('mov_id_base', ''), 10) || 0;
+      if (r0) { movs.forEach(function (m, k) { m.id_mov = 'MV' + (base + r0 + k); }); await API.batchUpdate(DB.id, [{ range: tM.cell('id_mov', r0) + ':' + tM.col('id_mov') + (r0 + movs.length - 1), values: movs.map(function (m) { return [m.id_mov]; }) }]).catch(function () { }); }
+      logs.push(App.log('BONIFICA_EXCEL_FILE', 'UNITA', Bon._file, { schede: fatti.length, con_fr_assegnato: sel.filter(function (x) { return x.pend; }).length, saltate: saltati }));
+      await API.append(DB.id, 'LOG', logs);
+      fatti.forEach(function (x) { Object.keys(x[1]).forEach(function (h) { x[0][h] = String(x[1][h]); }); });
+      Spec.applica(loc);
+      if (Sto.dati.cur) movs.forEach(function (m) { Sto.COLS.forEach(function (c) { if (!(c in m)) m[c] = ''; }); Sto.dati.cur.push(m); });
+      Export.scrivi().catch(function () { });
+      Modal.close(); Bon.L = null; Bon._pm = null;
+      Giacenze.render(); Ingresso.renderPend(); App.syncInfo();
+      if (saltati.length) Modal.open('Bonifica: ' + fatti.length + ' schede salvate', 'Saltate (scaricale di nuovo e riprova):\n• ' + saltati.join('\n• '));
+      else toast('Bonifica: ' + fatti.length + ' schede aggiornate', 'ok');
+    } catch (e) { Modal.close(); Modal.open('Errore durante la bonifica', e.message + '\n\nPremi Aggiorna e controlla le schede prima di riprovare.'); }
   }
 };
 
