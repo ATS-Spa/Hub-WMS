@@ -3535,7 +3535,7 @@ var Ack = {
         '<div class="hint">' + esc(rp.ragione_sociale || '') + (rp.indirizzo ? ' · ' + esc(rp.indirizzo) : '') + (s && s.n_ddt ? ' · <b>DDT ' + esc(s.n_ddt) + '</b>' : '') + '</div>' +
         (chc ? '<div class="blk-banner" style="margin:6px 0">⛔ ' + esc(Chi.testo(chc)) + ': non si spedisce, le schede restano in hub fino alla riapertura</div>' : '') +
         '<div class="ack-nums">' + nums + (s && s.n_colli ? '<span>colli <b>' + esc(s.n_colli) + '</b> · <b>' + esc(s.peso_tot_kg) + '</b> kg</span>' : '') + '</div>' +
-        '<div class="row"><div class="fg" style="flex:1;min-width:130px"><span class="fl">AWB (Service Desk)</span><input class="fc mono" id="awb_' + k + '" value="' + esc(s ? s.awb : '') + '"' + lock + ' oninput="var v=L.vettoreDaAwb(this.value,DB.t.VETTORI.rows);if(v)$(\'vet_' + k + '\').value=v"></div>' +
+        '<div class="row"><div class="fg" style="flex:1;min-width:130px"><span class="fl">AWB</span><input class="fc mono" id="awb_' + k + '" value="' + esc(s ? s.awb : '') + '"' + lock + ' oninput="var v=L.vettoreDaAwb(this.value,DB.t.VETTORI.rows);if(v)$(\'vet_' + k + '\').value=v"></div>' +
         '<div class="fg" style="width:110px"><span class="fl">Vettore</span><input class="fc" id="vet_' + k + '" list="dlVettori" value="' + esc(s ? s.vettore : '') + '"' + lock + '></div>' +
         (lock ? '' : '<button class="btn ghost sm" onclick="Ack.salvaAwb(\'' + esc(cod) + '\')">Salva</button>') + '</div>' +
         '<div class="row" style="align-items:center">' + btn + '</div></div>';
@@ -4034,7 +4034,7 @@ var Rma = {
       }).join('') + '</div></div>';
   },
   // ─ EXCEL RMA per il Service Desk: scarica le schede filtrate, il SD compila RMA CREATO (e NUOVA DESTINAZIONE se cambia), poi si reimporta
-  XR: ['P/N', 'MATERIAL', 'ID UNITA', 'SERIALE', 'FR', 'TIPO', 'MNFT', 'REPAIR', 'DESTINAZIONE ORIGINALE', 'DESTINAZIONE ATTUALE', 'NUOVA DESTINAZIONE', 'RMA CREATO', 'RMA GIACENZA PROPOSTO', 'DESTINAZIONE RITORNO', 'DATA OPEN', 'SCADENZA', 'NOTE SD'],
+  XR: ['P/N', 'MATERIAL', 'ID UNITA', 'SERIALE', 'FR', 'TIPO', 'MNFT', 'REPAIR', 'DESTINAZIONE ORIGINALE', 'DESTINAZIONE ATTUALE', 'NUOVA DESTINAZIONE', 'RMA CREATO', 'RMA GIACENZA PROPOSTO', 'DESTINAZIONE RITORNO', 'DATA OPEN', 'SCADENZA', 'NOTE SD', 'RMA AL DOWNLOAD'],
   destinazioni: function () {
     var m = {}; function add(x) { x = L.s(x); if (x && !m[L.up(x)]) m[L.up(x)] = x; }
     DB.t.CONTROPARTI.rows.forEach(function (r) { add(r.codice); });
@@ -4048,11 +4048,11 @@ var Rma = {
       var v = Rma.varia(u), a = Rma.ritDi(u), o = Rma.origine(u), att = v ? v.nuova : L.s(Rma.dv(u, 'dest'));
       var orig = u.tipo === 'GOOD' ? (o[0] || (v ? v.prima : '') || att) : att;   // dove andava (deposito VLT dell'FR) → dove va adesso
       return [u.pn, c.materialDi(u), u.id_unita, u.seriale, u.fr, u.tipo, u.mnft, u.riparatore, orig, att, '', L.s(Rma.dv(u, 'rma')),
-        a ? a.rma.id_rma : '', a ? Rma.destRma(a.rma) : '', a ? L.s(a.rma.data_apertura).slice(0, 10) : '', a ? a.rma.data_scadenza : '', a && a.rma.failure_report ? 'RITORNO GIACENZA FR ' + a.rma.failure_report : ''];
+        a ? a.rma.id_rma : '', a ? Rma.destRma(a.rma) : '', a ? L.s(a.rma.data_apertura).slice(0, 10) : '', a ? a.rma.data_scadenza : '', a && a.rma.failure_report ? 'RITORNO GIACENZA FR ' + a.rma.failure_report : '', L.s(Rma.dv(u, 'rma'))];
     });
     // carichi NEW/REUSE aperti: come le GOOD, l'RMA (e la destinazione) si possono dare da qui
     var UU = {}; DB.t.UNITA.rows.forEach(function (u) { UU[u.id_unita] = u; });
-    (soloCar ? ((Rma.grids.car && Rma.grids.car.visibili) || Rma.carichi()) : Rma.carichi()).forEach(function (k) { var u = UU[k.id_unita] || {}; rows.push([k.pn, L.mat(u.material) || c.materialDi(u), k.id_unita, k.seriale, '', k.tipo, u.mnft || '', '', k.destinazione, k.destinazione, '', L.s(k.rma), '', '', '', '', 'CARICO ' + k.id_carico]); });
+    (soloCar ? ((Rma.grids.car && Rma.grids.car.visibili) || Rma.carichi()) : Rma.carichi()).forEach(function (k) { var u = UU[k.id_unita] || {}; rows.push([k.pn, L.mat(u.material) || c.materialDi(u), k.id_unita, k.seriale, '', k.tipo, u.mnft || '', '', k.destinazione, k.destinazione, '', L.s(k.rma), '', '', '', '', 'CARICO ' + k.id_carico, L.s(k.rma)]); });
     if (!rows.length) { toast('Nessuna scheda GOOD/BALANCING o carico tra le righe filtrate', 'ko'); return; }
     var D = Rma.destinazioni(), dest = Object.keys(D).map(function (k) { return D[k]; }).sort();
     var istr = ['1. Compila solo le colonne gialle: NUOVA DESTINAZIONE (menu a tendina, solo se il pezzo deve andare altrove) e RMA CREATO.',
@@ -4060,7 +4060,8 @@ var Rma = {
       '3. DESTINAZIONE ORIGINALE = dove andava il pezzo (deposito VLT dell FR); DESTINAZIONE ATTUALE = dove va adesso (anche per variazione da ritorno in giacenza).',
       '4. Non cambiare ID UNITA e SERIALE: servono per riconoscere la scheda. RMA di ' + Rma.cifre().join(' o ') + ' cifre. Lo stesso RMA può stare su più righe solo se la destinazione è la stessa.',
       '4b. Le righe con NOTE SD "CARICO …" sono carichi NEW/REUSE: si compilano allo stesso modo.',
-      '5. Poi in RMA → Inventario giornaliero premi "⬆ Importa RMA": vedi l anteprima e confermi.'];
+      '5. Poi in RMA → Inventario giornaliero premi "⬆ Importa RMA": vedi l anteprima e confermi.',
+      '6. Si può lavorare in più persone sullo stesso Excel (es. diviso per destinazioni): all import contano solo le righe che hai cambiato tu; le altre (e le celle lasciate vuote) non toccano quello che ha importato un collega. Non cancellare la colonna nascosta RMA AL DOWNLOAD.'];
     var nome = (soloCar ? 'Excel_RMA_carichi_' : 'Excel_RMA_') + L.isoToday() + '.xlsx';
     try {
       await Lib.exceljs();
@@ -4079,6 +4080,7 @@ var Rma = {
         if (ED[h]) for (var r = 2; r <= n; r++) ws.getCell(r, i + 1).fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FFFFF2CC' } };
       });
       ws.getColumn(Rma.XR.indexOf('RMA CREATO') + 1).numFmt = '@';
+      var cSnap = ws.getColumn(Rma.XR.indexOf('RMA AL DOWNLOAD') + 1); cSnap.numFmt = '@'; cSnap.hidden = true;   // serve all'import: se RMA CREATO non è cambiato, la riga non sovrascrive
       ws.autoFilter = { from: { row: 1, column: 1 }, to: { row: n, column: Rma.XR.length } };
       var wd = wb.addWorksheet('DESTINAZIONI'); wd.addRow(['DESTINAZIONE']); dest.forEach(function (d) { wd.addRow([d]); }); wd.getColumn(1).width = 46; wd.getRow(1).font = { bold: true };
       var colD = Rma.XR.indexOf('NUOVA DESTINAZIONE') + 1, colR = Rma.XR.indexOf('RMA CREATO') + 1;
@@ -4099,6 +4101,9 @@ var Rma = {
     var rows;
     try { rows = await leggiFoglio(f); } catch (e) { Modal.open('Importa RMA', 'File non leggibile: ' + e.message); return; }
     if (!rows.length || !('RMA CREATO' in rows[0]) || !('SERIALE' in rows[0] || 'ID UNITA' in rows[0])) { Modal.open('Importa RMA', 'Il file non è un Excel RMA: servono almeno le colonne SERIALE (o ID UNITA) e RMA CREATO.\nScaricalo con "⬇ Excel RMA".'); return; }
+    // dati freschi dal database: un collega può aver importato da poco il suo file
+    try { await DB.loadTables(['UNITA', 'CARICHI_RMA']); Rma.calcola(); } catch (e) { Modal.open('Importa RMA', 'Non riesco a rileggere il database: ' + e.message); return; }
+    var snap = 'RMA AL DOWNLOAD' in rows[0];
     var inv = Rma.inventario().slice(), byId = {}, bySer = {}, D = Rma.destinazioni(), carDi = {};
     Rma.carichi().forEach(function (k) { var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === k.id_unita; }); if (u) { carDi[u.id_unita] = k; inv.push(u); } });
     inv.forEach(function (u) { byId[u.id_unita] = u; [L.up(u.seriale), L.up(L.afterSpace(u.seriale))].forEach(function (k) { if (k && (bySer[k] = bySer[k] || []).indexOf(u) < 0) bySer[k].push(u); }); });
@@ -4110,11 +4115,17 @@ var Rma = {
       if (u && o.ser && cand.length && cand.indexOf(u) < 0) o.err = 'ID UNITA ' + o.id + ' e seriale ' + o.ser + ' non sono la stessa scheda';
       else if (!u) { if (cand.length === 1) u = cand[0]; else if (cand.length > 1) o.err = 'seriale presente su più schede: indica l ID UNITA'; else o.err = 'seriale non presente nell inventario giornaliero'; }
       o.u = u || null;
-      if (!o.err && !o.rma && !o.nd) { o.skip = 'niente da importare'; }
+      if (!o.err && !o.rma && !o.nd && !(snap && L.frKey(r['RMA CREATO']))) { o.skip = 'niente da importare'; }
       if (!o.err && u) {
         o.car = carDi[u.id_unita] || null;
         if (o.car) { o.rmaPrima = L.s(o.car.rma); o.destPrima = L.s(o.car.destinazione); }
         else { o.rmaPrima = L.s(Rma.dv(u, 'rma')); o.destPrima = (Rma.varia(u) || {}).nuova || L.s(Rma.dv(u, 'dest')); }
+        // file con la colonna RMA AL DOWNLOAD: se chi importa non ha cambiato RMA CREATO, la riga non tocca l'RMA (anche se un collega l'ha cambiato)
+        if (snap && o.rma) {
+          var sn = L.frKey(r['RMA AL DOWNLOAD']), ora = o.car ? L.s(o.car.rma) : L.s(u.rma);
+          if (o.rma === sn) o.rma = '';
+          else if (sn !== ora && o.rma !== ora) o.err = 'RMA cambiato da un altro dopo il tuo download (era ' + (sn || 'vuoto') + ', ora ' + (ora || 'vuoto') + '): riscarica l Excel RMA';
+        }
         if (o.rma) {
           if (u.tipo === 'BALANCING') o.err = 'balancing: l RMA non si cambia da qui';
           else { var re = Rma.rmaErr(o.rma, true); if (re) o.err = re; }
@@ -4400,7 +4411,7 @@ var Rma = {
       col = done ? col : Rma.colli[k];
       var peso = col.reduce(function (a, c) { return a + (parseFloat(String(c.peso).replace(',', '.')) || 0); }, 0);
       var bt = done ? '<button class="btn sm" onclick="Rma.stampa(\'' + s.id_spedizione + '\')">Stampa DDT</button> <button class="btn ghost sm" onclick="Rma.cedolini(\'' + s.id_spedizione + '\')">Cedolini</button>' + (s.link_pdf ? ' <a class="mail" target="_blank" href="' + esc(s.link_pdf) + '">PDF su Drive</a>' : '')
-        : '<button class="btn ghost sm" onclick="Rma.salvaDest(\'' + esc(g.dest) + '\')">Salva colli e AWB</button> <button class="btn sm green"' + (g.pronta ? '' : ' disabled title="Servono colli/peso salvati, AWB e almeno un pezzo"') + ' onclick="Rma.emettiUno(\'' + esc(g.dest) + '\')">Genera DDT</button> <button class="btn ghost sm" onclick="Rma.cedolini(null,\'' + esc(g.dest) + '\')">Cedolini</button>';
+        : '<button class="btn sm green"' + (g.pronta ? '' : ' disabled title="Servono colli/peso salvati, AWB e almeno un pezzo"') + ' onclick="Rma.emettiUno(\'' + esc(g.dest) + '\')">Genera DDT</button> <button class="btn ghost sm" onclick="Rma.cedolini(null,\'' + esc(g.dest) + '\')">Cedolini</button>';
       var lista = (done ? Ack.righe(s.id_spedizione).map(function (r) { return { u: { id_unita: r.id_unita, seriale: r.seriale, pn: r.pn, tipo: '' }, rma: r.rma, fonte: r.note }; }) : g.pezzi);
       return '<div class="ack-card">' +
         '<div class="row" style="align-items:center"><span class="t">' + esc(g.dest) + '</span><div class="spacer"></div><span class="pill ' + (PILL[st] || '') + '">' + esc(st) + '</span></div>' +
@@ -4416,16 +4427,36 @@ var Rma = {
           return '<tr><td><select class="fc" style="width:86px;padding:4px 6px" onchange="Rma.collo(\'' + k + '\',' + i + ',\'tipo\',this.value)"><option' + (c.tipo === 'COLLO' ? ' selected' : '') + '>COLLO</option><option' + (c.tipo === 'PLT' ? ' selected' : '') + '>PLT</option></select></td>' +
             '<td><input class="fc mono' + (c.misura && !L.misura(c.misura) ? ' err' : '') + '" style="width:110px;padding:4px 6px" list="dlMisure" value="' + esc(c.misura) + '" placeholder="40X30X20" onchange="Rma.collo(\'' + k + '\',' + i + ',\'misura\',this.value)"></td>' +
             '<td><input class="fc mono" style="width:64px;padding:4px 6px" inputmode="decimal" value="' + esc(c.peso) + '" placeholder="kg" onchange="Rma.collo(\'' + k + '\',' + i + ',\'peso\',this.value)"></td><td><button class="ico-btn" onclick="Rma.collo(\'' + k + '\',' + i + ',\'del\')">✕</button></td></tr>';
-        }).join('') + '</tbody></table><button class="btn ghost sm" style="align-self:flex-start" onclick="Rma.collo(\'' + k + '\',0,\'add\')">+ Collo</button>') +
-        '<div class="row"><div class="fg" style="flex:1;min-width:130px"><span class="fl">AWB (Service Desk)</span><input class="fc mono" id="uawb_' + k + '" value="' + esc(s ? s.awb : '') + '"' + lock + ' oninput="var v=L.vettoreDaAwb(this.value,DB.t.VETTORI.rows);if(v)$(\'uvet_' + k + '\').value=v"></div>' +
-        '<div class="fg" style="width:110px"><span class="fl">Vettore</span><input class="fc" id="uvet_' + k + '" list="dlVettori" value="' + esc(s ? s.vettore : '') + '"' + lock + '></div></div>' +
+        }).join('') + '</tbody></table><div class="row" style="gap:6px"><button class="btn ghost sm" onclick="Rma.collo(\'' + k + '\',0,\'add\')">+ Collo</button><button class="btn sm' + (Rma.colliSalvati(s, col) ? ' ghost' : '') + '" onclick="Rma.salvaColli(\'' + esc(g.dest) + '\')">' + (Rma.colliSalvati(s, col) ? '✓ Colli salvati' : 'Salva colli e peso') + '</button></div>') +
+        '<div class="row"><div class="fg" style="flex:1;min-width:130px"><span class="fl">AWB</span><input class="fc mono" id="uawb_' + k + '" value="' + esc(Rma.awbTmp[k] !== undefined ? Rma.awbTmp[k].awb : (s ? s.awb : '')) + '"' + lock + ' oninput="var v=L.vettoreDaAwb(this.value,DB.t.VETTORI.rows);if(v)$(\'uvet_' + k + '\').value=v;Rma.awbTmp[\'' + k + '\']={awb:this.value,vet:$(\'uvet_' + k + '\').value}"></div>' +
+        '<div class="fg" style="width:110px"><span class="fl">Vettore</span><input class="fc" id="uvet_' + k + '" list="dlVettori" value="' + esc(Rma.awbTmp[k] !== undefined ? Rma.awbTmp[k].vet : (s ? s.vettore : '')) + '"' + lock + ' oninput="Rma.awbTmp[\'' + k + '\']={awb:$(\'uawb_' + k + '\').value,vet:this.value}"></div>' +
+        (done ? '' : '<button class="btn sm' + (s && L.s(s.awb) && Rma.awbTmp[k] === undefined ? ' ghost' : '') + '" onclick="Rma.salvaAwbRma(\'' + esc(g.dest) + '\')">' + (s && L.s(s.awb) && Rma.awbTmp[k] === undefined ? '✓ AWB salvato' : 'Salva AWB') + '</button>') + '</div>' +
         '<div class="row" style="align-items:center">' + bt + '</div></div>';
     }).join('') + '</div>' : '<div class="card empty">Nessun pezzo da far uscire: GOOD e BALANCING in giacenza con destinazione, o carichi NEW/REUSE.</div>');
   },
   collo: function (k, i, f, v) { var c = Rma.colli[k] = Rma.colli[k] || []; if (f === 'del') c.splice(i, 1); else if (f === 'add') c.push({ tipo: (c[c.length - 1] || {}).tipo || 'COLLO', misura: '', peso: '' }); else c[i][f] = L.s(v).toUpperCase(); Rma.renderUscite(); },
-  salvaDest: async function (dest) {
+  awbTmp: {},
+  // colli già salvati e uguali a quelli a video?
+  colliSalvati: function (s, col) {
+    if (!s) return false; var db = Ack.colliDb(s.id_spedizione); if (!db.length || db.length !== col.length) return false;
+    return db.every(function (c, i) { var x = col[i] || {}, m = L.misura(x.misura) || []; return L.up(c.tipo_collo) === L.up(x.tipo || 'COLLO') && String(c.lunghezza_cm) === String(m[0]) && String(c.larghezza_cm) === String(m[1]) && String(c.altezza_cm) === String(m[2]) && parseFloat(c.peso_kg) === parseFloat(String(x.peso).replace(',', '.')); });
+  },
+  // AWB e vettore da soli (Service Desk o magazzino): non toccano colli e peso
+  salvaAwbRma: async function (dest) {
+    var d = $('uscData').value, k = Ack.key(dest), awb = L.up($('uawb_' + k).value).replace(/\s+/g, ''), vet = L.up($('uvet_' + k).value) || L.vettoreDaAwb(awb, DB.t.VETTORI.rows);
+    try {
+      await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_COLLI']);
+      var s = Rma.sped(d, dest), cp = Rma.cp(dest);
+      if (s && s.stato === 'SPEDITA') { toast('Già spedita: AWB non modificabile', 'ko'); Rma.render(); return; }
+      if (!s) s = await Rma.creaSped(d, dest, cp);
+      var prima = { awb: s.awb, vettore: s.vettore };
+      await Promise.all([API.batchUpdate(DB.id, Ack.setS(s, { awb: awb, vettore: vet })), API.append(DB.id, 'LOG', [App.log('RMA_AWB', 'SPEDIZIONI', s.id_spedizione, { destinazione: dest, prima: prima, dopo: { awb: awb, vettore: vet } })])]);
+      delete Rma.awbTmp[k]; toast(dest + ': AWB ' + (awb || '(vuoto)') + ' salvato', 'ok'); Rma.render();
+    } catch (e) { Modal.open('Errore AWB', e.message); }
+  },
+  // colli e peso da soli (magazzino, prima che ci sia l'AWB): l'AWB già salvato resta com'è
+  salvaColli: async function (dest) {
     var d = $('uscData').value, k = Ack.key(dest), col = Rma.colli[k] || [], err = Ack.validaColli(col);
-    var awb = L.up($('uawb_' + k).value).replace(/\s+/g, ''), vet = L.up($('uvet_' + k).value) || L.vettoreDaAwb(awb, DB.t.VETTORI.rows);
     if (err.length) { Modal.open('Colli e peso · ' + dest, err.join('\n')); return; }
     try {
       await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_COLLI']);
@@ -4440,8 +4471,9 @@ var Rma = {
       objs.forEach(function (o, i) { o.id_collo = 'C' + L.pad(DB.rid('SPEDIZIONI_COLLI', r + i), 6); Ack.pushRow(tC, o, r + i); });
       var peso = objs.reduce(function (a, o) { return a + parseFloat(o.peso_kg); }, 0);
       await API.batchUpdate(DB.id, [{ range: tC.cell('id_collo', r) + ':' + tC.col('id_collo') + (r + objs.length - 1), values: objs.map(function (o) { return [o.id_collo]; }) }]
-        .concat(Ack.setS(s, { stato: 'PRONTA', n_colli: objs.length, peso_tot_kg: Math.round(peso * 100) / 100, awb: awb, vettore: vet })));
-      delete Rma.colli[k]; toast(dest + ': colli e AWB salvati', 'ok'); Rma.render();
+        .concat(Ack.setS(s, { stato: 'PRONTA', n_colli: objs.length, peso_tot_kg: Math.round(peso * 100) / 100 })));
+      await API.append(DB.id, 'LOG', [App.log('RMA_COLLI', 'SPEDIZIONI', s.id_spedizione, { destinazione: dest, colli: objs.length, peso_kg: Math.round(peso * 100) / 100 })]);
+      delete Rma.colli[k]; toast(dest + ': colli e peso salvati' + (L.s(s.awb) ? '' : ' · manca l\'AWB'), 'ok'); Rma.render();
     } catch (e) { Modal.open('Errore', e.message); }
   },
   creaSped: async function (d, dest, cp) {
