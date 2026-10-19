@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ATS FLM → VLT · Chiusure
 // @namespace    ats-spa.flm
-// @version      1.0.4
+// @version      1.0.5
 // @description  Chiude su VLT ingressi del giorno (op. linea), ACK, RMA e spare ferme in HUB con i dati dell'app "ATS - Fastweb FLM". Sostituisce i 4 script con i CSV.
 // @match        https://logistictoolvf.net.vodafone.it/*
 // @match        https://ats-spa.github.io/*
@@ -26,7 +26,7 @@
 */
 (function () {
   'use strict';
-  var VER = '1.0.4';
+  var VER = '1.0.5';
   var VLT_HOST = 'logistictoolvf.net.vodafone.it';
   var K = { CODA: 'ats_coda', STATO: 'ats_stato_', PEND: 'ats_esiti_pending', RICH: 'ats_richiesta', APP: 'ats_app_url', VIVO: 'ats_vlt_vivo', RUN: 'ats_run', UI: 'ats_ui', RICEVUTI: 'ats_esiti_ricevuti' };
   // esiti da consegnare = scritti da VLT (PEND) meno quelli già confermati dall'app (RICEVUTI): ognuno scrive solo la sua chiave
@@ -212,15 +212,27 @@
         var inv = $$('form .ng-invalid[id], form .ng-invalid[formcontrolname], form .is-invalid[id]').map(function (e) { return String(e.id || e.getAttribute('formcontrolname')).replace(/^field_/, ''); });
         throw Errore('VLT non fa salvare: campi obbligatori ' + (inv.length ? inv.join(', ') : 'mancanti'), 'MODULO');
       }
+      var idS = String(($('#field_id') || {}).value || (/\/(\d+)\/edit/.exec(location.hash) || [])[1] || '').trim();
+      var scrittura = function (e) { return e.t0 >= t0 && (e.m === 'PUT' || e.m === 'POST' || e.m === 'PATCH') && rx.test(e.u); };
+      // conferma di VLT a video: messaggio verde "... is updated/created with identifier <id>"
+      var conferma = function () { var t = norm(document.body.innerText); return /(is|è) (updated|created|aggiornat|creat)\w* with identifier|with identifier/.test(t) && (!idS || t.indexOf(idS.toLowerCase()) >= 0); };
       var t0 = Date.now(); btn.click();
-      var r = await netAttendi(function (e) { return (e.m === 'PUT' || e.m === 'POST' || e.m === 'PATCH') && rx.test(e.u); }, 25000, t0);
+      var r = await netAttendi(scrittura, 25000, t0);
       if (!r) {
         if (norm(document.body.innerText).indexOf('internal server error') >= 0) { chiudiErrore(); throw Errore('Errore 500 di VLT'); }
-        var via = await attendi(function () { return !/\/edit/.test(location.hash); }, 4000);
+        var via = await attendi(function () { return !/\/edit/.test(location.hash) || conferma(); }, 4000);
         if (via) return { verificato: false };
         throw Errore('Nessuna conferma del salvataggio da VLT');
       }
-      if (r.s === 0 || r.s >= 400) { chiudiErrore(); throw Errore('Salvataggio rifiutato da VLT (' + r.s + ')' + msgServer(r.b)); }
+      // VLT può fare più chiamate (una annullata con stato 0, una secondaria in errore): basta che una risponda OK
+      await sleep(1500);
+      var W = NET.filter(scrittura), ok = W.filter(function (e) { return e.s >= 200 && e.s < 300; });
+      if (!ok.length) {
+        var esce = await attendi(function () { return conferma() || !/\/edit/.test(location.hash); }, 5000);
+        var ko = W.filter(function (e) { return e.s >= 400; });
+        if (conferma() || (esce && !ko.length)) { console.log('[ATS→VLT] salvataggio confermato da VLT a video (rete: ' + W.map(function (e) { return e.m + ' ' + e.s; }).join(', ') + ')'); return { verificato: true }; }
+        var k = ko[ko.length - 1] || W[W.length - 1]; chiudiErrore(); throw Errore('Salvataggio rifiutato da VLT (' + k.s + ')' + msgServer(k.b));
+      }
       await attendi(function () { return !/\/edit/.test(location.hash); }, 5000);
       return { verificato: true };
     };
@@ -392,6 +404,47 @@
         await sleep(300);
       }
     };
+    // RMA MNF: dalla lista RMA a video, ogni RMA in "To Ship From CW" → "Material Not Found" (come il vecchio script, ma
+    // con pausa/ferma, conferma del salvataggio e senza riaprire due volte lo stesso RMA). Esiti nell'app (procedura MNF).
+    var mnf = async function () {
+      if (RUN.on) return;
+      if (!/#\/rma/i.test(location.hash) || !$('input#currentSearch')) { UI.log('⚠ MNF: apri prima la lista RMA di VLT (filtrata su To Ship From CW), poi riprova.'); return; }
+      var righe = function () { return $$('table tbody tr').filter(function (r) { return r.offsetParent && $$('td', r).length > 1; }); };
+      var n0 = righe().length;
+      if (!n0) { UI.log('MNF: nessuna riga nella lista.'); return; }
+      if (!confirm('Material Not Found\n\nPorto in "Material Not Found" gli RMA "To Ship From CW" della lista a video (' + n0 + ' righe in questa pagina).\nGli altri stati non vengono toccati.\n\nProcedo?')) return;
+      var c = { id: 'MNF' + oggi().replace(/-/g, ''), proc: 'MNF', nome: 'RMA Material Not Found', giorno: oggi(), items: [] };
+      RUN.on = true; RUN.stop = false; RUN.pausa = false; UI.agg(); UI.log('▶ MNF: avvio');
+      var fatti = {}, nOk = 0, nSalt = 0;
+      try {
+        while (!RUN.stop) {
+          while (RUN.pausa && !RUN.stop) await sleep(300);
+          await attendi(function () { return righe().length || null; }, 15000);
+          var tr = righe().find(function (r) { var id = norm(($$('td', r)[0] || {}).textContent); return id && !fatti[id] && norm(r.textContent).indexOf('material not found') < 0; });
+          if (!tr) break;
+          var rma = String(($$('td', tr)[0] || {}).textContent || '').trim(); fatti[norm(rma)] = 1;
+          UI.ora('MNF · RMA ' + rma);
+          var ed = $$('a, button', tr).find(function (x) { return x.textContent.trim() === 'Modifica'; }) || $$('a, button', tr).find(function (x) { return x.querySelector('svg[data-icon="pencil-alt"],svg[data-icon="pencil"]'); });
+          if (!ed) { UI.log('✗ ' + rma + ' · tasto Modifica non trovato'); break; }
+          ed.click();
+          var sel = await attendi(function () { var x = $('select#field_rmaStatus'); return x && x.options.length > 1 && testoSel(x) ? x : null; }, 15000);
+          var it = { k: 'MNF:' + rma, rma: rma }, r;
+          if (!sel) { r = { esito: 'ERRORE', dettaglio: 'scheda RMA non caricata' }; }
+          else {
+            await sleep(400); var S0 = testoSel(sel);
+            if (norm(S0) !== 'to ship from cw') { await esciForm(); r = { esito: 'SALTATO', stato_prima: S0, stato_dopo: S0, dettaglio: 'stato non To Ship From CW' }; nSalt++; }
+            else {
+              try { await scegli('select#field_rmaStatus', 'Material Not Found'); await salva(RX_RMA); r = esitoOk(S0, 'Material Not Found'); nOk++; }
+              catch (e) { if (e instanceof Ferma) throw e; r = { esito: 'ERRORE', stato_prima: S0, dettaglio: e.message }; if ($('select#field_rmaStatus')) await esciForm(); }
+            }
+          }
+          c.items.push(it); registra(c, it, r);
+          UI.log((r.esito === 'OK' ? '✓ ' : r.esito === 'SALTATO' ? '» ' : '✗ ') + rma + ' · ' + (r.stato_dopo || '') + (r.dettaglio ? ' · ' + r.dettaglio : ''));
+          await attendi(function () { return $('input#currentSearch'); }, 10000); await sleep(800);
+        }
+      } catch (e) { if (!(e instanceof Ferma)) UI.log('✗ MNF: ' + e.message); }
+      finally { RUN.on = false; RUN.pausa = false; RUN.stop = false; UI.ora('MNF finito: ' + nOk + ' in Material Not Found, ' + nSalt + ' saltati.'); UI.agg(); }
+    };
     var PROC = {
       INGRESSI: { nome: 'Ingressi del giorno', fai: chiudiFR },
       FERME: { nome: 'Spare ferme in HUB', fai: function (it) { return chiudiFR(it, 'FERME'); } },
@@ -531,7 +584,8 @@
         else h += '<div class="info">Nessuna coda. Inviala dall\'app (tab Chiusure VLT) o prendila qui sotto.</div>';
         if (RUN.on) h += '<button data-a="pausa" class="' + (RUN.pausa ? 'v' : 'g') + '">' + (RUN.pausa ? '▶ Riprendi' : '⏸ Pausa') + '</button><button data-a="stop" class="r">■ Ferma</button>';
         else if (c) h += '<button data-a="avvia" class="v"' + (n.da + n.ERRORE ? '' : ' disabled') + '>▶ ' + (n.OK + n.GIA_FATTO + n.SALTATO + n.ERRORE ? 'Riprendi' : 'Avvia') + '</button><button data-a="prova" class="g" title="Fa una sola scheda e si ferma">Prova 1</button><button data-a="errori" class="g"' + (n.ERRORE ? '' : ' disabled') + '>↻ Riprova errori</button><button data-a="report" class="g">⬇ Report</button>';
-        if (!RUN.on) h += '<div style="margin-top:6px"><select data-a="proc"><option value="INGRESSI">Ingressi del giorno</option><option value="ACK">ACK del giorno</option><option value="RMA">RMA del giorno</option><option value="FERME">Spare ferme in HUB</option></select> <button data-a="chiedi" class="g">📥 Prendi dati da ATS</button></div>';
+        if (!RUN.on) h += '<div style="margin-top:6px"><select data-a="proc"><option value="INGRESSI">Ingressi del giorno</option><option value="ACK">ACK del giorno</option><option value="RMA">RMA del giorno</option><option value="FERME">Spare ferme in HUB</option></select> <button data-a="chiedi" class="g">📥 Prendi dati da ATS</button></div>' +
+          '<div style="margin-top:4px"><button data-a="mnf" class="r" title="Lista RMA a video: To Ship From CW → Material Not Found">🔧 RMA → Material Not Found (lista a video)</button></div>';
         if (c && c.proc === 'RMA') h += '<div style="margin-top:4px"><label><input type="checkbox" data-a="rmaAuto"' + (cfg.rmaAuto ? ' checked' : '') + '> RMA: salva da solo (senza controllo seriali)</label></div>';
         if (UI._ser) {
           var s = UI._ser;
@@ -557,6 +611,7 @@
             if (a === 'stop') { RUN.stop = true; RUN.pausa = false; UI.ora('Mi fermo dopo il passo in corso…'); }
             if (a === 'report') report();
             if (a === 'salta') RUN.attesa = 'salta';
+            if (a === 'mnf') mnf();
             if (a === 'chiedi') chiediDati(($('#atsVlt select[data-a="proc"]') || {}).value || 'INGRESSI');
           };
         });
