@@ -3259,6 +3259,25 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
           <div class="step-body">Sotto trovi gli <strong>ingressi di oggi</strong> (tuoi o di tutti). Clicca una riga per correggerla: le modifiche aggiornano anche giacenza e movimenti e restano nel Log.</div>
         </div>
       </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">5</span>
+        <div>
+          <div class="step-title">Ubicazione anche per FAULTY e GOOD</div>
+          <div class="step-body">Il campo <strong>Ubicazione</strong> c'è anche per FAULTY e GOOD, <strong>facoltativo</strong> (per NEW/REUSE resta obbligatorio): funziona come per i NEW/REUSE, resta impostato tra un pezzo e l'altro e si può correggere sulla riga (✎ ubicazione). Finisce in giacenza e nel movimento di ingresso.</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">6</span>
+        <div>
+          <div class="step-title">FAULTY o GOOD senza FR (pending)</div>
+          <div class="step-body">Se l'FR manca o non è su VLT la riga è rossa: premi <strong>⏳ Pending senza FR</strong> e scegli il motivo (FR non ancora aperto dal Service Desk, Etichetta mancante, FR errato, Altro con dettaglio). Il pezzo si carica con gli altri ma entra <span class="tag amber">IN ATTESA</span>: conta in giacenza, non va in ACK, RMA né export, e si apre un'anomalia FR mancante.</div>
+        </div>
+      </div>
+      <div class="step-detail"><ul class="checklist amber"><li><span>Finito il caricamento si apre la <strong>mail al Service Desk</strong> con la tabella completa dei pezzi senza FR di quell'ingresso; dalla scheda <strong>⏳ In attesa di FR</strong> c'è anche <strong>✉ Mail Service Desk (elenco completo)</strong> con tutti quelli ancora fermi.</span></li><li><span>In <strong>⏳ In attesa di FR</strong> l'app propone l'FR trovato su VLT per quel seriale, solo se è in <strong>Failed Material Sent</strong> o <strong>Open</strong> e aperto da non più di 60 giorni prima dell'entrata (parametri <code>pending_fr_stati</code>, <code>pending_fr_giorni</code>): <strong>Conferma</strong>. Oppure scrivi l'FR e premi <strong>Assegna</strong> (avvisa se il seriale su VLT è diverso o se l'FR è già in giacenza).</span></li><li><span>Assegnato l'FR il pezzo torna IN GIACENZA, il movimento di ingresso prende l'FR, l'anomalia si chiude e l'FR entra nella coda "Ingressi del giorno" di Chiusure VLT di quel giorno.</span></li></ul></div>
     </div><div class="infobox info"><span class="ib-icon">ℹ️</span><div class="ib-body">Per gli ingressi conta la <strong>data di registrazione VLT</strong> (DATA RECEIVED AND VERIFY), non solo la data in hub.</div></div>
   </div>
   <div class="nav-btns">
