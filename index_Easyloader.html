@@ -98,9 +98,9 @@ a.btn{text-decoration:none;display:inline-block}
 .btn.green{background:var(--green)} .btn.red{background:var(--red)} .btn.sm{padding:5px 10px;font-size:12px}
 .row{display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap}
 .spacer{flex:1}
-.scan-row{display:grid;grid-template-columns:minmax(150px,220px) minmax(320px,1fr) minmax(200px,280px) auto;gap:10px;align-items:start}
-.scan-row .btn{margin-top:19px}
-@media (max-width:900px){.scan-row{grid-template-columns:1fr 1fr}}
+.scan-row{display:flex;flex-wrap:wrap;gap:10px;align-items:flex-start}.scan-row>.fg{flex:0 1 230px;min-width:140px}.scan-row>.fg#wrapPlt{flex:0 0 auto}.scan-row>.fg.fr-w{flex:0 1 220px}.scan-row>.fg.bc-w{flex:1 1 320px}.scan-row>.fg#wrapPnR{flex:0 1 230px}
+.scan-row>.btn{margin-top:19px}
+@media (max-width:900px){.scan-row>.fg,.scan-row>.fg.bc-w{flex:1 1 45%}}
 .stats{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:10px}
 .stat{background:var(--card);border:1px solid var(--border);border-radius:10px;padding:6px 12px;min-width:96px}
 .stat b{font-family:var(--ff-cond);font-size:20px;font-weight:800;display:block}
@@ -267,7 +267,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
   .card-t{font-size:17px}
   .hdr .fg,.hdr .fg.mid{width:calc(50% - 6px)}
   .hdr .fg.auto{width:100%}
-  .scan-row{grid-template-columns:1fr;gap:8px}
+  .scan-row{gap:8px}.scan-row>.fg,.scan-row>.fg.bc-w,.scan-row>.fg.fr-w{flex:1 1 100%}
   .scan-row .btn{margin-top:0;width:100%;padding:12px}
   /* niente zoom automatico di iOS sugli input e tasti più grandi per il touch */
   .fc,.g-f,.edit-cell{font-size:16px}
@@ -397,8 +397,9 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
       <div class="card">
         <div class="card-h"><div class="card-t">Lettura pezzi</div><span class="hint" id="hScan">Spara il seriale: l'FR compare da solo. Invio o Tab sul seriale aggiunge la riga. Se scrivi l'FR, il seriale compare da VLT.</span></div>
         <div class="scan-row">
-          <div class="fg"><span class="fl" id="lblFr">FR</span><input class="fc mono" id="scFr" autocomplete="off" placeholder="si compila dal seriale"><span class="hint" id="hFr"></span></div>
-          <div class="fg"><span class="fl">Barcode seriale</span><input class="fc mono" id="scBc" autocomplete="off" placeholder="spara qui il seriale"><span class="hint" id="hBc"></span></div>
+          <div class="fg fr-w"><span class="fl" id="lblFr">FR</span><input class="fc mono" id="scFr" autocomplete="off" placeholder="si compila dal seriale"><span class="hint" id="hFr"></span></div>
+          <div class="fg bc-w"><span class="fl">Barcode seriale</span><input class="fc mono" id="scBc" autocomplete="off" placeholder="spara qui il seriale"><span class="hint" id="hBc"></span></div>
+          <div class="fg" id="wrapPnR" style="display:none"><span class="fl" style="color:var(--amber)">P/N (non ricavato dal barcode)</span><input class="fc mono" id="scPnR" autocomplete="off" placeholder="scrivi il P/N"><span class="hint" id="hPnR"></span></div>
           <div class="fg" id="wrapPn"><span class="fl">P/N (NEW/REUSE, resta fisso)</span><input class="fc mono" id="scPn" autocomplete="off" placeholder="vuoto = dal barcode" onchange="Ingresso.pnFisso()"><span class="hint" id="hPn"></span></div>
           <div class="fg" id="wrapUbi"><span class="fl" id="lblUbi">Ubicazione</span><input class="fc mono" id="scUbi" list="dlUbicazioni" autocomplete="off" placeholder="es. AB07CY"></div>
           <div class="fg" id="wrapPlt"><span class="fl">Pallet</span><div style="display:flex;gap:6px"><input class="fc mono" id="scPlt" style="width:110px" autocomplete="off" placeholder="—" onchange="Pallet.imposta(this.value)"><button class="btn ghost sm" type="button" onclick="Pallet.nuovo()" title="Assegna il prossimo numero pallet (FLM …): l'ubicazione va riscritta">＋ Nuovo pallet</button></div></div>
@@ -1317,7 +1318,9 @@ var Ingresso = {
     } else Ingresso.nuovo(true);
     var fr = $('scFr'), bc = $('scBc'), ub = $('scUbi');
     function nextOn(e, fn) { if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) { e.preventDefault(); fn(); } }
-    function avanti() { if (!L.s(bc.value) && !L.s(fr.value)) return; if (Ingresso.needUbi() && !L.s(ub.value)) ub.focus(); else Ingresso.aggiungi(); }
+    function avanti() { if (!L.s(bc.value) && !L.s(fr.value)) return; if (Ingresso.needUbi() && !L.s(ub.value)) ub.focus(); else if ($('wrapPnR').style.display !== 'none' && !L.s($('scPnR').value)) { $('scPnR').focus(); $('hPnR').textContent = 'Invio per aggiungere (anche vuoto: lo correggi sulla riga)'; } else Ingresso.aggiungi(); }
+    $('scPnR').addEventListener('keydown', function (e) { nextOn(e, function () { Ingresso.aggiungi(); }); });
+    $('scPnR').addEventListener('input', function () { this.value = this.value.toUpperCase(); });
     var tA, tB;
     bc.addEventListener('input', function () { clearTimeout(tA); tA = setTimeout(function () { Ingresso.anteprima('bc'); }, 120); });
     fr.addEventListener('input', function () { clearTimeout(tB); tB = setTimeout(function () { Ingresso.anteprima('fr'); }, 120); });
@@ -1385,7 +1388,10 @@ var Ingresso = {
     if (fr && !/^\d+$/.test(fr)) { toast('FR/RMA deve essere un numero', 'ko'); $('scFr').focus(); return; }
     var pnF = Ingresso.needUbi() ? L.up($('scPn').value) : '', plt = Ingresso.needUbi() ? L.s($('scPlt').value) : '';
     if (Ingresso.needUbi() && !plt) { Pallet.nuovo(function () { Ingresso.aggiungi(); }); return; }   // primo pezzo: il pallet si crea da solo
+    var pnR = $('wrapPnR').style.display !== 'none' ? L.up($('scPnR').value) : '';
+    if (pnR && !pnF) pnF = pnR;
     Ingresso.rows.push({ fr: fr, bc: bc, ubi: ub, plt: plt, ser: '', pn: '', man: pnF ? { pn: pnF } : {} });
+    Ingresso.pnR(false);
     $('scFr').value = ''; $('scBc').value = ''; $('scFr').dataset.auto = '0'; $('scBc').dataset.auto = '0'; $('hFr').textContent = ''; $('hBc').textContent = '';
     if (!Ingresso.mostraUbi()) $('scUbi').value = '';
     Ingresso.fitScan(); Ingresso.ricalcola(); Ingresso.save(); $('scBc').focus();
@@ -1507,13 +1513,20 @@ var Ingresso = {
   // sotto il campo seriale: seriale pulito e P/N con l'esito anagrafica, prima di premere Tab
   anteprimaSer: function () {
     var b = L.s($('scBc').value), h = $('hBc');
-    if (!b) { h.textContent = ''; h.className = 'hint'; return; }
+    if (!b) { h.textContent = ''; h.className = 'hint'; Ingresso.pnR(false); return; }
     var fr = L.frKey($('scFr').value), v = DB.vltMap[fr], rip = v ? v.riparatore : '', sc = Ingresso.pulisci(b, rip), ser = sc.ser, sn = DB.serNoti[L.up(ser)];
     var pn = sc.pn || (sn && sn.pn) || (v ? v.f_mat_tmpn : ''), da = sc.pn ? ' (' + sc.fonte + ')' : (sn && sn.pn ? ' (da seriali noti)' : (pn ? ' (da VLT)' : ''));
     var ok = pn && App.pnEsiste(pn), sim = pn && !ok ? App.pnSimile(pn) : '';
     h.innerHTML = 'Seriale: <b class="mono">' + esc(ser) + '</b>' + (ser !== b ? ' <span style="opacity:.7">(pulito)</span>' : '') +
       ' · P/N: <b class="mono">' + esc(pn || 'verificare fisicamente') + '</b> <span style="opacity:.7">' + esc(da) + '</span>' + (pn ? (ok ? ' <span style="color:var(--green)">✓ in anagrafica</span>' : ' <span style="color:var(--amber)">✗ non in anagrafica' + (sim ? ' (simile ' + esc(sim) + ')' : '') + '</span>') : '');
     h.className = 'hint';
+    Ingresso.pnR(!pn && !Ingresso.needUbi());
+  },
+  // campo P/N accanto al seriale, solo quando dal barcode (regole, seriali noti, VLT) il P/N non si ricava
+  pnR: function (on) {
+    var w = $('wrapPnR'); if (!w) return;
+    if (!on) { w.style.display = 'none'; $('scPnR').value = ''; $('hPnR').textContent = ''; return; }
+    w.style.display = '';
   },
   fitScan: function () { ['scFr', 'scBc'].forEach(function (id) { var e = $(id); e.style.minWidth = Math.min(60, Math.max(12, L.s(e.value).length + 3)) + 'ch'; }); },
   // calcolo riga: replica della logica INPUT DATI del prototipo
