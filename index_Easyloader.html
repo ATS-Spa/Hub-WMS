@@ -2634,22 +2634,25 @@ var Mail = {
   // per i link nelle tabelle: onclick che apre la scelta destinatari
   link: function (t, subj, body) { Mail._k.push([t, subj, body]); return 'href="#" onclick="Mail.apriK(' + (Mail._k.length - 1) + ');return false"'; },
   apriK: function (i) { var x = Mail._k[i]; if (x) Mail.apri(x[0], x[1], x[2]); },
-  apri: function (t, subj, body, dopo, html) {
+  apri: function (t, subj, body, dopo, html, opz) {
+    opz = opz || {};
     var A = Mail.a(t), C = Mail.cc(t).filter(function (x) { return A.indexOf(x) < 0; }), T = Mail.TIPI[t] || { nome: t };
     var riga = function (x, r) { return '<tr><td><label style="display:flex;gap:8px;align-items:center"><input type="checkbox" class="mlSel" data-m="' + esc(x) + '" checked> ' + esc(x) + '</label></td><td><select class="fc mlRuolo" style="width:80px;padding:3px 6px"><option' + (r === 'A' ? ' selected' : '') + '>A</option><option' + (r === 'CC' ? ' selected' : '') + '>CC</option></select></td></tr>'; };
     Modal.html('Mail · ' + T.nome, '<div class="hint" style="margin-bottom:6px"><b>' + esc(subj) + '</b></div>' +
       '<table style="width:auto"><tbody>' + A.map(function (x) { return riga(x, 'A'); }).join('') + C.map(function (x) { return riga(x, 'CC'); }).join('') + '</tbody></table>' +
       (A.length + C.length ? '' : '<div class="hint warn">Nessun destinatario impostato: Admin → ✉ Mail.</div>') +
       '<div class="fg" style="margin-top:8px"><span class="fl">Altri destinatari (A), separati da virgola</span><input class="fc" id="mlAltri" placeholder="nome@dominio.it"></div>' +
-      '<div class="hint" style="margin-top:6px">Togli la spunta a chi non deve riceverla. Destinatari fissi in Admin → ✉ Mail.' + (html ? '<br><b>La tabella va negli appunti: quando si apre la mail premi Ctrl+V nel corpo.</b>' : '') + '</div>',
-      [{ label: 'Annulla', cls: 'ghost' }, { label: '✉ Apri mail', cls: 'green', keep: true, fn: function () {
-        var to = [], cc = [];
-        document.querySelectorAll('#mBody .mlSel').forEach(function (cb) { if (!cb.checked) return; var r = cb.closest('tr').querySelector('.mlRuolo').value; (r === 'CC' ? cc : to).push(cb.getAttribute('data-m')); });
-        to = to.concat(Mail.lista($('mlAltri').value));
-        if (!to.length && cc.length) to.push(cc.shift());
-        if (!to.length) { toast('Scegli almeno un destinatario', 'ko'); return; }
-        Modal.close(); Mail.invia(to, cc, subj, body, html); if (dopo) dopo();
-      } }]);
+      '<div class="hint" style="margin-top:6px">Togli la spunta a chi non deve riceverla. Destinatari fissi in Admin → ✉ Mail.' + '<br><b>📤 Invia dal server</b>: parte in automatico dall\'account aziendale (servizio sul PC server, entro un paio di minuti)' + (opz.allegati && opz.allegati.length ? ', con ' + opz.allegati.length + ' PDF DDT allegati' : '') + '. <b>✉ Apri mail</b>: si apre il tuo programma di posta' + (html ? ' (Ctrl+V nel corpo per la tabella)' : '') + '.</div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: '✉ Apri mail', cls: 'ghost', keep: true, fn: function () { var d = leggi(); if (!d) return; Modal.close(); Mail.invia(d.to, d.cc, subj, body, html); if (dopo) dopo(); } },
+        { label: '📤 Invia dal server', cls: 'green', keep: true, fn: async function () { var d = leggi(); if (!d) return; Modal.close(); if (await Mail.coda(t, d.to, d.cc, subj, body, html, opz) && dopo) dopo(); } }]);
+    function leggi() {
+      var to = [], cc = [];
+      document.querySelectorAll('#mBody .mlSel').forEach(function (cb) { if (!cb.checked) return; var r = cb.closest('tr').querySelector('.mlRuolo').value; (r === 'CC' ? cc : to).push(cb.getAttribute('data-m')); });
+      to = to.concat(Mail.lista($('mlAltri').value));
+      if (!to.length && cc.length) to.push(cc.shift());
+      if (!to.length) { toast('Scegli almeno un destinatario', 'ko'); return null; }
+      return { to: to, cc: cc };
+    }
   },
   // apre il client di posta; il testo va sempre anche negli appunti (le mail lunghe superano il limite dei link mailto)
   invia: function (to, cc, subj, body, html) {
@@ -2669,6 +2672,51 @@ var Mail = {
     if (url.length > 1900) url = base + '&body=' + encodeURIComponent('(testo lungo: incolla qui con Ctrl+V)\n\n');
     location.href = url;
     if (copiato) toast('Testo della mail copiato anche negli appunti', 'ok');
+  },
+  // ─ coda per il servizio sul PC server (ATS Ticket Service → easyloader_mail_handler.py): invia con Outlook dall'account aziendale
+  H: ['id_mail', 'creato_il', 'tab', 'a', 'cc', 'oggetto', 'testo', 'html', 'allegati', 'id_spedizioni', 'operatore', 'stato', 'inviata_il', 'dettaglio', 'message_id'],
+  carica: async function () { try { await DB.loadTables(['CODA_MAIL']); } catch (e) { DB.t.CODA_MAIL = null; } },
+  coda: async function (t, to, cc, subj, body, html, opz) {
+    try {
+      var tb = await DB.ensureSheet('CODA_MAIL', Mail.H);
+      if (html && html.length > 45000) html = '';   // limite di una cella Google (50.000 caratteri): resta il testo
+      var o = { id_mail: 'M' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase(), creato_il: L.nowStamp(), tab: t, a: to.join(';'), cc: cc.join(';'), oggetto: subj,
+        testo: L.s(body).slice(0, 45000), html: html || '', allegati: JSON.stringify((opz.allegati || []).filter(function (x) { return x.id; })), id_spedizioni: (opz.ids || []).join(';'), operatore: App.chi().email || Auth.email, stato: 'DA_INVIARE' };
+      var r = await API.append(DB.id, 'CODA_MAIL', [tb.toRow(o)]); o._r = r; tb.rows.push(o);
+      await API.append(DB.id, 'LOG', [App.log('MAIL_IN_CODA', 'CODA_MAIL', o.id_mail, { tab: t, a: o.a, cc: o.cc, oggetto: subj, allegati: (opz.allegati || []).length })]);
+      toast('Mail in coda: parte dal server entro un paio di minuti', 'ok'); Mail.poll(); Mail.rinfresca();
+      return true;
+    } catch (e) { Modal.open('Mail non messa in coda', e.message + '\n\nPuoi usare "✉ Apri mail".'); return false; }
+  },
+  ultima: function (id) {
+    var t = DB.t.CODA_MAIL; if (!t || !id) return null; var x = null;
+    t.rows.forEach(function (r) { if ((';' + L.s(r.id_spedizioni) + ';').indexOf(';' + id + ';') >= 0) x = r; });
+    return x;
+  },
+  pill: function (id) {
+    var r = Mail.ultima(id); if (!r) return '';
+    var ora = L.s(r.inviata_il).slice(11, 16), tip = esc('A: ' + r.a + (r.cc ? ' · CC: ' + r.cc : '') + (r.dettaglio ? ' · ' + r.dettaglio : ''));
+    if (r.stato === 'INVIATA') return ' <span class="pill p-green" title="' + tip + '">✉ inviata ' + esc(ora) + '</span>';
+    if (r.stato === 'ERRORE') return ' <span class="pill p-red" title="' + tip + '">✉ errore</span> <button class="btn ghost sm" onclick="Mail.riprova(\'' + r.id_mail + '\')" title="' + tip + '">Riprova</button>';
+    return ' <span class="pill p-amber" title="' + tip + '">✉ ' + (r.stato === 'IN_INVIO' ? 'in invio' : 'in coda') + '</span>';
+  },
+  riprova: async function (idm) {
+    var t = DB.t.CODA_MAIL, r = t && t.rows.find(function (x) { return x.id_mail === idm; }); if (!r) return;
+    try { await API.batchUpdate(DB.id, [{ range: t.cell('stato', r._r), values: [['DA_INVIARE']] }, { range: t.cell('dettaglio', r._r), values: [['']] }]); r.stato = 'DA_INVIARE'; r.dettaglio = ''; Mail.poll(); Mail.rinfresca(); toast('Mail rimessa in coda', 'ok'); }
+    catch (e) { Modal.open('Errore', e.message); }
+  },
+  rinfresca: function () { if (App.tab === 'ack' && Ack.loaded) Ack.renderCards(); if (App.tab === 'rma' && Rma.loaded && Rma.sez === 'usc') Rma.renderUscite(); },
+  // finché ci sono mail in coda rilegge lo stato ogni 20 s (massimo 15 minuti)
+  _p: null,
+  poll: function () {
+    if (Mail._p) return; var fine = Date.now() + 15 * 60000;
+    Mail._p = setInterval(async function () {
+      var prima = {}; ((DB.t.CODA_MAIL || {}).rows || []).forEach(function (r) { prima[r.id_mail] = r.stato; });
+      await Mail.carica(); var R = (DB.t.CODA_MAIL || {}).rows || [];
+      R.forEach(function (r) { if (prima[r.id_mail] && prima[r.id_mail] !== r.stato) { if (r.stato === 'INVIATA') toast('✉ Inviata: ' + r.oggetto, 'ok'); else if (r.stato === 'ERRORE') toast('✉ Mail non inviata: ' + r.dettaglio, 'ko'); } });
+      Mail.rinfresca();
+      if (!R.some(function (r) { return r.stato === 'DA_INVIARE' || r.stato === 'IN_INVIO'; }) || Date.now() > fine) { clearInterval(Mail._p); Mail._p = null; }
+    }, 20000);
   },
   // Admin → ✉ Mail
   render: function () {
@@ -3055,7 +3103,7 @@ var Ack = {
     Ack._loghi = Promise.all([uno(Ack.LOGHI.sx), uno(Ack.LOGHI.dx)]).then(function (r) { Ack._lg = { sx: r[0], dx: r[1] }; if (!r[0] || !r[1]) Ack._loghi = null; return Ack._lg; });
     return Ack._loghi;
   },
-  load: async function () { Ack.loghi(); await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_RIGHE', 'SPEDIZIONI_COLLI', 'DDT_REGISTRO', 'ANOMALIE']); await Ack.ensurePending(); try { await DB.ensureCols('SPEDIZIONI', ['operatore_sigla', 'operatore_email']); } catch (e) { } Ack.loaded = true; },
+  load: async function () { Ack.loghi(); await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_RIGHE', 'SPEDIZIONI_COLLI', 'DDT_REGISTRO', 'ANOMALIE']); await Ack.ensurePending(); try { await DB.ensureCols('SPEDIZIONI', ['operatore_sigla', 'operatore_email']); } catch (e) { } await Mail.carica(); if (((DB.t.CODA_MAIL || {}).rows || []).some(function (r) { return r.stato === 'DA_INVIARE' || r.stato === 'IN_INVIO'; })) Mail.poll(); Ack.loaded = true; },
   // ─ ACK PENDING: FR tolti da un ACK, con il motivo (foglio ACK_PENDING, creato dall'app se non c'è)
   PEND_H: ['id_pending', 'data', 'riparatore', 'fr', 'seriale', 'pn', 'id_unita', 'id_spedizione', 'motivo', 'stato', 'rimosso_da', 'risolto_il', 'risolto_da', 'id_spedizione_uscita', 'nota_risoluzione'],
   MOTIVI: ['Pezzo non trovato a scaffale', 'Pezzo danneggiato / da verificare', 'Seriale o TPN non corrispondente', 'Bloccato dal Service Desk', 'In attesa di autorizzazione'],
@@ -3711,7 +3759,8 @@ var Ack = {
   inviaMail: function (ids) {
     var m = Ack.mailTesto(ids); if (!m) { toast('Nessuna spedizione', 'ko'); return; }
     var s0 = Ack.byId(ids[0]);
-    Mail.apri(s0 && s0.tipo === 'RMA' ? 'rma' : 'ack', m.subj, m.body, function () { ids.forEach(Ack.mailInviata); }, m.html);
+    var all = ids.map(Ack.byId).filter(function (s) { return s && Drive.idDa(s.link_pdf); }).map(function (s) { return { id: Drive.idDa(s.link_pdf), nome: 'DDT ' + (s.tipo === 'RMA' ? 'RMA ' : 'ACK ') + s.n_ddt + ' ' + s.destinatario + '.pdf' }; });
+    Mail.apri(s0 && s0.tipo === 'RMA' ? 'rma' : 'ack', m.subj, m.body, function () { ids.forEach(Ack.mailInviata); }, m.html, { allegati: all, ids: ids });
   },
   // mail unica con tutte le destinazioni del giorno (spunte chiuse o spedite)
   mailGiorno: function () {
@@ -3746,6 +3795,7 @@ var Ack = {
       if (s && s.n_ddt) btn += ' <button class="btn sm" onclick="Ack.stampa(\'' + s.id_spedizione + '\')">Stampa DDT</button>' + (s.link_pdf ? ' <a class="mail" target="_blank" href="' + esc(s.link_pdf) + '">PDF su Drive</a>' : '');
       if (s && s.stato !== 'BOZZA') btn += ' <a class="mail" href="#" onclick="Ack.inviaMail([\'' + s.id_spedizione + '\']);return false" title="Mail a Service Desk e bollettazione: destinatario, indirizzo, DDT, AWB, colli, misure e peso">✉ mail</a>';
       if (s && (s.stato === 'PRONTA' || s.stato === 'SPEDITA')) btn += ' <button class="btn ghost sm" onclick="Ack.cedolini(\'' + s.id_spedizione + '\')" title="Un foglio per collo/pallet con destinazione, DDT e AWB">Cedolini</button>';
+      if (s) btn += Mail.pill(s.id_spedizione);
       if (s && s.n_ddt && !L.s(s.awb)) btn += ' <span class="pill p-amber" title="DDT emesso: inserisci l\'AWB appena la bollettazione lo comunica">AWB da inserire</span>';
       var np = Ack.pending(cod).length;
       btn += ' <button class="btn ghost sm"' + (np ? ' style="border-color:var(--amber);color:var(--amber)"' : '') + ' onclick="Ack.vediPending(\'' + esc(cod) + '\')" title="FR tolti dagli ACK di questo riparatore, con il motivo">ACK Pending' + (np ? ' (' + np + ')' : '') + '</button>';
@@ -3830,6 +3880,7 @@ var Rma = {
     await DB.loadTables(['RMA_RITORNI', 'SPEDIZIONI', 'SPEDIZIONI_COLLI']);
     await DB.ensureSheet('CARICHI_RMA', Rma.CAR_H);
     await DB.ensureSheet('RMA_PENDING', Rma.PEN_H);
+    await Mail.carica(); if (((DB.t.CODA_MAIL || {}).rows || []).some(function (r) { return r.stato === 'DA_INVIARE' || r.stato === 'IN_INVIO'; })) Mail.poll();
     var c = await DB.cacheGet('rmalk');
     if (!c || (Date.now() - c.ts) > 24 * 3600 * 1000) {
       var art = await DB.loadCols(DB.id, 'ARTICOLI', ['material', 'pn']);
@@ -4022,7 +4073,7 @@ var Rma = {
       '<button class="btn ghost sm" onclick="Rma.carModello()">Modello Excel</button> <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button>' + xr + '</div></div>' +
       '';
     return '<div class="row"><div class="fg" style="width:160px"><span class="fl">Giorno di uscita</span><input class="fc" type="date" id="uscData2" value="' + esc($('uscData').value) + '" onchange="$(\'uscData\').value=this.value;Rma.render()"></div><div class="spacer"></div>' +
-      '<button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button> <button class="btn ghost sm" onclick="Rma.cedoliniTutti()" title="Tutti i cedolini delle destinazioni della pagina in un solo PDF (un foglio per collo)">🖨 Tutti i cedolini</button> <button class="btn ghost sm" onclick="Rma.mailGiorno()" title="Una mail a Service Desk e bollettazione con tutte le destinazioni del giorno: indirizzo, DDT, AWB, colli, misure e peso">✉ Mail bollettazione</button> <button class="btn green" id="uscTutti" onclick="Rma.emettiTutti()">Genera i DDT pronti</button></div>' +
+      '<button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button> <button class="btn ghost sm" onclick="Rma.ddtTutti()" title="Ristampa in un solo PDF tutti i DDT già emessi delle destinazioni della pagina">🖨 Tutti i DDT</button> <button class="btn ghost sm" onclick="Rma.cedoliniTutti()" title="Tutti i cedolini delle destinazioni della pagina in un solo PDF (un foglio per collo)">🖨 Tutti i cedolini</button> <button class="btn ghost sm" onclick="Rma.mailGiorno()" title="Una mail a Service Desk e bollettazione con tutte le destinazioni del giorno: indirizzo, DDT, AWB, colli, misure e peso">✉ Mail bollettazione</button> <button class="btn green" id="uscTutti" onclick="Rma.emettiTutti()">Genera i DDT pronti</button></div>' +
       '<div class="hint" style="margin-top:8px">Un DDT per destinazione (serie RMA). Pronta = colli e peso salvati + AWB. Le schede ci sono già per tutte le destinazioni di oggi: puoi mettere colli e AWB subito. I pezzi senza RMA restano non spuntati e si spuntano da soli appena l\'RMA c\'è; se al DDT ne manca qualcuno, l\'app chiede conferma.</div>';
   },
   render: function (rifai) {
@@ -4657,7 +4708,7 @@ var Rma = {
         '<div class="fg" style="width:110px"><span class="fl">Vettore</span><input class="fc" id="uvet_' + k + '" list="dlVettori" value="' + esc(Rma.awbTmp[k] !== undefined ? Rma.awbTmp[k].vet : (s ? s.vettore : '')) + '"' + lock + ' oninput="Rma.awbTmp[\'' + k + '\']={awb:$(\'uawb_' + k + '\').value,vet:this.value}"></div>' +
         '<button class="btn sm' + (s && L.s(s.awb) && Rma.awbTmp[k] === undefined ? ' ghost' : '') + '" onclick="Rma.salvaAwbRma(\'' + esc(g.dest) + '\')">' + (s && L.s(s.awb) && Rma.awbTmp[k] === undefined ? '✓ AWB salvato' : 'Salva AWB') + '</button></div>' +
         (done && !L.s(s.awb) ? '<div><span class="pill p-amber" title="DDT emesso: inserisci l\'AWB appena la bollettazione lo comunica">AWB da inserire</span></div>' : '') +
-        '<div class="row" style="align-items:center">' + bt + (s && (s.stato === 'PRONTA' || s.stato === 'SPEDITA') ? ' <a class="mail" href="#" onclick="Rma._npz[\'' + s.id_spedizione + '\']=' + g.attivi.length + ';Ack.inviaMail([\'' + s.id_spedizione + '\']);return false">✉ mail</a>' : '') + '</div></div>';
+        '<div class="row" style="align-items:center">' + bt + (s && (s.stato === 'PRONTA' || s.stato === 'SPEDITA') ? ' <a class="mail" href="#" onclick="Rma._npz[\'' + s.id_spedizione + '\']=' + g.attivi.length + ';Ack.inviaMail([\'' + s.id_spedizione + '\']);return false">✉ mail</a>' + Mail.pill(s.id_spedizione) : '') + '</div></div>';
     }).join('') + '</div>' : '<div class="card empty">Nessun pezzo da far uscire: GOOD e BALANCING in giacenza con destinazione, o carichi NEW/REUSE.</div>');
   },
   collo: function (k, i, f, v) { var c = Rma.colli[k] = Rma.colli[k] || []; if (f === 'del') c.splice(i, 1); else if (f === 'add') c.push({ tipo: (c[c.length - 1] || {}).tipo || 'COLLO', misura: '', peso: '' }); else c[i][f] = L.s(v).toUpperCase(); Rma.renderUscite(); },
@@ -4813,6 +4864,11 @@ var Rma = {
   },
   pdf: function (id) { return Ddt.pdf(Rma.pdfParams(id)); },
   _npz: {},
+  ddtTutti: function () {
+    var ids = Rma.gruppi().filter(function (g) { return g.s && g.s.n_ddt && g.s.stato === 'SPEDITA'; }).map(function (g) { return g.s.id_spedizione; });
+    if (!ids.length) { toast('Nessun DDT emesso in questa pagina', 'ko'); return; }
+    Rma.stampaMolti(ids);
+  },
   cedoliniTutti: function () {
     var w = window.open('', '_blank');
     try {
@@ -6956,6 +7012,7 @@ var Arc = {
     { n: 'RMA_RITORNI', tipo: 'pre', ok: function (r, A) { var d = L.normDate(r.data_apertura); return d && d < A && r.stato !== 'DA_EVADERE' && r.stato !== 'ASSEGNATA'; } },
     { n: 'ACK_VLT', tipo: 'pre', ok: function (r, A, X) { var d = L.normDate(r.data_ack); return d && d < A && !X.inHub[r.id_unita]; } },
     { n: 'LOG', tipo: 'pre', ok: function (r, A) { var d = L.normDate(r.data_ora); return d && d < A; } },
+    { n: 'CODA_MAIL', tipo: 'pre', ok: function (r, A) { var d = L.normDate(r.creato_il); return d && d < A && r.stato !== 'DA_INVIARE' && r.stato !== 'IN_INVIO'; } },
     { n: 'UNITA', tipo: 'sparse', ok: function (r, A) { var d = L.normDate(r.data_out) || L.normDate(r.modificato_il) || L.normDate(r.creato_il); return ['USCITO', 'ANNULLATO', 'RETTIFICATO'].indexOf(r.stato) >= 0 && d && d < A; } }
   ],
   piano: null, log: [],
