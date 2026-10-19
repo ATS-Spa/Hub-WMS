@@ -1,7 +1,7 @@
 // ==UserScript==
 // @name         ATS FLM → VLT · Chiusure
 // @namespace    ats-spa.flm
-// @version      1.0.7
+// @version      1.0.8
 // @description  Chiude su VLT ingressi del giorno (op. linea), ACK, RMA e spare ferme in HUB con i dati dell'app "ATS - Fastweb FLM". Sostituisce i 4 script con i CSV.
 // @match        https://logistictoolvf.net.vodafone.it/*
 // @match        https://ats-spa.github.io/*
@@ -26,7 +26,7 @@
 */
 (function () {
   'use strict';
-  var VER = '1.0.7';
+  var VER = '1.0.8';
   var VLT_HOST = 'logistictoolvf.net.vodafone.it';
   var K = { CODA: 'ats_coda', STATO: 'ats_stato_', PEND: 'ats_esiti_pending', RICH: 'ats_richiesta', APP: 'ats_app_url', VIVO: 'ats_vlt_vivo', RUN: 'ats_run', UI: 'ats_ui', RICEVUTI: 'ats_esiti_ricevuti' };
   // esiti da consegnare = scritti da VLT (PEND) meno quelli già confermati dall'app (RICEVUTI): ognuno scrive solo la sua chiave
@@ -68,7 +68,7 @@
         try { var ids0 = get('ats_code_ids', []).concat(c.id); ids0.slice(0, -5).forEach(function (x) { del(K.STATO + x); }); set('ats_code_ids', ids0.slice(-5)); } catch (e) { }
         if (m.richiesta) del(K.RICH);
         post({ tipo: 'coda_ok', coda: riassunto(c) });
-        if (m.apri && (Date.now() - get(K.VIVO, 0)) > 12000) { try { GM_openInTab('https://' + VLT_HOST + '/', { active: true }); } catch (e) { } }
+        if (m.apri && (Date.now() - get(K.VIVO, 0)) > 12000) { try { GM_openInTab('https://' + VLT_HOST + '/' + (c.proc === 'RMA' ? '#/rma' : '#/fail-rep'), { active: true }); } catch (e) { } }
       }
       else if (m.tipo === 'esiti_ok') {
         set(K.RICEVUTI, get(K.RICEVUTI, []).concat(m.ids || []).slice(-4000));
@@ -313,8 +313,9 @@
     // RMA: semi-automatico (compila, l'operatore controlla i seriali e salva) — o automatico se spuntato
     var RX_RMA = /rmas?\b/i;
     var chiudiRma = async function (it) {
-      var inp = await attendi(function () { return $('input#currentSearch'); }, 12000);
-      if (!inp) throw Errore('Apri la pagina RMA di VLT (non trovo la ricerca), poi premi Riprendi', 'PAGINA');
+      if (!/^#\/rma(\?|$)/i.test(location.hash) || $('select#field_rmaStatus')) { location.hash = '#/rma'; await sleep(800); }
+      var inp = await attendi(function () { return $('input#currentSearch'); }, 15000);
+      if (!inp) throw Errore('Non riesco ad aprire la pagina RMA di VLT (https://' + VLT_HOST + '/#/rma): aprila tu, poi premi Riprendi', 'PAGINA');
       // come lo script RMA precedente: valore + solo evento "input" (niente change/blur, che su VLT lanciano ricerche a vuoto in ritardo)
       var d = Object.getOwnPropertyDescriptor(W.HTMLInputElement.prototype, 'value');
       var metti = function (v) { if (d && d.set) d.set.call(inp, v); else inp.value = v; inp.dispatchEvent(new Event('input', { bubbles: true })); };
