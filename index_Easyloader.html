@@ -377,7 +377,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
       <div class="blk-banner" id="blkBanner" style="display:none"></div>
       <div class="card">
         <div class="card-h"><div class="card-t">Testata ingresso</div><div class="spacer"></div>
-          <button class="btn ghost sm" onclick="Ingresso.nuovo()">Nuovo ingresso</button></div>
+          <button class="btn ghost sm" onclick="Ingresso.importa()" title="Ricarica un Excel &quot;Pezzi letti&quot; scaricato dall'app (serve la password)">⬆ Importa pezzi letti</button> <button class="btn ghost sm" onclick="Ingresso.nuovo()">Nuovo ingresso</button></div>
         <div class="hdr">
           <div class="fg"><span class="fl">Tipo *</span>
             <select class="fc" id="inTipo" onchange="Ingresso.onTestata()">
@@ -1353,6 +1353,72 @@ var Ingresso = {
   nuovo: function (silent) {
     if (!silent && Ingresso.rows.length && !confirm('Ci sono ' + Ingresso.rows.length + ' pezzi non caricati. Scartarli?')) return;
     Ingresso.rows = []; Ingresso.setTestata({ data: L.isoToday() }); Ingresso.save(); Ingresso.ricalcola(); $('scFr').value = ''; $('scBc').value = ''; $('scUbi').value = '';
+  },
+  // IMPORT una tantum dell'Excel "Pezzi letti" (⬇ Excel della lettura): password → file → anteprima → torna nella lettura con i controlli di sempre
+  importa: function () {
+    Modal.html('⬆ Importa pezzi letti', '<div class="hint" style="margin-bottom:8px">Ricarica nella lettura un Excel <b>"Pezzi letti"</b> scaricato dall\'app. I pezzi <b>non</b> vengono caricati subito: tornano in elenco con tutti i controlli e poi premi <b>Carica dati</b> come sempre.</div>' +
+      '<div class="fg"><span class="fl">Password *</span><input class="fc" type="password" id="impPwd" autocomplete="new-password"></div><div class="hint" id="impErr" style="margin-top:6px"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Scegli il file…', cls: 'green', keep: true, fn: async function () {
+        var pw = $('impPwd').value, par = L.s(DB.param('password_eliminazione', ''));
+        var ok = par ? (/^sha256:/i.test(par) ? (await Nr.sha(pw)) === par.slice(7).toLowerCase() : pw === par) : (await Nr.sha(pw)) === Nr.PWD;
+        if (!ok) { $('impErr').textContent = 'Password errata'; $('impErr').className = 'hint err'; return; }
+        Modal.close();
+        var f = document.createElement('input'); f.type = 'file'; f.accept = '.xlsx,.xls,.csv';
+        f.onchange = function () { if (f.files[0]) Ingresso._impLeggi(f.files[0]); };
+        f.click();
+      } }]);
+    setTimeout(function () { $('impPwd').focus(); $('impPwd').addEventListener('keydown', function (e) { if (e.key === 'Enter') document.querySelector('#mBtns .btn.green').click(); }); }, 50);
+  },
+  _impLeggi: async function (file) {
+    var R;
+    try { R = await leggiFoglio(file); } catch (e) { toast('File non leggibile: ' + e.message, 'ko'); return; }
+    var g = function (o, k) { return L.s(o[k]); };
+    R = R.filter(function (o) { return g(o, 'SERIALE') || g(o, 'FR'); });
+    if (!R.length || !('SERIALE' in (R[0] || {})) || !('TIPO' in R[0])) { toast('Non è un Excel "Pezzi letti" dell\'app (servono almeno le colonne Tipo e Seriale)', 'ko'); return; }
+    var ubiSet = {}; (DB.ubicazioni || []).forEach(function (u) { ubiSet[L.up(u)] = 1; });
+    var tipi = {}, vis = {}, P = [], dup = 0, scart = [];
+    R.forEach(function (o) { var t = L.up(g(o, 'TIPO')); if (t) tipi[t] = (tipi[t] || 0) + 1; });
+    var tipo = Object.keys(tipi).sort(function (a, b) { return tipi[b] - tipi[a]; })[0] || '';
+    R.forEach(function (o, k) {
+      var t = L.up(g(o, 'TIPO')) || tipo, ser = L.up(g(o, 'SERIALE')), fr = g(o, 'FR').replace(/^FR/i, '').replace(/^0+(?=\d)/, '');
+      if (t !== tipo) { scart.push((k + 2) + ': tipo ' + t); return; }
+      if (fr && !/^\d+$/.test(fr)) fr = '';
+      var key = ser || ('FR' + fr); if (vis[key]) { dup++; return; } vis[key] = 1;
+      // "Destinazione · Ubicazione" (FAULTY/GOOD) oppure solo ubicazione (NEW/REUSE)
+      var parti = g(o, 'DESTINAZIONE / UBICAZIONE').split(' · ').map(L.s).filter(Boolean), ubi = '';
+      if (parti.length > 1) ubi = parti[parti.length - 1];
+      else if (parti.length === 1 && (tipo === 'NEW' || tipo === 'REUSE' || ubiSet[L.up(parti[0])] || /^[A-Z0-9]+(-[A-Z0-9]+){3,}$/i.test(parti[0]))) ubi = parti[0];
+      P.push({ fr: fr, ser: ser, pn: L.up(g(o, 'P/N')), nota: /^PENDING FR:/i.test(g(o, 'NOTA')) ? '' : g(o, 'NOTA'), ubi: L.up(ubi) });
+    });
+    if (!P.length) { toast('Nessun pezzo da importare', 'ko'); return; }
+    var o0 = R[0], T = { tipo: tipo, data: (g(o0, 'DATA INGRESSO') || L.isoToday()).slice(0, 10), mittente: g(o0, 'MITTENTE'), awb: g(o0, 'AWB'), ddt: g(o0, 'DDT MITTENTE') || g(o0, 'DDT') };
+    Ingresso._imp = { P: P, T: T, file: file.name };
+    var mostra = P.slice(0, 500).map(function (p, i) { return '<tr><td>' + (i + 1) + '</td><td class="mono">' + esc(p.fr) + '</td><td class="mono">' + esc(p.ser) + '</td><td class="mono">' + esc(p.pn) + '</td><td class="mono">' + esc(p.ubi) + '</td><td>' + esc(p.nota) + '</td></tr>'; }).join('');
+    var ubiN = {}; P.forEach(function (p) { if (p.ubi) ubiN[p.ubi] = (ubiN[p.ubi] || 0) + 1; });
+    Modal.html('Anteprima import · ' + esc(file.name),
+      '<div class="row" style="gap:14px;flex-wrap:wrap;margin-bottom:8px">' +
+        '<div><span class="fl">Tipo</span><div><b>' + esc(tipo) + '</b></div></div><div><span class="fl">Mittente</span><div>' + esc(T.mittente || '—') + '</div></div>' +
+        '<div><span class="fl">AWB</span><div class="mono">' + esc(T.awb || '—') + '</div></div><div><span class="fl">DDT mittente</span><div class="mono">' + esc(T.ddt || '—') + '</div></div>' +
+        '<div><span class="fl">Data ingresso</span><div class="mono">' + esc(T.data) + '</div></div><div><span class="fl">Pezzi</span><div><b>' + P.length + '</b></div></div></div>' +
+      (Object.keys(ubiN).length ? '<div class="hint">Ubicazioni: ' + Object.keys(ubiN).map(function (u) { return '<span class="mono">' + esc(u) + '</span> (' + ubiN[u] + ')'; }).join(' · ') + '</div>' : '') +
+      (dup ? '<div class="hint" style="color:var(--amber)">⚠ ' + dup + ' righe doppie (stesso seriale) saltate</div>' : '') +
+      (scart.length ? '<div class="hint" style="color:var(--amber)">⚠ ' + scart.length + ' righe di tipo diverso da ' + esc(tipo) + ' saltate (riga ' + esc(scart.slice(0, 8).join(', ')) + (scart.length > 8 ? '…' : '') + ')</div>' : '') +
+      (Ingresso.rows.length ? '<div class="hint err">La lettura attuale (' + Ingresso.rows.length + ' pezzi non caricati) verrà sostituita.</div>' : '') +
+      '<div class="tbl-wrap modal-scroll" style="max-height:40vh;margin-top:8px"><table><thead><tr><th>#</th><th>FR</th><th>Seriale</th><th>P/N</th><th>Ubicazione</th><th>Nota</th></tr></thead><tbody>' + mostra + '</tbody></table></div>' +
+      (P.length > 500 ? '<div class="hint">… e altri ' + (P.length - 500) + '</div>' : '') +
+      '<div style="margin-top:8px;display:flex;gap:16px;flex-wrap:wrap"><label><input type="checkbox" id="impPn" checked> usa il P/N del file</label><label><input type="checkbox" id="impNota"> usa la Nota del file (altrimenti si ricalcola)</label></div>' +
+      '<div class="hint" style="margin-top:6px">FR, stato VLT, destinazione e controlli si ricalcolano adesso; gli FR vuoti si associano dal seriale con le regole di sempre.</div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: '⬆ Importa ' + P.length + ' pezzi', cls: 'green', fn: function () { Ingresso._impApplica($('impPn').checked, $('impNota').checked); } }], true);
+  },
+  _impApplica: function (usaPn, usaNota) {
+    var I = Ingresso._imp; if (!I) return;
+    var plt = (I.T.tipo === 'NEW' || I.T.tipo === 'REUSE') ? L.s($('scPlt').value) : '';
+    Ingresso.rows = I.P.map(function (p) { var man = {}; if (usaPn && p.pn) man.pn = p.pn; if (usaNota && p.nota) man.nota = p.nota; return { fr: p.fr, bc: p.ser, ubi: p.ubi, plt: plt, ser: '', pn: '', man: man }; });
+    Ingresso.setTestata(I.T); Ingresso.onAwb(); Ingresso.onTestata(); Ingresso.ricalcola(); Ingresso.save();
+    API.append(DB.id, 'LOG', [App.log('INGRESSO_IMPORT_EXCEL', 'UNITA', I.file, { tipo: I.T.tipo, pezzi: I.P.length, mittente: I.T.mittente, awb: I.T.awb, ddt: I.T.ddt })]).catch(function () {});
+    Ingresso._imp = null;
+    toast(I.P.length + ' pezzi importati nella lettura: controlla e premi Carica dati', 'ok');
+    if (plt === '' && (I.T.tipo === 'NEW' || I.T.tipo === 'REUSE')) toast('NEW/REUSE: assegna il pallet prima di caricare', 'ko');
   },
   save: function () { lsS('draft_' + Auth.email, Ingresso.rows.length ? { testata: Ingresso.T(), rows: Ingresso.rows } : null); },
   needUbi: function () { var t = $('inTipo').value; return t === 'NEW' || t === 'REUSE'; },
