@@ -2426,6 +2426,64 @@ var Chv = {
     FERME: 'FAULTY in giacenza con stato VLT tra quelli del parametro vlt_stati_fr_da_chiudere. Se la nota VLT contiene "OK" (bonificata dal SD) la nota si ignora e va in Failure Report Sent.'
   },
   FATTO: { OK: 1, GIA_FATTO: 1 },
+  // ─ divisione tra più operatori: ACK per riparatore, RMA per destinazione. Una "presa" vale per quel giorno finché non si rilascia.
+  PH: ['giorno', 'procedura', 'chiave', 'operatore', 'sigla', 'preso_il', 'stato', 'rilasciata_il', 'rilasciata_da'],
+  divisa: function (proc) { return proc === 'ACK' || proc === 'RMA'; },
+  io: function () { return L.s(App.chi().email || Auth.email).toLowerCase(); },
+  // prese attive del giorno: chiave → riga (in caso di doppia presa vince la prima scritta)
+  attive: async function (giorno, proc, ricarica) {
+    if (ricarica || !DB.t.CHV_PRESE) await DB.ensureSheet('CHV_PRESE', Chv.PH);
+    var m = {}; DB.t.CHV_PRESE.rows.forEach(function (r) { if (r.giorno === giorno && r.procedura === proc && r.stato === 'PRESA' && !m[r.chiave]) m[r.chiave] = r; });
+    return m;
+  },
+  gruppi: function (p) {
+    var g = {}, ord = [], f = Chv.fatti; 
+    p.tutti.forEach(function (it) { var k = L.s(it.dest) || '(senza destinazione)'; if (!g[k]) { g[k] = { k: k, tot: 0, da: 0 }; ord.push(k); } g[k].tot++; });
+    p.da.forEach(function (it) { var k = L.s(it.dest) || '(senza destinazione)'; if (g[k]) g[k].da++; });
+    return ord.sort().map(function (k) { return g[k]; });
+  },
+  // scelta delle destinazioni/riparatori da prendere (restituisce l'elenco scelto o null)
+  scegli: function (proc, giorno, G, att) {
+    var me = Chv.io(), nome = proc === 'ACK' ? 'Riparatore' : 'Destinazione';
+    return new Promise(function (res) {
+      var righe = G.map(function (g, i) {
+        var a = att[g.k], mia = a && L.s(a.operatore).toLowerCase() === me, altri = a && !mia, chiusa = !g.da;
+        var st = chiusa ? '<span class="pill p-green">chiusa</span>' : (mia ? '<span class="pill p-violet">tua</span>' : (altri ? '<span class="pill p-amber">presa da ' + esc(a.sigla || a.operatore) + '</span>' + (App.isAdmin ? ' <button class="btn ghost sm" data-lib="' + i + '">Libera</button>' : '') : '<span class="pill">libera</span>'));
+        return '<tr><td><input type="checkbox" class="chvSel" data-i="' + i + '"' + (mia ? ' checked' : '') + (altri || chiusa ? ' disabled' : '') + '></td><td><b>' + esc(g.k) + '</b></td><td class="mono">' + g.da + ' / ' + g.tot + '</td><td>' + st + '</td></tr>';
+      }).join('');
+      Modal.html(Chv.PROC[proc] + ' · ' + L.itDate(giorno) + ' · chi chiude cosa',
+        '<div class="hint" style="margin-bottom:8px">Spunta ' + (proc === 'ACK' ? 'i riparatori' : 'le destinazioni') + ' che chiudi tu: allo script VLT arrivano solo quelli, e restano a tuo nome per oggi finché non li rilasci (togli la spunta). Quelli presi da altri non si possono prendere' + (App.isAdmin ? ' (da admin puoi liberarli)' : '') + '.</div>' +
+        '<div class="tbl-wrap modal-scroll"><table><thead><tr><th><input type="checkbox" id="chvTutti" title="Tutte le libere"></th><th>' + nome + '</th><th>Da chiudere / tot</th><th>Stato</th></tr></thead><tbody>' + righe + '</tbody></table></div>',
+        [{ label: 'Annulla', cls: 'ghost', fn: function () { res(null); } }, { label: '▶ Prendi e invia a VLT', cls: 'green', fn: function () { res(G.filter(function (g, i) { var cb = document.querySelector('#mBody .chvSel[data-i="' + i + '"]'); return cb && cb.checked && !cb.disabled; }).map(function (g) { return g.k; })); } }], true);
+      var tt = $('chvTutti'); if (tt) tt.onchange = function () { document.querySelectorAll('#mBody .chvSel').forEach(function (cb) { if (!cb.disabled) cb.checked = tt.checked; }); };
+      document.querySelectorAll('#mBody [data-lib]').forEach(function (b) { b.onclick = async function () { var g = G[+b.getAttribute('data-lib')]; if (!(await Modal.confirm('Libera ' + g.k, 'Tolgo la presa a ' + (att[g.k].sigla || att[g.k].operatore) + ': poi la può prendere un altro.'))) { res(null); return; } await Chv.rilascia(giorno, proc, [g.k], true); res(null); toast(g.k + ' liberata: premi di nuovo Invia a VLT', 'ok'); }; });
+    });
+  },
+  // scrive le prese: rilascia le mie non più spuntate, prende le nuove libere; poi verifica chi ha vinto
+  prendi: async function (giorno, proc, scelte) {
+    var me = Chv.io(), chi = App.chi(), now = L.nowStamp(), att = await Chv.attive(giorno, proc, true), t = DB.t.CHV_PRESE;
+    var mie = Object.keys(att).filter(function (k) { return L.s(att[k].operatore).toLowerCase() === me; });
+    var lascia = mie.filter(function (k) { return scelte.indexOf(k) < 0; }), nuove = scelte.filter(function (k) { return !att[k]; });
+    if (lascia.length) await Chv.rilascia(giorno, proc, lascia);
+    if (nuove.length) {
+      var objs = nuove.map(function (k) { return { giorno: giorno, procedura: proc, chiave: k, operatore: me, sigla: chi.sigla || '', preso_il: now, stato: 'PRESA' }; });
+      var r = await API.append(DB.id, 'CHV_PRESE', objs.map(function (o) { return t.toRow(o); }));
+    }
+    if (lascia.length || nuove.length) await API.append(DB.id, 'LOG', [App.log('CHV_PRESE', 'CHV_PRESE', proc + ' ' + giorno, { prese: nuove, rilasciate: lascia })]);
+    att = await Chv.attive(giorno, proc, true);
+    var ok = scelte.filter(function (k) { return att[k] && L.s(att[k].operatore).toLowerCase() === me; });
+    return { mie: ok, perse: scelte.filter(function (k) { return ok.indexOf(k) < 0; }).map(function (k) { return k + (att[k] ? ' (presa da ' + (att[k].sigla || att[k].operatore) + ')' : ''); }) };
+  },
+  rilascia: async function (giorno, proc, chiavi, admin) {
+    var me = Chv.io(), t = DB.t.CHV_PRESE || await DB.ensureSheet('CHV_PRESE', Chv.PH), now = L.nowStamp(), upd = [];
+    t.rows.forEach(function (r) {
+      if (r.giorno !== giorno || r.procedura !== proc || r.stato !== 'PRESA' || chiavi.indexOf(r.chiave) < 0) return;
+      if (!admin && L.s(r.operatore).toLowerCase() !== me) return;
+      [['stato', 'RILASCIATA'], ['rilasciata_il', now], ['rilasciata_da', me]].forEach(function (x) { r[x[0]] = x[1]; upd.push({ range: t.cell(x[0], r._r), values: [[x[1]]] }); });
+    });
+    if (upd.length) { await API.batchUpdate(DB.id, upd); if (admin) await API.append(DB.id, 'LOG', [App.log('CHV_PRESE_LIBERATE', 'CHV_PRESE', proc + ' ' + giorno, { chiavi: chiavi })]); }
+    Chv._cnt = null;
+  },
   bridge: null, inited: false, anche: false, _q: Promise.resolve(), _serviti: {},
   init: function () {
     if (Chv.inited) return; Chv.inited = true;
@@ -2450,7 +2508,7 @@ var Chv = {
       t.rows.forEach(function (r) { ci[r.id_esito] = 1; });
       var nuovi = esiti.filter(function (e) { return e && e.id_esito && !ci[e.id_esito]; });
       if (nuovi.length) {
-        var objs = nuovi.map(function (e) { var o = {}; Chv.H.forEach(function (h) { o[h] = e[h] === undefined ? '' : String(e[h]); }); o.operatore = Auth.email; return o; });
+        var objs = nuovi.map(function (e) { var o = {}; Chv.H.forEach(function (h) { o[h] = e[h] === undefined ? '' : String(e[h]); }); o.operatore = App.chi().email || Auth.email; return o; });
         var r = await API.append(DB.id, 'VLT_CHIUSURE', objs.map(function (o) { return t.toRow(o); }));
         objs.forEach(function (o, i) { o._r = r + i; t.rows.push(o); });
       }
@@ -2518,12 +2576,29 @@ var Chv = {
     if (!Chv.bridge) { Modal.open('Script VLT non attivo', 'Lo script Tampermonkey "ATS FLM → VLT" non risponde su questa pagina.\n\n1. Installa lo script in Tampermonkey (pulsante "Installa script").\n2. Ricarica questa pagina.\n\nSenza script l\'app non può passare i dati a VLT.'); return; }
     var giorno = auto && auto.giorno ? auto.giorno : Chv.giorno(), p;
     try { p = await Busy.wrap(Chv.prepara(proc, giorno)); } catch (e) { Modal.open('Coda non preparata', e.message); return; }
+    if (Chv.divisa(proc)) {
+      try {
+        var att = await Chv.attive(giorno, proc, true), me = Chv.io(), G = Chv.gruppi(p), daiK;
+        if (auto) {
+          // "Prendi dati da ATS" dal pannello VLT: le mie prese; se nessuno ha preso niente, tutto; altrimenti solo le libere
+          var mieA = Object.keys(att).filter(function (k) { return L.s(att[k].operatore).toLowerCase() === me; });
+          daiK = mieA.length ? mieA : G.map(function (g) { return g.k; }).filter(function (k) { return !att[k]; });
+        } else {
+          var scelte = await Chv.scegli(proc, giorno, G, att); if (!scelte) return;
+          if (!scelte.length) { await Chv.prendi(giorno, proc, []); toast('Nessuna ' + (proc === 'ACK' ? 'riparatore' : 'destinazione') + ' presa: le tue sono state rilasciate', 'ok'); Chv.render(); return; }
+          var esito = await Busy.wrap(Chv.prendi(giorno, proc, scelte)); daiK = esito.mie;
+          if (esito.perse.length) toast('Prese nel frattempo da altri: ' + esito.perse.join(', '), 'ko');
+        }
+        p.da = p.da.filter(function (it) { return daiK.indexOf(L.s(it.dest) || '(senza destinazione)') >= 0; });
+      } catch (e) { Modal.open('Divisione non riuscita', e.message); return; }
+    }
     if (!auto) {
       var testo = Chv.PROC[proc] + ' · ' + L.itDate(giorno) + '\n\nDa chiudere su VLT: ' + p.da.length + (p.gia ? '\nGià chiuse (escluse): ' + p.gia : '') + (p.scarti.length ? '\nNon inviabili: ' + p.scarti.length + '\n' + p.scarti.slice(0, 8).map(function (s) { return '  • ' + s.motivo; }).join('\n') : '') + '\n\nLa coda va allo script: apri la scheda VLT e premi ▶ Avvia nel riquadro ATS.';
       if (!p.da.length) { Modal.open('Niente da inviare', testo); return; }
       if (!(await Modal.confirm('Invia a VLT', testo))) return;
     }
-    var coda = { id: 'C' + Date.now().toString(36).toUpperCase(), proc: proc, nome: Chv.PROC[proc], giorno: giorno, creata: L.nowStamp(), da: App.me.sigla || Auth.email, items: p.da };
+    if (auto && Chv.divisa(proc) && !p.da.length) { toast('VLT ha chiesto ' + proc + ': niente di libero o di tuo da chiudere (prendi le destinazioni da Chiusure VLT)', 'ko'); return; }
+    var coda = { id: 'C' + Date.now().toString(36).toUpperCase(), proc: proc, nome: Chv.PROC[proc], giorno: giorno, creata: L.nowStamp(), da: App.chi().sigla || App.me.sigla || Auth.email, items: p.da };
     Chv.post({ tipo: 'coda', coda: coda, richiesta: !!auto, apri: !auto });
     toast('Coda inviata allo script VLT: ' + p.da.length + ' ' + (proc === 'RMA' ? 'RMA' : 'FR'), 'ok');
   },
@@ -2540,13 +2615,13 @@ var Chv = {
         for (var i = 0; i < P.length; i++) {
           var x = await Chv.prepara(P[i], giorno), f = Chv.fatti(P[i], giorno), ult = {};
           ((DB.t.VLT_CHIUSURE || {}).rows || []).forEach(function (r) { if (r.procedura === P[i] && r.giorno === giorno) ult[r.chiave] = r; });
-          var rma = P[i] === 'RMA', fr = P[i] === 'INGRESSI' || P[i] === 'FERME';
+          var rma = P[i] === 'RMA', fr = P[i] === 'INGRESSI' || P[i] === 'FERME', prese = Chv.divisa(P[i]) ? await Chv.attive(giorno, P[i], true) : {};
           fogli.push({ nome: Chv.PROC[P[i]].slice(0, 31).replace(/[\/?*\[\]:]/g, ' '),
-            headers: rma ? ['RMA', 'Seriali', 'Destinazione', 'AWB', 'DDT', 'Esito', 'Stato prima', 'Stato dopo', 'Dettaglio', 'Ora']
+            headers: (rma ? ['RMA', 'Seriali', 'Destinazione', 'AWB', 'DDT', 'Esito', 'Stato prima', 'Stato dopo', 'Dettaglio', 'Ora']
               : (fr ? ['FR', 'Seriale', 'P/N conferma', 'Tipo', 'Stato VLT (file)', 'Nota', 'Esito', 'Stato prima', 'Stato dopo', 'Dettaglio', 'Ora']
-                : ['FR', 'Seriale', 'Riparatore', 'AWB', 'DDT', 'Esito', 'Stato prima', 'Stato dopo', 'Dettaglio', 'Ora']),
+                : ['FR', 'Seriale', 'Riparatore', 'AWB', 'DDT', 'Esito', 'Stato prima', 'Stato dopo', 'Dettaglio', 'Ora'])).concat(['Chiusa da', 'Presa da']),
             rows: x.tutti.map(function (it) {
-              var e = ult[it.k] || {}, es = [f[it.k] || 'DA FARE', e.stato_prima || '', e.stato_dopo || '', e.dettaglio || '', L.s(e.data_ora).slice(11, 16)];
+              var e = ult[it.k] || {}, pr = prese[L.s(it.dest)], es = [f[it.k] || 'DA FARE', e.stato_prima || '', e.stato_dopo || '', e.dettaglio || '', L.s(e.data_ora).slice(11, 16), e.operatore || '', pr ? (pr.sigla || pr.operatore) : ''];
               if (rma) return [it.rma, (it.serials || []).join(' '), it.dest, it.awb, it.ddt].concat(es);
               if (fr) return [it.fr, it.seriale, it.conf_tmpn, it.tipo || 'FAULTY', it.stato_file, it.note + (it.bonificata ? ' [VLT: OK bonificata → Failure Report Sent]' : '')].concat(es);
               return [it.fr, it.seriale, it.dest, it.awb, it.ddt].concat(es);
@@ -2571,6 +2646,12 @@ var Chv = {
     try { await Chv.tab(); } catch (e) { $('chvBox').innerHTML = '<div class="empty">Errore: ' + esc(e.message) + '</div>'; return; }
     Chv.render();
   },
+  rilasciaMie: async function (proc) {
+    var g = Chv.giorno(), att = await Chv.attive(g, proc, true), me = Chv.io(), mie = Object.keys(att).filter(function (k) { return L.s(att[k].operatore).toLowerCase() === me; });
+    if (!mie.length) { toast('Non hai prese su ' + proc, 'ok'); return; }
+    if (!(await Modal.confirm('Rilascia ' + proc, 'Rilascio: ' + mie.join(', ') + '\nGli altri potranno prenderle.'))) return;
+    try { await Chv.rilascia(g, proc, mie); await API.append(DB.id, 'LOG', [App.log('CHV_PRESE', 'CHV_PRESE', proc + ' ' + g, { rilasciate: mie })]); toast('Rilasciate', 'ok'); Chv.render(); } catch (e) { Modal.open('Errore', e.message); }
+  },
   ricarica: async function () { Chv._cnt = null; try { await DB.loadTables(['VLT_CHIUSURE']); } catch (e) { } Chv.render(); },
   render: async function () {
     var box = $('chvBox'); if (!box) return;
@@ -2585,6 +2666,7 @@ var Chv = {
       mine.forEach(function (r) { last[r.chiave] = r.esito; });
       var n = { OK: 0, GIA_FATTO: 0, ERRORE: 0, SALTATO: 0 }; Object.keys(last).forEach(function (k) { n[last[k]] = (n[last[k]] || 0) + 1; });
       html += '<div class="ack-card"><div class="t">' + esc(Chv.PROC[p]) + '</div><div class="hint">' + esc(Chv.DESC[p]) + '</div>' +
+        (Chv.divisa(p) ? '<div class="hint" id="chvP_' + p + '" style="margin:2px 0 4px"></div>' : '') +
         '<div class="ack-nums"><span id="chvN_' + p + '" class="pill p-violet" title="Schede in coda per il giorno scelto">da chiudere …</span><span>chiuse <b>' + n.OK + '</b></span><span>già a posto <b>' + n.GIA_FATTO + '</b></span><span' + (n.ERRORE ? ' style="border-color:var(--red)"' : '') + '>errori <b>' + n.ERRORE + '</b></span><span>saltate <b>' + n.SALTATO + '</b></span></div>' +
         '<div class="row"><button class="btn sm" onclick="Chv.invia(\'' + p + '\')"' + (b ? '' : ' disabled') + '>▶ Invia a VLT</button><button class="btn ghost sm" onclick="Chv.vedi(\'' + p + '\')">👁 Vedi coda</button><button class="btn ghost sm" onclick="Chv.excel(\'' + p + '\')">⬇ Excel</button></div></div>';
     });
@@ -2605,7 +2687,14 @@ var Chv = {
     if (!c || c.g !== giorno || Date.now() - c.ts > 60000) {
       c = Chv._cnt = { g: giorno, ts: Date.now(), n: {} };
       for (var p in Chv.PROC) { try { var x = await Chv.costruisci(p, giorno); c.n[p] = x.items.map(function (it) { return it.k; }); } catch (e) { c.n[p] = null; } }
+      try { await DB.ensureSheet('CHV_PRESE', Chv.PH); } catch (e) { }
     }
+    ['ACK', 'RMA'].forEach(function (p) {
+      var el = $('chvP_' + p); if (!el || !DB.t.CHV_PRESE) return; var per = {}, me = Chv.io(), visti = {};
+      DB.t.CHV_PRESE.rows.forEach(function (r) { if (r.giorno !== giorno || r.procedura !== p || r.stato !== 'PRESA' || visti[r.chiave]) return; visti[r.chiave] = 1; var o = r.sigla || r.operatore; (per[o] = per[o] || []).push(r.chiave); });
+      var k = Object.keys(per);
+      el.innerHTML = k.length ? '👥 ' + k.map(function (o) { return '<b>' + esc(o) + '</b>: ' + esc(per[o].join(', ')); }).join(' · ') + ' <button class="btn ghost sm" onclick="Chv.rilasciaMie(\'' + p + '\')">Rilascia le mie</button>' : '👥 nessuno ha ancora preso ' + (p === 'ACK' ? 'riparatori' : 'destinazioni');
+    });
     var tot = 0, tutte = 0;
     Object.keys(Chv.PROC).forEach(function (p) {
       var el = $('chvN_' + p), K = c.n[p]; if (!el) return;
@@ -3024,18 +3113,18 @@ var Ddt = {
     box(M, y, cw - 1, 14, 'DESCRIZIONE MERCE', DB.param('ddt_descrizione_merce', 'MATERIALE PER TLC'));
     box(M + cw, y, cw - 1, 14, 'VETTORE', p.vettore);
     box(M + 2 * cw, y, cw - 1, 14, 'AWB', p.awb);
-    box(M + 3 * cw, y, cw - 1, 14, 'COLLI', String(C.length || ''), 15);
-    box(M + 4 * cw, y, cw, 14, 'PESO KG', String(Math.round(peso * 100) / 100), 15);
+    box(M + 3 * cw, y, cw - 1, 14, 'COLLI', String(C.length || ''), 12);
+    box(M + 4 * cw, y, cw, 14, 'PESO KG', String(Math.round(peso * 100) / 100), 12);
     y += 18;
     // dettaglio colli in grande (tipo, misure, peso): due colli per riga
     if (C.length) {
-      d.setFont('helvetica', 'bold'); d.setFontSize(10); d.text('DETTAGLIO COLLI', M, y); y += 6.5;
-      d.setFontSize(16);
+      d.setFont('helvetica', 'bold'); d.setFontSize(9); d.text('DETTAGLIO COLLI', M, y + 1); y += 6;
+      d.setFontSize(12);
       var tc = C.map(function (c, ci) { return (ci + 1) + ') ' + L.s(c.tipo_collo || 'PLT') + '  ' + c.lunghezza_cm + 'x' + c.larghezza_cm + 'x' + c.altezza_cm + ' cm  ' + c.peso_kg + ' kg'; });
       var per = tc.every(function (t) { return d.getTextWidth(t) < W / 2 - 4; }) ? 2 : 1;   // due per riga se ci stanno
       for (var ci = 0; ci < C.length; ci++) {
         d.text(tc[ci], M + (ci % per) * (W / 2), y);
-        if (ci % per === per - 1 || ci === C.length - 1) y += 7.5;
+        if (ci % per === per - 1 || ci === C.length - 1) y += 5.8;
         if (y > 250) { d.addPage(); y = 20; }
       }
       d.setFont('helvetica', 'normal'); y += 2;
@@ -4691,7 +4780,10 @@ var Rma = {
     var G = Rma.gruppi(), d = $('uscData').value, esc0 = Rma.escl(), nP = G.filter(function (g) { return g.pronta; }).length;
     if ($('uscTutti')) { $('uscTutti').disabled = !nP; $('uscTutti').textContent = 'Genera i DDT pronti' + (nP ? ' (' + nP + ')' : ''); }
     var tot = G.reduce(function (a, g) { return a + g.attivi.length; }, 0), nM = G.reduce(function (a, g) { return a + (g.s && g.s.stato === 'SPEDITA' ? 0 : g.mancanti.length); }, 0), sped = G.filter(function (g) { return g.s && g.s.stato === 'SPEDITA'; }).length;
-    $('rmaStats').innerHTML = '<div class="stat"><b>' + G.length + '</b><span>destinazioni</span></div><div class="stat"><b>' + tot + '</b><span>pezzi da spedire</span></div>' + (nM ? '<div class="stat"><b style="color:var(--amber)">' + nM + '</b><span>senza RMA</span></div>' : '') + '<div class="stat"><b style="color:var(--violet)">' + nP + '</b><span>pronte per ddt</span></div><div class="stat"><b style="color:var(--green)">' + sped + '</b><span>spedite</span></div>';
+    var nSch = 0, nCol = 0, kgS = 0;
+    G.forEach(function (g) { if (!g.s || g.s.stato !== 'SPEDITA') return; nSch += Ack.righe(g.s.id_spedizione).filter(function (r) { return r.esito === 'SPUNTATO'; }).length || (parseInt(g.s.n_pezzi, 10) || 0); Ack.colliDb(g.s.id_spedizione).forEach(function (c) { nCol++; kgS += parseFloat(String(c.peso_kg).replace(',', '.')) || 0; }); });
+    $('rmaStats').innerHTML = '<div class="stat"><b>' + G.length + '</b><span>destinazioni</span></div><div class="stat"><b>' + tot + '</b><span>pezzi da spedire</span></div>' + (nM ? '<div class="stat"><b style="color:var(--amber)">' + nM + '</b><span>senza RMA</span></div>' : '') + '<div class="stat"><b style="color:var(--violet)">' + nP + '</b><span>pronte per ddt</span></div><div class="stat"><b style="color:var(--green)">' + sped + '</b><span>destinazioni spedite</span></div>' +
+      '<div class="stat"><b style="color:var(--green)">' + nSch + '</b><span>schede spedite</span></div><div class="stat"><b>' + nCol + '</b><span>colli spediti · ' + Math.round(kgS * 100) / 100 + ' kg</span></div>';
     var PILL = { BOZZA: 'p-blue', PRONTA: 'p-violet', SPEDITA: 'p-green' };
     $('rmaUsc').innerHTML = Rma.pendCard() + (G.length ? '<div class="ack-grid usc-grid">' + G.map(function (g) {
       var s = g.s, k = Ack.key(g.dest), cp = Rma.cp(g.dest), st = s ? s.stato : 'DA PREPARARE', done = s && s.stato === 'SPEDITA', lock = '';
@@ -7027,6 +7119,7 @@ var Arc = {
     { n: 'RMA_RITORNI', tipo: 'pre', ok: function (r, A) { var d = L.normDate(r.data_apertura); return d && d < A && r.stato !== 'DA_EVADERE' && r.stato !== 'ASSEGNATA'; } },
     { n: 'ACK_VLT', tipo: 'pre', ok: function (r, A, X) { var d = L.normDate(r.data_ack); return d && d < A && !X.inHub[r.id_unita]; } },
     { n: 'LOG', tipo: 'pre', ok: function (r, A) { var d = L.normDate(r.data_ora); return d && d < A; } },
+    { n: 'CHV_PRESE', tipo: 'pre', ok: function (r, A) { return r.giorno && r.giorno < A; } },
     { n: 'CODA_MAIL', tipo: 'pre', ok: function (r, A) { var d = L.normDate(r.creato_il); return d && d < A && r.stato !== 'DA_INVIARE' && r.stato !== 'IN_INVIO'; } },
     { n: 'UNITA', tipo: 'sparse', ok: function (r, A) { var d = L.normDate(r.data_out) || L.normDate(r.modificato_il) || L.normDate(r.creato_il); return ['USCITO', 'ANNULLATO', 'RETTIFICATO'].indexOf(r.stato) >= 0 && d && d < A; } }
   ],
