@@ -232,6 +232,8 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
 .kc-x span{flex:1 1 0;min-width:0;text-align:center;white-space:nowrap;overflow:hidden}
 .kc-x span.sel{color:var(--text);font-weight:700}
 .ack-colli{display:flex;flex-direction:column;gap:3px;font-size:12px;margin:2px 0 6px;padding:6px 8px;border:1px solid var(--border);border-radius:8px}.ack-colli .pill{font-size:10.5px;padding:1px 6px}
+.ac-pop{position:fixed;z-index:3000;background:var(--card,#fff);color:var(--text);border:1px solid var(--border);border-radius:8px;box-shadow:0 10px 28px rgba(0,0,0,.25);max-height:320px;overflow:auto;min-width:220px;max-width:min(560px,calc(100vw - 24px));font:12.5px/1.35 'JetBrains Mono',Consolas,monospace}
+.ac-pop div{padding:6px 10px;white-space:nowrap;cursor:pointer}.ac-pop div.on,.ac-pop div:hover{background:var(--blue,#3b82f6);color:#fff}.ac-pop .ac-n{cursor:default;color:var(--subtle);font-family:inherit;font-size:11px;border-bottom:1px solid var(--border)}.ac-pop .ac-n:hover{background:none;color:var(--subtle)}
 .blk-banner{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);color:var(--text);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:13px}
 .dash-axis{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px}
 .progress{font-family:var(--ff-mono);font-size:12px;color:var(--subtle);margin-top:10px;white-space:pre-line}
@@ -409,6 +411,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
           <div class="stats" style="margin:0 0 0 8px" id="inStats"></div>
           <div class="spacer"></div>
           <button class="btn ghost sm" onclick="Ingresso.excelLetti()">⬇ Excel</button> <button class="btn ghost sm" onclick="Ingresso.etichetteLetti()">🏷 Etichette</button> <button class="btn ghost sm" onclick="Ingresso.cedolinoLetti()" title="Cedolino per P/N: quantità e posizione (NEW/REUSE)">📋 Cedolino</button>
+          <button class="btn ghost sm" id="btnPendTutti" onclick="Ingresso.pendScegli()" title="Scegli dall'elenco i pezzi senza FR da caricare in attesa">⏳ Metti in attesa FR</button> <button class="btn ghost sm" onclick="Ingresso.ubiScegli()" title="Assegna un'ubicazione ai pezzi scelti dall'elenco">📍 Assegna ubicazione</button>
           <button class="btn green" id="btnCarica" onclick="Ingresso.carica()">Carica dati</button></div>
         <div class="tbl-wrap"><table>
           <thead><tr><th>#</th><th>FR</th><th>RMA</th><th>Seriale</th><th>P/N</th><th>MNFT</th><th>Riparatore</th><th>Stato VLT</th><th>Nota</th><th>Destinazione / Ubicazione</th><th>Controlli</th><th></th></tr></thead>
@@ -1401,6 +1404,44 @@ var Ingresso = {
       } }]);
   },
   nopend: function (i) { delete Ingresso.rows[i].pend; Ingresso.ricalcola(); Ingresso.save(); },
+  // elenco a popup dei pezzi senza FR: si scelgono, un motivo per tutti
+  pendScegli: function () {
+    var C = Ingresso.computed, idx = C.map(function (c, i) { return c.puoPend ? i : -1; }).filter(function (i) { return i >= 0; });
+    if (!idx.length) { toast('Nessun pezzo senza FR in elenco', 'ok'); return; }
+    var righe = idx.map(function (i) { var c = C[i]; return '<tr><td><input type="checkbox" class="pdSel" data-i="' + i + '"' + (c.pend ? '' : ' checked') + '></td><td>' + (i + 1) + '</td><td class="mono">' + esc(c.ser) + '</td><td class="mono">' + esc(c.pn) + '</td><td>' + esc(c.tipo) + '</td><td>' + (c.pend ? '<span class="pill p-amber">⏳ ' + esc(c.pend) + '</span>' : '<span class="pill p-red">senza FR</span>') + '</td></tr>'; }).join('');
+    Modal.html('Metti in attesa di FR', '<div class="hint" style="margin-bottom:8px">I pezzi scelti si caricano <b>IN ATTESA</b> (contano in giacenza, non vanno in ACK, RMA né export) con un\'anomalia FR mancante; l\'FR si assegna dopo da "⏳ In attesa di FR".</div>' +
+      '<div class="tbl-wrap modal-scroll" style="max-height:42vh"><table><thead><tr><th><input type="checkbox" id="pdTutti" checked></th><th>#</th><th>Seriale</th><th>P/N</th><th>Tipo</th><th>Stato</th></tr></thead><tbody>' + righe + '</tbody></table></div>' +
+      '<div class="row" style="margin-top:8px"><div class="fg" style="flex:1;min-width:220px"><span class="fl">Motivo *</span><select class="fc" id="pdMot">' + Ingresso.MOTIVI.map(function (m) { return '<option>' + esc(m) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="fg" style="flex:1;min-width:200px"><span class="fl">Dettaglio (obbligatorio per "Altro")</span><input class="fc" id="pdNota"></div></div>',
+      [{ label: 'Annulla', cls: 'ghost' },
+       { label: 'Togli dall\'attesa', cls: 'ghost', fn: function () { Ingresso._pdSel().forEach(function (i) { delete Ingresso.rows[i].pend; }); Ingresso.ricalcola(); Ingresso.save(); } },
+       { label: '⏳ Metti in attesa', cls: 'green', keep: true, fn: function () {
+         var mot = $('pdMot').value, nt = L.s($('pdNota').value), sel = Ingresso._pdSel();
+         if (!sel.length) { toast('Scegli almeno un pezzo', 'ko'); return; }
+         if (mot === 'Altro' && !nt) { $('pdNota').classList.add('err'); return; }
+         sel.forEach(function (i) { Ingresso.rows[i].pend = { motivo: mot, nota: nt }; });
+         Modal.close(); Ingresso.ricalcola(); Ingresso.save(); toast(sel.length + ' pezzi in attesa di FR', 'ok');
+       } }], true);
+    $('pdTutti').onchange = function () { document.querySelectorAll('#mBody .pdSel').forEach(function (cb) { cb.checked = $('pdTutti').checked; }); };
+  },
+  _pdSel: function () { return Array.prototype.slice.call(document.querySelectorAll('#mBody .pdSel')).filter(function (cb) { return cb.checked; }).map(function (cb) { return +cb.getAttribute('data-i'); }); },
+  // un'ubicazione per i pezzi scelti dall'elenco
+  ubiScegli: function () {
+    var C = Ingresso.computed, idx = C.map(function (c, i) { return Ingresso.ubiTipo(c.tipo) ? i : -1; }).filter(function (i) { return i >= 0; });
+    if (!idx.length) { toast('Nessun pezzo in elenco', 'ok'); return; }
+    var righe = idx.map(function (i) { var c = C[i]; return '<tr><td><input type="checkbox" class="ubSel" data-i="' + i + '"' + (L.s(c.ubicazione) ? '' : ' checked') + '></td><td>' + (i + 1) + '</td><td class="mono">' + esc(c.ser) + '</td><td class="mono">' + esc(c.pn) + '</td><td>' + esc(c.tipo) + '</td><td class="mono">' + esc(c.ubicazione || '—') + '</td></tr>'; }).join('');
+    Modal.html('Assegna ubicazione', '<div class="fg"><span class="fl">Ubicazione (vuota = la toglie)</span><input class="fc mono" id="ubVal" list="dlUbicazioni" autocomplete="off" placeholder="es. 71-STK-S01-C01-01-12"></div>' +
+      '<div class="tbl-wrap modal-scroll" style="max-height:42vh;margin-top:8px"><table><thead><tr><th><input type="checkbox" id="ubTutti"></th><th>#</th><th>Seriale</th><th>P/N</th><th>Tipo</th><th>Ubicazione attuale</th></tr></thead><tbody>' + righe + '</tbody></table></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: '📍 Assegna ai selezionati', cls: 'green', keep: true, fn: function () {
+        var v = L.up(L.s($('ubVal').value)), sel = Array.prototype.slice.call(document.querySelectorAll('#mBody .ubSel')).filter(function (cb) { return cb.checked; }).map(function (cb) { return +cb.getAttribute('data-i'); });
+        if (!sel.length) { toast('Scegli almeno un pezzo', 'ko'); return; }
+        if ((Ingresso.T().tipo === 'NEW' || Ingresso.T().tipo === 'REUSE') && !v) { $('ubVal').classList.add('err'); return; }
+        sel.forEach(function (i) { Ingresso.rows[i].ubi = v; });
+        Modal.close(); Ingresso.ricalcola(); Ingresso.save(); toast((v ? 'Ubicazione ' + v : 'Ubicazione tolta') + ' · ' + sel.length + ' pezzi', 'ok');
+      } }], true);
+    $('ubTutti').onchange = function () { document.querySelectorAll('#mBody .ubSel').forEach(function (cb) { cb.checked = $('ubTutti').checked; }); };
+    setTimeout(function () { $('ubVal').focus(); }, 50);
+  },
   edit: function (i, f, v) { var r = Ingresso.rows[i]; r.man[f] = L.s(v); Ingresso.ricalcola(); Ingresso.save(); },
   editUbi: function (i, v) { Ingresso.rows[i].ubi = L.up(v); Ingresso.ricalcola(); Ingresso.save(); },
   // PULIZIA: 1) script pulizia con P/N in anagrafica · 2) regole barcode con P/N in anagrafica · 3) casi fissi dello script · 4) prima regola barcode
@@ -1419,11 +1460,24 @@ var Ingresso = {
     var ser0 = Ingresso.pulisci(bc, '').ser;
     var CLOSED = {}; L.s(DB.param('vlt_stati_chiusi', '')).split(';').forEach(function (x) { if (x) CLOSED[x] = 1; });
     var hf = DB.huaweiFr[L.up(bc)] || DB.huaweiFr[L.up(ser0)] || DB.huaweiFr[L.up(L.afterSpace(bc))];
-    var pick = L.pickFr(DB.vltBySer[L.up(ser0)] || DB.vltBySer[L.up(L.afterSpace(ser0))] || DB.vltBySer[L.up(bc)] || [], CLOSED);
+    var tutti = DB.vltBySer[L.up(ser0)] || DB.vltBySer[L.up(L.afterSpace(ser0))] || DB.vltBySer[L.up(bc)] || [];
+    // dal seriale si associa solo un FR recente e in uno stato valido (un FR vecchio dello stesso seriale non va preso)
+    var validi = tutti.filter(function (v) { return Ingresso.frValido(v, tipo, CLOSED); });
+    var pick = L.pickFr(validi, CLOSED); pick.n = validi.length;
+    var scartato = !validi.length && tutti.length ? L.pickFr(tutti, CLOSED).row : null;
     if (tipo === 'GOOD' && hf) return { fr: hf, origine: 'HUAWEI', pick: pick };
     if (pick.row) return { fr: pick.row.fr_id, origine: 'VLT', pick: pick };
     if (hf) return { fr: hf, origine: 'HUAWEI', pick: pick };
-    return { fr: '', origine: '', pick: pick };
+    return { fr: '', origine: '', pick: pick, scartato: scartato };
+  },
+  // FR valido per l'ingresso. FAULTY: aperto da non più di ingresso_fr_giorni (60) e in uno stato di ingresso_fr_stati_faulty.
+  // GOOD: basta che non sia chiuso (la GOOD torna dal riparatore anche mesi dopo l'apertura dell'FR)
+  frValido: function (v, tipo, CLOSED) {
+    if (tipo === 'FAULTY') {
+      var gg = parseInt(DB.param('ingresso_fr_giorni', '60'), 10) || 60, d = new Date(); d.setDate(d.getDate() - gg);
+      var da = L.normDate(L.s(v.data_apertura).slice(0, 10));
+      if (/^\d{4}-\d{2}-\d{2}$/.test(da) && da < L.isoToday(d)) return false; var st = L.s(DB.param('ingresso_fr_stati_faulty', 'Failed Material Sent;Open')).split(';').map(function (x) { return L.up(L.s(x)); }); return st.indexOf(L.up(v.stato)) >= 0; }
+    return !CLOSED[v.stato];
   },
   regole: function () { return DB.t.REGOLE_BARCODE.rows.slice().sort(function (a, b) { return (parseInt(a.priorita, 10) || 0) - (parseInt(b.priorita, 10) || 0); }); },
   // anteprima mentre si scrive: seriale → FR e FR → seriale
@@ -1435,7 +1489,7 @@ var Ingresso = {
         var r = L.s(bc.value) ? Ingresso.trovaFr(L.s(bc.value), T.tipo) : { fr: '' };
         fr.value = r.fr; fr.dataset.auto = r.fr ? '1' : '0';
         var v = r.fr ? DB.vltMap[r.fr] : null;
-        $('hFr').textContent = r.fr ? (r.origine === 'HUAWEI' ? 'da file Huawei' : (v ? v.stato : '') + (r.pick && r.pick.n > 1 ? ' · ' + r.pick.n + ' FR, preso il più recente' : '')) : (L.s(bc.value) ? 'non trovato: scrivilo' : '');
+        $('hFr').textContent = r.fr ? (r.origine === 'HUAWEI' ? 'da file Huawei' : (v ? v.stato : '') + (r.pick && r.pick.n > 1 ? ' · ' + r.pick.n + ' FR, preso il più recente' : '')) : (L.s(bc.value) ? (r.scartato ? 'FR ' + r.scartato.fr_id + ' vecchio/' + r.scartato.stato + ': non associato' : 'non trovato: scrivilo') : '');
         $('hFr').className = 'hint' + (L.s(bc.value) && !r.fr ? ' warn' : '');
       }
       Ingresso.anteprimaSer();
@@ -1468,7 +1522,8 @@ var Ingresso = {
     var frIn = r.fr, frOrig = '', pick = null;
     var ser0 = r.bc ? Ingresso.pulisci(r.bc, '').ser : '';
     // lettura dal seriale: l'FR si cerca da solo (stessa logica dell'anteprima)
-    if (!frIn && r.bc) { var tf = Ingresso.trovaFr(r.bc, T.tipo); frIn = tf.fr; frOrig = tf.origine; pick = tf.pick; }
+    var frScart = null;
+    if (!frIn && r.bc) { var tf = Ingresso.trovaFr(r.bc, T.tipo); frIn = tf.fr; frOrig = tf.origine; pick = tf.pick; frScart = tf.scartato || null; }
     var jg = T.tipo === 'GOOD' && !frIn ? Jun.perGood(ser0 || r.bc) : null;
     if (jg && L.s(jg.fr)) { frIn = L.s(jg.fr); frOrig = 'JUNIPER'; }
     var o = { fr: frIn, rma: '', bc: r.bc, msgs: [], err: false, warn: false, tipo: T.tipo, ubicazione: r.ubi, plt: r.plt || '', destinazione: '', statoVlt: '', nota: '', mail: null };
@@ -1484,6 +1539,7 @@ var Ingresso = {
       if (pick.chiuso) { o.msgs.push(['warn', 'L\'FR più recente di questo seriale è chiuso su VLT (' + pick.row.stato + ')']); o.warn = true; }
     }
     if (frOrig === 'HUAWEI') o.msgs.push(['info', 'FR ricavato dal file Huawei (seriale → FR)']);
+    if (frScart && !frIn) o.msgs.push(['info', 'Su VLT c\'è l\'FR ' + frScart.fr_id + ' (' + frScart.stato + (frScart.data_apertura ? ', aperto il ' + L.s(frScart.data_apertura).slice(0, 10) : '') + ') ma non è stato associato: troppo vecchio o in uno stato non valido']);
     if (jg) o.msgs.push(['info', 'GOOD Juniper · pratica ' + jg.id_juniper + (L.s(jg.fr) ? ' · FR dalla pratica' : ' · faulty non ancora arrivata: l\'FR si associa da solo quando la ricevi')]);
     o.rip = r.man.rip || (v ? v.riparatore : '');
     var sn = DB.serNoti[L.up(o.ser)];
@@ -1614,12 +1670,14 @@ var Ingresso = {
         '<td class="nw">' + ed('ser', c.ser, 12) + '</td><td class="nw">' + ed('pn', c.pn, 8) + (c.pn && c.pnAnag !== undefined ? (c.pnAnag ? ' <span title="P/N presente in anagrafica articoli" style="color:var(--green)">✓</span>' : ' <span title="P/N NON presente in anagrafica articoli' + (c.pnSimile ? ' (simile: ' + esc(c.pnSimile) + ')' : '') + '" style="color:var(--amber)">✗</span>') : '') + '</td><td class="nw">' + ed('mnft', c.mnft, 6) + '</td>' +
         '<td>' + esc(c.rip) + '</td><td style="font-size:11.5px;color:var(--subtle)">' + esc(c.statoVlt) + '</td>' +
         '<td>' + ed('nota', c.nota, 10) + '</td><td>' + (c.tipo === 'FAULTY' || c.tipo === 'GOOD' ? (c.destinazione ? '<div>' + esc(c.destinazione) + '</div>' : '') + '<input class="edit-cell edit-vis mono" style="width:calc(' + Math.max(12, Math.min(40, L.s(c.ubicazione).length + 2)) + 'ch + 16px)" list="dlUbicazioni" value="' + esc(c.ubicazione) + '" placeholder="✎ ubicazione (facoltativa)" onchange="Ingresso.editUbi(' + i + ',this.value)">' : '') + (c.tipo === 'NEW' || c.tipo === 'REUSE' ? '<input class="edit-cell edit-vis mono" style="width:calc(' + Math.max(12, Math.min(40, L.s(c.ubicazione).length + 2)) + 'ch + 16px)" list="dlUbicazioni" value="' + esc(c.ubicazione) + '" placeholder="✎ ubicazione" onchange="Ingresso.editUbi(' + i + ',this.value)">' + (c.plt ? '<div class="hint mono" style="font-size:10.5px">' + esc(c.plt) + '</div>' : '') : (c.tipo === 'FAULTY' || c.tipo === 'GOOD' ? '' : esc(c.destinazione))) + '</td>' +
-        '<td><div class="msgs">' + m + mail + (c.puoPend ? (c.pend ? ' <button class="btn ghost sm" onclick="Ingresso.nopend(' + i + ')">Annulla pending</button>' : ' <button class="btn sm" style="background:var(--amber);color:#111" onclick="Ingresso.pend(' + i + ')" title="Carica il pezzo senza FR: resta in attesa finché non arriva">⏳ Pending senza FR</button>') : '') + '</div></td><td><button class="ico-btn" title="Elimina" onclick="Ingresso.del(' + i + ')">✕</button></td></tr>';
+        '<td><div class="msgs">' + m + mail + '' + '</div></td><td><button class="ico-btn" title="Elimina" onclick="Ingresso.del(' + i + ')">✕</button></td></tr>';
     }).join('');
     var nErr = C.filter(function (c) { return c.err; }).length, nWarn = C.filter(function (c) { return c.warn && !c.err; }).length;
     $('inStats').innerHTML = '<div class="stat"><b>' + C.length + '</b><span>pezzi</span></div>' +
       (nErr ? '<div class="stat"><b style="color:var(--red)">' + nErr + '</b><span>bloccanti</span></div>' : '') +
       (nWarn ? '<div class="stat"><b style="color:var(--amber)">' + nWarn + '</b><span>da verificare</span></div>' : '');
+    var nPd = C.filter(function (c) { return c.puoPend && !c.pend; }).length, bp = $('btnPendTutti');
+    if (bp) { bp.textContent = '⏳ Metti in attesa FR' + (nPd ? ' (' + nPd + ')' : ''); bp.style.borderColor = nPd ? 'var(--amber)' : ''; bp.style.color = nPd ? 'var(--amber)' : ''; }
     $('btnCarica').disabled = !C.length || nErr > 0;
     $('btnCarica').title = nErr ? 'Correggi le righe in rosso' : '';
     $('wrapUbi').style.visibility = Ingresso.mostraUbi() ? 'visible' : 'hidden'; $('lblUbi').textContent = Ingresso.needUbi() ? 'Ubicazione *' : 'Ubicazione (facoltativa)';
@@ -7642,6 +7700,56 @@ var Mob = {
 
 window.addEventListener('load', function () { try { Mob.init(); } catch (e) { } });
 window.addEventListener('load', Auth.init);
+</script>
+<script>
+// ─ menu delle ubicazioni a larghezza piena (il menu nativo del browser taglia i codici lunghi): sostituisce list="dlUbicazioni"
+var Ac = {
+  el: null, pop: null, sel: -1, vis: [],
+  lista: function () { return DB.ubicazioni || []; },
+  apri: function (el) {
+    Ac.el = el; if (!Ac.pop) { Ac.pop = document.createElement('div'); Ac.pop.className = 'ac-pop'; document.body.appendChild(Ac.pop); Ac.pop.addEventListener('mousedown', function (e) { var d = e.target.closest('[data-v]'); e.preventDefault(); if (d) Ac.scegli(d.getAttribute('data-v')); }); }
+    Ac.filtra();
+  },
+  filtra: function () {
+    var el = Ac.el; if (!el) return; var q = L.up(el.value), L0 = Ac.lista();
+    var a = q ? L0.filter(function (x) { return L.up(x).indexOf(q) === 0; }).concat(L0.filter(function (x) { var u = L.up(x); return u.indexOf(q) > 0; })) : L0;
+    Ac.vis = a.slice(0, 300); Ac.sel = -1;
+    if (!Ac.vis.length) { Ac.chiudi(); return; }
+    Ac.pop.innerHTML = '<div class="ac-n">' + a.length + ' ubicazioni' + (a.length > 300 ? ' (prime 300: continua a scrivere)' : '') + '</div>' + Ac.vis.map(function (x, i) { return '<div data-v="' + esc(x) + '" data-i="' + i + '">' + esc(x) + '</div>'; }).join('');
+    var r = el.getBoundingClientRect(), h = Math.min(320, 26 * (Ac.vis.length + 1) + 4), sotto = window.innerHeight - r.bottom > h + 8 || r.top < h;
+    Ac.pop.style.display = 'block'; Ac.pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - Ac.pop.offsetWidth - 8)) + 'px';
+    Ac.pop.style.minWidth = Math.max(220, r.width) + 'px'; Ac.pop.style.top = (sotto ? r.bottom + 2 : Math.max(8, r.top - h - 2)) + 'px';
+    Ac.pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - Ac.pop.offsetWidth - 8)) + 'px';
+  },
+  evid: function (d) {
+    if (!Ac.vis.length) return; Ac.sel = (Ac.sel + d + Ac.vis.length) % Ac.vis.length;
+    Ac.pop.querySelectorAll('[data-i]').forEach(function (x) { x.classList.toggle('on', +x.getAttribute('data-i') === Ac.sel); });
+    var on = Ac.pop.querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest' });
+  },
+  scegli: function (v) {
+    var el = Ac.el; if (!el) return; el.value = v;
+    el.dispatchEvent(new Event('input', { bubbles: true })); el.dispatchEvent(new Event('change', { bubbles: true }));
+    Ac.chiudi();
+  },
+  chiudi: function () { if (Ac.pop) Ac.pop.style.display = 'none'; Ac.sel = -1; },
+  aperto: function () { return Ac.pop && Ac.pop.style.display === 'block'; }
+};
+document.addEventListener('focusin', function (e) {
+  var el = e.target; if (!el || el.tagName !== 'INPUT') return;
+  if (el.getAttribute('list') === 'dlUbicazioni') { el.removeAttribute('list'); el.dataset.ac = 'ubi'; el.setAttribute('autocomplete', 'off'); }
+  if (el.dataset.ac === 'ubi') Ac.apri(el);
+});
+document.addEventListener('input', function (e) { if (e.target === Ac.el && e.target.dataset.ac === 'ubi' && document.activeElement === e.target) Ac.filtra(); });
+document.addEventListener('focusout', function (e) { if (e.target === Ac.el) setTimeout(function () { if (document.activeElement !== Ac.el) Ac.chiudi(); }, 120); });
+// tastiera: frecce per scegliere, Invio conferma la voce evidenziata (senza far partire il pezzo), Esc chiude
+document.addEventListener('keydown', function (e) {
+  if (!Ac.aperto() || e.target !== Ac.el) return;
+  if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopImmediatePropagation(); Ac.evid(e.key === 'ArrowDown' ? 1 : -1); }
+  else if (e.key === 'Enter' && Ac.sel >= 0) { e.preventDefault(); e.stopImmediatePropagation(); Ac.scegli(Ac.vis[Ac.sel]); }
+  else if (e.key === 'Escape') { Ac.chiudi(); }
+  else if (e.key === 'Enter' || e.key === 'Tab') Ac.chiudi();
+}, true);
+window.addEventListener('scroll', function () { if (Ac.aperto()) Ac.filtra(); }, true);
 </script>
 </body>
 </html>
