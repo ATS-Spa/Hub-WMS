@@ -3334,11 +3334,21 @@ DB.ensureSheet = async function (name, header) {
   await API.batchUpdate(DB.id, [{ range: API.q(name) + '!A1', values: [header] }]);
   DB.t[name] = new Table(name, header, []); return DB.t[name];
 };
+// il foglio deve avere almeno n colonne: se la griglia è più stretta la allarga (altrimenti "exceeds grid limits")
+DB.allargaCol = async function (name, n) {
+  var js; try { js = await API.call(API.S + DB.id + '?fields=' + encodeURIComponent('sheets(properties(sheetId,title,gridProperties(columnCount)))')); } catch (e) { return; }   // se non riesco a leggere, ci prova la scrittura
+  var sh = (js.sheets || []).map(function (x) { return x.properties; }).find(function (p) { return p.title === name; });
+  if (!sh) return;
+  var c = (sh.gridProperties || {}).columnCount || 0;
+  if (c >= n) return;
+  await API.call(API.S + DB.id + ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: [{ appendDimension: { sheetId: sh.sheetId, dimension: 'COLUMNS', length: n - c } }] }) });
+};
 // colonne nuove su un foglio esistente (in coda all'intestazione), poi ricarica il foglio
 DB.ensureCols = async function (name, cols) {
   var t = DB.t[name]; if (!t || !t.header.length) return t;
   var manc = cols.filter(function (c) { return !(c in t.idx); }); if (!manc.length) return t;
   var a = t.header.length;
+  await DB.allargaCol(name, a + manc.length);
   await API.batchUpdate(DB.id, [{ range: API.q(name) + '!' + L.colLetter(a) + '1:' + L.colLetter(a + manc.length - 1) + '1', values: [manc] }]);
   await DB.loadTables([name]); return DB.t[name];
 };
