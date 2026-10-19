@@ -425,6 +425,17 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
           <tbody id="oggiRows"></tbody>
         </table></div>
       </div>
+
+      <div class="card" id="pendCard">
+        <div class="card-h"><div class="card-t">⏳ In attesa di FR</div><span class="pill p-amber" id="pendN">0</span>
+          <span class="hint">FAULTY/GOOD entrate senza FR: in giacenza ma ferme (non vanno in ACK, RMA, export) finché non si assegna l'FR</span><div class="spacer"></div>
+          <button class="btn ghost sm" onclick="Ingresso.mailPend()" title="Una mail al Service Desk con l'elenco completo dei pezzi senza FR">✉ Mail Service Desk (elenco completo)</button>
+          <button class="btn ghost sm" onclick="Ingresso.excelPend()">⬇ Excel</button></div>
+        <div class="tbl-wrap" style="max-height:40vh"><table>
+          <thead><tr><th>ID</th><th>Tipo</th><th>Seriale</th><th>P/N</th><th>Entrata</th><th>Giorni</th><th>Motivo</th><th>FR proposto da VLT</th><th>Assegna FR</th></tr></thead>
+          <tbody id="pendRows"></tbody>
+        </table></div>
+      </div>
     </div>
 
     <!-- GIACENZE -->
@@ -1374,6 +1385,19 @@ var Ingresso = {
     Ingresso.fitScan(); Ingresso.ricalcola(); Ingresso.save(); $('scBc').focus();
   },
   del: function (i) { Ingresso.rows.splice(i, 1); Ingresso.ricalcola(); Ingresso.save(); },
+  MOTIVI: ['FR non ancora aperto dal Service Desk', 'Etichetta mancante', 'FR errato', 'Altro'],
+  pend: function (i) {
+    var c = Ingresso.computed[i]; if (!c) return;
+    Modal.html('Pending senza FR · ' + c.ser, '<div class="hint" style="margin-bottom:8px">Il pezzo entra in giacenza <b>IN ATTESA</b> (non va in ACK, RMA né export) con un\'anomalia aperta. L\'FR si assegna dopo da "⏳ In attesa di FR".</div>' +
+      '<div class="fg"><span class="fl">Motivo *</span><select class="fc" id="pdMot">' + Ingresso.MOTIVI.map(function (m) { return '<option>' + esc(m) + '</option>'; }).join('') + '</select></div>' +
+      '<div class="fg" style="margin-top:6px"><span class="fl">Dettaglio (obbligatorio per "Altro")</span><input class="fc" id="pdNota"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Metti in pending', cls: 'green', keep: true, fn: function () {
+        var mot = $('pdMot').value, nt = L.s($('pdNota').value);
+        if (mot === 'Altro' && !nt) { $('pdNota').classList.add('err'); return; }
+        Ingresso.rows[i].pend = { motivo: mot, nota: nt }; Modal.close(); Ingresso.ricalcola(); Ingresso.save();
+      } }]);
+  },
+  nopend: function (i) { delete Ingresso.rows[i].pend; Ingresso.ricalcola(); Ingresso.save(); },
   edit: function (i, f, v) { var r = Ingresso.rows[i]; r.man[f] = L.s(v); Ingresso.ricalcola(); Ingresso.save(); },
   editUbi: function (i, v) { Ingresso.rows[i].ubi = L.up(v); Ingresso.ricalcola(); Ingresso.save(); },
   // PULIZIA: 1) script pulizia con P/N in anagrafica · 2) regole barcode con P/N in anagrafica · 3) casi fissi dello script · 4) prima regola barcode
@@ -1527,6 +1551,15 @@ var Ingresso = {
       o.pnAnag = App.pnEsiste(o.pn);
       if (!o.pnAnag) { var sim = App.pnSimile(o.pn); o.pnSimile = sim; o.msgs.push(['warn', 'P/N ' + o.pn + ' non in anagrafica articoli' + (sim ? ' (simile: ' + sim + ')' : '')]); o.warn = true; }
     }
+    // FAULTY/GOOD senza FR (o FR non su VLT): si può caricare "in attesa di FR" con un motivo
+    o.puoPend = (o.tipo === 'FAULTY' || o.tipo === 'GOOD') && !v && !o.rma && !!r.bc;
+    if (r.pend && o.puoPend) {
+      o.msgs = o.msgs.filter(function (m) { return !/FR non trovato|Destinazione non ricavata/.test(m[1]); });
+      o.err = o.msgs.some(function (m) { return m[0] === 'err'; });
+      o.pend = r.pend.motivo; o.fr = ''; o.warn = true;
+      o.nota = 'PENDING FR: ' + r.pend.motivo + (r.pend.nota ? ' (' + r.pend.nota + ')' : '') + (r.man.nota ? ' · ' + r.man.nota : '');
+      o.msgs.unshift(['warn', '⏳ Pending senza FR: ' + r.pend.motivo + ' · entra IN ATTESA, l\'FR si assegna dopo']);
+    }
     // il FR fa fede: stesso FR già in giacenza con un altro seriale (es. Huawei che sostituisce il pezzo)
     if (o.fr && (o.tipo === 'FAULTY' || o.tipo === 'GOOD')) {
       var gf = (ctx.giacFr[o.fr] || []).filter(function (u) { return u.tipo === o.tipo && L.up(u.seriale) !== L.up(o.ser); });
@@ -1578,7 +1611,7 @@ var Ingresso = {
         '<td class="nw">' + ed('ser', c.ser, 12) + '</td><td class="nw">' + ed('pn', c.pn, 8) + (c.pn && c.pnAnag !== undefined ? (c.pnAnag ? ' <span title="P/N presente in anagrafica articoli" style="color:var(--green)">✓</span>' : ' <span title="P/N NON presente in anagrafica articoli' + (c.pnSimile ? ' (simile: ' + esc(c.pnSimile) + ')' : '') + '" style="color:var(--amber)">✗</span>') : '') + '</td><td class="nw">' + ed('mnft', c.mnft, 6) + '</td>' +
         '<td>' + esc(c.rip) + '</td><td style="font-size:11.5px;color:var(--subtle)">' + esc(c.statoVlt) + '</td>' +
         '<td>' + ed('nota', c.nota, 10) + '</td><td>' + (c.tipo === 'NEW' || c.tipo === 'REUSE' ? '<input class="edit-cell edit-vis mono" style="width:calc(' + Math.max(12, Math.min(40, L.s(c.ubicazione).length + 2)) + 'ch + 16px)" list="dlUbicazioni" value="' + esc(c.ubicazione) + '" placeholder="✎ ubicazione" onchange="Ingresso.editUbi(' + i + ',this.value)">' + (c.plt ? '<div class="hint mono" style="font-size:10.5px">' + esc(c.plt) + '</div>' : '') : esc(c.destinazione)) + '</td>' +
-        '<td><div class="msgs">' + m + mail + '</div></td><td><button class="ico-btn" title="Elimina" onclick="Ingresso.del(' + i + ')">✕</button></td></tr>';
+        '<td><div class="msgs">' + m + mail + (c.puoPend ? (c.pend ? ' <button class="btn ghost sm" onclick="Ingresso.nopend(' + i + ')">Annulla pending</button>' : ' <button class="btn sm" style="background:var(--amber);color:#111" onclick="Ingresso.pend(' + i + ')" title="Carica il pezzo senza FR: resta in attesa finché non arriva">⏳ Pending senza FR</button>') : '') + '</div></td><td><button class="ico-btn" title="Elimina" onclick="Ingresso.del(' + i + ')">✕</button></td></tr>';
     }).join('');
     var nErr = C.filter(function (c) { return c.err; }).length, nWarn = C.filter(function (c) { return c.warn && !c.err; }).length;
     $('inStats').innerHTML = '<div class="stat"><b>' + C.length + '</b><span>pezzi</span></div>' +
@@ -1611,6 +1644,8 @@ var Ingresso = {
       Modal.close(); toast(C.length + ' pezzi caricati', 'ok');
       if (esito && (T.tipo === 'NEW' || T.tipo === 'REUSE')) Nr.daIngresso(T, esito.pezzi, esito.idR);
       if (esito && esito.pezzi.some(function (p) { return p.tipo === 'FAULTY'; })) Jun.dopoIngresso(esito.pezzi, L.isoToday());
+      var pz = esito ? esito.pezzi.filter(function (p) { return p.stato === 'IN_ATTESA' && p.pending_fr; }) : [];
+      if (pz.length) setTimeout(function () { Ingresso.mailPend(pz.map(function (p) { return p.id_unita; }), T); }, 300);
       Export.scrivi().catch(function (e) { toast('Export FR da chiudere non aggiornato: ' + e.message, 'ko'); });
       Ingresso.rows = []; Ingresso.save(); Ingresso.setTestata({ data: L.isoToday() }); Ingresso.ricalcola(); Ingresso.renderOggi(); App.syncInfo();
     } catch (e) {
@@ -1633,13 +1668,14 @@ var Ingresso = {
   },
   // scrittura in 2-3 giri: (1) ricezione, giacenza e movimenti in parallelo, (2) ID e riferimenti incrociati + log + anomalie in parallelo
   scrivi: async function (T, C) {
+    if (C.some(function (c) { return c.pend; })) await DB.ensureCols('UNITA', ['pending_fr', 'fr_assegnato_il']);
     var now = L.nowStamp(), me = Auth.email, sigla = App.me.sigla || '', n = C.length;
     var tU = DB.t.UNITA, H = await Ingresso.heads(), tR = H.RICEZIONI, tM = H.MOVIMENTI, tA = H.ANOMALIE, tL = H.LOG;
     var mag = function (t) { return t === 'NEW' || t === 'REUSE' ? 'HUB_MAGAZZINO' : (t === 'SCRAP' ? 'SCRAP' : 'HUB_GUASTI'); };
     var rObj = { data_arrivo: T.data, mittente: T.mittente, awb: T.awb, vettore: T.vettore, ddt_mittente: T.ddt, po_mrn: T.po, tipo: T.tipo, flag_balancing: T.bal ? 'SI' : 'NO', n_pezzi: n, stato: 'CHIUSA', note: '', creato_il: now, creato_da: me };
     var uObjs = C.map(function (c) {
       return { seriale: c.ser, barcode_letto: c.bc, pn: c.pn, mnft: c.mnft, tipo: c.tipo, fr: c.fr, rma: c.rma, riparatore: c.rip, magazzino: mag(c.tipo),
-        ubicazione: (c.tipo === 'NEW' || c.tipo === 'REUSE') ? c.ubicazione : '', n_plt: (c.tipo === 'NEW' || c.tipo === 'REUSE') ? c.plt : '', stato: 'IN_GIACENZA', destinazione_prevista: c.destinazione,
+        ubicazione: (c.tipo === 'NEW' || c.tipo === 'REUSE') ? c.ubicazione : '', n_plt: (c.tipo === 'NEW' || c.tipo === 'REUSE') ? c.plt : '', stato: c.pend ? 'IN_ATTESA' : 'IN_GIACENZA', pending_fr: c.pend || '', destinazione_prevista: c.destinazione,
         data_in: T.data, note: c.nota, rev: 1, creato_il: now, creato_da: me };
     });
     var mObjs = C.map(function (c, i) {
@@ -1679,6 +1715,7 @@ var Ingresso = {
     ['id_unita', 'id_ricezione', 'id_mov_in'].forEach(function (h) { upd.push({ range: colRange(tU, h, rU), values: uObjs.map(function (o) { return [o[h]]; }) }); });
     ['id_mov', 'id_unita', 'id_ricezione'].forEach(function (h) { upd.push({ range: colRange(tM, h, rM), values: mObjs.map(function (o) { return [o[h]]; }) }); });
     var anom = [];
+    C.forEach(function (c, i) { if (c.pend) anom.push(tA.toRow({ data: now, tipo: 'FR_MANCANTE', id_unita: uObjs[i].id_unita, seriale: c.ser, fr: '', descrizione: c.nota, stato: 'APERTA', aperta_da: me, rev: 1 })); });
     C.forEach(function (c, i) { if (c.anomalia) anom.push(tA.toRow({ data: now, tipo: /SERIALE/.test(c.anomalia) ? 'SERIALE_ERRATO' : 'TPN_ERRATO', id_unita: uObjs[i].id_unita, seriale: c.ser, fr: c.fr, descrizione: c.anomalia, stato: 'APERTA', aperta_da: me, rev: 1 })); });
     await Promise.all([
       API.batchUpdate(DB.id, upd),
@@ -1827,6 +1864,84 @@ var Ingresso = {
       var mia = Ingresso.puoModificare(u);
       return '<tr' + (mia ? ' class="r-edit" title="Clicca per modificare" onclick="Ingresso.apriModifica(\'' + u.id_unita + '\')"' : ' title="Riga di un altro operatore (o già uscita): sola lettura"') + '><td class="mono">' + esc(u.id_unita) + '</td><td>' + Pill.tipo(u.tipo) + '</td><td class="mono">' + esc(u.fr) + '</td><td class="mono">' + esc(u.rma) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.riparatore) + '</td><td>' + esc(u.note) + '</td><td>' + esc(op ? (op.sigla || op.nome) : u.creato_da) + '</td><td>' + (mia ? '<button class="ico-btn" title="Elimina" onclick="event.stopPropagation();Ingresso.chiediElimina(\'' + u.id_unita + '\')">🗑</button>' : '') + '</td></tr>';
     }).join('') : '<tr><td colspan="10" class="empty">Nessun ingresso oggi</td></tr>';
+    Ingresso.renderPend();
+  },
+  // ─ pezzi in attesa di FR
+  pendenti: function () { return DB.t.UNITA.rows.filter(function (u) { return u.stato === 'IN_ATTESA' && L.s(u.pending_fr); }); },
+  // FR proposto da VLT per il seriale: solo se in Failed Material Sent / Open e aperto da non troppo (parametri pending_fr_stati / pending_fr_giorni)
+  proponi: function (u) {
+    var st = {}; L.s(DB.param('pending_fr_stati', 'Failed Material Sent;Open')).split(';').forEach(function (x) { if (L.s(x)) st[L.up(x)] = 1; });
+    var gg = parseInt(DB.param('pending_fr_giorni', '60'), 10) || 60, d0 = new Date(L.normDate(u.data_in) + 'T00:00:00'); d0.setDate(d0.getDate() - gg);
+    var lim = L.isoToday(d0), ser = L.up(u.seriale);
+    var c = (DB.vltBySer[ser] || DB.vltBySer[L.up(L.afterSpace(ser))] || []).filter(function (v) { var da = L.normDate(L.s(v.data_apertura).slice(0, 10)); return st[L.up(v.stato)] && (!da || da >= lim); });
+    c.sort(function (a, b) { return (parseInt(b.fr_id, 10) || 0) - (parseInt(a.fr_id, 10) || 0); });
+    return c[0] || null;
+  },
+  renderPend: function () {
+    if (!$('pendRows')) return;
+    var P = Ingresso.pendenti(), oggi = new Date(L.isoToday() + 'T00:00:00');
+    $('pendN').textContent = P.length; $('pendCard').style.display = P.length ? '' : 'none';
+    $('pendRows').innerHTML = P.map(function (u) {
+      var v = Ingresso.proponi(u), gg = Math.round((oggi - new Date(L.normDate(u.data_in) + 'T00:00:00')) / 864e5);
+      return '<tr><td class="mono">' + esc(u.id_unita) + '</td><td>' + esc(u.tipo) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(L.itDate(u.data_in)) + '</td><td' + (gg > 3 ? ' style="color:var(--red);font-weight:700"' : '') + '>' + gg + '</td><td style="font-size:12px">' + esc(u.pending_fr) + '</td>' +
+        '<td>' + (v ? '<span class="mono"><b>' + esc(v.fr_id) + '</b></span> <span class="hint">' + esc(v.stato) + ' · ' + esc(L.s(v.data_apertura).slice(0, 10)) + '</span> <button class="btn sm green" onclick="Ingresso.assegna(\'' + u.id_unita + '\',\'' + esc(v.fr_id) + '\')">Conferma</button>' : '<span class="hint">nessuno</span>') + '</td>' +
+        '<td class="nw"><input class="fc mono" id="pf_' + u.id_unita + '" style="width:100px;padding:4px 6px" placeholder="FR"> <button class="btn ghost sm" onclick="Ingresso.assegna(\'' + u.id_unita + '\',$(\'pf_' + u.id_unita + '\').value)">Assegna</button></td></tr>';
+    }).join('');
+  },
+  assegna: async function (id, fr) {
+    fr = L.s(fr).replace(/\D/g, ''); var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; });
+    if (!u || !fr) { toast('Scrivi l\'FR', 'ko'); return; }
+    var v = DB.vltMap[fr];
+    if (!v) { Modal.open('FR non trovato', 'L\'FR ' + fr + ' non è su VLT (o VLT non è aggiornato: premi ↻ VLT).'); return; }
+    var avv = [];
+    if (L.up(v.f_mat_serial_no) && L.up(v.f_mat_serial_no) !== L.up(u.seriale) && L.up(L.afterSpace(v.f_mat_serial_no)) !== L.up(L.afterSpace(u.seriale))) avv.push('Seriale su VLT ' + v.f_mat_serial_no + ' diverso da quello letto ' + u.seriale);
+    var altro = DB.t.UNITA.rows.find(function (x) { return x !== u && x.fr === fr && Giacenze.A_MAG.indexOf(x.stato) >= 0; });
+    if (altro) avv.push('FR già in giacenza su ' + altro.id_unita + ' (' + altro.seriale + ')');
+    var st = L.s(DB.param('pending_fr_stati', 'Failed Material Sent;Open')).split(';').map(L.up);
+    if (st.indexOf(L.up(v.stato)) < 0) avv.push('Stato VLT "' + v.stato + '"');
+    if (!(await Modal.confirm('Assegna FR ' + fr + ' a ' + u.seriale, 'Riparatore ' + (v.riparatore || '-') + ' · stato VLT ' + v.stato + (avv.length ? '\n\n⚠ ' + avv.join('\n⚠ ') : '') + '\n\nIl pezzo torna IN GIACENZA, il movimento di ingresso prende l\'FR e l\'anomalia si chiude.'))) return;
+    try {
+      await Busy.wrap((async function () {
+        await DB.ensureCols('UNITA', ['pending_fr', 'fr_assegnato_il']); var tU = DB.t.UNITA; u = tU.rows.find(function (x) { return x.id_unita === id; });
+        var now = L.nowStamp(), me = Auth.email, prima = { stato: u.stato, nota: u.note, motivo: u.pending_fr };
+        var dep = DB.t.DEPOT_VLT.rows.find(function (d) { return d.depot_vlt === v.depot_origine; });
+        var nota = L.s(u.note).replace(/PENDING FR: [^·|]*/, '').replace(/^\s*[·|]\s*/, '').trim();
+        nota = [nota, 'FR ' + fr + ' assegnato il ' + L.itDate(L.isoToday()) + ' (era pending: ' + u.pending_fr + ')'].filter(Boolean).join(' · ');
+        var ch = { fr: fr, riparatore: v.riparatore || u.riparatore, stato: 'IN_GIACENZA', pending_fr: '', fr_assegnato_il: now, note: nota, modificato_il: now, modificato_da: me, rev: (parseInt(u.rev, 10) || 1) + 1 };
+        if (u.tipo === 'GOOD' && !L.s(u.destinazione_prevista) && dep) ch.destinazione_prevista = dep.destinazione;
+        var upd = []; Object.keys(ch).forEach(function (h) { if (h in tU.idx) { u[h] = String(ch[h]); upd.push({ range: tU.cell(h, u._r), values: [[u[h]]] }); } });
+        var tM = (await Ingresso.heads()).MOVIMENTI, rM = await Ingresso.rigaMov(u, tM);
+        if (rM) [['fr', fr], ['riparatore', ch.riparatore], ['stato_vlt', v.stato], ['note', nota]].forEach(function (x) { if (x[0] in tM.idx) upd.push({ range: tM.cell(x[0], rM), values: [[x[1]]] }); });
+        await DB.loadTables(['ANOMALIE']); var tA = DB.t.ANOMALIE;
+        tA.rows.forEach(function (a) { if (a.id_unita === id && a.tipo === 'FR_MANCANTE' && a.stato === 'APERTA') [['stato', 'RISOLTA'], ['risolta_il', now], ['risolta_da', me], ['nota_risoluzione', 'FR ' + fr + ' assegnato'], ['fr', fr]].forEach(function (x) { if (x[0] in tA.idx) { a[x[0]] = x[1]; upd.push({ range: tA.cell(x[0], a._r), values: [[x[1]]] }); } }); });
+        await API.batchUpdate(DB.id, upd);
+        await API.append(DB.id, 'LOG', [App.log('PENDING_FR_ASSEGNATO', 'UNITA', id, { fr: fr, seriale: u.seriale, prima: prima, movimento: rM ? u.id_mov_in : 'non trovato', avvisi: avv })]);
+        if (!rM) toast('Movimento di ingresso non trovato: aggiornalo da Movimenti', 'ko');
+        Export.scrivi().catch(function () { });
+      })());
+      toast('FR ' + fr + ' assegnato a ' + u.seriale, 'ok'); Ingresso.renderOggi(); App.syncInfo();
+    } catch (e) { Modal.open('Errore', e.message); }
+  },
+  // mail al Service Desk con l'elenco completo (dopo il caricamento: solo quelli appena entrati; dal pulsante: tutti i pending)
+  mailPend: async function (ids, T) {
+    var P = Ingresso.pendenti().filter(function (u) { return !ids || ids.indexOf(u.id_unita) >= 0; });
+    if (!P.length) { toast('Nessun pezzo in attesa di FR', 'ok'); return; }
+    var R = {}; try { if (!DB.t.RICEZIONI) await DB.loadTables(['RICEZIONI']); (DB.t.RICEZIONI.rows || []).forEach(function (r) { R[r.id_ricezione] = r; }); } catch (e) { }
+    var righe = P.map(function (u) { var r = R[u.id_ricezione] || T || {}; return { id: u.id_unita, tipo: u.tipo, ser: u.seriale, pn: u.pn, data: L.itDate(u.data_in), mitt: r.mittente || '', ddt: r.ddt_mittente || r.ddt || '', awb: r.awb || '', mot: u.pending_fr }; });
+    var subj = 'Pezzi ricevuti senza FR - ' + P.length + (P.length === 1 ? ' pezzo' : ' pezzi') + ' - ' + L.itDate(L.isoToday());
+    var body = 'Ciao Ragazzi,\n\nabbiamo ricevuto questi pezzi senza FR: sono fermi in hub in attesa dell\'FR. Ci aprite / indicate l\'FR?\n\n' +
+      righe.map(function (x) { return x.ser + ' | ' + x.pn + ' | ' + x.tipo + ' | entrata ' + x.data + ' | ' + x.mitt + (x.ddt ? ' DDT ' + x.ddt : '') + (x.awb ? ' AWB ' + x.awb : '') + ' | ' + x.mot; }).join('\n') + '\n\nGrazie';
+    var e = function (x) { return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+    var th = 'style="background:#1f4e79;color:#fff;padding:5px 8px;border:1px solid #8ea9c1;text-align:left"', td = 'style="padding:5px 8px;border:1px solid #b7c7d6"';
+    var html = '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">Ciao Ragazzi,<br><br>abbiamo ricevuto questi pezzi <b>senza FR</b>: sono fermi in hub in attesa dell\'FR. Ci aprite / indicate l\'FR?<br><br>' +
+      '<table style="border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:10pt"><tr>' + ['#', 'Seriale', 'P/N', 'Tipo', 'Entrata', 'Mittente', 'DDT', 'AWB', 'Motivo'].map(function (h) { return '<th ' + th + '>' + h + '</th>'; }).join('') + '</tr>' +
+      righe.map(function (x, k) { return '<tr' + (k % 2 ? ' style="background:#f2f6fa"' : '') + '><td ' + td + '>' + (k + 1) + '</td><td ' + td + '><b>' + e(x.ser) + '</b></td><td ' + td + '>' + e(x.pn) + '</td><td ' + td + '>' + e(x.tipo) + '</td><td ' + td + '>' + e(x.data) + '</td><td ' + td + '>' + e(x.mitt) + '</td><td ' + td + '>' + e(x.ddt) + '</td><td ' + td + '>' + e(x.awb) + '</td><td ' + td + '>' + e(x.mot) + '</td></tr>'; }).join('') +
+      '</table><br>Grazie</div>';
+    Mail.apri('ingresso', subj, body, function () { API.append(DB.id, 'LOG', [App.log('PENDING_FR_MAIL', 'UNITA', P.length + ' pezzi', { id: P.map(function (u) { return u.id_unita; }) })]).catch(function () { }); }, html);
+  },
+  excelPend: function () {
+    var P = Ingresso.pendenti();
+    Xls.scarica('In_attesa_di_FR', [{ nome: 'In attesa di FR', headers: ['ID', 'Tipo', 'Seriale', 'P/N', 'Entrata', 'Motivo', 'FR proposto', 'Stato VLT'], rows: P.map(function (u) { var v = Ingresso.proponi(u); return [u.id_unita, u.tipo, u.seriale, u.pn, L.itDate(u.data_in), u.pending_fr, v ? v.fr_id : '', v ? v.stato : '']; }) }]);
   }
 };
 // destinazione balancing: la sigla (NA, CA, MI…) diventa la destinazione di CONVERSIONE DESTINAZIONE (foglio DEPOT_VLT)
@@ -2529,7 +2644,7 @@ var Chv = {
     var add = function (it) { if (visti[it.k]) return; visti[it.k] = 1; items.push(it); };
     if (proc === 'INGRESSI') {
       DB.t.UNITA.rows.forEach(function (u) {
-        if (L.s(u.creato_il).slice(0, 10) !== giorno || u.creato_da === 'MIGRAZIONE' || u.stato === 'ANNULLATO') return;
+        if ((L.s(u.creato_il).slice(0, 10) !== giorno && L.s(u.fr_assegnato_il).slice(0, 10) !== giorno) || u.creato_da === 'MIGRAZIONE' || u.stato === 'ANNULLATO') return;
         if (!L.s(u.fr) || ['NEW', 'REUSE', 'BALANCING'].indexOf(u.tipo) >= 0) return;
         var v = DB.vltMap[u.fr];
         add({ k: 'IN:' + u.fr, fr: u.fr, tipo: u.tipo, note: Chv.nota(u.note), stato_file: v ? v.stato : '', conf_serial: u.seriale, conf_tmpn: u.pn, seriale: u.seriale });
