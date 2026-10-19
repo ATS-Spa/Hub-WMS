@@ -231,6 +231,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
 .kc-x{display:flex;gap:4px;font-size:10px;color:var(--muted);margin-top:4px}
 .kc-x span{flex:1 1 0;min-width:0;text-align:center;white-space:nowrap;overflow:hidden}
 .kc-x span.sel{color:var(--text);font-weight:700}
+.ack-colli{display:flex;flex-direction:column;gap:3px;font-size:12px;margin:2px 0 6px;padding:6px 8px;border:1px solid var(--border);border-radius:8px}.ack-colli .pill{font-size:10.5px;padding:1px 6px}
 .blk-banner{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);color:var(--text);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:13px}
 .dash-axis{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px}
 .progress{font-family:var(--ff-mono);font-size:12px;color:var(--subtle);margin-top:10px;white-space:pre-line}
@@ -2996,9 +2997,9 @@ var Ddt = {
     var J = window.jspdf && window.jspdf.jsPDF; if (!J) throw new Error('libreria PDF non caricata');
     if (d) d.addPage(); else d = new J({ unit: 'mm', format: 'a4' });
     var P0 = d.getNumberOfPages(), M = 12, W = 210 - 2 * M, y = 14, lg = Ack._lg || {};
-    function box(x, yy, w, h, lab, txt) {
+    function box(x, yy, w, h, lab, txt, fs) {
       d.setDrawColor(120); d.rect(x, yy, w, h); d.setFont('helvetica', 'bold'); d.setFontSize(7.5); d.text(lab, x + 2, yy + 4);
-      d.setFont('helvetica', 'normal'); d.setFontSize(9.5); d.text(d.splitTextToSize(L.s(txt).replace(/\s+/g, ' '), w - 4), x + 2, yy + 9);
+      d.setFont('helvetica', fs ? 'bold' : 'normal'); d.setFontSize(fs || 9.5); d.text(d.splitTextToSize(L.s(txt).replace(/\s+/g, ' '), w - 4), x + 2, yy + (fs ? 11 : 9));
     }
     function logo(im, destra) {
       if (!im) return; var h = 18, w = h * im.w / im.h; if (w > 55) { w = 55; h = w * im.h / im.w; }
@@ -3023,13 +3024,21 @@ var Ddt = {
     box(M, y, cw - 1, 14, 'DESCRIZIONE MERCE', DB.param('ddt_descrizione_merce', 'MATERIALE PER TLC'));
     box(M + cw, y, cw - 1, 14, 'VETTORE', p.vettore);
     box(M + 2 * cw, y, cw - 1, 14, 'AWB', p.awb);
-    box(M + 3 * cw, y, cw - 1, 14, 'COLLI', String(C.length || ''));
-    box(M + 4 * cw, y, cw, 14, 'PESO KG', String(Math.round(peso * 100) / 100));
+    box(M + 3 * cw, y, cw - 1, 14, 'COLLI', String(C.length || ''), 15);
+    box(M + 4 * cw, y, cw, 14, 'PESO KG', String(Math.round(peso * 100) / 100), 15);
     y += 18;
+    // dettaglio colli in grande (tipo, misure, peso): due colli per riga
     if (C.length) {
-      d.setFont('helvetica', 'normal'); d.setFontSize(8);
-      d.text(d.splitTextToSize('Colli: ' + C.map(function (c, i) { return (i + 1) + ') ' + c.tipo_collo + ' ' + c.lunghezza_cm + 'x' + c.larghezza_cm + 'x' + c.altezza_cm + ' cm ' + c.peso_kg + ' kg'; }).join('  '), W), M, y);
-      y += 4 + 3.5 * Math.ceil(C.length / 4);
+      d.setFont('helvetica', 'bold'); d.setFontSize(10); d.text('DETTAGLIO COLLI', M, y); y += 6.5;
+      d.setFontSize(16);
+      var tc = C.map(function (c, ci) { return (ci + 1) + ') ' + L.s(c.tipo_collo || 'PLT') + '  ' + c.lunghezza_cm + 'x' + c.larghezza_cm + 'x' + c.altezza_cm + ' cm  ' + c.peso_kg + ' kg'; });
+      var per = tc.every(function (t) { return d.getTextWidth(t) < W / 2 - 4; }) ? 2 : 1;   // due per riga se ci stanno
+      for (var ci = 0; ci < C.length; ci++) {
+        d.text(tc[ci], M + (ci % per) * (W / 2), y);
+        if (ci % per === per - 1 || ci === C.length - 1) y += 7.5;
+        if (y > 250) { d.addPage(); y = 20; }
+      }
+      d.setFont('helvetica', 'normal'); y += 2;
     }
     var cols = [{ h: '#', w: 10 }].concat(p.cols), used = cols.reduce(function (a, c) { return a + (c.w || 0); }, 0);
     cols.forEach(function (c) { if (!c.w) c.w = W - used; });
@@ -3185,6 +3194,11 @@ var Ack = {
   byId: function (id) { return DB.t.SPEDIZIONI.rows.find(function (s) { return s.id_spedizione === id; }); },
   sped: function (d, cod) { return DB.t.SPEDIZIONI.rows.find(function (s) { return s.tipo === 'ACK' && L.normDate(s.data) === d && L.up(s.destinatario) === L.up(cod) && s.stato !== 'ANNULLATA'; }); },
   righe: function (id) { return (DB.t.SPEDIZIONI_RIGHE ? DB.t.SPEDIZIONI_RIGHE.rows : []).filter(function (r) { return r.id_spedizione === id; }); },
+  // dettaglio spedizione sulla card: un collo per riga con tipo, misure e peso
+  colliCard: function (id) {
+    var cl = Ack.colliDb(id); if (!cl.length) return '';
+    return '<div class="ack-colli">' + cl.map(function (c, i) { return '<div><span class="pill">' + esc(c.tipo_collo || 'PLT') + '</span> <span class="mono">' + esc(c.lunghezza_cm) + '×' + esc(c.larghezza_cm) + '×' + esc(c.altezza_cm) + ' cm</span> · <b>' + esc(c.peso_kg) + ' kg</b></div>'; }).join('') + '</div>';
+  },
   colliDb: function (id) { return DB.t.SPEDIZIONI_COLLI.rows.filter(function (c) { return c.id_spedizione === id; }).sort(function (a, b) { return (+a.n_collo) - (+b.n_collo); }); },
   spareFalse: function (id) { return DB.t.ANOMALIE.rows.filter(function (a) { return a.tipo === 'SPARE_FALSE' && a.id_spedizione === id && a.stato === 'APERTA'; }); },
   calRow: function (d, cod) { return DB.t.CALENDARIO_USCITE.rows.find(function (c) { return L.normDate(c.data) === d && L.up(App.aliasRip(c.riparatore)) === L.up(cod); }); },
@@ -3805,6 +3819,7 @@ var Ack = {
         '<div class="hint">' + esc(rp.ragione_sociale || '') + (rp.indirizzo ? ' · ' + esc(rp.indirizzo) : '') + (s && s.n_ddt ? ' · <b>DDT ' + esc(s.n_ddt) + '</b>' : '') + '</div>' +
         (chc ? '<div class="blk-banner" style="margin:6px 0">⛔ ' + esc(Chi.testo(chc)) + ': non si spedisce, le schede restano in hub fino alla riapertura</div>' : '') +
         '<div class="ack-nums">' + nums + (s && s.n_colli ? '<span>colli <b>' + esc(s.n_colli) + '</b> · <b>' + esc(s.peso_tot_kg) + '</b> kg</span>' : '') + '</div>' +
+        (s && (s.stato === 'PRONTA' || s.stato === 'SPEDITA') ? Ack.colliCard(s.id_spedizione) : '') +
         '<div class="row"><div class="fg" style="flex:1;min-width:130px"><span class="fl">AWB</span><input class="fc mono" id="awb_' + k + '" value="' + esc(s ? s.awb : '') + '"' + lock + ' oninput="var v=L.vettoreDaAwb(this.value,DB.t.VETTORI.rows);if(v)$(\'vet_' + k + '\').value=v"></div>' +
         '<div class="fg" style="width:110px"><span class="fl">Vettore</span><input class="fc" id="vet_' + k + '" list="dlVettori" value="' + esc(s ? s.vettore : '') + '"' + lock + '></div>' +
         (lock ? '' : '<button class="btn ghost sm" onclick="Ack.salvaAwb(\'' + esc(cod) + '\')">Salva</button>') + '</div>' +
