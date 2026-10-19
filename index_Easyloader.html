@@ -3105,6 +3105,20 @@ var Ack = {
   // ─ coda scritture della spunta (una chiamata ogni pochi secondi, non una per lettura)
   qPush: function (upd) { Ack.q = Ack.q.concat(upd); clearTimeout(Ack._qt); Ack._qt = setTimeout(Ack.flush, 2500); Ack.qInfo(); },
   qInfo: function () { var e = $('ackSave'); if (e) e.textContent = (Ack.q.length || Ack.qA.length) ? '● salvataggio in corso…' : '✓ spunta salvata'; },
+  // rilegge spedizioni e righe dal database (spunte fatte da altri dispositivi, es. il palmarino), tenendo le modifiche locali non ancora salvate
+  fresca: async function () {
+    await Ack.flush();
+    await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_RIGHE']);
+    DB.t.SPEDIZIONI_RIGHE.rows.forEach(function (r) { var l = Ack._loc[r.id_riga]; if (l) Object.keys(l).forEach(function (k) { r[k] = l[k]; }); });
+  },
+  aggiornaVista: async function (quiet) {
+    try {
+      var foc = document.activeElement && document.activeElement.id === 'ackScan', val = $('ackScan') ? $('ackScan').value : '';
+      await Ack.fresca(); Ack.render();
+      if ($('ackScan')) { $('ackScan').value = val; if (foc) $('ackScan').focus(); }
+      if (!quiet) toast('Spunte aggiornate', 'ok');
+    } catch (e) { if (!quiet) toast('Non aggiornato: ' + e.message, 'ko'); }
+  },
   flush: function () {
     if (Ack._fl) return Ack._fl.then(function () { if (Ack.q.length || Ack.qA.length) return Ack.flush(); });
     clearTimeout(Ack._qt);
@@ -3124,14 +3138,17 @@ var Ack = {
             a.filter(function (x) { return x._annulla; }).forEach(function (x) { Ack.q.push({ range: tA.cell('stato', x._r), values: [['RISOLTA']] }); });
           }
         }
+        Ack._loc = {};   // tutto salvato
       } catch (e) { toast('Spunta non ancora salvata, riprovo: ' + e.message, 'ko'); Ack._qt = setTimeout(Ack.flush, 5000); }
       finally { Busy.muto--; Ack._fl = null; Ack.qInfo(); }
     })();
     return Ack._fl;
   },
+  _loc: {},   // modifiche locali non ancora salvate: sopravvivono a una rilettura della lista
   setR: function (r, esito) {
     var t = DB.t.SPEDIZIONI_RIGHE;
     r.esito = esito; r.spuntato_da = esito === 'SPUNTATO' ? App.chi().email : ''; Ack.opTocca(); r.spuntato_il = esito === 'SPUNTATO' ? L.nowStamp() : '';
+    Ack._loc[r.id_riga] = { esito: r.esito, spuntato_da: r.spuntato_da, spuntato_il: r.spuntato_il };
     Ack.qPush(['esito', 'spuntato_da', 'spuntato_il'].map(function (h) { return { range: t.cell(h, r._r), values: [[r[h]]] }; }));
   },
 
@@ -3217,6 +3234,14 @@ var Ack = {
     }
     Ack.render();
     setTimeout(function () { var e = $('ackScan'); if (e) e.focus(); var d = $('ackDet'); if (d && d.scrollIntoView) d.scrollIntoView({ behavior: 'smooth', block: 'start' }); }, 60);
+    Ack.aggiornaVista(true);   // subito le spunte fatte dagli altri
+    // scheda aperta in spunta: ogni 30 secondi si riallinea con gli altri dispositivi (solo se non ci sono spunte in salvataggio)
+    clearInterval(Ack._poll);
+    Ack._poll = setInterval(function () {
+      var s1 = Ack.cur && Ack.byId(Ack.cur);
+      if (App.tab !== 'ack' || !s1 || s1.stato !== 'IN_SPUNTA') { clearInterval(Ack._poll); return; }
+      if (document.visibilityState === 'visible' && !Ack.q.length && !Ack.qA.length && !Ack._fl && !$('modal').classList.contains('show')) Ack.aggiornaVista(true);
+    }, 30000);
   },
   excel: function (id) {
     var s = Ack.byId(id), R = Ack.righe(id), sf = Ack.spareFalse(id);
@@ -3336,7 +3361,11 @@ var Ack = {
   },
   chiudi: async function () {
     var s = Ack.byId(Ack.cur); if (!s || s.stato !== 'IN_SPUNTA') return;
-    await Ack.flush();
+    // rilettura obbligatoria: un altro dispositivo può aver spuntato nel frattempo (mai marcare MANCANTE una riga già spuntata)
+    try { Modal.open('Chiusura spunta', 'Rileggo le spunte di tutti i dispositivi…', []); await Ack.fresca(); Modal.close(); }
+    catch (e) { Modal.open('Chiusura spunta', 'Non riesco a rileggere le spunte dal database: ' + e.message + '\nRiprova tra poco: niente è stato modificato.'); return; }
+    s = Ack.byId(Ack.cur); if (!s || s.stato !== 'IN_SPUNTA') { Ack.render(); toast('La spunta è già stata chiusa da un altro dispositivo', 'ko'); return; }
+    Ack.render();
     var R = Ack.righe(s.id_spedizione), c = Ack.cfg();
     var manc = R.filter(function (r) { return r.esito === 'DA_SPUNTARE' || r.esito === 'MANCANTE'; });
     if (manc.length) {
@@ -3548,7 +3577,7 @@ var Ack = {
     var ORD = { MANCANTE: 0, DA_SPUNTARE: 1, SPUNTATO: 2, RIMOSSO: 3, ESCLUSO_BAN: 4 };
     var RR = R.slice().sort(function (a, b) { return (ORD[a.esito] - ORD[b.esito]) || ((parseInt(a.fr, 10) || 0) - (parseInt(b.fr, 10) || 0)); });
     var html = '<div class="card"><div class="card-h"><div class="card-t">' + (edit ? 'Spunta ' : 'ACK ') + esc(s.destinatario) + ' · ' + esc(L.itDate(s.data)) + '</div><span class="hint">' + esc(s.id_spedizione) + '</span><div class="spacer"></div>' +
-      (edit ? '<span class="hint" id="ackSave"></span><button class="btn ghost sm" onclick="Ack.aggiornaLista()">Aggiorna lista da VLT</button><button class="btn green" onclick="Ack.chiudi()">Chiudi spunta</button>' : '') +
+      (edit ? '<span class="hint" id="ackSave"></span><button class="btn ghost sm" onclick="Ack.aggiornaVista()" title="Rilegge le spunte fatte dagli altri dispositivi (si aggiorna anche da solo ogni 30 secondi)">↻ Spunte</button><button class="btn ghost sm" onclick="Ack.aggiornaLista()">Aggiorna lista da VLT</button><button class="btn green" onclick="Ack.chiudi()">Chiudi spunta</button>' : '') +
       (s.stato === 'PRONTA' ? '<button class="btn ghost sm" onclick="Ack.riapri()">Riapri spunta</button>' : '') +
       '<button class="btn ghost sm" onclick="Ack.excel(\'' + s.id_spedizione + '\')">⬇ Excel</button> <button class="btn ghost sm" onclick="Ack.cur=null;Ack.render()">Chiudi pannello</button></div>';
     var opS = App.condiviso() && edit ? Ack._op[s.id_spedizione] : null;
