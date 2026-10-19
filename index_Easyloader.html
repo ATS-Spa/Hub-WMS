@@ -233,7 +233,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
 .kc-x span.sel{color:var(--text);font-weight:700}
 .ack-colli{display:flex;flex-direction:column;gap:3px;font-size:12px;margin:2px 0 6px;padding:6px 8px;border:1px solid var(--border);border-radius:8px}.ack-colli .pill{font-size:10.5px;padding:1px 6px}
 .ac-pop{position:fixed;z-index:3000;background:var(--card,#fff);color:var(--text);border:1px solid var(--border);border-radius:8px;box-shadow:0 10px 28px rgba(0,0,0,.25);max-height:320px;overflow:auto;min-width:220px;max-width:min(560px,calc(100vw - 24px));font:12.5px/1.35 'JetBrains Mono',Consolas,monospace}
-.ac-pop div{padding:6px 10px;white-space:nowrap;cursor:pointer}.ac-pop div.on,.ac-pop div:hover{background:var(--blue,#3b82f6);color:#fff}.ac-pop .ac-n{cursor:default;color:var(--subtle);font-family:inherit;font-size:11px;border-bottom:1px solid var(--border)}.ac-pop .ac-n:hover{background:none;color:var(--subtle)}
+.ac-pop div{padding:6px 10px;white-space:nowrap;cursor:pointer}.ac-pop div.on,.ac-pop div:hover{background:var(--blue,#3b82f6);color:#fff}.ac-pop .ac-n{cursor:default;color:var(--subtle);font-family:inherit;font-size:11px;border-bottom:1px solid var(--border)}.ac-pop .ac-n:hover{background:none;color:var(--subtle)}.ac-pop .ac-n{position:sticky;top:0;background:var(--card,#fff)}
 .blk-banner{background:rgba(239,68,68,.1);border:1px solid rgba(239,68,68,.35);color:var(--text);border-radius:8px;padding:8px 12px;margin-bottom:10px;font-size:13px}
 .dash-axis{display:flex;justify-content:space-between;font-size:11px;color:var(--muted);margin-top:4px}
 .progress{font-family:var(--ff-mono);font-size:12px;color:var(--subtle);margin-top:10px;white-space:pre-line}
@@ -765,6 +765,12 @@ L.pickFr = function (list, closed) {
   return { row: row, nAttivi: act.length, chiuso: !!(row && closed[row.stato]), n: list.length };
 };
 // date: accetta 2026-10-12, 12/10/2026, 12/10/2026 08:10:16 → 2026-10-12
+// ricerca con più valori: "a; b; c" (anche a capo, es. colonna incollata da Excel) → la riga va bene se contiene almeno uno dei valori
+L.qm = function (q) {
+  var t = L.up(q).split(/\s*[;\r\n\t]+\s*/).map(function (x) { return x.trim(); }).filter(Boolean);
+  if (!t.length) return null;
+  return function (x) { x = L.up(x); for (var i = 0; i < t.length; i++) if (x.indexOf(t[i]) >= 0) return true; return false; };
+};
 L.normDate = function (d) {
   d = L.s(d); var m = /^(\d{4})-(\d{1,2})-(\d{1,2})/.exec(d); if (m) return m[1] + '-' + L.pad(m[2], 2) + '-' + L.pad(m[3], 2);
   m = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})/.exec(d); if (m) return m[3] + '-' + L.pad(m[2], 2) + '-' + L.pad(m[1], 2);
@@ -2042,6 +2048,7 @@ var Pill = {
 // ───────────────────────── GIACENZE ─────────────────────────
 var Giacenze = {
   A_MAG: ['IN_GIACENZA', 'IN_LAVORAZIONE', 'BLOCCATO', 'IN_ATTESA'],
+  _qm: function (v) { if (Giacenze._qv !== v) { Giacenze._qv = v; Giacenze._qf = L.qm(v); } return Giacenze._qf; },
   bloccato: function (id) { var u = id && DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); return u && (u.stato === 'BLOCCATO' || u.stato === 'IN_ATTESA') ? u : null; },
   init: function () {
     $('gTipo').innerHTML = '<option value="">Tutti</option>' + TIPI.map(function (t) { return '<option>' + t + '</option>'; }).join('');
@@ -2061,10 +2068,10 @@ var Giacenze = {
     try { var y = String(new Date().getFullYear() - 1), c = await DB.cacheGet('arch_' + y); if (!c) { var f = await API.findInFolder(CFG.FOLDER_ID, 'DB_ARCHIVIO_' + y); if (f) { c = { ts: Date.now(), rows: await Sto.colsSafe(f.id, 'MOVIMENTI') }; await DB.cacheSet('arch_' + y, c); } } if (c) { Sto.dati[y] = c.rows; Giacenze.render(); } } catch (e) { }
   },
   filtra: function (u) {
-    var st = $('gStato').value, tipo = $('gTipo').value, mag = $('gMag').value, q = L.up($('gQ').value);
+    var st = $('gStato').value, tipo = $('gTipo').value, mag = $('gMag').value, q = Giacenze._qm($('gQ').value);
     if (st === 'A_MAG' ? Giacenze.A_MAG.indexOf(u.stato) < 0 : (st && u.stato !== st)) return false;
     if (mag && u.magazzino !== mag) return false;
-    if (q) { var m = Giacenze.movIn(u); if (![u.seriale, u.pn, u.fr, u.rma, u.ubicazione, u.n_plt, u.material, u.note, u.id_unita, u.destinazione_prevista, u.bin_vlt, m.awb, m.ddt, m.controparte, m.po_mrn].some(function (x) { return L.up(x).indexOf(q) >= 0; })) return false; }
+    if (q) { var m = Giacenze.movIn(u); if (![u.seriale, u.pn, u.fr, u.rma, u.ubicazione, u.n_plt, u.material, u.note, u.id_unita, u.destinazione_prevista, u.bin_vlt, m.awb, m.ddt, m.controparte, m.po_mrn].some(q)) return false; }
     return !tipo || u.tipo === tipo;
   },
   grid: function () {
@@ -2522,9 +2529,9 @@ var Admin = {
     document.querySelectorAll('.subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-' + Admin.sez); });
     $('admTitle').textContent = c.title; $('admHint').textContent = c.hint;
     $('admHead').innerHTML = '<tr>' + c.cols.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr>';
-    var q = L.up($('admQ').value);
+    var q = L.qm($('admQ').value);
     $('admRows').innerHTML = t.rows.map(function (r, i) {
-      if (q && !Admin.dirty[i] && !c.cols.some(function (h) { return L.up(r[h]).indexOf(q) >= 0; })) return '';
+      if (q && !Admin.dirty[i] && !c.cols.some(function (h) { return q(r[h]); })) return '';
       return '<tr>' + c.cols.map(function (h) {
         var d = Admin.dirty[i] && Admin.dirty[i][h] !== undefined;
         var v = d ? Admin.dirty[i][h] : r[h];
@@ -3196,8 +3203,8 @@ Grid.prototype.altri = function () { this.limit += 1000; this.render(); };
 Grid.prototype.render = function (rifaiTesta) {
   var self = this, o = this.o, all = o.rows(), th = $(o.thead), tb = $(o.tbody);
   if (!th || !tb) return;
-  var qq = o.cerca ? L.up(o.cerca()) : '';
-  if (qq) all = all.filter(function (r) { return o.cols.some(function (c) { return !c.noXls && L.up(self.val(c, r)).indexOf(qq) >= 0; }); });
+  var qq = o.cerca ? L.qm(o.cerca()) : null;
+  if (qq) all = all.filter(function (r) { return o.cols.some(function (c) { return !c.noXls && qq(self.val(c, r)); }); });
   if (rifaiTesta || !th.dataset.g) { th.innerHTML = this.head(); th.dataset.g = '1'; th.classList.add('g-head'); }
   var list = all.filter(function (r) { return self.match(r); });
   var sc = this.sort && o.cols.find(function (x) { return x.k === self.sort; });
@@ -6038,7 +6045,7 @@ var Sto = {
   dir: function (r) { return r.direzione === 'IN' || r.direzione === 'OUT' ? r.direzione : 'INT'; },
   periodo: function () { return [$('stoDa').value || '0000-00-00', $('stoA').value || '9999-99-99']; },
   nelPeriodo: function (r) { var g = L.normDate(r.data_ora), p = Sto.periodo(); return !g || (g >= p[0] && g <= p[1]); },
-  cerca_: function (r, q) { return [r.seriale, r.fr, r.rma, r.ddt, r.awb, r.id_mov, r.pn, r.po_mrn, r.controparte, r.id_unita, Sto.dir(r) === 'INT' ? r.note : ''].some(function (x) { return L.up(x).indexOf(q) >= 0; }); },
+  cerca_: function (r, q) { if (Sto._qv !== q) { Sto._qv = q; Sto._qf = L.qm(q); } var m = Sto._qf; return !m || [r.seriale, r.fr, r.rma, r.ddt, r.awb, r.id_mov, r.pn, r.po_mrn, r.controparte, r.id_unita, Sto.dir(r) === 'INT' ? r.note : ''].some(m); },
   righe: function (sez) {
     var q = L.up($('stoQ').value), R = Sto.dati[Sto.fonte] || [];
     return R.filter(function (r) { return (sez === 'ALL' || Sto.dir(r) === sez) && Sto.nelPeriodo(r) && (!q || Sto.cerca_(r, q)); });
@@ -6203,8 +6210,8 @@ var LogV = {
       thead: 'logHead', tbody: 'logRows', foot: 'logFoot', sort: '_i', dir: -1, limit: 500, empty: 'Nessuna operazione nel periodo',
       rowAttr: function (r) { return 'class="r-edit" onclick="LogV.apri(' + r._i + ')" title="Dettaglio"'; },
       rows: function () {
-        var da = $('logDa').value || '0000', a = $('logA').value || '9999', q = L.up($('logQ').value);
-        return (LogV.rows || []).filter(function (r) { var g = L.s(r.data_ora).slice(0, 10); return (!g || (g >= da && g <= a)) && (!q || L.up(r.id_record + ' ' + r.dettaglio + ' ' + r.azione).indexOf(q) >= 0); });
+        var da = $('logDa').value || '0000', a = $('logA').value || '9999', q = L.up($('logQ').value), qm = L.qm(q);
+        return (LogV.rows || []).filter(function (r) { var g = L.s(r.data_ora).slice(0, 10); return (!g || (g >= da && g <= a)) && (!qm || qm(r.id_record + ' ' + r.dettaglio + ' ' + r.azione)); });
       },
       cols: [
         { k: 'data_ora', label: 'Data e ora', cls: 'mono nw', html: function (r) { return esc(Sto.dataOra(r.data_ora)); } },
@@ -7733,29 +7740,50 @@ window.addEventListener('load', function () { try { Mob.init(); } catch (e) { } 
 window.addEventListener('load', Auth.init);
 </script>
 <script>
-// ─ menu delle ubicazioni a larghezza piena (il menu nativo del browser taglia i codici lunghi): sostituisce list="dlUbicazioni"
+// ─ menu a tendina dell'app al posto di quello del browser (che taglia i testi lunghi) per tutti gli input con list="dl…":
+//   larghezza piena, cerca mentre scrivi (prima chi inizia così, poi chi lo contiene), 300 voci alla volta: le altre arrivano scorrendo
 var Ac = {
-  el: null, pop: null, sel: -1, vis: [],
-  lista: function () { return DB.ubicazioni || []; },
+  el: null, pop: null, sel: -1, vis: [], shown: 0, PASSO: 300,
+  lista: function (el) {
+    var id = el.dataset.acList;
+    if (id === 'dlUbicazioni' && DB.ubicazioni) return DB.ubicazioni;
+    var dl = document.getElementById(id); if (!dl) return [];
+    return Array.prototype.map.call(dl.options, function (o) { return o.value; }).filter(Boolean);
+  },
   apri: function (el) {
-    Ac.el = el; if (!Ac.pop) { Ac.pop = document.createElement('div'); Ac.pop.className = 'ac-pop'; document.body.appendChild(Ac.pop); Ac.pop.addEventListener('mousedown', function (e) { var d = e.target.closest('[data-v]'); e.preventDefault(); if (d) Ac.scegli(d.getAttribute('data-v')); }); }
+    Ac.el = el;
+    if (!Ac.pop) {
+      Ac.pop = document.createElement('div'); Ac.pop.className = 'ac-pop'; document.body.appendChild(Ac.pop);
+      Ac.pop.addEventListener('mousedown', function (e) { var d = e.target.closest('[data-v]'); e.preventDefault(); if (d) Ac.scegli(d.getAttribute('data-v')); });
+      Ac.pop.addEventListener('scroll', function () { if (Ac.pop.scrollTop + Ac.pop.clientHeight > Ac.pop.scrollHeight - 60) Ac.altre(); });
+    }
     Ac.filtra();
   },
   filtra: function () {
-    var el = Ac.el; if (!el) return; var q = L.up(el.value), L0 = Ac.lista();
-    var a = q ? L0.filter(function (x) { return L.up(x).indexOf(q) === 0; }).concat(L0.filter(function (x) { var u = L.up(x); return u.indexOf(q) > 0; })) : L0;
-    Ac.vis = a.slice(0, 300); Ac.sel = -1;
+    var el = Ac.el; if (!el) return; var q = L.up(el.value), L0 = Ac.lista(el);
+    Ac.vis = q ? L0.filter(function (x) { return L.up(x).indexOf(q) === 0; }).concat(L0.filter(function (x) { return L.up(x).indexOf(q) > 0; })) : L0.slice();
+    Ac.sel = -1; Ac.shown = 0;
     if (!Ac.vis.length) { Ac.chiudi(); return; }
-    Ac.pop.innerHTML = '<div class="ac-n">' + a.length + ' ubicazioni' + (a.length > 300 ? ' (prime 300: continua a scrivere)' : '') + '</div>' + Ac.vis.map(function (x, i) { return '<div data-v="' + esc(x) + '" data-i="' + i + '">' + esc(x) + '</div>'; }).join('');
-    var r = el.getBoundingClientRect(), h = Math.min(320, 26 * (Ac.vis.length + 1) + 4), sotto = window.innerHeight - r.bottom > h + 8 || r.top < h;
-    Ac.pop.style.display = 'block'; Ac.pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - Ac.pop.offsetWidth - 8)) + 'px';
-    Ac.pop.style.minWidth = Math.max(220, r.width) + 'px'; Ac.pop.style.top = (sotto ? r.bottom + 2 : Math.max(8, r.top - h - 2)) + 'px';
+    Ac.pop.innerHTML = '<div class="ac-n">' + Ac.vis.length + (Ac.vis.length === 1 ? ' voce' : ' voci') + (Ac.vis.length > Ac.PASSO ? ' · scorri per vederle tutte' : '') + '</div>';
+    Ac.pop.scrollTop = 0; Ac.altre(); Ac.posiziona();
+  },
+  altre: function () {
+    if (Ac.shown >= Ac.vis.length) return;
+    var da = Ac.shown, a = Math.min(Ac.vis.length, da + Ac.PASSO), h = '';
+    for (var i = da; i < a; i++) h += '<div data-v="' + esc(Ac.vis[i]) + '" data-i="' + i + '">' + esc(Ac.vis[i]) + '</div>';
+    Ac.pop.insertAdjacentHTML('beforeend', h); Ac.shown = a;
+  },
+  posiziona: function () {
+    var el = Ac.el, r = el.getBoundingClientRect(), h = Math.min(320, 26 * (Math.min(Ac.vis.length, 12) + 1) + 4), sotto = window.innerHeight - r.bottom > h + 8 || r.top < h;
+    Ac.pop.style.display = 'block'; Ac.pop.style.minWidth = Math.max(220, r.width) + 'px';
+    Ac.pop.style.top = (sotto ? r.bottom + 2 : Math.max(8, r.top - h - 2)) + 'px';
     Ac.pop.style.left = Math.max(8, Math.min(r.left, window.innerWidth - Ac.pop.offsetWidth - 8)) + 'px';
   },
   evid: function (d) {
-    if (!Ac.vis.length) return; Ac.sel = (Ac.sel + d + Ac.vis.length) % Ac.vis.length;
-    Ac.pop.querySelectorAll('[data-i]').forEach(function (x) { x.classList.toggle('on', +x.getAttribute('data-i') === Ac.sel); });
-    var on = Ac.pop.querySelector('.on'); if (on) on.scrollIntoView({ block: 'nearest' });
+    if (!Ac.vis.length) return; Ac.sel = Math.max(0, Math.min(Ac.vis.length - 1, Ac.sel + d));
+    while (Ac.sel >= Ac.shown) Ac.altre();
+    Ac.pop.querySelectorAll('.on').forEach(function (x) { x.classList.remove('on'); });
+    var on = Ac.pop.querySelector('[data-i="' + Ac.sel + '"]'); if (on) { on.classList.add('on'); on.scrollIntoView({ block: 'nearest' }); }
   },
   scegli: function (v) {
     var el = Ac.el; if (!el) return; el.value = v;
@@ -7767,12 +7795,12 @@ var Ac = {
 };
 document.addEventListener('focusin', function (e) {
   var el = e.target; if (!el || el.tagName !== 'INPUT') return;
-  if (el.getAttribute('list') === 'dlUbicazioni') { el.removeAttribute('list'); el.dataset.ac = 'ubi'; el.setAttribute('autocomplete', 'off'); }
-  if (el.dataset.ac === 'ubi') Ac.apri(el);
+  var l = el.getAttribute('list'); if (l && /^dl/.test(l)) { el.removeAttribute('list'); el.dataset.acList = l; el.setAttribute('autocomplete', 'off'); }
+  if (el.dataset.acList) Ac.apri(el);
 });
-document.addEventListener('input', function (e) { if (e.target === Ac.el && e.target.dataset.ac === 'ubi' && document.activeElement === e.target) Ac.filtra(); });
+document.addEventListener('input', function (e) { if (e.target === Ac.el && e.target.dataset.acList && document.activeElement === e.target) Ac.filtra(); });
 document.addEventListener('focusout', function (e) { if (e.target === Ac.el) setTimeout(function () { if (document.activeElement !== Ac.el) Ac.chiudi(); }, 120); });
-// tastiera: frecce per scegliere, Invio conferma la voce evidenziata (senza far partire il pezzo), Esc chiude
+// tastiera: frecce per scegliere, Invio conferma la voce evidenziata (senza far partire altro), Esc chiude
 document.addEventListener('keydown', function (e) {
   if (!Ac.aperto() || e.target !== Ac.el) return;
   if (e.key === 'ArrowDown' || e.key === 'ArrowUp') { e.preventDefault(); e.stopImmediatePropagation(); Ac.evid(e.key === 'ArrowDown' ? 1 : -1); }
@@ -7780,7 +7808,28 @@ document.addEventListener('keydown', function (e) {
   else if (e.key === 'Escape') { Ac.chiudi(); }
   else if (e.key === 'Enter' || e.key === 'Tab') Ac.chiudi();
 }, true);
-window.addEventListener('scroll', function () { if (Ac.aperto()) Ac.filtra(); }, true);
+window.addEventListener('scroll', function (e) { if (Ac.aperto() && e.target !== Ac.pop) Ac.posiziona(); }, true);
+['gQ', 'stoQ', 'logQ', 'admQ', 'nrQ', 'balQ', 'junQ'].forEach(function (id) { var e = document.getElementById(id); if (!e) return; e.dataset.multi = '1'; e.title = 'Più valori insieme: separali con ; (es. seriale1; seriale2) oppure incolla una colonna da Excel'; if (e.placeholder) e.placeholder += ' · più valori con ;'; else e.placeholder = 'più valori: separa con ;'; });
+// celle modificabili nelle tabelle: si allargano quanto serve per testo e suggerimento (non tagliano più la parola), mai oltre 60 caratteri
+var Fit = {
+  uno: function (el) {
+    if (!el || el.tagName !== 'INPUT' || !el.classList.contains('edit-cell')) return;
+    var need = Math.min(60, Math.max(L.s(el.value).length, L.s(el.placeholder).length) + 2), w = el.style.width, m = /calc\((\d+(?:\.\d+)?)ch/.exec(w) || /^(\d+(?:\.\d+)?)ch$/.exec(w), cur = m ? parseFloat(m[1]) : 0;
+    if (need > cur) el.style.width = 'calc(' + need + 'ch + 16px)';
+  },
+  tutti: function (root) { if (root && root.querySelectorAll) root.querySelectorAll('input.edit-cell').forEach(Fit.uno); }
+};
+document.addEventListener('input', function (e) { Fit.uno(e.target); });
+new MutationObserver(function (ms) { ms.forEach(function (m) { m.addedNodes.forEach(function (n) { if (n.nodeType !== 1) return; if (n.matches && n.matches('input.edit-cell')) Fit.uno(n); else Fit.tutti(n); }); }); }).observe(document.body, { childList: true, subtree: true });
+Fit.tutti(document);
+// ricerche: incollando una colonna da Excel (più righe) i valori diventano "a; b; c"
+document.addEventListener('paste', function (e) {
+  var el = e.target; if (!el || el.tagName !== 'INPUT' || !/^(text|search|)$/.test(el.type || '') || !el.dataset.multi) return;
+  var t = (e.clipboardData || window.clipboardData).getData('text'); if (!/[\r\n\t]/.test(t)) return;
+  e.preventDefault(); var v = t.split(/[\r\n\t]+/).map(function (x) { return x.trim(); }).filter(Boolean).join('; ');
+  var a = el.selectionStart || 0, b = el.selectionEnd || 0; el.value = el.value.slice(0, a) + v + el.value.slice(b);
+  el.dispatchEvent(new Event('input', { bubbles: true }));
+});
 </script>
 </body>
 </html>
