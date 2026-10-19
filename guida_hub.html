@@ -3265,7 +3265,16 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
         <span class="step-num purple">5</span>
         <div>
           <div class="step-title">Ubicazione anche per FAULTY e GOOD</div>
-          <div class="step-body">Il campo <strong>Ubicazione</strong> c'è anche per FAULTY e GOOD, <strong>facoltativo</strong> (per NEW/REUSE resta obbligatorio): funziona come per i NEW/REUSE, resta impostato tra un pezzo e l'altro e si può correggere sulla riga (✎ ubicazione). Finisce in giacenza e nel movimento di ingresso.</div>
+          <div class="step-body">Il campo <strong>Ubicazione</strong> c'è anche per FAULTY e GOOD, <strong>facoltativo</strong> (per NEW/REUSE resta obbligatorio): funziona come per i NEW/REUSE, resta impostato tra un pezzo e l'altro e si può correggere sulla riga (✎ ubicazione). Per darla a più pezzi insieme: <strong>📍 Assegna ubicazione</strong>, scegli i pezzi dall'elenco e scrivi l'ubicazione. Il menu mostra il codice intero (frecce + Invio per scegliere).</div>
+        </div>
+      </div>
+    </div>
+    <div class="step">
+      <div class="step-header">
+        <span class="step-num purple">7</span>
+        <div>
+          <div class="step-title">FR associato dal seriale: solo se valido</div>
+          <div class="step-body">Quando spari il seriale l'FR si associa da solo solo se è valido: per le FAULTY aperto da non più di <strong>60 giorni</strong> e in stato <strong>Failed Material Sent</strong> o <strong>Open</strong> (parametri <code>ingresso_fr_giorni</code>, <code>ingresso_fr_stati_faulty</code>); per le GOOD basta che non sia chiuso. Un FR vecchio dello stesso seriale non viene preso: la riga lo segnala ("Su VLT c'è l'FR … ma non è stato associato") e la puoi mettere in attesa di FR.</div>
         </div>
       </div>
     </div>
@@ -3274,7 +3283,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
         <span class="step-num purple">6</span>
         <div>
           <div class="step-title">FAULTY o GOOD senza FR (pending)</div>
-          <div class="step-body">Se l'FR manca o non è su VLT la riga è rossa: premi <strong>⏳ Pending senza FR</strong> e scegli il motivo (FR non ancora aperto dal Service Desk, Etichetta mancante, FR errato, Altro con dettaglio). Il pezzo si carica con gli altri ma entra <span class="tag amber">IN ATTESA</span>: conta in giacenza, non va in ACK, RMA né export, e si apre un'anomalia FR mancante.</div>
+          <div class="step-body">Se l'FR manca o non è su VLT la riga è rossa: premi <strong>⏳ Metti in attesa FR</strong> (in alto, con il numero dei pezzi senza FR), spunta i pezzi dall'elenco e scegli il motivo (FR non ancora aperto dal Service Desk, Etichetta mancante, FR errato, Altro con dettaglio). Il pezzo si carica con gli altri ma entra <span class="tag amber">IN ATTESA</span>: conta in giacenza, non va in ACK, RMA né export, e si apre un'anomalia FR mancante.</div>
         </div>
       </div>
       <div class="step-detail"><ul class="checklist amber"><li><span>Finito il caricamento si apre la <strong>mail al Service Desk</strong> con la tabella completa dei pezzi senza FR di quell'ingresso; dalla scheda <strong>⏳ In attesa di FR</strong> c'è anche <strong>✉ Mail Service Desk (elenco completo)</strong> con tutti quelli ancora fermi.</span></li><li><span>In <strong>⏳ In attesa di FR</strong> l'app propone l'FR trovato su VLT per quel seriale, solo se è in <strong>Failed Material Sent</strong> o <strong>Open</strong> e aperto da non più di 60 giorni prima dell'entrata (parametri <code>pending_fr_stati</code>, <code>pending_fr_giorni</code>): <strong>Conferma</strong>. Oppure scrivi l'FR e premi <strong>Assegna</strong> (avvisa se il seriale su VLT è diverso o se l'FR è già in giacenza).</span></li><li><span>Assegnato l'FR il pezzo torna IN GIACENZA, il movimento di ingresso prende l'FR, l'anomalia si chiude e l'FR entra nella coda "Ingressi del giorno" di Chiusure VLT di quel giorno.</span></li></ul></div>
@@ -3888,7 +3897,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
           <div class="step-body">Scegli il <strong>Giorno</strong>: compaiono le code INGRESSI, FERME (Spare ferme in hub), ACK e RMA, ognuna con il tag <span class="tag violet">da chiudere N / totale</span>; in alto il totale delle schede da chiudere nel giorno. <strong>▶ Invia a VLT</strong> passa la coda allo script, che apre ogni FR, controlla lo stato e lo chiude; gli esiti tornano nell'app. <strong>⬇ Excel tutte le code</strong> per il riepilogo.</div>
         </div>
       </div>
-      <div class="step-detail"><ul class="checklist "><li><span>FR già nello stato finale: saltato (già fatto).</span></li><li><span>Stato inatteso: saltato e segnalato.</span></li><li><span>FERME con nota VLT che contiene "OK": la nota viene ignorata e l'FR va in Failure Report Sent.</span></li><li><span>RMA: chiusura semi-automatica con pannello seriali (script v1.0.3: aspetta il risultato della ricerca prima di aprire la modifica).</span></li><li><span>ACK e RMA senza AWB non vanno in coda finché l'AWB non è inserito.</span></li></ul></div>
+      <div class="step-detail"><ul class="checklist "><li><span>FR già nello stato finale: saltato (già fatto).</span></li><li><span>Stato inatteso: saltato e segnalato.</span></li><li><span>FERME con nota VLT che contiene "OK": la nota viene ignorata e l'FR va in Failure Report Sent.</span></li><li><span>RMA: chiusura semi-automatica con pannello seriali (script v1.0.3: aspetta il risultato della ricerca prima di aprire la modifica).</span></li><li><span>ACK e RMA senza AWB non vanno in coda finché l'AWB non è inserito.</span></li><li><span>Schede chiuse davvero ma segnate "saltato"/"errore": in <strong>👁 Vedi coda</strong> spuntale (o "seleziona saltate ed errori") e premi <strong>✔ Segna come già chiuse</strong> con il motivo; lo storico resta e nel Log c'è VLT_CHIUSURE_MANUALE. In alternativa rimandale a VLT: lo script vede lo stato già finale e le segna "già a posto".</span></li><li><span>Lo script apre VLT sulla pagina giusta: <code>#/rma</code> per gli RMA, <code>#/fail-rep</code> per FR e GOOD (anche i pulsanti ↗ VLT FR / ↗ VLT RMA).</span></li></ul></div>
     </div>
     <div class="step">
       <div class="step-header">
