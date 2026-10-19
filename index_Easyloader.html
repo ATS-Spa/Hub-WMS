@@ -3184,7 +3184,7 @@ var Ack = {
   rip: function (cod) { return DB.t.RIPARATORI.rows.find(function (r) { return L.up(r.codice) === L.up(cod); }) || { codice: cod }; },
   byId: function (id) { return DB.t.SPEDIZIONI.rows.find(function (s) { return s.id_spedizione === id; }); },
   sped: function (d, cod) { return DB.t.SPEDIZIONI.rows.find(function (s) { return s.tipo === 'ACK' && L.normDate(s.data) === d && L.up(s.destinatario) === L.up(cod) && s.stato !== 'ANNULLATA'; }); },
-  righe: function (id) { return DB.t.SPEDIZIONI_RIGHE.rows.filter(function (r) { return r.id_spedizione === id; }); },
+  righe: function (id) { return (DB.t.SPEDIZIONI_RIGHE ? DB.t.SPEDIZIONI_RIGHE.rows : []).filter(function (r) { return r.id_spedizione === id; }); },
   colliDb: function (id) { return DB.t.SPEDIZIONI_COLLI.rows.filter(function (c) { return c.id_spedizione === id; }).sort(function (a, b) { return (+a.n_collo) - (+b.n_collo); }); },
   spareFalse: function (id) { return DB.t.ANOMALIE.rows.filter(function (a) { return a.tipo === 'SPARE_FALSE' && a.id_spedizione === id && a.stato === 'APERTA'; }); },
   calRow: function (d, cod) { return DB.t.CALENDARIO_USCITE.rows.find(function (c) { return L.normDate(c.data) === d && L.up(App.aliasRip(c.riparatore)) === L.up(cod); }); },
@@ -3877,7 +3877,7 @@ var Rma = {
     Rma.render();
   },
   load: async function () {
-    await DB.loadTables(['RMA_RITORNI', 'SPEDIZIONI', 'SPEDIZIONI_COLLI']);
+    await DB.loadTables(['RMA_RITORNI', 'SPEDIZIONI', 'SPEDIZIONI_RIGHE', 'SPEDIZIONI_COLLI']);   // RIGHE: servono alle schede già spedite (elenco pezzi, DDT, mail)
     await DB.ensureSheet('CARICHI_RMA', Rma.CAR_H);
     await DB.ensureSheet('RMA_PENDING', Rma.PEN_H);
     await Mail.carica(); if (((DB.t.CODA_MAIL || {}).rows || []).some(function (r) { return r.stato === 'DA_INVIARE' || r.stato === 'IN_INVIO'; })) Mail.poll();
