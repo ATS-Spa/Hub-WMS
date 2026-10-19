@@ -377,7 +377,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
       <div class="blk-banner" id="blkBanner" style="display:none"></div>
       <div class="card">
         <div class="card-h"><div class="card-t">Testata ingresso</div><div class="spacer"></div>
-          <button class="btn ghost sm" onclick="Ingresso.importa()" title="Ricarica un Excel &quot;Pezzi letti&quot; scaricato dall'app (serve la password)">⬆ Importa pezzi letti</button> <button class="btn ghost sm" onclick="Ingresso.nuovo()">Nuovo ingresso</button></div>
+          <span class="pill p-amber" id="inPerConto" style="display:none"></span> <button class="btn ghost sm" onclick="Ingresso.importa()" title="Ricarica un Excel &quot;Pezzi letti&quot; scaricato dall'app (serve la password)">⬆ Importa pezzi letti</button> <button class="btn ghost sm" onclick="Ingresso.nuovo()">Nuovo ingresso</button></div>
         <div class="hdr">
           <div class="fg"><span class="fl">Tipo *</span>
             <select class="fc" id="inTipo" onchange="Ingresso.onTestata()">
@@ -1319,7 +1319,7 @@ var Ingresso = {
   init: function () {
     var d = lsG('draft_' + Auth.email);
     if (d && d.rows && d.rows.length) {
-      Ingresso.rows = d.rows; Ingresso.setTestata(d.testata || {});
+      Ingresso.rows = d.rows; Ingresso.setTestata(d.testata || {}); Ingresso.setPerConto(d.perConto);
       toast('Ripristinata la lettura non caricata (' + d.rows.length + ' pezzi)');
     } else Ingresso.nuovo(true);
     var fr = $('scFr'), bc = $('scBc'), ub = $('scUbi');
@@ -1352,7 +1352,7 @@ var Ingresso = {
   },
   nuovo: function (silent) {
     if (!silent && Ingresso.rows.length && !confirm('Ci sono ' + Ingresso.rows.length + ' pezzi non caricati. Scartarli?')) return;
-    Ingresso.rows = []; Ingresso.setTestata({ data: L.isoToday() }); Ingresso.save(); Ingresso.ricalcola(); $('scFr').value = ''; $('scBc').value = ''; $('scUbi').value = '';
+    Ingresso.rows = []; Ingresso.setPerConto(null); Ingresso.setTestata({ data: L.isoToday() }); Ingresso.save(); Ingresso.ricalcola(); $('scFr').value = ''; $('scBc').value = ''; $('scUbi').value = '';
   },
   // IMPORT una tantum dell'Excel "Pezzi letti" (⬇ Excel della lettura): password → file → anteprima → torna nella lettura con i controlli di sempre
   importa: function () {
@@ -1406,21 +1406,44 @@ var Ingresso = {
       (Ingresso.rows.length ? '<div class="hint err">La lettura attuale (' + Ingresso.rows.length + ' pezzi non caricati) verrà sostituita.</div>' : '') +
       '<div class="tbl-wrap modal-scroll" style="max-height:40vh;margin-top:8px"><table><thead><tr><th>#</th><th>FR</th><th>Seriale</th><th>P/N</th><th>Ubicazione</th><th>Nota</th></tr></thead><tbody>' + mostra + '</tbody></table></div>' +
       (P.length > 500 ? '<div class="hint">… e altri ' + (P.length - 500) + '</div>' : '') +
+      '<div class="row" style="margin-top:8px;gap:10px;flex-wrap:wrap;align-items:flex-end"><div class="fg" style="min-width:240px"><span class="fl">Carica a nome di</span><select class="fc" id="impOp"><option value="">' + esc('io · ' + (App.chi().sigla || Auth.email)) + '</option>' +
+        Ack.operatori().filter(function (o) { return L.s(o.email).toLowerCase() !== Auth.email; }).map(function (o) { return '<option value="' + esc(o.sigla) + '">' + esc(o.sigla + ' · ' + (o.nome || o.email)) + '</option>'; }).join('') + '</select></div>' +
+        '<div class="fg" id="impPinW" style="display:none"><span class="fl">PIN dell\'operatore</span><input class="fc mono" id="impPin" type="password" inputmode="numeric" autocomplete="off" maxlength="6" style="width:110px"></div><div class="fb err" id="impOpErr"></div></div>' +
       '<div style="margin-top:8px;display:flex;gap:16px;flex-wrap:wrap"><label><input type="checkbox" id="impPn" checked> usa il P/N del file</label><label><input type="checkbox" id="impNota"> usa la Nota del file (altrimenti si ricalcola)</label></div>' +
       '<div class="hint" style="margin-top:6px">FR, stato VLT, destinazione e controlli si ricalcolano adesso; gli FR vuoti si associano dal seriale con le regole di sempre.</div>',
-      [{ label: 'Annulla', cls: 'ghost' }, { label: '⬆ Importa ' + P.length + ' pezzi', cls: 'green', fn: function () { Ingresso._impApplica($('impPn').checked, $('impNota').checked); } }], true);
+      [{ label: 'Annulla', cls: 'ghost' }, { label: '⬆ Importa ' + P.length + ' pezzi', cls: 'green', keep: true, fn: async function () {
+        var sg = $('impOp').value, chi = null;
+        if (sg) {
+          var o = Ack.operatori().find(function (x) { return x.sigla === sg; }), e = await Ack.pinErr(o, L.s($('impPin').value));
+          if (e) { $('impOpErr').textContent = e; $('impPin').value = ''; $('impPin').focus(); return; }
+          chi = { email: L.s(o.email).toLowerCase(), sigla: o.sigla, nome: o.nome || L.s(o.email).split('@')[0] || o.sigla };
+          if (!chi.email) { $('impOpErr').textContent = 'Operatore senza email in Admin → Operatori'; return; }
+        }
+        Modal.close(); Ingresso._impApplica($('impPn') ? $('impPn').checked : true, false, chi, Ingresso._impOpz);
+      } }], true);
+    $('impOp').onchange = function () { $('impPinW').style.display = this.value ? '' : 'none'; $('impOpErr').textContent = ''; if (this.value) $('impPin').focus(); };
+    var opz = function () { Ingresso._impOpz = { pn: $('impPn').checked, nota: $('impNota').checked }; };
+    $('impPn').onchange = opz; $('impNota').onchange = opz; opz();
   },
-  _impApplica: function (usaPn, usaNota) {
+  _impApplica: function (usaPn, usaNota, chi, opz) {
     var I = Ingresso._imp; if (!I) return;
+    if (opz) { usaPn = opz.pn; usaNota = opz.nota; }
     var plt = (I.T.tipo === 'NEW' || I.T.tipo === 'REUSE') ? L.s($('scPlt').value) : '';
     Ingresso.rows = I.P.map(function (p) { var man = {}; if (usaPn && p.pn) man.pn = p.pn; if (usaNota && p.nota) man.nota = p.nota; return { fr: p.fr, bc: p.ser, ubi: p.ubi, plt: plt, ser: '', pn: '', man: man }; });
-    Ingresso.setTestata(I.T); Ingresso.onAwb(); Ingresso.onTestata(); Ingresso.ricalcola(); Ingresso.save();
-    API.append(DB.id, 'LOG', [App.log('INGRESSO_IMPORT_EXCEL', 'UNITA', I.file, { tipo: I.T.tipo, pezzi: I.P.length, mittente: I.T.mittente, awb: I.T.awb, ddt: I.T.ddt })]).catch(function () {});
+    Ingresso.setTestata(I.T); Ingresso.setPerConto(chi); Ingresso.onAwb(); Ingresso.onTestata(); Ingresso.ricalcola(); Ingresso.save();
+    API.append(DB.id, 'LOG', [App.log('INGRESSO_IMPORT_EXCEL', 'UNITA', I.file, { tipo: I.T.tipo, pezzi: I.P.length, mittente: I.T.mittente, awb: I.T.awb, ddt: I.T.ddt, per_conto_di: chi ? chi.sigla : '' })]).catch(function () {});
     Ingresso._imp = null;
     toast(I.P.length + ' pezzi importati nella lettura: controlla e premi Carica dati', 'ok');
     if (plt === '' && (I.T.tipo === 'NEW' || I.T.tipo === 'REUSE')) toast('NEW/REUSE: assegna il pallet prima di caricare', 'ko');
   },
-  save: function () { lsS('draft_' + Auth.email, Ingresso.rows.length ? { testata: Ingresso.T(), rows: Ingresso.rows } : null); },
+  save: function () { lsS('draft_' + Auth.email, Ingresso.rows.length ? { testata: Ingresso.T(), rows: Ingresso.rows, perConto: Ingresso.perConto } : null); },
+  // carico "per conto di" un altro operatore (scelto con il suo PIN, come negli ACK): i pezzi risultano suoi, nel LOG resta chi ha caricato
+  perConto: null,
+  setPerConto: function (o) {
+    Ingresso.perConto = o || null; var e = $('inPerConto'); if (!e) return;
+    e.style.display = o ? '' : 'none';
+    e.innerHTML = o ? '👤 per conto di <b>' + esc(o.sigla + ' · ' + o.nome) + '</b> <a href="#" onclick="Ingresso.setPerConto(null);Ingresso.save();return false" title="Torna a caricare con il tuo nome">✕</a>' : '';
+  },
   needUbi: function () { var t = $('inTipo').value; return t === 'NEW' || t === 'REUSE'; },
   // ubicazione: obbligatoria per NEW/REUSE, facoltativa per FAULTY e GOOD (stesso campo, resta impostata tra un pezzo e l'altro)
   ubiTipo: function (t) { return t === 'NEW' || t === 'REUSE' || t === 'FAULTY' || t === 'GOOD'; },
@@ -1469,7 +1492,7 @@ var Ingresso = {
     Ingresso.fitScan(); Ingresso.ricalcola(); Ingresso.save(); $('scBc').focus();
   },
   del: function (i) { Ingresso.rows.splice(i, 1); Ingresso.ricalcola(); Ingresso.save(); },
-  MOTIVI: ['FR non ancora aperto dal Service Desk', 'Etichetta mancante', 'FR errato', 'Altro'],
+  MOTIVI: ['Manca tipo e FR: pezzo senza etichetta né documenti', 'FR non ancora aperto dal Service Desk', 'Etichetta FR mancante o illeggibile', 'FR indicato errato / non corrisponde al seriale', 'FR chiuso o in stato non valido in VLT', 'Seriale non trovato in VLT', 'Altro'],
   pend: function (i) {
     var c = Ingresso.computed[i]; if (!c) return;
     Modal.html('Pending senza FR · ' + c.ser, '<div class="hint" style="margin-bottom:8px">Il pezzo entra in giacenza <b>IN ATTESA</b> (non va in ACK, RMA né export) con un\'anomalia aperta. L\'FR si assegna dopo da "⏳ In attesa di FR".</div>' +
@@ -1754,7 +1777,7 @@ var Ingresso = {
       return '<tr class="' + cls + '"><td>' + (i + 1) + '</td><td class="mono">' + esc(c.fr) + '</td><td class="mono">' + esc(c.rma) + '</td>' +
         '<td class="nw">' + ed('ser', c.ser, 12) + '</td><td class="nw">' + ed('pn', c.pn, 8) + (c.pn && c.pnAnag !== undefined ? (c.pnAnag ? ' <span title="P/N presente in anagrafica articoli" style="color:var(--green)">✓</span>' : ' <span title="P/N NON presente in anagrafica articoli' + (c.pnSimile ? ' (simile: ' + esc(c.pnSimile) + ')' : '') + '" style="color:var(--amber)">✗</span>') : '') + '</td><td class="nw">' + ed('mnft', c.mnft, 6) + '</td>' +
         '<td>' + esc(c.rip) + '</td><td style="font-size:11.5px;color:var(--subtle)">' + esc(c.statoVlt) + '</td>' +
-        '<td>' + ed('nota', c.nota, 10) + '</td><td>' + (c.tipo === 'FAULTY' || c.tipo === 'GOOD' ? (c.destinazione ? '<div>' + esc(c.destinazione) + '</div>' : '') + '<input class="edit-cell edit-vis mono" style="width:calc(' + Math.max(12, Math.min(40, L.s(c.ubicazione).length + 2)) + 'ch + 16px)" list="dlUbicazioni" value="' + esc(c.ubicazione) + '" placeholder="✎ ubicazione (facoltativa)" onchange="Ingresso.editUbi(' + i + ',this.value)">' : '') + (c.tipo === 'NEW' || c.tipo === 'REUSE' ? '<input class="edit-cell edit-vis mono" style="width:calc(' + Math.max(12, Math.min(40, L.s(c.ubicazione).length + 2)) + 'ch + 16px)" list="dlUbicazioni" value="' + esc(c.ubicazione) + '" placeholder="✎ ubicazione" onchange="Ingresso.editUbi(' + i + ',this.value)">' + (c.plt ? '<div class="hint mono" style="font-size:10.5px">' + esc(c.plt) + '</div>' : '') : (c.tipo === 'FAULTY' || c.tipo === 'GOOD' ? '' : esc(c.destinazione))) + '</td>' +
+        '<td>' + ed('nota', c.nota, 10) + '</td><td>' + (c.tipo === 'FAULTY' || c.tipo === 'GOOD' ? (c.destinazione ? '<div>' + esc(c.destinazione) + '</div>' : '') + '<input class="edit-cell edit-vis mono" style="width:calc(' + Math.max(12, Math.min(40, L.s(c.ubicazione).length + 2)) + 'ch + 16px)" list="dlUbicazioni" value="' + esc(c.ubicazione) + '" placeholder="✎ ubicazione" onchange="Ingresso.editUbi(' + i + ',this.value)">' : '') + (c.tipo === 'NEW' || c.tipo === 'REUSE' ? '<input class="edit-cell edit-vis mono" style="width:calc(' + Math.max(12, Math.min(40, L.s(c.ubicazione).length + 2)) + 'ch + 16px)" list="dlUbicazioni" value="' + esc(c.ubicazione) + '" placeholder="✎ ubicazione" onchange="Ingresso.editUbi(' + i + ',this.value)">' + (c.plt ? '<div class="hint mono" style="font-size:10.5px">' + esc(c.plt) + '</div>' : '') : (c.tipo === 'FAULTY' || c.tipo === 'GOOD' ? '' : esc(c.destinazione))) + '</td>' +
         '<td><div class="msgs">' + m + mail + '' + '</div></td><td><button class="ico-btn" title="Elimina" onclick="Ingresso.del(' + i + ')">✕</button></td></tr>';
     }).join('');
     var nErr = C.filter(function (c) { return c.err; }).length, nWarn = C.filter(function (c) { return c.warn && !c.err; }).length;
@@ -1782,7 +1805,7 @@ var Ingresso = {
     if (C.some(function (c) { return c.err; })) { Modal.open('Righe bloccanti', 'Correggi le righe in rosso prima di caricare.'); return; }
     var nWarn = C.filter(function (c) { return c.warn; }).length;
     var ok = await Modal.confirm('Carica ' + C.length + ' pezzi',
-      'Tipo ' + T.tipo + ' · ' + T.mittente + ' · ' + T.data + (nWarn ? '\n\n' + nWarn + ' righe hanno avvisi (gialle): verranno caricate e, se c\'è un errore seriale/TPN, aperta un\'anomalia.' : ''));
+      'Tipo ' + T.tipo + ' · ' + T.mittente + ' · ' + T.data + (Ingresso.perConto ? '\n\nA nome di ' + Ingresso.perConto.sigla + ' · ' + Ingresso.perConto.nome + ' (caricato da te: resta nel LOG)' : '') + (nWarn ? '\n\n' + nWarn + ' righe hanno avvisi (gialle): verranno caricate e, se c\'è un errore seriale/TPN, aperta un\'anomalia.' : ''));
     if (!ok) return;
     Modal.open('Caricamento in corso', 'Non chiudere la pagina.', []);
     try {
@@ -1793,7 +1816,7 @@ var Ingresso = {
       var pz = esito ? esito.pezzi.filter(function (p) { return p.stato === 'IN_ATTESA' && p.pending_fr; }) : [];
       if (pz.length) setTimeout(function () { Ingresso.mailPend(pz.map(function (p) { return p.id_unita; }), T); }, 300);
       Export.scrivi().catch(function (e) { toast('Export FR da chiudere non aggiornato: ' + e.message, 'ko'); });
-      Ingresso.rows = []; Ingresso.save(); Ingresso.setTestata({ data: L.isoToday() }); Ingresso.ricalcola(); Ingresso.renderOggi(); App.syncInfo();
+      Ingresso.rows = []; Ingresso.setPerConto(null); Ingresso.save(); Ingresso.setTestata({ data: L.isoToday() }); Ingresso.ricalcola(); Ingresso.renderOggi(); App.syncInfo();
     } catch (e) {
       var msg = e.message;
       try { await DB.loadTables(['UNITA']); Ingresso.ricalcola(); Ingresso.renderOggi(); msg += '\n\nHo ricaricato la giacenza: le righe già salvate ora sono rosse ("già in giacenza"), eliminale dalla lista e ricarica solo le altre.'; }
@@ -1815,7 +1838,7 @@ var Ingresso = {
   // scrittura in 2-3 giri: (1) ricezione, giacenza e movimenti in parallelo, (2) ID e riferimenti incrociati + log + anomalie in parallelo
   scrivi: async function (T, C) {
     if (C.some(function (c) { return c.pend; })) await DB.ensureCols('UNITA', ['pending_fr', 'fr_assegnato_il']);
-    var now = L.nowStamp(), me = Auth.email, sigla = App.me.sigla || '', n = C.length;
+    var pc = Ingresso.perConto, now = L.nowStamp(), me = pc ? pc.email : Auth.email, sigla = pc ? pc.sigla : (App.me.sigla || ''), n = C.length;
     var tU = DB.t.UNITA, H = await Ingresso.heads(), tR = H.RICEZIONI, tM = H.MOVIMENTI, tA = H.ANOMALIE, tL = H.LOG;
     var mag = function (t) { return t === 'NEW' || t === 'REUSE' ? 'HUB_MAGAZZINO' : (t === 'SCRAP' ? 'SCRAP' : 'HUB_GUASTI'); };
     var rObj = { data_arrivo: T.data, mittente: T.mittente, awb: T.awb, vettore: T.vettore, ddt_mittente: T.ddt, po_mrn: T.po, tipo: T.tipo, flag_balancing: T.bal ? 'SI' : 'NO', n_pezzi: n, stato: 'CHIUSA', note: '', creato_il: now, creato_da: me };
@@ -1865,7 +1888,7 @@ var Ingresso = {
     C.forEach(function (c, i) { if (c.anomalia) anom.push(tA.toRow({ data: now, tipo: /SERIALE/.test(c.anomalia) ? 'SERIALE_ERRATO' : 'TPN_ERRATO', id_unita: uObjs[i].id_unita, seriale: c.ser, fr: c.fr, descrizione: c.anomalia, stato: 'APERTA', aperta_da: me, rev: 1 })); });
     await Promise.all([
       API.batchUpdate(DB.id, upd),
-      API.append(DB.id, 'LOG', [tL.toRow({ data_ora: now, utente: me, azione: 'CREA', foglio: 'RICEZIONI', id_record: idR, dettaglio: JSON.stringify({ tipo: T.tipo, pezzi: n, mittente: T.mittente, unita: uObjs[0].id_unita + '…' + uObjs[n - 1].id_unita }) })]),
+      API.append(DB.id, 'LOG', [tL.toRow({ data_ora: now, utente: me, azione: 'CREA', foglio: 'RICEZIONI', id_record: idR, dettaglio: JSON.stringify(Object.assign({ tipo: T.tipo, pezzi: n, mittente: T.mittente, unita: uObjs[0].id_unita + '…' + uObjs[n - 1].id_unita }, pc ? { per_conto_di: pc.sigla, caricato_da: Auth.email } : {})) })]),
       anom.length ? API.append(DB.id, 'ANOMALIE', anom).then(function (rA) { return API.batchUpdate(DB.id, [{ range: tA.cell('id_anomalia', rA) + ':' + tA.col('id_anomalia') + (rA + anom.length - 1), values: anom.map(function (x, i) { return ['A' + L.pad(DB.rid('ANOMALIE', rA + i), 6)]; }) }]); }) : null
     ]);
     // aggiorno la giacenza in memoria
@@ -3432,9 +3455,22 @@ var Ddt = {
     return d;
   },
   // cedolini: una pagina per collo con la destinazione in grande
-  cedolini: function (p, d0) {
+  // formato dei cedolini: A4, A5 (foglio orizzontale) o etichetta 10×10 cm; l'ultimo scelto resta proposto
+  FORMATI: [['A4', 'A4'], ['A5', 'A5'], ['10x10', 'Etichetta 10×10']],
+  formato: function (titolo, fn) {
+    var f = lsG('cedolini_formato') || 'A5';
+    Modal.html(titolo || 'Stampa cedolini', '<div style="font-size:13px">Formato:</div>', [{ label: 'Annulla', cls: 'ghost' }].concat(Ddt.FORMATI.map(function (x) {
+      return { label: x[1] + (f === x[0] ? ' ✓' : ''), cls: f === x[0] ? '' : 'ghost', fn: function () { lsS('cedolini_formato', x[0]); fn(x[0]); } };
+    })));
+  },
+  cedolini: function (p, d0, fmt) {
     var J = window.jspdf && window.jspdf.jsPDF; if (!J) throw new Error('libreria PDF non caricata');
-    var d = d0 || new J({ unit: 'mm', format: 'a5', orientation: 'landscape' }), n = Math.max(1, (p.colli || []).length);
+    fmt = fmt || 'A5';
+    if (fmt === '10x10') return Ddt.cedolini10(p, d0 || new J({ unit: 'mm', format: [100, 100], orientation: 'portrait' }), !!d0);
+    var A4 = fmt === 'A4', k = A4 ? 297 / 210 : 1;
+    var d = d0 || new J({ unit: 'mm', format: A4 ? 'a4' : 'a5', orientation: 'landscape' }), n = Math.max(1, (p.colli || []).length);
+    if (A4) { var t0 = d.text, f0 = d.setFontSize, s0 = d.splitTextToSize;   // A4 = stesso cedolino in scala
+      d = Object.create(d); d.text = function (t, x, y, o) { return t0.call(this, t, x * k, y * k, o); }; d.setFontSize = function (z) { return f0.call(this, z * k); }; d.splitTextToSize = function (t, w, o) { return s0.call(this, t, w * k, o); }; }
     for (var i = 0; i < n; i++) {
       if (i || d0) d.addPage();
       d.setFont('helvetica', 'bold'); d.setFontSize(11); d.text('DESTINAZIONE', 12, 16);
@@ -3443,6 +3479,25 @@ var Ddt = {
       d.setFont('helvetica', 'bold'); d.setFontSize(16); d.text('COLLO ' + (i + 1) + ' / ' + n, 12, 96);
       d.setFont('helvetica', 'normal'); d.setFontSize(12); d.text('DDT ' + L.s(p.numero) + '   ·   AWB ' + L.s(p.awb) + '   ·   ' + L.s(p.vettore), 12, 108);
       d.setFontSize(9); d.text('Mittente: ' + DB.param('ddt_mittente', ''), 12, 136);
+    }
+    return A4 ? Object.getPrototypeOf(d) : d;
+  },
+  // etichetta 10×10 cm: stesso contenuto, impaginato per il formato quadrato
+  cedolini10: function (p, d, segue) {
+    var n = Math.max(1, (p.colli || []).length), W = 100, M = 5, LW = W - 2 * M;
+    for (var i = 0; i < n; i++) {
+      if (i || segue) d.addPage([100, 100], 'portrait');
+      d.setTextColor(0); d.setFont('helvetica', 'bold'); d.setFontSize(8); d.text('DESTINAZIONE', M, 8);
+      var fs = 18, righe; do { d.setFontSize(fs); righe = d.splitTextToSize(L.s(p.destinatario), LW); fs -= 1; } while (righe.length > 3 && fs > 10);
+      righe = righe.slice(0, 3); var lh = (fs + 1) * 0.42; d.text(righe, M, 8 + lh + 1, { lineHeightFactor: 1.05 });
+      var y = 8 + lh * righe.length + 6;
+      d.setFont('helvetica', 'normal'); d.setFontSize(9); var ind = d.splitTextToSize(L.s(p.indirizzo), LW).slice(0, 4); d.text(ind, M, y);
+      d.setDrawColor(120); d.line(M, 66, W - M, 66);
+      d.setFont('helvetica', 'bold'); d.setFontSize(18); d.text('COLLO ' + (i + 1) + ' / ' + n, M, 75);
+      d.setFont('helvetica', 'normal'); d.setFontSize(10);
+      Etichette.fit(d, 'DDT ' + L.s(p.numero), M, 82, LW, 10, 7);
+      Etichette.fit(d, 'AWB ' + L.s(p.awb) + (L.s(p.vettore) ? '  ·  ' + L.s(p.vettore) : ''), M, 87.5, LW, 10, 6);
+      d.setFontSize(6.5); d.text(d.splitTextToSize('Mittente: ' + DB.param('ddt_mittente', ''), LW).slice(0, 2), M, 94);
     }
     return d;
   },
@@ -3719,6 +3774,14 @@ var Ack = {
     DB.t.OPERATORI.rows.forEach(function (o) { var sg = L.up(o.sigla); if (!sg || visti[sg] || L.up(o.attivo) === 'NO' || L.up(o.condiviso) === 'SI') return; visti[sg] = 1; out.push(o); });
     return out.sort(function (a, b) { return L.s(a.nome || a.sigla).localeCompare(L.s(b.nome || b.sigla)); });
   },
+  // '' = PIN giusto (o non richiesto), altrimenti il messaggio d'errore
+  pinErr: async function (o, pin) {
+    if (!o) return 'Scegli l\'operatore';
+    var obbl = L.up(DB.param('ack_pin_obbligatorio', 'SI')) !== 'NO', ref = L.s(o.pin);
+    if (!ref && obbl) return 'PIN non impostato per ' + o.sigla + ': chiedi a un admin (Admin → Operatori → pin)';
+    if (ref && ('sha256:' + (await Nr.sha(L.s(pin)))).toLowerCase() !== ref.toLowerCase()) return 'PIN errato';
+    return '';
+  },
   scegliOp: function (s, titolo) {
     return new Promise(function (res) {
       var ops = Ack.operatori(), pre = L.up(s.operatore_sigla);
@@ -3731,9 +3794,8 @@ var Ack = {
          { label: 'Conferma', cls: 'green', keep: true, fn: async function () {
            var sg = $('opSel').value, o = ops.find(function (x) { return x.sigla === sg; }), pin = L.s($('opPin').value);
            if (!o) return;
-           var obbl = L.up(DB.param('ack_pin_obbligatorio', 'SI')) !== 'NO', ref = L.s(o.pin);
-           if (!ref && obbl) { $('opErr').textContent = 'PIN non impostato per ' + o.sigla + ': chiedi a un admin (Admin → Operatori → pin)'; return; }
-           if (ref) { var h = 'sha256:' + (await Nr.sha(pin)); if (h.toLowerCase() !== ref.toLowerCase()) { $('opErr').textContent = 'PIN errato'; $('opPin').value = ''; $('opPin').focus(); return; } }
+           var pe = await Ack.pinErr(o, pin);
+           if (pe) { $('opErr').textContent = pe; if (pe === 'PIN errato') { $('opPin').value = ''; $('opPin').focus(); } return; }
            var chi = { email: L.s(o.email).toLowerCase() || Auth.email, sigla: o.sigla, nome: o.nome || L.s(o.email).split('@')[0] || o.sigla, ts: Date.now() };
            Ack._op[s.id_spedizione] = chi; App.opAtt = chi;
            Modal.close();
@@ -4095,11 +4157,11 @@ var Ack = {
     return Ddt.pdf({ numero: s.n_ddt, data: s.data_ddt, destinatario: rp.ragione_sociale || s.destinatario, indirizzo: rp.indirizzo || '', vettore: s.vettore, awb: L.s(s.awb) || 'DA ASSEGNARE', colli: Ack.colliDb(id),
       cols: [{ h: 'FR', w: 26 }, { h: 'S/N', w: 70 }, { h: 'P/N', w: 50 }, { h: 'NOTE' }], righe: R.map(function (r) { return [r.fr, r.seriale, r.pn, r.flag_vlt]; }) });
   },
-  cedolini: function (id) {
+  cedolini: function (id) { Ddt.formato('Cedolini', function (f) {
     var w = window.open('', '_blank');
-    try { var s = Ack.byId(id), rp = Ack.rip(s.destinatario); Ddt.apri(Ddt.cedolini({ destinatario: rp.ragione_sociale || s.destinatario, indirizzo: rp.indirizzo || '', numero: s.n_ddt, awb: s.awb, vettore: s.vettore, colli: Ack.colliDb(id) }), w); }
+    try { var s = Ack.byId(id), rp = Ack.rip(s.destinatario); Ddt.apri(Ddt.cedolini({ destinatario: rp.ragione_sociale || s.destinatario, indirizzo: rp.indirizzo || '', numero: s.n_ddt, awb: s.awb, vettore: s.vettore, colli: Ack.colliDb(id) }, null, f), w); }
     catch (e) { if (w) w.close(); Modal.open('Cedolini', e.message); }
-  },
+  }); },
   stampa: async function (id) {
     var w = window.open('', '_blank');
     try { await Ack.loghi(); Ddt.apri(Ack.pdf(id), w); }
@@ -5263,7 +5325,8 @@ var Rma = {
     if (!ids.length) { toast('Nessun DDT emesso in questa pagina', 'ko'); return; }
     Rma.stampaMolti(ids);
   },
-  cedoliniTutti: function () {
+  cedoliniTutti: function () { Ddt.formato('Tutti i cedolini', function (f) { Rma._cedTutti(f); }); },
+  _cedTutti: function (f) {
     var w = window.open('', '_blank');
     try {
       var doc = null;
@@ -5271,7 +5334,7 @@ var Rma = {
         var s = g.s, k = Ack.key(g.dest), cp = Rma.cp(g.dest), loc = (Rma.colli[k] || []).filter(function (c) { return L.s(c.misura) || L.s(c.peso); });
         var col = s && s.stato === 'SPEDITA' ? Ack.colliDb(s.id_spedizione) : (loc.length ? loc : (s ? Ack.colliDb(s.id_spedizione) : []));
         if (!col.length) return;
-        doc = Ddt.cedolini({ destinatario: s ? s.destinatario : g.dest, indirizzo: (s && s.destinazione_estesa) || (cp ? cp.indirizzo_completo : ''), numero: s ? s.n_ddt : '', awb: s ? s.awb : '', vettore: s ? s.vettore : '', colli: col }, doc);
+        doc = Ddt.cedolini({ destinatario: s ? s.destinatario : g.dest, indirizzo: (s && s.destinazione_estesa) || (cp ? cp.indirizzo_completo : ''), numero: s ? s.n_ddt : '', awb: s ? s.awb : '', vettore: s ? s.vettore : '', colli: col }, doc, f);
       });
       if (!doc) { if (w) w.close(); toast('Nessuna destinazione con colli inseriti', 'ko'); return; }
       Ddt.apri(doc, w);
@@ -5404,13 +5467,14 @@ var Rma = {
       Ddt.apri(d, w);
     } catch (e) { if (w) w.close(); Modal.open('Stampa DDT', e.message); }
   },
-  cedolini: function (id, dest) {
+  cedolini: function (id, dest) { Ddt.formato('Cedolini', function (f) { Rma._ced(id, dest, f); }); },
+  _ced: function (id, dest, f) {
     var w = window.open('', '_blank');
     try {
       var p;
       if (id) p = Rma.pdfParams(id);
       else { var k = Ack.key(dest), s = Rma.sped($('uscData').value, dest), cp = Rma.cp(dest); p = { destinatario: dest, indirizzo: cp ? cp.indirizzo_completo : '', numero: s ? s.n_ddt : '', awb: s ? s.awb : $('uawb_' + k).value, vettore: s ? s.vettore : $('uvet_' + k).value, colli: (Rma.colli[k] || []).length ? Rma.colli[k] : (s ? Ack.colliDb(s.id_spedizione) : []) }; }
-      Ddt.apri(Ddt.cedolini(p), w);
+      Ddt.apri(Ddt.cedolini(p, null, f), w);
     } catch (e) { if (w) w.close(); Modal.open('Cedolini', e.message); }
   }
 };
@@ -6651,7 +6715,8 @@ var Cedolino = {
     var f = lsG('cedolino_formato') || 'A5';
     Modal.html('Stampa cedolino', '<div style="font-size:13px">Formato del foglio:</div>',
       [{ label: 'Annulla', cls: 'ghost' }, { label: 'A5' + (f === 'A5' ? ' ✓' : ''), cls: f === 'A5' ? '' : 'ghost', fn: function () { lsS('cedolino_formato', 'A5'); Cedolino.pdf(gruppi, 'A5'); } },
-       { label: 'A4' + (f === 'A4' ? ' ✓' : ''), cls: f === 'A4' ? '' : 'ghost', fn: function () { lsS('cedolino_formato', 'A4'); Cedolino.pdf(gruppi, 'A4'); } }]);
+       { label: 'A4' + (f === 'A4' ? ' ✓' : ''), cls: f === 'A4' ? '' : 'ghost', fn: function () { lsS('cedolino_formato', 'A4'); Cedolino.pdf(gruppi, 'A4'); } },
+       { label: 'Etichetta 10×10' + (f === '10x10' ? ' ✓' : ''), cls: f === '10x10' ? '' : 'ghost', fn: function () { lsS('cedolino_formato', '10x10'); Cedolino.pdf(gruppi, '10x10'); } }]);
   },
   // gruppi: [{ testa: { mittente, po, ddt, tipo, data }, pezzi: [{ pn, ubicazione, nota, plt }] }] → un cedolino per pallet
   pdf: async function (gruppi, formato) {
@@ -6670,37 +6735,44 @@ var Cedolino = {
     var w = window.open('', '_blank');
     try {
       await Ack.loghi(); await Lib.qr();
-      var A4 = formato === 'A4', J = window.jspdf.jsPDF, d = new J({ unit: 'mm', format: 'a' + (A4 ? 4 : 5), orientation: A4 ? 'portrait' : 'landscape' });
-      var W = 210, H = A4 ? 297 : 148, logo = (Ack._lg || {}).sx, first = true, FONDO = H - 8, X = { tpn: 10, note: 70, q: W - 12 };
+      var A4 = formato === 'A4', Q = formato === '10x10', J = window.jspdf.jsPDF;
+      var d = Q ? new J({ unit: 'mm', format: [100, 100], orientation: 'portrait' }) : new J({ unit: 'mm', format: 'a' + (A4 ? 4 : 5), orientation: A4 ? 'portrait' : 'landscape' });
+      var W = Q ? 100 : 210, H = Q ? 100 : (A4 ? 297 : 148), logo = (Ack._lg || {}).sx, first = true;
+      // misure: foglio A4/A5 oppure etichetta 10×10 (tutto più compatto)
+      var G = Q ? { m: 5, lgW: 18, lgH: 5, lgY: 4, tx: 25, tY: 8, tS: 8.5, iY: 11.5, iS: 5.5, qs: 17, qY: 3, lbY: 24, lbS: 6, pX: 40, vY: 31, pW: 33, pMax: 16, pMin: 8, bMax: 10, bMin: 5, l1: 34, hY: 37.5, hS: 6, l2: 39, y0: 40, fondo: H - 4, rMin: 5, rMax: 8, tpn: 5, note: 40, q: W - 6, tW: 34, tMax: 9, tMin: 5.5, nMax: 6.5, nMin: 4.5, qMax: 11, pag: function () { d.addPage([100, 100], 'portrait'); } }
+                : { m: 10, lgW: 30, lgH: 8, lgY: 7, tx: 48, tY: 12, tS: 11, iY: 17, iS: 8, qs: 26, qY: 6, lbY: 25, lbS: 7.5, pX: 62, vY: 34, pW: 48, pMax: 24, pMin: 12, bMax: 16, bMin: 8, l1: 38, hY: 42.5, hS: 7.5, l2: 44, y0: 45, fondo: H - 8, rMin: 6.5, rMax: 10, tpn: 10, note: 70, q: W - 12, tW: 58, tMax: 11, tMin: 7, nMax: 8, nMin: 5.5, qMax: 13, pag: function () { d.addPage(); } };
+      var FONDO = G.fondo, X = { tpn: G.tpn, note: G.note, q: G.q };
       var testata = function (pg, cont) {
         var ps = pg.ubi.map(Cedolino.pos), bin = (ps.find(function (x) { return x[1]; }) || ['', ''])[1];
-        if (logo) { try { var wl = Math.min(30, 8 * logo.w / logo.h); d.addImage(logo.url, 'PNG', 10, 7, wl, wl * logo.h / logo.w); } catch (x) { } }
-        d.setTextColor(0); d.setFont('helvetica', 'bold'); d.setFontSize(11); d.text('CEDOLINO ' + L.s(pg.t.tipo) + (cont ? ' (segue)' : ''), 48, 12);
-        d.setFont('helvetica', 'normal'); d.setFontSize(8);
-        d.text([pg.t.mittente, pg.t.po ? 'PO/MRN ' + pg.t.po : '', pg.t.ddt ? 'DDT ' + pg.t.ddt : '', pg.t.data ? L.itDate(pg.t.data) : '', 'Pezzi ' + pg.tot].filter(Boolean).join('  ·  '), 48, 17);
+        if (logo) { try { var wl = Math.min(G.lgW, G.lgH * logo.w / logo.h); d.addImage(logo.url, 'PNG', G.m, G.lgY, wl, wl * logo.h / logo.w); } catch (x) { } }
         // QR = solo il bin effettivo
-        var qs = 26; if (bin) { Etichette.qr(d, bin, W - 10 - qs, 6, qs); }
-        var xr = bin ? W - 14 - qs : W - 10;
-        d.setTextColor(110); d.setFont('helvetica', 'bold'); d.setFontSize(7.5); d.text('PALLET', 10, 25); d.text('POS. / BIN', 62, 25);
-        d.setTextColor(0); Etichette.fit(d, pg.plt || '—', 10, 34, 48, 24, 12);
-        Etichette.fit(d, ps.length ? ps.map(function (x) { return [x[0], x[1]].filter(Boolean).join(' / '); }).join('  ·  ') : '—', 62, 34, xr - 62, 16, 8);
-        d.setDrawColor(120); d.line(10, 38, W - 10, 38);
-        d.setFont('helvetica', 'bold'); d.setFontSize(7.5); d.setTextColor(90);
-        d.text('TPN', X.tpn, 42.5); d.text('NOTE', X.note, 42.5); d.text('Q', X.q, 42.5, { align: 'right' });
-        d.setTextColor(0); d.setDrawColor(200); d.line(10, 44, W - 10, 44);
-        return 45;
+        var qs = G.qs; if (bin) { Etichette.qr(d, bin, W - G.m - qs, G.qY, qs); }
+        var xq = bin ? W - G.m - qs - 3 : W - G.m;
+        d.setTextColor(0); d.setFont('helvetica', 'bold'); d.setFontSize(G.tS); d.text('CEDOLINO ' + L.s(pg.t.tipo) + (cont ? ' (segue)' : ''), G.tx, G.tY);
+        d.setFont('helvetica', 'normal'); d.setFontSize(G.iS);
+        var info = [pg.t.mittente, pg.t.po ? 'PO/MRN ' + pg.t.po : '', pg.t.ddt ? 'DDT ' + pg.t.ddt : '', pg.t.data ? L.itDate(pg.t.data) : '', 'Pezzi ' + pg.tot].filter(Boolean).join('  ·  ');
+        d.text(Q ? d.splitTextToSize(info, xq - G.tx).slice(0, 3) : info, G.tx, G.iY);
+        var xr = Q ? W - G.m : (bin ? W - 14 - qs : W - 10);
+        d.setTextColor(110); d.setFont('helvetica', 'bold'); d.setFontSize(G.lbS); d.text('PALLET', G.m, G.lbY); d.text('POS. / BIN', G.pX, G.lbY);
+        d.setTextColor(0); Etichette.fit(d, pg.plt || '—', G.m, G.vY, G.pW, G.pMax, G.pMin);
+        Etichette.fit(d, ps.length ? ps.map(function (x) { return [x[0], x[1]].filter(Boolean).join(' / '); }).join('  ·  ') : '—', G.pX, G.vY, xr - G.pX, G.bMax, G.bMin);
+        d.setDrawColor(120); d.line(G.m, G.l1, W - G.m, G.l1);
+        d.setFont('helvetica', 'bold'); d.setFontSize(G.hS); d.setTextColor(90);
+        d.text('TPN', X.tpn, G.hY); d.text('NOTE', X.note, G.hY); d.text('Q', X.q, G.hY, { align: 'right' });
+        d.setTextColor(0); d.setDrawColor(200); d.line(G.m, G.l2, W - G.m, G.l2);
+        return G.y0;
       };
       pagine.forEach(function (pg) {
-        var n = pg.righe.length, rh = Math.max(6.5, Math.min(10, (FONDO - 45) / Math.max(1, n)));
-        if (!first) d.addPage(); first = false;
+        var n = pg.righe.length, rh = Math.max(G.rMin, Math.min(G.rMax, (FONDO - G.y0) / Math.max(1, n)));
+        if (!first) G.pag(); first = false;
         var y = testata(pg, false);
         pg.righe.forEach(function (r) {
-          if (y + rh > FONDO) { d.addPage(); y = testata(pg, true); }
+          if (y + rh > FONDO) { G.pag(); y = testata(pg, true); }
           var mid = y + rh / 2 + 1.3;
-          d.setFont('helvetica', 'bold'); Etichette.fit(d, r.pn || '—', X.tpn, mid, 58, 11, 7);
-          d.setFont('helvetica', 'normal'); Etichette.fit(d, r.note.join(' · '), X.note, mid, X.q - X.note - 14, 8, 5.5);
-          d.setFont('helvetica', 'bold'); d.setFontSize(Math.min(13, rh + 2)); d.text(String(r.q), X.q, mid + 0.3, { align: 'right' });
-          d.setDrawColor(225); d.line(10, y + rh, W - 10, y + rh);
+          d.setFont('helvetica', 'bold'); Etichette.fit(d, r.pn || '—', X.tpn, mid, G.tW, G.tMax, G.tMin);
+          d.setFont('helvetica', 'normal'); Etichette.fit(d, r.note.join(' · '), X.note, mid, X.q - X.note - (Q ? 8 : 14), G.nMax, G.nMin);
+          d.setFont('helvetica', 'bold'); d.setFontSize(Math.min(G.qMax, rh + 2)); d.text(String(r.q), X.q, mid + 0.3, { align: 'right' });
+          d.setDrawColor(225); d.line(G.m, y + rh, W - G.m, y + rh);
           y += rh;
         });
       });
