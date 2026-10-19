@@ -4141,7 +4141,10 @@ var Rma = {
           if (rit) { var dr = Rma.destRma(rit); o.note.push('ritorno in giacenza'); if (dr && L.up(dr) !== L.up(o.destPrima)) { o.dest = dr; o.note.push('destinazione dal ritorno'); } }
         }
         // stesso RMA su più pezzi solo verso la stessa destinazione (nel file e rispetto a schede e carichi)
-        if (!o.err && o.rma) { var fd = o.dest || o.destPrima, cf = Rma.rmaConflitto(o.rma, fd, u.id_unita, nelFile); if (cf) o.err = cf; else if (nelFile[o.rma] === undefined) nelFile[o.rma] = fd; }
+        // con un RMA creato dal SD il pezzo va alla SUA destinazione (quella della scheda): il ritorno in giacenza proposto, che la cambiava, non vale più
+        var proprio = o.car ? o.destPrima : L.s(Rma.dv(u, 'dest'));
+        if (!o.err && o.rma && !o.dest && !o.car && L.up(proprio) !== L.up(o.destPrima)) o.note.push('va a ' + proprio + ' (destinazione della scheda): il ritorno proposto verso ' + o.destPrima + ' non vale più');
+        if (!o.err && o.rma) { var fd = o.dest || proprio, cf = Rma.rmaConflitto(o.rma, fd, u.id_unita, nelFile); if (cf) o.err = cf; else if (nelFile[o.rma] === undefined) nelFile[o.rma] = fd; }
         if (!o.err) {
           if (o.rma === o.rmaPrima) o.rma = '';
           if (o.dest && L.up(o.dest) === L.up(o.destPrima)) o.dest = '';
