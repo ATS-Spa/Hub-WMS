@@ -466,6 +466,8 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
           <div class="fg" style="width:220px"><span class="fl">Riparatore fuori calendario</span><select class="fc" id="ackExtra"></select></div>
           <button class="btn ghost sm" onclick="Ack.aggiungiExtra()">+ Aggiungi</button>
           <div class="spacer"></div>
+          <button class="btn ghost sm" onclick="Ack.mailGiorno()" title="Una mail a Service Desk e bollettazione con tutte le destinazioni del giorno: destinatario, indirizzo, DDT, AWB, colli, misure e peso">✉ Mail bollettazione (tutte)</button>
+          <button class="btn ghost sm" onclick="Ack.cfgMail()" title="Destinatari della mail ACK">⚙ Destinatari</button>
           <button class="btn ghost sm" onclick="Ack.ricaricaVlt()" title="Rilegge subito il foglio VLT">↻ VLT</button>
           <button class="btn ghost sm" onclick="Ack.export()" title="Riscrive il foglio EXPORT_FR_DA_CHIUDERE letto dallo script VLT">Aggiorna export FR da chiudere</button>
         </div>
@@ -2629,6 +2631,13 @@ var Drive = {
     Drive._f = f.id; return f.id;
   },
   upload: function (name, blob) { return Busy.wrap(Drive._upload(name, blob)); },
+  idDa: function (link) { var m = /\/d\/([\w-]{10,})/.exec(L.s(link)) || /[?&]id=([\w-]{10,})/.exec(L.s(link)); return m ? m[1] : ''; },
+  // sostituisce il contenuto del file (stesso id e link: il PDF del DDT si aggiorna dove è già stato condiviso)
+  sostituisci: async function (fileId, blob) {
+    var go = function () { return fetch('https://www.googleapis.com/upload/drive/v3/files/' + fileId + '?uploadType=media&supportsAllDrives=true', { method: 'PATCH', headers: { Authorization: 'Bearer ' + Auth.token, 'Content-Type': 'application/pdf' }, body: blob }); };
+    var res = await Busy.wrap(go()); if (res.status === 401) { await Auth.refresh(); res = await go(); }
+    if (!res.ok) { var js = await res.json().catch(function () { return {}; }); throw new Error((js.error && js.error.message) || ('HTTP ' + res.status)); }
+  },
   _upload: async function (name, blob) {
     var folder = await Drive.folder();
     var go = function () {
@@ -3401,7 +3410,7 @@ var Ack = {
       lsS('colli_' + s.id_spedizione, null); delete Ack.colli[s.id_spedizione];
       try { await Export.scrivi(); } catch (e) { toast('Export FR da chiudere non aggiornato: ' + e.message, 'ko'); }
       Modal.close(); Ack.render();
-      if (L.s(s.awb)) await Ack.emetti(s.id_spedizione); else toast('Spunta chiusa: in attesa dell\'AWB', 'ok');
+      if (L.s(s.awb)) await Ack.emetti(s.id_spedizione); else toast('Spunta chiusa: genera il DDT anche senza AWB per la bollettazione', 'ok');
     } catch (e) { Modal.open('Errore chiusura', e.message); }
   },
   riapri: async function () {
@@ -3423,7 +3432,7 @@ var Ack = {
     try {
       await DB.loadTables(['SPEDIZIONI']);
       var s = Ack.sped(d, cod);
-      if (s && s.n_ddt) { toast('DDT già emesso: AWB non modificabile', 'ko'); Ack.render(); return; }
+      if (s && s.n_ddt) { if (!awb) throw new Error('Inserisci l\'AWB'); await Ack.awbDopoDdt(s, awb, vet); return; }
       if (!s) s = await Ack.creaSped(d, cod, { awb: awb, vettore: vet });
       else await API.batchUpdate(DB.id, Ack.setS(s, { awb: awb, vettore: vet }));
       await API.append(DB.id, 'LOG', [App.log('ACK_AWB', 'SPEDIZIONI', s.id_spedizione, { awb: awb, vettore: vet })]);
@@ -3432,6 +3441,49 @@ var Ack = {
     } catch (e) { Modal.open('Errore AWB', e.message); }
   },
   key: function (cod) { return L.s(cod).replace(/[^A-Za-z0-9]/g, '_'); },
+  // "Genera DDT" dalla card: senza AWB chiede conferma (DDT per la bollettazione, l'AWB si aggiunge dopo)
+  genera: async function (id) {
+    var s = Ack.byId(id); if (!s) return;
+    if (!L.s(s.awb) && !(await Modal.confirm('Genera DDT senza AWB', 'Il DDT prende il numero e i pezzi escono dalla giacenza adesso (AWB "DA ASSEGNARE" sul PDF).\nQuando la bollettazione comunica l\'AWB inseriscilo nella card e premi Salva: si aggiornano movimenti, spedizione e il PDF su Drive viene sostituito.'))) return;
+    await Ack.emetti(id);
+  },
+  // AWB inserito dopo il DDT: SPEDIZIONI + MOVIMENTI OUT della spedizione + PDF rigenerato e sostituito su Drive
+  awbDopoDdt: async function (s, awb, vet) {
+    if (L.s(s.awb) && !App.isAdmin) throw new Error('AWB già inserito: può correggerlo solo un admin');
+    if (L.s(s.awb) === awb && L.s(s.vettore) === vet) { toast('Nessuna modifica', 'ok'); return; }
+    var id = s.id_spedizione, prima = { awb: s.awb, vettore: s.vettore };
+    Modal.open('AWB su DDT ' + s.n_ddt, 'Non chiudere la pagina.', []);
+    try {
+      Modal.progress('1/4 spedizione');
+      await API.batchUpdate(DB.id, Ack.setS(s, { awb: awb, vettore: vet }));
+      Modal.progress('2/4 movimenti');
+      var sh = API.q('MOVIMENTI'), h = (await API.batchGet(DB.id, [sh + '!1:1']))[0][0] || [], tM = new Table('MOVIMENTI', h);
+      var cS = tM.col('id_spedizione'), cD = tM.col('direzione'), nMov = 0, upd = [];
+      if (cS && 'awb' in tM.idx) {
+        var v = await API.batchGet(DB.id, [sh + '!' + cS + ':' + cS, sh + '!' + cD + ':' + cD]), colS = v[0] || [], colD = v[1] || [];
+        for (var r = 1; r < colS.length; r++) {
+          if (L.s(colS[r] && colS[r][0]) !== id || L.up(colD[r] && colD[r][0]) !== 'OUT') continue;
+          upd.push({ range: tM.cell('awb', r + 1), values: [[awb]] }); if ('vettore' in tM.idx) upd.push({ range: tM.cell('vettore', r + 1), values: [[vet]] }); nMov++;
+        }
+        if (upd.length) await API.batchUpdate(DB.id, upd);
+      }
+      Modal.progress('3/4 PDF DDT');
+      var pdfOk = '';
+      try {
+        await Ack.loghi(); var blob = Ack.pdf(id).output('blob'), fid = Drive.idDa(s.link_pdf);
+        if (fid) { await Drive.sostituisci(fid, blob); pdfOk = 'PDF su Drive aggiornato.'; }
+        else {
+          var link = await Drive.upload('DDT ACK ' + s.n_ddt + ' ' + s.destinatario + ' ' + L.normDate(s.data_ddt) + '.pdf', blob);
+          await API.batchUpdate(DB.id, Ack.setS(s, { link_pdf: link })); pdfOk = 'PDF salvato in STORICO DDT.';
+        }
+      } catch (e) { pdfOk = 'PDF non aggiornato su Drive (' + e.message + '): usa "Stampa DDT".'; }
+      Modal.progress('4/4 log');
+      await API.append(DB.id, 'LOG', [App.log('ACK_AWB_DOPO_DDT', 'SPEDIZIONI', id, { ddt: s.n_ddt, prima: prima, dopo: { awb: awb, vettore: vet }, movimenti: nMov })]);
+      Ack.render();
+      Modal.open('AWB inserito', 'DDT ' + s.n_ddt + ' · AWB ' + awb + ' ' + vet + '\nMovimenti aggiornati: ' + nMov + '\n' + pdfOk,
+        [{ label: 'Chiudi', cls: 'ghost' }, { label: 'Stampa DDT', fn: function () { Ack.stampa(id); } }]);
+    } catch (e) { Modal.open('Errore AWB', e.message); }
+  },
 
   // DDT + uscita: parte da sola quando la spunta è chiusa e c'è l'AWB
   emetti: async function (id) {
@@ -3444,7 +3496,6 @@ var Ack = {
       if (!s) throw new Error('Spedizione ' + id + ' non trovata');
       if (s.n_ddt) throw new Error('DDT già emesso (' + s.n_ddt + ')');
       if (s.stato !== 'PRONTA') throw new Error('La spunta non è chiusa (stato ' + s.stato + ')');
-      if (!L.s(s.awb)) throw new Error('Manca l\'AWB');
       var R = Ack.righe(id).filter(function (r) { return r.esito === 'SPUNTATO'; });
       var chiE = App.chi(), now = L.nowStamp(), me = L.s(s.operatore_email) || chiE.email, oggi = L.isoToday(), anno = oggi.slice(0, 4), sigla = L.s(s.operatore_sigla) || chiE.sigla;   // OP = chi ha fatto la spunta
       // 1. numero DDT: riga nel registro (append atomico) → progressivo = base + righe ACK dell'anno che la precedono
@@ -3504,7 +3555,7 @@ var Ack = {
       await API.append(DB.id, 'LOG', [tL.toRow({ data_ora: now, utente: me, azione: 'ACK_USCITA', foglio: 'SPEDIZIONI', id_record: id, dettaglio: JSON.stringify({ riparatore: s.destinatario, ddt: nDdt, awb: s.awb, pezzi: R.length, mov: mObjs[0] ? mObjs[0].id_mov + '…' + mObjs[mObjs.length - 1].id_mov : '' }) })]);
       await Jun.dopoAck(s, R, nDdt, oggi);
       DB.t.DDT_REGISTRO = null; Ack.loaded = false; await Ack.load();
-      Modal.open('ACK ' + s.destinatario + ' spedito', 'DDT ' + nDdt + ' · ' + R.length + ' pezzi · AWB ' + s.awb + (link ? '\nPDF salvato in STORICO DDT.' : ''),
+      Modal.open('ACK ' + s.destinatario + (L.s(s.awb) ? ' spedito' : ' · DDT emesso senza AWB'), 'DDT ' + nDdt + ' · ' + R.length + ' pezzi · ' + (L.s(s.awb) ? 'AWB ' + s.awb : 'AWB da assegnare: quando la bollettazione lo comunica inseriscilo nella card e premi Salva, si aggiornano movimenti, spedizione e PDF del DDT.') + (link ? '\nPDF salvato in STORICO DDT.' : ''),
         [{ label: 'Chiudi', cls: 'ghost' }, { label: 'Stampa DDT', fn: function () { Ack.stampa(id); } }]);
       App.syncInfo(); Ack.render();
     } catch (e) { Modal.open('DDT non emesso', e.message + '\n\nRiprova con "Genera DDT": se il numero era già stato preso, la riga resta nel registro.'); }
@@ -3514,7 +3565,7 @@ var Ack = {
   // ─ DDT PDF (layout del modello DDT RIP)
   pdf: function (id) {
     var s = Ack.byId(id), rp = Ack.rip(s.destinatario), R = Ack.righe(id).filter(function (r) { return r.esito === 'SPUNTATO'; });
-    return Ddt.pdf({ numero: s.n_ddt, data: s.data_ddt, destinatario: rp.ragione_sociale || s.destinatario, indirizzo: rp.indirizzo || '', vettore: s.vettore, awb: s.awb, colli: Ack.colliDb(id),
+    return Ddt.pdf({ numero: s.n_ddt, data: s.data_ddt, destinatario: rp.ragione_sociale || s.destinatario, indirizzo: rp.indirizzo || '', vettore: s.vettore, awb: L.s(s.awb) || 'DA ASSEGNARE', colli: Ack.colliDb(id),
       cols: [{ h: 'FR', w: 26 }, { h: 'S/N', w: 70 }, { h: 'P/N', w: 50 }, { h: 'NOTE' }], righe: R.map(function (r) { return [r.fr, r.seriale, r.pn, r.flag_vlt]; }) });
   },
   stampa: async function (id) {
@@ -3522,15 +3573,80 @@ var Ack = {
     try { await Ack.loghi(); Ddt.apri(Ack.pdf(id), w); }
     catch (e) { if (w) w.close(); Modal.open('Stampa DDT', e.message); }
   },
-  mail: function (id) {
-    var s = Ack.byId(id); if (!s) return '#';
-    var to = DB.param('mail_sd', ''), cc = DB.param('mail_cc', ''), sf = Ack.spareFalse(id), n = Ack.conta(Ack.righe(id));
-    var subj = 'ACK ' + s.destinatario + ' del ' + L.itDate(s.data) + (s.n_ddt ? ' - DDT ' + s.n_ddt : '') + (s.awb ? ' - AWB ' + s.awb : '');
-    var body = 'Ciao Ragazzi,\n\nACK ' + s.destinatario + ': ' + (n.sp || s.n_pezzi) + ' pezzi' + (s.n_colli ? ', ' + s.n_colli + ' colli, ' + s.peso_tot_kg + ' kg' : '') + (s.n_ddt ? ', DDT ' + s.n_ddt : '') + (s.awb ? ', AWB ' + s.awb + ' ' + s.vettore : '') + '.\n' +
-      (n.rim ? '\nFR attesi non spediti (restano in giacenza): ' + n.rim + '\n' : '') +
-      (sf.length ? '\nSPARE FALSE (letti ma non in stato ACK su VLT), da sbloccare:\n' + sf.map(function (a) { var v = DB.vltMap[a.fr]; return 'FR ' + (a.fr || '-') + ' · ' + a.seriale + (v ? ' · ' + v.stato : ''); }).join('\n') + '\n' : '') +
-      (s.link_pdf ? '\nDDT: ' + s.link_pdf + '\n' : '') + '\nGrazie';
-    return 'mailto:' + to + '?subject=' + encodeURIComponent(subj) + (cc ? '&cc=' + encodeURIComponent(cc) : '') + '&body=' + encodeURIComponent(body);
+  // destinatari: Service Desk + bollettazione (param mail_bollettazione, più indirizzi separati da virgola)
+  mailTo: function () {
+    var v = {}, out = [];
+    [DB.param('mail_sd', ''), DB.param('mail_bollettazione', '')].join(',').split(/[,;\s]+/).forEach(function (x) { x = L.s(x); if (x && !v[x.toLowerCase()]) { v[x.toLowerCase()] = 1; out.push(x); } });
+    return out.join(',');
+  },
+  // blocco testo di una destinazione: destinatario, indirizzo, DDT, AWB, pezzi, colli con tipo/misure/peso
+  mailBlocco: function (s, i) {
+    var rma = s.tipo === 'RMA', cp = rma ? Rma.cp(s.destinatario) : null, rp = rma ? { ragione_sociale: '', indirizzo: s.destinazione_estesa || (cp ? cp.indirizzo_completo : '') } : Ack.rip(s.destinatario), cl = Ack.colliDb(s.id_spedizione);
+    var n = rma ? { sp: Ack.righe(s.id_spedizione).filter(function (r) { return r.esito !== 'RIMOSSO'; }).length || Rma._npz[s.id_spedizione] || 0 } : Ack.conta(Ack.righe(s.id_spedizione));
+    var tot = cl.reduce(function (a, c) { return a + (parseFloat(String(c.peso_kg).replace(',', '.')) || 0); }, 0);
+    var t = (i ? i + ') ' : '') + s.destinatario + (rp.ragione_sociale && L.up(rp.ragione_sociale) !== L.up(s.destinatario) ? ' - ' + rp.ragione_sociale : '') + '\n' +
+      '   Indirizzo: ' + (rp.indirizzo || '-') + '\n' +
+      '   DDT: ' + (s.n_ddt ? s.n_ddt + ' del ' + L.itDate(s.data_ddt) : (s.stato === 'PRONTA' ? 'da generare' : 'spunta in corso')) + '\n' +
+      '   AWB: ' + (L.s(s.awb) ? s.awb + ' ' + L.s(s.vettore) : 'DA ASSEGNARE') + '\n' +
+      '   Pezzi: ' + (n.sp || s.n_pezzi || 0) + '\n';
+    if (cl.length) t += '   Colli: ' + cl.length + ' · peso totale ' + Math.round(tot * 100) / 100 + ' kg\n' + cl.map(function (c, k) { return '     ' + (k + 1) + '. ' + (c.tipo_collo || 'PLT') + ' ' + c.lunghezza_cm + 'x' + c.larghezza_cm + 'x' + c.altezza_cm + ' cm · ' + c.peso_kg + ' kg'; }).join('\n') + '\n';
+    else t += '   Colli: da inserire (spunta non chiusa)\n';
+    if (s.link_pdf) t += '   PDF DDT: ' + s.link_pdf + '\n';
+    return t;
+  },
+  mailTesto: function (ids) {
+    var S = ids.map(Ack.byId).filter(Boolean); if (!S.length) return null;
+    var d = L.itDate(S[0].data), one = S.length === 1, s0 = S[0], T = s0.tipo === 'RMA' ? 'RMA' : 'ACK';
+    var subj = one ? T + ' ' + s0.destinatario + ' del ' + d + (s0.n_ddt ? ' - DDT ' + s0.n_ddt : '') + (s0.awb ? ' - AWB ' + s0.awb : '')
+      : T + ' del ' + d + ' - ' + S.length + ' destinazioni - DDT ' + S.map(function (x) { return x.n_ddt || '?'; }).join(', ');
+    var body = 'Ciao Ragazzi,\n\n' + (one ? T + ' in uscita:' : T + ' in uscita, ' + S.length + ' destinazioni:') + '\n\n' + S.map(function (x, k) { return Ack.mailBlocco(x, one ? 0 : k + 1); }).join('\n');
+    var noAwb = S.filter(function (x) { return x.n_ddt && !L.s(x.awb); });
+    if (noAwb.length) body += '\nPer favore assegnate l\'AWB a: ' + noAwb.map(function (x) { return x.destinatario + ' (DDT ' + x.n_ddt + ')'; }).join(', ') + '\n';
+    S.forEach(function (x) {
+      if (x.tipo === 'RMA') return;
+      var n = Ack.conta(Ack.righe(x.id_spedizione)), sf = Ack.spareFalse(x.id_spedizione), pre = one ? '' : x.destinatario + ' - ';
+      if (n.rim) body += '\n' + pre + 'FR attesi non spediti (restano in giacenza): ' + n.rim + '\n';
+      if (sf.length) body += '\n' + pre + 'SPARE FALSE (letti ma non in stato ACK su VLT), da sbloccare:\n' + sf.map(function (a) { var v = DB.vltMap[a.fr]; return 'FR ' + (a.fr || '-') + ' · ' + a.seriale + (v ? ' · ' + v.stato : ''); }).join('\n') + '\n';
+    });
+    return { subj: subj, body: body + '\nGrazie' };
+  },
+  mail: function (id) { var m = Ack.mailTesto([id]); if (!m) return '#'; var cc = DB.param('mail_cc', ''); return 'mailto:' + Ack.mailTo() + '?subject=' + encodeURIComponent(m.subj) + (cc ? '&cc=' + encodeURIComponent(cc) : '') + '&body=' + encodeURIComponent(m.body); },
+  // apre il client di posta; il testo va sempre anche negli appunti (le mail lunghe superano il limite dei link mailto)
+  inviaMail: function (ids) {
+    var m = Ack.mailTesto(ids); if (!m) { toast('Nessuna spedizione', 'ko'); return; }
+    var to = Ack.mailTo(), cc = DB.param('mail_cc', '');
+    if (!to) { toast('Nessun destinatario: imposta mail_sd / mail_bollettazione in Parametri', 'ko'); return; }
+    var copiato = false;
+    try { if (navigator.clipboard) { navigator.clipboard.writeText(m.body).catch(function () { }); copiato = true; } } catch (e) { }
+    var url = 'mailto:' + to + '?subject=' + encodeURIComponent(m.subj) + (cc ? '&cc=' + encodeURIComponent(cc) : '') + '&body=' + encodeURIComponent(m.body);
+    if (url.length > 1900) url = 'mailto:' + to + '?subject=' + encodeURIComponent(m.subj) + (cc ? '&cc=' + encodeURIComponent(cc) : '') + '&body=' + encodeURIComponent('(testo lungo: incolla qui con Ctrl+V)\n\n');
+    location.href = url;
+    if (copiato) toast('Testo della mail copiato anche negli appunti', 'ok');
+    ids.forEach(Ack.mailInviata);
+  },
+  // mail unica con tutte le destinazioni del giorno (spunte chiuse o spedite)
+  mailGiorno: function () {
+    var d = $('ackData').value || L.isoToday();
+    var ids = Ack.giro(d).map(function (c) { return Ack.sped(d, c); }).filter(function (s) { return s && (s.stato === 'PRONTA' || s.stato === 'SPEDITA'); }).map(function (s) { return s.id_spedizione; });
+    if (!ids.length) { toast('Nessuna spunta chiusa il ' + L.itDate(d), 'ko'); return; }
+    Ack.inviaMail(ids);
+  },
+  // destinatari della bollettazione (admin)
+  cfgMail: function () {
+    var cur = L.s(DB.param('mail_bollettazione', ''));
+    if (!App.isAdmin) { Modal.open('Destinatari mail ACK', 'A: ' + (Ack.mailTo() || '-') + '\nCC: ' + (DB.param('mail_cc', '') || '-') + '\n\nLi modifica un admin.'); return; }
+    Modal.html('Destinatari mail ACK', '<div class="hint" style="margin-bottom:8px">Service Desk (mail_sd): <b>' + esc(DB.param('mail_sd', '') || '-') + '</b> · CC: <b>' + esc(DB.param('mail_cc', '') || '-') + '</b></div>' +
+      '<div class="fg"><span class="fl">Bollettazione (più indirizzi separati da virgola)</span><input class="fc" id="ackMailB" value="' + esc(cur) + '" placeholder="bollettazione@..."></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Salva', cls: 'green', fn: async function () {
+        var v = L.s($('ackMailB').value).replace(/\s*[;,]\s*/g, ',');
+        try {
+          await DB.loadTables(['PARAMETRI']); var t = DB.t.PARAMETRI, r = t.rows.find(function (x) { return x.chiave === 'mail_bollettazione'; });
+          if (r) { await API.batchUpdate(DB.id, [{ range: t.cell('valore', r._r), values: [[v]] }]); r.valore = v; }
+          else { await API.append(DB.id, 'PARAMETRI', [t.toRow({ chiave: 'mail_bollettazione', valore: v, descrizione: 'Destinatari bollettazione della mail ACK (oltre al Service Desk), separati da virgola' })]); t.rows.push({ chiave: 'mail_bollettazione', valore: v }); }
+          await API.append(DB.id, 'LOG', [App.log('PARAMETRO', 'PARAMETRI', 'mail_bollettazione', { prima: cur, dopo: v })]);
+          toast('Destinatari salvati', 'ok');
+        } catch (e) { Modal.open('Errore', e.message); }
+      } }]);
   },
   mailInviata: function (id) { var s = Ack.byId(id); if (s && s._r) API.batchUpdate(DB.id, Ack.setS(s, { mail_sd_inviata: L.nowStamp() })).catch(function () { }); },
 
@@ -3554,12 +3670,13 @@ var Ack = {
       var chc = Chi.ditta(cod, d);
       if (!s || s.stato === 'BOZZA') btn = chc ? '<button class="btn sm" disabled title="' + esc(Chi.testo(chc)) + '">Avvia spunta</button>' : '<button class="btn sm" onclick="Ack.avvia(\'' + esc(cod) + '\')">Avvia spunta</button>';
       else btn = '<button class="btn sm ' + (s.stato === 'IN_SPUNTA' ? '' : 'ghost') + '" onclick="Ack.apri(\'' + s.id_spedizione + '\')">' + (s.stato === 'IN_SPUNTA' ? 'Apri spunta' : 'Dettaglio') + '</button>';
-      if (s && s.stato === 'PRONTA') btn += ' <button class="btn sm green" ' + (L.s(s.awb) ? '' : 'disabled title="Manca l\'AWB"') + ' onclick="Ack.emetti(\'' + s.id_spedizione + '\')">Genera DDT</button>';
+      if (s && s.stato === 'PRONTA') btn += ' <button class="btn sm green"' + (L.s(s.awb) ? '' : ' title="Senza AWB: DDT per la bollettazione, l\'AWB si inserisce dopo e il PDF si aggiorna"') + ' onclick="Ack.genera(\'' + s.id_spedizione + '\')">Genera DDT' + (L.s(s.awb) ? '' : ' (senza AWB)') + '</button>';
       if (s && s.n_ddt) btn += ' <button class="btn sm" onclick="Ack.stampa(\'' + s.id_spedizione + '\')">Stampa DDT</button>' + (s.link_pdf ? ' <a class="mail" target="_blank" href="' + esc(s.link_pdf) + '">PDF su Drive</a>' : '');
-      if (s && s.stato !== 'BOZZA') btn += ' <a class="mail" href="' + Ack.mail(s.id_spedizione) + '" onclick="Ack.mailInviata(\'' + s.id_spedizione + '\')">✉ mail SD</a>';
+      if (s && s.stato !== 'BOZZA') btn += ' <a class="mail" href="#" onclick="Ack.inviaMail([\'' + s.id_spedizione + '\']);return false" title="Mail a Service Desk e bollettazione: destinatario, indirizzo, DDT, AWB, colli, misure e peso">✉ mail</a>';
+      if (s && s.n_ddt && !L.s(s.awb)) btn += ' <span class="pill p-amber" title="DDT emesso: inserisci l\'AWB appena la bollettazione lo comunica">AWB da inserire</span>';
       var np = Ack.pending(cod).length;
       btn += ' <button class="btn ghost sm"' + (np ? ' style="border-color:var(--amber);color:var(--amber)"' : '') + ' onclick="Ack.vediPending(\'' + esc(cod) + '\')" title="FR tolti dagli ACK di questo riparatore, con il motivo">ACK Pending' + (np ? ' (' + np + ')' : '') + '</button>';
-      var lock = s && s.n_ddt ? ' disabled' : '';
+      var lock = s && s.n_ddt && L.s(s.awb) && !App.isAdmin ? ' disabled' : '';
       return '<div class="ack-card' + (s && Ack.cur === s.id_spedizione ? ' sel' : '') + '">' +
         '<div class="row" style="align-items:center"><span class="t">' + esc(cod) + '</span><div class="spacer"></div><span class="pill ' + (PILL[st] || '') + '">' + esc(st.replace('_', ' ')) + '</span></div>' +
         '<div class="hint">' + esc(rp.ragione_sociale || '') + (rp.indirizzo ? ' · ' + esc(rp.indirizzo) : '') + (s && s.n_ddt ? ' · <b>DDT ' + esc(s.n_ddt) + '</b>' : '') + '</div>' +
@@ -3612,7 +3729,7 @@ var Ack = {
           '<td><input class="fc mono' + (c.misura && !L.misura(c.misura) ? ' err' : '') + '" style="width:150px" list="dlMisure" value="' + esc(c.misura) + '" placeholder="120X80X100" onchange="Ack.collo(' + i + ',\'misura\',this.value)"></td>' +
           '<td><input class="fc mono" style="width:90px" inputmode="decimal" value="' + esc(c.peso) + '" onchange="Ack.collo(' + i + ',\'peso\',this.value)"></td><td><button class="ico-btn" onclick="Ack.collo(' + i + ',\'del\')">✕</button></td></tr>';
       }).join('') + '</tbody></table></div>';
-    if (!edit) html += '<div class="hint" style="margin-top:10px">' + (s.stato === 'PRONTA' ? (L.s(s.awb) ? 'AWB presente: premi "Genera DDT" se il DDT non è partito da solo.' : 'Spunta chiusa: il DDT si genera quando il Service Desk inserisce l\'AWB.') : 'Spedita · DDT ' + esc(s.n_ddt) + ' del ' + esc(L.itDate(s.data_ddt))) + '</div>';
+    if (!edit) html += '<div class="hint" style="margin-top:10px">' + (s.stato === 'PRONTA' ? (L.s(s.awb) ? 'AWB presente: premi "Genera DDT" se il DDT non è partito da solo.' : 'Spunta chiusa: genera il DDT (anche senza AWB) e mandalo alla bollettazione; l\'AWB si inserisce dopo e il PDF si aggiorna.') : 'Spedita · DDT ' + esc(s.n_ddt) + ' del ' + esc(L.itDate(s.data_ddt)) + (L.s(s.awb) ? '' : ' · <b style="color:var(--amber)">AWB da inserire</b>')) + '</div>';
     html += '</div>';
     var foc = document.activeElement && document.activeElement.id === 'ackScan';
     box.innerHTML = html; Ack.qInfo();
@@ -3832,7 +3949,7 @@ var Rma = {
       '<button class="btn ghost sm" onclick="Rma.carModello()">Modello Excel</button> <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button>' + xr + '</div></div>' +
       '';
     return '<div class="row"><div class="fg" style="width:160px"><span class="fl">Giorno di uscita</span><input class="fc" type="date" id="uscData2" value="' + esc($('uscData').value) + '" onchange="$(\'uscData\').value=this.value;Rma.render()"></div><div class="spacer"></div>' +
-      '<button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button> <button class="btn green" id="uscTutti" onclick="Rma.emettiTutti()">Genera i DDT pronti</button></div>' +
+      '<button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button> <button class="btn ghost sm" onclick="Rma.mailGiorno()" title="Una mail a Service Desk e bollettazione con tutte le destinazioni del giorno: indirizzo, DDT, AWB, colli, misure e peso">✉ Mail bollettazione</button> <button class="btn green" id="uscTutti" onclick="Rma.emettiTutti()">Genera i DDT pronti</button></div>' +
       '<div class="hint" style="margin-top:8px">Un DDT per destinazione (serie RMA). Pronta = colli e peso salvati + AWB. Le schede ci sono già per tutte le destinazioni di oggi: puoi mettere colli e AWB subito. I pezzi senza RMA restano non spuntati e si spuntano da soli appena l\'RMA c\'è; se al DDT ne manca qualcuno, l\'app chiede conferma.</div>';
   },
   render: function (rifai) {
@@ -4420,8 +4537,9 @@ var Rma = {
   cp: function (dest) { return DB.t.CONTROPARTI.rows.find(function (c) { return L.up(c.codice) === L.up(dest); }) || null; },
   sped: function (d, dest) { return DB.t.SPEDIZIONI.rows.find(function (s) { return s.tipo === 'RMA' && L.normDate(s.data) === d && L.up(s.destinatario) === L.up(dest) && s.stato !== 'ANNULLATA'; }); },
   gruppi: function () {
-    var d = $('uscData').value, esc0 = Rma.escl(), g = {};
-    Rma.daSpedire().forEach(function (x) { var k = L.up(x.dest); (g[k] = g[k] || { dest: x.dest, pezzi: [] }).pezzi.push(x); });
+    var d = $('uscData').value, esc0 = Rma.escl(), g = {}, riap = {};
+    DB.t.SPEDIZIONI.rows.forEach(function (s) { if (s.tipo === 'RMA' && s.n_ddt && s.stato === 'PRONTA') riap[s.id_spedizione] = L.normDate(s.data); });
+    Rma.daSpedire().forEach(function (x) { if (riap[x.u.id_spedizione] && riap[x.u.id_spedizione] !== d) return; var k = L.up(x.dest); (g[k] = g[k] || { dest: x.dest, pezzi: [] }).pezzi.push(x); });
     DB.t.SPEDIZIONI.rows.forEach(function (s) { if (s.tipo === 'RMA' && L.normDate(s.data) === d && s.stato !== 'ANNULLATA') { var k = L.up(s.destinatario); g[k] = g[k] || { dest: s.destinatario, pezzi: [] }; } });
     return Object.keys(g).sort().map(function (k) {
       var x = g[k]; x.s = Rma.sped(d, x.dest); x.mancanti = x.pezzi.filter(function (p) { return p.manca; });
@@ -4443,9 +4561,10 @@ var Rma = {
       if (!done && !Rma.colli[k]) Rma.colli[k] = col.length ? col : [{ tipo: 'COLLO', misura: '', peso: '' }];
       col = done ? col : Rma.colli[k];
       var peso = col.reduce(function (a, c) { return a + (parseFloat(String(c.peso).replace(',', '.')) || 0); }, 0);
-      var bt = done ? '<button class="btn sm" onclick="Rma.stampa(\'' + s.id_spedizione + '\')">Stampa DDT</button> <button class="btn ghost sm" onclick="Rma.cedolini(\'' + s.id_spedizione + '\')">Cedolini</button>' + (s.link_pdf ? ' <a class="mail" target="_blank" href="' + esc(s.link_pdf) + '">PDF su Drive</a>' : '')
-        : '<button class="btn sm green"' + (g.pronta ? '' : ' disabled title="Servono colli/peso salvati, AWB e almeno un pezzo"') + ' onclick="Rma.emettiUno(\'' + esc(g.dest) + '\')">Genera DDT</button> <button class="btn ghost sm" onclick="Rma.cedolini(null,\'' + esc(g.dest) + '\')">Cedolini</button>';
-      var lista = (done ? Ack.righe(s.id_spedizione).map(function (r) { return { u: { id_unita: r.id_unita, seriale: r.seriale, pn: r.pn, tipo: '' }, rma: r.rma, fonte: r.note }; }) : g.pezzi);
+      var bt = done ? '<button class="btn sm" onclick="Rma.stampa(\'' + s.id_spedizione + '\')">Stampa DDT</button> <button class="btn ghost sm" onclick="Rma.cedolini(\'' + s.id_spedizione + '\')">Cedolini</button>' + (s.link_pdf ? ' <a class="mail" target="_blank" href="' + esc(s.link_pdf) + '">PDF su Drive</a>' : '') +
+          (App.isAdmin ? ' <button class="btn ghost sm" title="Riapre la scheda per correggere pezzi, colli, peso o AWB: poi Rigenera DDT (stesso numero, il PDF viene sostituito). Tutto tracciato nel LOG." onclick="Rma.riapriDdt(\'' + s.id_spedizione + '\')">↺ Riapri DDT</button>' : '')
+        : (s && s.n_ddt ? '<span class="pill p-amber" title="DDT riaperto: correggi e rigenera">DDT ' + esc(s.n_ddt) + ' riaperto</span> ' : '') + '<button class="btn sm green"' + (g.pronta ? '' : ' disabled title="Servono colli/peso salvati, AWB e almeno un pezzo"') + ' onclick="Rma.emettiUno(\'' + esc(g.dest) + '\')">' + (s && s.n_ddt ? 'Rigenera DDT' : 'Genera DDT') + '</button> <button class="btn ghost sm" onclick="Rma.cedolini(null,\'' + esc(g.dest) + '\')">Cedolini</button>';
+      var lista = (done ? Ack.righe(s.id_spedizione).filter(function (r) { return r.esito !== 'RIMOSSO'; }).map(function (r) { return { u: { id_unita: r.id_unita, seriale: r.seriale, pn: r.pn, tipo: '' }, rma: r.rma, fonte: r.note }; }) : g.pezzi);
       return '<div class="ack-card">' +
         '<div class="row" style="align-items:center"><span class="t">' + esc(g.dest) + '</span><div class="spacer"></div><span class="pill ' + (PILL[st] || '') + '">' + esc(st) + '</span></div>' +
         '<div class="hint">' + (cp && cp.indirizzo_completo ? esc(cp.indirizzo_completo) : '<span style="color:var(--amber)">indirizzo non in anagrafica CONTROPARTI</span>') + (s && s.n_ddt ? ' · <b>DDT ' + esc(s.n_ddt) + '</b>' : '') + '</div>' +
@@ -4552,9 +4671,10 @@ var Rma = {
     var d = $('uscData').value, g = Rma.gruppi().find(function (x) { return L.up(x.dest) === L.up(dest); });
     if (!g || !g.s) throw new Error('spedizione non preparata');
     var s = g.s, P = g.attivi.filter(function (p) { return p.u.stato === 'IN_GIACENZA' || p.u.stato === 'IN_LAVORAZIONE'; });
-    if (s.n_ddt) throw new Error('DDT già emesso (' + s.n_ddt + ')');
+    if (s.n_ddt && s.stato !== 'PRONTA') throw new Error('DDT già emesso (' + s.n_ddt + ')');
     if (s.stato !== 'PRONTA' || !L.s(s.awb)) throw new Error('mancano colli o AWB');
     if (!P.length) throw new Error('nessun pezzo in giacenza');
+    if (s.n_ddt) return Rma.riemetti(s, P);
     var now = L.nowStamp(), me = Auth.email, oggi = L.isoToday(), anno = oggi.slice(0, 4), sigla = App.me.sigla || '', id = s.id_spedizione;
     var heads = await API.batchGet(DB.id, ['DDT_REGISTRO', 'MOVIMENTI'].map(function (n) { return API.q(n) + '!1:1'; }));
     var tD = new Table('DDT_REGISTRO', heads[0][0] || []), tM = new Table('MOVIMENTI', heads[1][0] || []);
@@ -4615,9 +4735,128 @@ var Rma = {
   pdfParams: function (id) {
     var s = DB.t.SPEDIZIONI.rows.find(function (x) { return x.id_spedizione === id; }), cp = Rma.cp(s.destinatario);
     return { numero: s.n_ddt, data: s.data_ddt, destinatario: s.destinatario, indirizzo: s.destinazione_estesa || (cp ? cp.indirizzo_completo : ''), vettore: s.vettore, awb: s.awb, colli: Ack.colliDb(id), qr: true,
-      cols: [{ h: 'RMA', w: 26 }, { h: 'S/N', w: 62 }, { h: 'P/N', w: 46 }, { h: 'NOTE' }], righe: Ack.righe(id).map(function (r) { return [r.rma, r.seriale, r.pn, r.note]; }) };
+      cols: [{ h: 'RMA', w: 26 }, { h: 'S/N', w: 62 }, { h: 'P/N', w: 46 }, { h: 'NOTE' }], righe: Ack.righe(id).filter(function (r) { return r.esito !== 'RIMOSSO'; }).map(function (r) { return [r.rma, r.seriale, r.pn, r.note]; }) };
   },
   pdf: function (id) { return Ddt.pdf(Rma.pdfParams(id)); },
+  _npz: {},
+  // mail unica delle uscite RMA del giorno (colli salvati o spedite)
+  mailGiorno: function () {
+    var G = Rma.gruppi().filter(function (g) { return g.s && (g.s.stato === 'PRONTA' || g.s.stato === 'SPEDITA'); });
+    if (!G.length) { toast('Nessuna uscita con colli salvati in questo giorno', 'ko'); return; }
+    G.forEach(function (g) { Rma._npz[g.s.id_spedizione] = g.attivi.length; });
+    Ack.inviaMail(G.map(function (g) { return g.s.id_spedizione; }));
+  },
+  // ─ RIAPERTURA DDT RMA (admin): i pezzi tornano in uscita sulla stessa scheda, il numero DDT resta;
+  //   con "Rigenera DDT" movimenti e righe si aggiornano sul posto, i pezzi tolti vengono stornati, il PDF su Drive sostituito
+  riapriDdt: async function (id) {
+    if (!App.isAdmin) { toast('Solo un admin può riaprire un DDT', 'ko'); return; }
+    var s0 = DB.t.SPEDIZIONI.rows.find(function (x) { return x.id_spedizione === id; }); if (!s0 || s0.stato !== 'SPEDITA' || !s0.n_ddt) return;
+    Modal.html('Riapri DDT ' + s0.n_ddt + ' · ' + s0.destinatario,
+      '<div class="hint" style="margin-bottom:8px">I pezzi tornano in uscita su questa scheda (giorno ' + esc(L.itDate(s0.data)) + '): puoi togliere o aggiungere pezzi, cambiare RMA, colli, peso e AWB. ' +
+      'Poi premi <b>Rigenera DDT</b>: stesso numero, movimenti aggiornati (i pezzi tolti vengono stornati, non cancellati) e PDF su Drive sostituito.</div>' +
+      '<div class="fg"><span class="fl">Motivo (obbligatorio, va nel LOG)</span><input class="fc" id="rmaRiapM" placeholder="es. RMA errato sul seriale ..."></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Riapri', cls: 'green', keep: true, fn: function () { var m = L.s($('rmaRiapM').value); if (!m) { $('rmaRiapM').classList.add('err'); return; } Modal.close(); Rma._riapri(id, m); } }]);
+  },
+  _riapri: async function (id, motivo) {
+    Modal.open('Riapertura DDT', 'Non chiudere la pagina.', []);
+    try {
+      await DB.loadTables(['UNITA', 'SPEDIZIONI', 'SPEDIZIONI_RIGHE', 'RMA_RITORNI', 'CARICHI_RMA']);
+      var s = DB.t.SPEDIZIONI.rows.find(function (x) { return x.id_spedizione === id; });
+      if (!s || s.stato !== 'SPEDITA') throw new Error('spedizione non più in stato SPEDITA');
+      var R = Ack.righe(id).filter(function (r) { return r.esito === 'SPUNTATO'; }), U = {}, tU = DB.t.UNITA, tRR = DB.t.RMA_RITORNI, tC = DB.t.CARICHI_RMA, now = L.nowStamp(), me = Auth.email, upd = [], pezzi = [];
+      tU.rows.forEach(function (u) { U[u.id_unita] = u; });
+      var fuori = R.filter(function (r) { var u = U[r.id_unita]; return !u || u.stato !== 'USCITO' || u.id_spedizione !== id; });
+      if (fuori.length) throw new Error('Questi pezzi non risultano più usciti con questo DDT (rientrati o modificati): ' + fuori.map(function (r) { return r.seriale; }).join(', '));
+      R.forEach(function (r) {
+        var u = U[r.id_unita], car = tC.rows.find(function (c) { return c.id_unita === u.id_unita && c.id_spedizione === id; });
+        var ch = { stato: car ? 'IN_LAVORAZIONE' : 'IN_GIACENZA', data_out: '', modificato_il: now, modificato_da: me, rev: (parseInt(u.rev, 10) || 1) + 1 };
+        Object.keys(ch).forEach(function (h) { if (h in tU.idx) { u[h] = String(ch[h]); upd.push({ range: tU.cell(h, u._r), values: [[u[h]]] }); } });
+        if (car) [['stato', 'APERTO'], ['id_spedizione', '']].forEach(function (x) { car[x[0]] = x[1]; upd.push({ range: tC.cell(x[0], car._r), values: [[x[1]]] }); });
+        pezzi.push({ id_unita: u.id_unita, seriale: u.seriale, rma: r.rma });
+      });
+      tRR.rows.forEach(function (rt) { if (rt.id_spedizione === id && rt.stato === 'EVASA') [['stato', 'ASSEGNATA'], ['id_spedizione', '']].forEach(function (x) { rt[x[0]] = x[1]; upd.push({ range: tRR.cell(x[0], rt._r), values: [[x[1]]] }); }); });
+      upd = upd.concat(Ack.setS(s, { stato: 'PRONTA', note: [L.s(s.note), 'DDT riaperto il ' + L.itDate(L.isoToday()) + ' da ' + (App.me.sigla || me) + ': ' + motivo].filter(Boolean).join(' | '), rev: (parseInt(s.rev, 10) || 1) + 1 }));
+      await API.batchUpdate(DB.id, upd);
+      await API.append(DB.id, 'LOG', [App.log('RMA_DDT_RIAPERTO', 'SPEDIZIONI', id, { ddt: s.n_ddt, destinazione: s.destinatario, motivo: motivo, pezzi: pezzi, awb: s.awb })]);
+      try {   // pratiche NEW/REUSE già chiuse come SPEDITA tornano IN_USCITA
+        if (!Nr.loaded) await Nr.load();
+        var ric = {}; R.forEach(function (r) { var u = U[r.id_unita]; if (u && u.id_ricezione) ric[u.id_ricezione] = 1; });
+        var np = Nr.t().rows.filter(function (p) { return p.stato === 'SPEDITA' && ric[p.id_ricezione]; });
+        for (var i = 0; i < np.length; i++) await Nr.set(np[i], { stato: 'IN_USCITA' }, 'NR_RIAPERTA');
+      } catch (e) { }
+      $('uscData').value = L.normDate(s.data); Rma.calcola(); Modal.close(); Rma.render();
+      toast('DDT ' + s.n_ddt + ' riaperto: correggi e premi "Rigenera DDT"', 'ok');
+    } catch (e) { Modal.open('Riapertura non riuscita', e.message); }
+  },
+  notaDdt: function (p) {
+    var n = p.rit && L.s(p.rit.failure_report) ? 'RITORNO GIACENZA FR ' + L.s(p.rit.failure_report) : p.fonte, m = /RMA Precedente (\d+)/i.exec(L.s(p.u.note));
+    return m && m[1] !== L.s(p.rma) ? n + ' · RMA Precedente ' + m[1] : n;
+  },
+  riemetti: async function (s, P) {
+    var now = L.nowStamp(), me = Auth.email, sigla = App.me.sigla || '', id = s.id_spedizione, nDdt = s.n_ddt, dDdt = L.normDate(s.data_ddt) || L.isoToday();
+    await DB.loadTables(['DDT_REGISTRO']);
+    var sh = API.q('MOVIMENTI'), tM = new Table('MOVIMENTI', (await API.batchGet(DB.id, [sh + '!1:1']))[0][0] || []);
+    var cols = ['id_spedizione', 'id_unita', 'direzione'].map(function (h) { return sh + '!' + tM.col(h) + ':' + tM.col(h); });
+    var v = await API.batchGet(DB.id, cols), movDi = {};
+    for (var r = 1; r < (v[0] || []).length; r++) if (L.s(v[0][r] && v[0][r][0]) === id && L.up(v[2][r] && v[2][r][0]) === 'OUT') movDi[L.s(v[1][r] && v[1][r][0])] = r + 1;
+    var tR = DB.t.SPEDIZIONI_RIGHE, vecchie = {}; Ack.righe(id).forEach(function (x) { if (x.esito === 'SPUNTATO') vecchie[x.id_unita] = x; });
+    var upd = [], nuoveR = [], nuoviM = [], agg = [], mod = [], tolti = [], inP = {};
+    var setCells = function (t, row, o) { Object.keys(o).forEach(function (h) { if (h in t.idx) upd.push({ range: t.cell(h, row), values: [[o[h] === undefined || o[h] === null ? '' : String(o[h])]] }); }); };
+    P.forEach(function (p) {
+      var u = p.u, nota = Rma.notaDdt(p); inP[u.id_unita] = 1;
+      var rObj = { seriale: u.seriale, pn: u.pn, fr: u.fr, rma: p.rma, esito: 'SPUNTATO', note: nota };
+      var mObj = { causale: p.causale, seriale: u.seriale, pn: u.pn, mnft: u.mnft, tipo: u.tipo, fr: u.fr, rma: p.rma, po_mrn: p.po || '', controparte: s.destinatario, awb: s.awb, vettore: s.vettore, ddt: nDdt, riparatore: u.riparatore, note: nota };
+      var vr = vecchie[u.id_unita];
+      if (vr) { setCells(tR, vr._r, rObj); Object.keys(rObj).forEach(function (k) { vr[k] = String(rObj[k]); }); } else nuoveR.push(Object.assign({ id_spedizione: id, id_unita: u.id_unita, spuntato_da: me, spuntato_il: now }, rObj));
+      if (movDi[u.id_unita]) setCells(tM, movDi[u.id_unita], mObj);
+      else nuoviM.push(Object.assign({ data_ora: dDdt + ' ' + now.slice(11), direzione: 'OUT', id_unita: u.id_unita, id_spedizione: id, ubicazione_da: u.ubicazione, operatore: me, operatore_sigla: sigla, origine: 'APP' }, mObj));
+      (vr ? mod : agg).push(u.seriale);
+    });
+    // pezzi tolti: riga RIMOSSO, movimento stornato (direzione INT, fuori dall'export Easyloader), restano in giacenza
+    Object.keys(vecchie).forEach(function (k) {
+      if (inP[k]) return; var vr = vecchie[k], txt = 'tolto dal DDT ' + nDdt + ' alla riapertura del ' + L.itDate(L.isoToday());
+      setCells(tR, vr._r, { esito: 'RIMOSSO', note: [L.s(vr.note), txt].filter(Boolean).join(' · ') }); vr.esito = 'RIMOSSO';
+      if (movDi[k]) setCells(tM, movDi[k], { direzione: 'INT', causale: 'STORNO_DDT', note: 'STORNO: ' + txt });
+      tolti.push(vr.seriale);
+    });
+    if (nuoveR.length) {
+      var rS = await API.append(DB.id, 'SPEDIZIONI_RIGHE', nuoveR.map(function (o) { return tR.toRow(o); }));
+      upd.push({ range: tR.cell('id_riga', rS) + ':' + tR.col('id_riga') + (rS + nuoveR.length - 1), values: nuoveR.map(function (o, i) { return ['SR' + L.pad(DB.rid('SPEDIZIONI_RIGHE', rS + i), 6)]; }) });
+      nuoveR.forEach(function (o, i) { o.id_riga = 'SR' + L.pad(DB.rid('SPEDIZIONI_RIGHE', rS + i), 6); Ack.pushRow(tR, o, rS + i); });
+    }
+    if (nuoviM.length) {
+      var rM = await API.append(DB.id, 'MOVIMENTI', nuoviM.map(function (o) { return tM.toRow(o); })), oBase = parseInt(DB.param('mov_out_id_base', ''), 10) || 0;
+      upd.push({ range: tM.cell('id_mov', rM) + ':' + tM.col('id_mov') + (rM + nuoviM.length - 1), values: nuoviM.map(function (o, i) { return ['OUT' + (oBase + rM + i)]; }) });
+    }
+    var tU = DB.t.UNITA, tRR = DB.t.RMA_RITORNI, tC = DB.t.CARICHI_RMA;
+    P.forEach(function (p) {
+      var u = p.u, ch = { stato: 'USCITO', id_spedizione: id, data_out: dDdt, rma: p.rma, destinazione_prevista: s.destinatario, modificato_il: now, modificato_da: me, rev: (parseInt(u.rev, 10) || 1) + 1 };
+      Object.keys(ch).forEach(function (h) { if (h in tU.idx) { u[h] = String(ch[h]); upd.push({ range: tU.cell(h, u._r), values: [[u[h]]] }); } });
+      var rit = tRR.rows.find(function (x) { return x.id_rma === L.s(p.rma); });
+      if (rit) [['stato', 'EVASA'], ['id_unita_assegnata', u.id_unita], ['id_spedizione', id]].forEach(function (x) { rit[x[0]] = x[1]; upd.push({ range: tRR.cell(x[0], rit._r), values: [[x[1]]] }); });
+      var car = tC.rows.find(function (c) { return c.id_unita === u.id_unita && c.stato === 'APERTO'; });
+      if (car) [['stato', 'SPEDITO'], ['id_spedizione', id]].forEach(function (x) { car[x[0]] = x[1]; upd.push({ range: tC.cell(x[0], car._r), values: [[x[1]]] }); });
+    });
+    // pezzi tolti: via il legame con la spedizione
+    Object.keys(vecchie).forEach(function (k) { if (inP[k]) return; var u = tU.rows.find(function (x) { return x.id_unita === k; }); if (u && u.id_spedizione === id && 'id_spedizione' in tU.idx) { u.id_spedizione = ''; upd.push({ range: tU.cell('id_spedizione', u._r), values: [['']] }); } });
+    upd = upd.concat(Ack.setS(s, { stato: 'SPEDITA', n_pezzi: P.length, rev: (parseInt(s.rev, 10) || 1) + 1 }));
+    var tD = DB.t.DDT_REGISTRO, rg = tD && tD.rows.find(function (x) { return x.id_spedizione === id && x.n_ddt === nDdt; });
+    if (rg && 'n_righe' in tD.idx) upd.push({ range: tD.cell('n_righe', rg._r), values: [[String(P.length)]] });
+    await API.batchUpdate(DB.id, upd);
+    // PDF: stesso file su Drive, contenuto sostituito
+    var pdfMsg = '';
+    try {
+      var blob = Rma.pdf(id).output('blob'), fid = Drive.idDa(s.link_pdf);
+      if (fid) await Drive.sostituisci(fid, blob);
+      else { var link = await Drive.upload('DDT RMA ' + nDdt + ' ' + s.destinatario + ' ' + dDdt + '.pdf', blob); await API.batchUpdate(DB.id, Ack.setS(s, { link_pdf: link }).concat(rg && 'link_pdf' in tD.idx ? [{ range: tD.cell('link_pdf', rg._r), values: [[link]] }] : [])); }
+    } catch (e) { pdfMsg = ' (PDF non aggiornato su Drive: ' + e.message + ')'; toast('PDF ' + nDdt + ' non aggiornato su Drive (' + e.message + ')', 'ko'); }
+    await API.append(DB.id, 'LOG', [App.log('RMA_DDT_RIEMESSO', 'SPEDIZIONI', id, { ddt: nDdt, destinazione: s.destinatario, pezzi: P.length, aggiunti: agg, tolti: tolti, aggiornati: mod, awb: s.awb })]);
+    var nuoviP = P.filter(function (p) { return !vecchie[p.u.id_unita]; });
+    if (nuoviP.length) await Jun.dopoRma(nuoviP, s, nDdt, dDdt);
+    await Nr.dopoRma();
+    var e0 = Rma.escl(); P.forEach(function (p) { delete e0[p.u.id_unita]; }); lsS('usc_escl_' + $('uscData').value, e0);
+    return { id: id, dest: s.destinatario, ddt: nDdt + ' (rigenerato' + (agg.length ? ', +' + agg.length : '') + (tolti.length ? ', -' + tolti.length : '') + ')' + pdfMsg, n: P.length };
+  },
   stampa: async function (id) { var w = window.open('', '_blank'); try { await Ack.loghi(); try { await Lib.qr(); } catch (e) { } Ddt.apri(Rma.pdf(id), w); } catch (e) { if (w) w.close(); Modal.open('Stampa DDT', e.message); } },
   stampaMolti: async function (ids) {
     var w = window.open('', '_blank');
