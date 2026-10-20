@@ -1,7 +1,8 @@
 // ==UserScript==
 // @name         ATS FLM → VLT · Chiusure
 // @namespace    ats-spa.flm
-// @version      1.0.8
+// @author       Daniele Izzo
+// @version      1.0.9
 // @description  Chiude su VLT ingressi del giorno (op. linea), ACK, RMA e spare ferme in HUB con i dati dell'app "ATS - Fastweb FLM". Sostituisce i 4 script con i CSV.
 // @match        https://logistictoolvf.net.vodafone.it/*
 // @match        https://ats-spa.github.io/*
@@ -26,7 +27,7 @@
 */
 (function () {
   'use strict';
-  var VER = '1.0.8';
+  var VER = '1.0.9';
   var VLT_HOST = 'logistictoolvf.net.vodafone.it';
   var K = { CODA: 'ats_coda', STATO: 'ats_stato_', PEND: 'ats_esiti_pending', RICH: 'ats_richiesta', APP: 'ats_app_url', VIVO: 'ats_vlt_vivo', RUN: 'ats_run', UI: 'ats_ui', RICEVUTI: 'ats_esiti_ricevuti' };
   // esiti da consegnare = scritti da VLT (PEND) meno quelli già confermati dall'app (RICEVUTI): ognuno scrive solo la sua chiave
@@ -195,7 +196,8 @@
       var g = await netAttendi(function (e) { return e.m === 'GET' && rx.test(e.u); }, 15000, t0);
       if (g && g.s === 404) throw Errore('FR ' + fr + ' non trovato su VLT', 'NON_TROVATO');
       if (g && g.s >= 400) throw Errore('VLT ha risposto ' + g.s + ' aprendo la scheda' + msgServer(g.b));
-      var sel = await attendi(function () { var s = $('#field_frStatus'); return s && s.options.length > 1 && testoSel(s) ? s : null; }, 20000);
+      // pronta = menu stato con lo stato attuale scelto (una FR in OPEN può avere un solo stato nel menu)
+      var sel = await attendi(function () { var s = $('#field_frStatus'); return s && s.options.length >= 1 && testoSel(s) ? s : null; }, 20000);
       if (!sel) throw Errore('La scheda FR ' + fr + ' non si è caricata (VLT lento?)');
       await sleep(500);
       var idf = $('#field_id');
@@ -264,6 +266,8 @@
         await salva(RX_FR);
         return esitoOk(S0, scrap ? 'Close for Scrap material' : 'Good Material Received');
       }
+      // Spare ferme in HUB: l'FR in OPEN non si chiude, si segnala (va nella mail al Service Desk) e si passa alla prossima
+      if (s === 'open' && proc === 'FERME') return { esito: 'SALTATO', stato_prima: S0, stato_dopo: S0, dettaglio: 'FR in OPEN: non chiudibile, da segnalare al Service Desk' };
       if (s === 'open') {
         var selO = $('#field_frStatus');
         if (selO && opzione(selO, 'Open')) {
@@ -589,7 +593,7 @@
         c.items.forEach(function (it) { var e = st[it.k] && st[it.k].esito; if (e) n[e] = (n[e] || 0) + 1; else n.da++; });
         return n;
       },
-      _log: [], _ora: '', _ser: null, _cop: {},
+      _log: [], _ora: '', _ser: null, _cop: {}, _proc: '',
       log: function (t) { UI._log.push(adesso().slice(11, 16) + ' ' + t); UI._log = UI._log.slice(-60); var l = $('#atsVlt .log'); if (l) { l.textContent = UI._log.join('\n'); l.scrollTop = 99999; } console.log('[ATS→VLT] ' + t); },
       ora: function (t) { UI._ora = t; var o = $('#atsVlt .ora'); if (o) o.textContent = t; },
       seriali: function (it, avvisi, auto) { UI._ser = it ? { it: it, avvisi: avvisi || [], auto: auto } : null; UI.agg(); },
@@ -603,8 +607,8 @@
         else h += '<div class="info">Nessuna coda. Inviala dall\'app (tab Chiusure VLT) o prendila qui sotto.</div>';
         if (RUN.on) h += '<button data-a="pausa" class="' + (RUN.pausa ? 'v' : 'g') + '">' + (RUN.pausa ? '▶ Riprendi' : '⏸ Pausa') + '</button><button data-a="stop" class="r">■ Ferma</button>';
         else if (c) h += '<button data-a="avvia" class="v"' + (n.da + n.ERRORE ? '' : ' disabled') + '>▶ ' + (n.OK + n.GIA_FATTO + n.SALTATO + n.ERRORE ? 'Riprendi' : 'Avvia') + '</button><button data-a="prova" class="g" title="Fa una sola scheda e si ferma">Prova 1</button><button data-a="errori" class="g"' + (n.ERRORE ? '' : ' disabled') + '>↻ Riprova errori</button><button data-a="report" class="g">⬇ Report</button>';
-        if (!RUN.on) h += '<div style="margin-top:6px"><select data-a="proc"><option value="INGRESSI">Ingressi del giorno</option><option value="ACK">ACK del giorno</option><option value="RMA">RMA del giorno</option><option value="FERME">Spare ferme in HUB</option><option value="MNF">RMA → Material Not Found (lista a video)</option></select> ' +
-          ((cfg.proc || 'INGRESSI') === 'MNF' ? '<button data-a="mnf" class="r" title="Lista RMA a video: To Ship From CW → Material Not Found">🔧 Avvia MNF</button>' : '<button data-a="chiedi" class="g">📥 Prendi dati da ATS</button>') + '</div>';
+        if (!RUN.on) h += '<div style="margin-top:6px"><select data-a="proc"><option value="">— scegli la procedura —</option><option value="INGRESSI">Ingressi del giorno</option><option value="ACK">ACK del giorno</option><option value="RMA">RMA del giorno</option><option value="FERME">Spare ferme in HUB</option><option value="MNF">RMA → Material Not Found (lista a video)</option></select> ' +
+          (UI._proc === 'MNF' ? '<button data-a="mnf" class="r" title="Lista RMA a video: To Ship From CW → Material Not Found">🔧 Avvia MNF</button>' : '<button data-a="chiedi" class="g"' + (UI._proc ? '' : ' disabled title="Scegli prima la procedura"') + '>📥 Prendi dati da ATS</button>') + '</div>';
         if (UI._ser) {
           var s = UI._ser;
           h += '<div class="ser"><b>RMA ' + esc(s.it.rma) + '</b> · ' + esc(s.it.dest || '') + ' · AWB ' + esc(s.it.awb || '—') + (s.avvisi || []).map(function (a) { return '<div class="warn">⚠ ' + esc(a) + '</div>'; }).join('') +
@@ -615,7 +619,8 @@
         h += '<div class="ora">' + esc(UI._ora) + '</div><div class="log">' + esc(UI._log.join('\n')) + '</div></div>';
         UI.el.innerHTML = h;
         var l = $('#atsVlt .log'); if (l) l.scrollTop = 99999;
-        var ps = $('#atsVlt select[data-a="proc"]'); if (ps) { ps.value = cfg.proc || 'INGRESSI'; ps.onchange = function () { cfg.proc = ps.value; set(K.UI, cfg); UI.agg(); }; }
+        // la procedura si sceglie sempre: all'apertura il menu è vuoto (non ricorda l'ultima scelta)
+        var ps = $('#atsVlt select[data-a="proc"]'); if (ps) { ps.value = UI._proc || ''; ps.onchange = function () { UI._proc = ps.value; UI.agg(); }; }
         $$('#atsVlt [data-a]').forEach(function (b) {
           var a = b.getAttribute('data-a'); if (a === 'proc') return;
           if (a === 'rmaAuto') { b.onchange = function () { cfg.rmaAuto = b.checked; set(K.UI, cfg); }; return; }
@@ -630,7 +635,7 @@
             if (a === 'report') report();
             if (a === 'salta') RUN.attesa = 'salta';
             if (a === 'mnf') mnf();
-            if (a === 'chiedi') chiediDati(($('#atsVlt select[data-a="proc"]') || {}).value || 'INGRESSI');
+            if (a === 'chiedi') { var pr = ($('#atsVlt select[data-a="proc"]') || {}).value || ''; if (!pr) { UI.log('Scegli prima la procedura dal menu.'); return; } chiediDati(pr); }
           };
         });
         $$('#atsVlt [data-c]').forEach(function (b) { b.onclick = function () { var v = b.getAttribute('data-c'); (navigator.clipboard ? navigator.clipboard.writeText(v) : Promise.reject()).then(function () { if (UI._ser) UI._cop[UI._ser.it.rma + '|' + v] = 1; b.textContent = '✓ Copiato'; b.classList.add('ok'); }, function () { b.textContent = '✗'; }); }; });
