@@ -152,7 +152,9 @@ td.mono,td.nw{white-space:nowrap}
 .busy-box{display:flex;align-items:center;gap:12px;background:var(--surface);border:1px solid var(--border);border-radius:12px;padding:16px 22px;font-size:14px;color:var(--text);box-shadow:0 10px 30px rgba(0,0,0,.35)}
 .busy-spin{width:26px;height:26px;border:3px solid var(--border);border-top-color:var(--blue);border-radius:50%;animation:busyRot .8s linear infinite}
 @keyframes busyRot{to{transform:rotate(360deg)}}
-.modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px 24px;max-width:520px;width:92%}
+.modal{background:var(--surface);border:1px solid var(--border);border-radius:14px;padding:22px 24px;max-width:520px;width:92%;max-height:94vh;display:flex;flex-direction:column}
+.modal>h3,.modal>#mBtns{flex:0 0 auto}
+.modal .mbody{overflow:auto;min-height:0;flex:1 1 auto}   /* contenuto lungo: scorre dentro, i pulsanti restano sempre visibili */
 .modal.wide{max-width:1280px}
 .modal-scroll{max-height:60vh;overflow:auto;margin-top:6px}
 .modal h3{font-family:var(--ff-cond);font-size:20px;margin-bottom:10px}
@@ -466,6 +468,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
           <div class="spacer"></div>
           <button class="btn ghost sm" onclick="Giacenze.grid().scegli()" title="Mostra o nascondi colonne">⚙ Colonne</button>
           <button class="btn ghost sm" onclick="Giacenze.excel()">⬇ Excel</button>
+          <button class="btn ghost sm" onclick="Reso.apri()" title="Uscita di pezzi in reso verso una destinazione, senza RMA: partono con il DDT di Uscite e DDT RMA">📤 Reso senza RMA</button>
           <button class="btn ghost sm" onclick="Rial.apri()" title="Pezzi con l'ingresso nei movimenti ma senza scheda in giacenza (e schede in giacenza già uscite). Serve la password">🔁 Riallinea da movimenti</button>
           <button class="btn ghost sm" onclick="Bon.apri()" title="Ricarica l'Excel di Giacenze con i dati mancanti compilati (FR, material…): cambia solo quello che hai scritto. Serve la password">⬆ Bonifica da Excel</button>
           <button class="btn ghost sm" id="gRett" style="display:none" onclick="Rett.aggiungi()" title="Solo admin: aggiungi un pezzo presente a scaffale ma mancante a sistema (movimento interno, non va in fatturazione)">＋ Rettifica: aggiungi pezzo</button>
@@ -2336,6 +2339,68 @@ var Giacenze = {
   }
 };
 
+// ───────────────────────── RESO SENZA RMA ─────────────────────────
+// Da Giacenze: pezzi scelti + destinazione → segnati "reso" (uscita_reso = SI). Compaiono in Uscite e DDT RMA sotto quella
+// destinazione e partono con il DDT normale (colli, AWB, cedolini, mail), senza RMA: movimento OUT con causale RESO,
+// nota DDT "RESO" (+ nota libera). Si possono togliere dal reso finché il DDT non è emesso.
+var Reso = {
+  attivi: function () { return DB.t.UNITA.rows.filter(function (u) { return L.up(u.uscita_reso) === 'SI' && u.stato === 'IN_GIACENZA'; }); },
+  apri: function () {
+    var A = Reso.attivi();
+    Modal.html('📤 Reso senza RMA',
+      '<div class="hint" style="margin-bottom:8px">I pezzi vanno in <b>Uscite e DDT RMA</b> sotto la destinazione scelta e partono con il DDT di quel giorno, <b>senza RMA</b> (causale RESO). Seriali uno per riga o separati da ; (anche incollati da Excel).</div>' +
+      '<div class="fg"><span class="fl">Seriali *</span><textarea class="fc mono" id="rsSer" rows="4" placeholder="es. 102016770000110"></textarea></div>' +
+      '<div class="row" style="gap:10px;margin-top:8px;justify-content:flex-start;flex-wrap:wrap"><div class="fg" style="min-width:260px;flex:1"><span class="fl">Destinazione *</span><input class="fc" id="rsDest" list="dlControparti" autocomplete="off"></div>' +
+      '<div class="fg" style="min-width:260px;flex:1"><span class="fl">Nota DDT (oltre a "RESO")</span><input class="fc" id="rsNota" autocomplete="off" placeholder="es. reso materiale non conforme"></div></div>' +
+      '<div class="hint" id="rsErr" style="margin-top:6px"></div>' +
+      (A.length ? '<div style="font-size:13px;margin-top:12px"><b>' + A.length + '</b> pezzi già in reso (non ancora spediti):</div><div class="tbl-wrap modal-scroll" style="max-height:26vh"><table><thead><tr><th></th><th>Scheda</th><th>Tipo</th><th>Seriale</th><th>P/N</th><th>Destinazione</th><th>Nota DDT</th></tr></thead><tbody>' +
+        A.map(function (u) { return '<tr><td><input type="checkbox" class="rsSel" data-id="' + esc(u.id_unita) + '"></td><td class="mono">' + esc(u.id_unita) + '</td><td>' + esc(u.tipo) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.destinazione_prevista) + '</td><td>' + esc(u.nota_ddt) + '</td></tr>'; }).join('') + '</tbody></table></div>' : ''),
+      [{ label: 'Chiudi', cls: 'ghost' }].concat(A.length ? [{ label: '↩ Togli dal reso i spuntati', cls: 'ghost', keep: true, fn: function () {
+        var ids = Array.prototype.slice.call(document.querySelectorAll('#mBody .rsSel')).filter(function (c) { return c.checked; }).map(function (c) { return c.getAttribute('data-id'); });
+        if (!ids.length) { toast('Spunta i pezzi da togliere', 'ko'); return; }
+        Reso.scrivi(ids.map(function (id) { return DB.t.UNITA.rows.find(function (u) { return u.id_unita === id; }); }).filter(Boolean), null, '');
+      } }] : []).concat([{ label: '📤 Metti in reso', cls: 'green', keep: true, fn: function () { Reso.controlla(); } }]), true);
+    setTimeout(function () { $('rsSer').focus(); }, 50);
+  },
+  controlla: function () {
+    var err = function (m) { $('rsErr').textContent = m; $('rsErr').className = 'hint err'; };
+    var ser = L.s($('rsSer').value).split(/[\s;,]+/).map(L.up).filter(Boolean), dest = L.s($('rsDest').value), nota = L.s($('rsNota').value);
+    if (!ser.length) return err('Scrivi almeno un seriale');
+    if (!dest) return err('Scegli la destinazione');
+    var D = Rma.destinazioni ? Rma.destinazioni() : {}; if (D[L.up(dest)]) dest = D[L.up(dest)];
+    var U = DB.t.UNITA.rows, trov = [], no = [];
+    ser.forEach(function (s) {
+      var u = U.find(function (x) { return Giacenze.A_MAG.indexOf(x.stato) >= 0 && (L.up(x.seriale) === s || L.up(L.afterSpace(x.seriale)) === s); });
+      if (!u) no.push(s + ': non in giacenza');
+      else if (u.stato !== 'IN_GIACENZA') no.push(s + ': ' + u.stato + (u.stato === 'IN_LAVORAZIONE' ? ' (è in un carico RMA: annullalo prima)' : ' (sbloccalo prima)'));
+      else if (trov.indexOf(u) < 0) trov.push(u);
+    });
+    if (no.length && !trov.length) return err(no.join(' · '));
+    if (!DB.t.CONTROPARTI.rows.some(function (c) { return L.up(c.codice) === L.up(dest); }) && !confirm('"' + dest + '" non è tra le controparti: il DDT uscirà senza indirizzo. Continuo?')) return;
+    if (no.length && !confirm('Questi non si possono mettere in reso:\n' + no.join('\n') + '\n\nContinuo con gli altri ' + trov.length + '?')) return;
+    Reso.scrivi(trov, dest, nota);
+  },
+  // dest = null → toglie dal reso
+  scrivi: async function (lista, dest, nota) {
+    Modal.progress('Salvataggio…');
+    try {
+      await DB.ensureCols('UNITA', ['uscita_reso', 'nota_ddt']);
+      var tU = DB.t.UNITA, now = L.nowStamp(), upd = [], logs = [];
+      lista.forEach(function (x) {
+        var u = tU.rows.find(function (y) { return y.id_unita === x.id_unita; }); if (!u) return;
+        var ch = dest ? { uscita_reso: 'SI', destinazione_prevista: dest, nota_ddt: nota } : { uscita_reso: '', nota_ddt: '' }, prima = {};
+        Object.assign(ch, { modificato_il: now, modificato_da: Auth.email, rev: (parseInt(u.rev, 10) || 1) + 1 });
+        Object.keys(ch).forEach(function (h) { if (h in tU.idx) { prima[h] = u[h]; u[h] = String(ch[h]); upd.push({ range: tU.cell(h, u._r), values: [[u[h]]] }); } });
+        logs.push(App.log(dest ? 'RESO_IN_USCITA' : 'RESO_TOLTO', 'UNITA', u.id_unita, { seriale: u.seriale, prima: prima, dopo: ch }));
+      });
+      for (var k = 0; k < upd.length; k += 400) await API.batchUpdate(DB.id, upd.slice(k, k + 400));
+      await API.append(DB.id, 'LOG', logs);
+      Modal.close(); toast(dest ? lista.length + ' pezzi in reso verso ' + dest + ': li trovi in Uscite e DDT RMA' : lista.length + ' pezzi tolti dal reso', 'ok');
+      if (App.tab === 'giacenze') Giacenze.render(); if (App.tab === 'rma' && Rma.loaded) Rma.render();
+    } catch (e) { Modal.progress(''); $('rsErr') ? ($('rsErr').textContent = 'Non salvato: ' + e.message) : Modal.open('Errore', e.message); }
+  }
+};
+
 // ───────────────────────── RIALLINEA GIACENZA DAI MOVIMENTI ─────────────────────────
 // A) pezzi con l'ultimo movimento IN (nessuna uscita dopo) ma senza scheda in giacenza (es. ingressi importati con
 //    "Importa movimenti mancanti", che scrive solo lo storico) → si propone di creare la scheda dal movimento, collegata ad esso.
@@ -2399,8 +2464,8 @@ var Rial = {
     Modal.html('Riallinea giacenza dai movimenti',
       '<div class="row" style="gap:10px;align-items:flex-end;margin-bottom:6px"><div class="fg"><span class="fl">Ingressi dal</span><input class="fc" type="date" id="rlDa" value="' + esc(Rial.da) + '"></div><button class="btn ghost sm" id="rlRic">↻ Ricalcola</button><div class="spacer"></div><button class="btn ghost sm" id="rlXls">⬇ Excel</button></div>' +
       '<div style="font-size:13px;margin:6px 0"><b>A) ' + A.length + '</b> pezzi con l\'ingresso nei movimenti ma <b>senza scheda in giacenza</b> (nessuna uscita dopo). Quelli spuntati diventano schede IN GIACENZA collegate al loro movimento (nessun nuovo movimento IN, non cambia la fatturazione).' + (A.some(function (x) { return x.avv.length; }) ? ' <span style="color:var(--amber)">Le righe gialle hanno avvisi e partono senza spunta.</span>' : '') + '</div>' +
-      (A.length ? '<div class="tbl-wrap modal-scroll" style="max-height:34vh"><table><thead><tr><th><input type="checkbox" id="rlTutti"></th><th>Mov. IN</th><th>Data</th><th>Tipo</th><th>FR</th><th>Seriale</th><th>P/N</th><th>Mittente</th><th>Ubicazione</th><th>Origine</th><th>Avvisi</th></tr></thead><tbody>' + rA + '</tbody></table></div>' : '<div class="empty">Nessun pezzo da riallineare in questo periodo</div>') +
-      (C.length ? '<div style="font-size:13px;margin:10px 0 6px"><b>C) ' + C.length + '</b> schede <b>già create dal riallineamento</b> e ancora in giacenza: se una non doveva entrare, spuntala e premi <b>↩ Togli le schede C spuntate</b> (torna fuori giacenza, il movimento resta com\'era).</div>' +
+      (A.length ? '<div class="tbl-wrap modal-scroll" style="max-height:26vh"><table><thead><tr><th><input type="checkbox" id="rlTutti"></th><th>Mov. IN</th><th>Data</th><th>Tipo</th><th>FR</th><th>Seriale</th><th>P/N</th><th>Mittente</th><th>Ubicazione</th><th>Origine</th><th style="min-width:280px">Avvisi</th></tr></thead><tbody>' + rA + '</tbody></table></div>' : '<div class="empty">Nessun pezzo da riallineare in questo periodo</div>') +
+      (C.length ? '<div style="font-size:13px;margin:10px 0 6px"><b>C) ' + C.length + '</b> schede <b>già create dal riallineamento</b> e ancora in giacenza: se una non doveva entrare, spuntala e premi <b>↩ Togli le schede C spuntate</b> (torna fuori giacenza, il movimento resta com\'era). <button class="btn ghost sm" id="rlCMig" title="Spunta le schede nate da ingressi della migrazione: allora il pezzo non era in inventario">Spunta quelle della migrazione (' + C.filter(function (u) { return /\(MIGRAZIONE_/.test(L.s(u.note)); }).length + ')</button></div>' +
         '<div class="tbl-wrap modal-scroll" style="max-height:22vh"><table><thead><tr><th><input type="checkbox" id="rlCTutti"></th><th>Scheda</th><th>Creata il</th><th>Tipo</th><th>FR</th><th>Seriale</th><th>P/N</th><th>MNFT</th><th>Mov. IN</th></tr></thead><tbody>' +
         C.map(function (u, i) { return '<tr><td><input type="checkbox" class="rlCSel" data-i="' + i + '"></td><td class="mono">' + esc(u.id_unita) + '</td><td>' + esc(L.s(u.creato_il).slice(0, 16)) + '</td><td>' + esc(u.tipo) + '</td><td class="mono">' + esc(u.fr) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.mnft) + '</td><td class="mono">' + esc(u.id_mov_in) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '') +
       '<div style="font-size:13px;margin:10px 0 6px"><b>B) ' + B.length + '</b> schede <b>in giacenza</b> che hanno già un\'<b>uscita</b> dopo l\'ingresso: solo da verificare (non cambio niente).</div>' +
@@ -2416,6 +2481,7 @@ var Rial = {
       } }] : []), true);
     $('rlRic').onclick = function () { Rial.da = $('rlDa').value || Rial.da; Rial.anteprima(); };
     $('rlXls').onclick = function () { Rial.excel(); };
+    if ($('rlCMig')) $('rlCMig').onclick = function () { document.querySelectorAll('#mBody .rlCSel').forEach(function (c) { c.checked = /\(MIGRAZIONE_/.test(L.s(Rial.R.C[+c.getAttribute('data-i')].note)); }); };
     if ($('rlCTutti')) $('rlCTutti').onchange = function () { document.querySelectorAll('#mBody .rlCSel').forEach(function (c) { c.checked = $('rlCTutti').checked; }); };
     if ($('rlTutti')) $('rlTutti').onchange = function () { document.querySelectorAll('#mBody .rlSel').forEach(function (c) { c.checked = $('rlTutti').checked; }); };
   },
@@ -4781,6 +4847,7 @@ var Rma = {
     await DB.loadTables(['RMA_RITORNI', 'SPEDIZIONI', 'SPEDIZIONI_RIGHE', 'SPEDIZIONI_COLLI']);   // RIGHE: servono alle schede già spedite (elenco pezzi, DDT, mail)
     await DB.ensureSheet('CARICHI_RMA', Rma.CAR_H);
     await DB.ensureSheet('RMA_PENDING', Rma.PEN_H);
+    try { if (!DB.t.JUNIPER) await DB.loadTables(['JUNIPER']); } catch (e) { }   // per tenere fuori le GOOD Juniper non ancora messe in uscita dalla pratica
     await Mail.carica(); if (((DB.t.CODA_MAIL || {}).rows || []).some(function (r) { return r.stato === 'DA_INVIARE' || r.stato === 'IN_INVIO'; })) Mail.poll();
     var c = await DB.cacheGet('rmalk');
     if (!c || (Date.now() - c.ts) > 24 * 3600 * 1000) {
@@ -4891,7 +4958,10 @@ var Rma = {
     var ult = Rma.ultimoImport();
     return DB.t.RMA_RITORNI.rows.filter(function (r) { return r.importato_il === ult && (r.stato === 'DA_EVADERE' || r.stato === 'ASSEGNATA') && DB.daQuestAnno(r.data_apertura); });
   },
-  inventario: function () { return DB.t.UNITA.rows.filter(function (u) { return u.stato === 'IN_GIACENZA' && (u.tipo === 'GOOD' || u.tipo === 'BALANCING'); }); },
+  // GOOD/BALANCING in giacenza; le GOOD Juniper entrano solo quando la pratica le mette in uscita ("📦 Metti GOOD in uscita RMA");
+  // i pezzi in reso escono a parte (senza RMA)
+  inventario: function () { return DB.t.UNITA.rows.filter(function (u) { return u.stato === 'IN_GIACENZA' && (u.tipo === 'GOOD' || u.tipo === 'BALANCING') && L.up(u.uscita_reso) !== 'SI' && !(Jun.eGood(u) && !Jun.liberata(u)); }); },
+  junFerme: function () { return DB.t.UNITA.rows.filter(function (u) { return u.stato === 'IN_GIACENZA' && u.tipo === 'GOOD' && L.up(u.uscita_reso) !== 'SI' && Jun.eGood(u) && !Jun.liberata(u); }); },
   // destinazione d'origine della GOOD = deposito VLT da cui è partito l'FR (non cambia quando il SD modifica la destinazione)
   origine: function (u) {
     var v = DB.vltMap && DB.vltMap[u.fr], dep = v && DB.t.DEPOT_VLT.rows.find(function (d) { return d.depot_vlt === v.depot_origine; });
@@ -4917,7 +4987,7 @@ var Rma = {
     var r = DB.t.RMA_RITORNI.rows.find(function (x) { return x.id_rma === v && x.stato !== 'ANNULLATO'; });
     return r ? { rma: r, variazione: false } : null;
   },
-  dv: function (u, f) { var d = Rma.dirty[u.id_unita]; return d && d[f] !== undefined ? d[f] : u[f === 'dest' ? 'destinazione_prevista' : 'rma']; },
+  dv: function (u, f) { var d = Rma.dirty[u.id_unita]; return d && d[f] !== undefined ? d[f] : u[f === 'dest' ? 'destinazione_prevista' : (f === 'ndt' ? 'nota_ddt' : 'rma')]; },
   // RMA giacenza aperti "ieri" (dal giorno lavorativo precedente a oggi escluso: il lunedì prende venerdì, sabato e domenica)
   daIeri: function (r) {
     var oggi = L.isoToday(), d = new Date(); do { d.setDate(d.getDate() - 1); } while (d.getDay() === 0 || d.getDay() === 6);
@@ -5007,7 +5077,7 @@ var Rma = {
       var nVar = inv.filter(function (u) { return Rma.varia(u); }).length;
       h = '<div class="stat"><b>' + inv.length + '</b><span>in inventario</span></div><div class="stat"><b>' + nG + '</b><span>good</span></div><div class="stat"><b>' + nB + '</b><span>balancing</span></div>' +
         '<div class="stat"><b style="color:var(--green)">' + nAut + '</b><span>rma giacenza</span></div><div class="stat"><b style="color:var(--blue)">' + nCre + '</b><span>rma creato</span></div>' +
-        '<div class="stat"><b style="color:var(--amber)">' + (nG - nAut - nCre) + '</b><span>senza rma</span></div>' + (nVar || Rma.soloVar ? '<div class="stat' + (Rma.soloVar ? ' stat-on' : '') + '" style="cursor:pointer" title="Clicca per vedere solo le schede con variazione di destino" onclick="Rma.soloVar=!Rma.soloVar;Rma.render()"><b style="color:var(--violet)">' + nVar + '</b><span>variaz. destino' + (Rma.soloVar ? ' ✓' : '') + '</span></div>' : '');
+        '<div class="stat"><b style="color:var(--amber)">' + (nG - nAut - nCre) + '</b><span>senza rma</span></div>' + (Rma.junFerme().length ? '<div class="stat" style="cursor:pointer" title="GOOD Juniper in giacenza: entrano in inventario/uscita solo dalla pratica (tab Juniper → 📦 Metti GOOD in uscita RMA)" onclick="App.go && App.go(\'juniper\')"><b>' + Rma.junFerme().length + '</b><span>juniper (da pratica)</span></div>' : '') + (nVar || Rma.soloVar ? '<div class="stat' + (Rma.soloVar ? ' stat-on' : '') + '" style="cursor:pointer" title="Clicca per vedere solo le schede con variazione di destino" onclick="Rma.soloVar=!Rma.soloVar;Rma.render()"><b style="color:var(--violet)">' + nVar + '</b><span>variaz. destino' + (Rma.soloVar ? ' ✓' : '') + '</span></div>' : '');
     } else if (s === 'rit') {
       var att = Rma.attivi(), con = {}; Object.keys(abb).forEach(function (k) { con[abb[k].rma.id_rma] = 1; });
       var nOk = att.filter(function (r) { return con[r.id_rma]; }).length, nLate = att.filter(function (r) { return r.data_scadenza && r.data_scadenza < oggi; }).length;
@@ -5034,6 +5104,9 @@ var Rma = {
         { k: 'pn', label: 'P/N', filter: 'select', cls: 'mono' },
         { k: 'riparatore', label: 'Repair', filter: 'select' },
         { k: 'note', label: 'Nota', filter: 'text', cls: 'nw', get: function (u) { return Rma.nota(u.note); } },
+        // nota libera che esce sul DDT RMA (colonna NOTE), dopo quella automatica (RMA creato / ritorno giacenza…)
+        { k: 'ndt', label: 'Nota DDT', filter: 'text', get: function (u) { return L.s(Rma.dv(u, 'ndt')); },
+          html: function (u) { var d = Rma.dirty[u.id_unita], on = d && d.ndt !== undefined, val = L.s(Rma.dv(u, 'ndt')); return '<input class="edit-cell' + (on ? ' dirty' : '') + '" style="width:calc(' + Math.max(14, Math.min(44, val.length + 3)) + 'ch + 16px)" value="' + esc(val) + '" placeholder="✎ nota DDT" title="Esce sul DDT RMA nella colonna NOTE" onchange="Rma.set(\'' + u.id_unita + '\',\'ndt\',this.value)">'; } },
         { k: 'material', label: 'Material', filter: 'select', cls: 'mono', get: function (u) { return ctx().materialDi(u); } },
         { k: 'dest', label: 'Destinazione', filter: 'select', get: function (u) { var v = Rma.varia(u); return v ? v.nuova : Rma.dv(u, 'dest'); },
           html: function (u) {
@@ -5095,7 +5168,7 @@ var Rma = {
   set: function (id, f, v) {
     var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); v = f === 'rma' ? L.frKey(v) : L.s(v);
     if (f === 'rma' && v && Rma.rmaErr(v, true)) toast(Rma.rmaErr(v, true), 'ko');
-    var orig = L.s(f === 'dest' ? u.destinazione_prevista : u.rma), d = Rma.dirty[id] || {};
+    var orig = L.s(f === 'dest' ? u.destinazione_prevista : (f === 'ndt' ? u.nota_ddt : u.rma)), d = Rma.dirty[id] || {};
     if (v === orig) delete d[f]; else d[f] = v;
     if (Object.keys(d).length) Rma.dirty[id] = d; else delete Rma.dirty[id];
     Rma.render();
@@ -5104,13 +5177,15 @@ var Rma = {
     var ids = Object.keys(Rma.dirty); if (!ids.length) return;
     var bad = ids.map(function (id) { var d = Rma.dirty[id], u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); var r = d.rma !== undefined ? d.rma : (u ? L.s(Rma.dv(u, 'rma')) : ''); var e = d.rma ? Rma.rmaErr(d.rma, true) : ''; if (!e && r && u) e = Rma.rmaConflitto(r, Rma.dv(u, 'dest'), id); return e ? (u ? u.seriale + ': ' : '') + e : ''; }).filter(Boolean);
     if (bad.length) { Modal.open('RMA non valido', bad.join('\n')); return; }
+    if (ids.some(function (id) { return Rma.dirty[id].ndt !== undefined; })) { try { await DB.ensureCols('UNITA', ['nota_ddt']); } catch (e) { toast('Colonna nota_ddt non aggiunta: ' + e.message, 'ko'); return; } }
     var tU = DB.t.UNITA, now = L.nowStamp(), upd = [], logs = [], ch = {};
     ids.forEach(function (id) {
       var u = tU.rows.find(function (x) { return x.id_unita === id; }), d = Rma.dirty[id], c = { modificato_il: now, modificato_da: Auth.email, rev: (parseInt(u.rev, 10) || 1) + 1 }, prima = {};
+      if (d.ndt !== undefined) { c.nota_ddt = d.ndt; prima.nota_ddt = u.nota_ddt; }
       if (d.rma !== undefined) { c.rma = d.rma; prima.rma = u.rma; }
       if (d.dest !== undefined) { c.destinazione_prevista = d.dest; prima.destinazione_prevista = u.destinazione_prevista; }
       Object.keys(c).forEach(function (h) { upd.push({ range: tU.cell(h, u._r), values: [[String(c[h])]] }); });
-      logs.push(App.log(d.dest !== undefined ? 'VARIAZIONE_RMA' : 'RMA_CREATO', 'UNITA', id, { prima: prima, dopo: d, seriale: u.seriale })); ch[id] = c;
+      logs.push(App.log(d.dest !== undefined ? 'VARIAZIONE_RMA' : (d.rma !== undefined ? 'RMA_CREATO' : 'NOTA_DDT'), 'UNITA', id, { prima: prima, dopo: d, seriale: u.seriale })); ch[id] = c;
     });
     try {
       await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', logs)]);
@@ -5547,6 +5622,7 @@ var Rma = {
   // pezzi pronti a uscire: GOOD con RMA, BALANCING arrivate con RMA, carichi NEW/REUSE aperti
   daSpedire: function () {
     var out = [], abb = Rma.abb;
+    if (Reso.attivi) Reso.attivi().forEach(function (u) { out.push({ u: u, rma: '', dest: u.destinazione_prevista, fonte: 'RESO', causale: 'RESO' }); });
     Rma.inventario().forEach(function (u) {
       if (u.tipo === 'GOOD') {
         var a = abb[u.id_unita];
@@ -5725,7 +5801,7 @@ var Rma = {
     var tR = DB.t.SPEDIZIONI_RIGHE;
     var notaDdt = function (p) {   // come nel DDT di oggi, + l'RMA scaduto di un pezzo rimasto in pending
       var n = p.rit && L.s(p.rit.failure_report) ? 'RITORNO GIACENZA FR ' + L.s(p.rit.failure_report) : p.fonte, m = /RMA Precedente (\d+)/i.exec(L.s(p.u.note));
-      return m && m[1] !== L.s(p.rma) ? n + ' · RMA Precedente ' + m[1] : n;
+      return [m && m[1] !== L.s(p.rma) ? n + ' · RMA Precedente ' + m[1] : n, L.s(p.u.nota_ddt)].filter(Boolean).join(' · ');
     };
     var righe = P.map(function (p) { return { id_spedizione: id, id_unita: p.u.id_unita, seriale: p.u.seriale, pn: p.u.pn, fr: p.u.fr, rma: p.rma, esito: 'SPUNTATO', spuntato_da: me, spuntato_il: now, note: notaDdt(p) }; });
     var mObjs = P.map(function (p) {
@@ -5846,7 +5922,7 @@ var Rma = {
   },
   notaDdt: function (p) {
     var n = p.rit && L.s(p.rit.failure_report) ? 'RITORNO GIACENZA FR ' + L.s(p.rit.failure_report) : p.fonte, m = /RMA Precedente (\d+)/i.exec(L.s(p.u.note));
-    return m && m[1] !== L.s(p.rma) ? n + ' · RMA Precedente ' + m[1] : n;
+    return [m && m[1] !== L.s(p.rma) ? n + ' · RMA Precedente ' + m[1] : n, L.s(p.u.nota_ddt)].filter(Boolean).join(' · ');
   },
   riemetti: async function (s, P) {
     var now = L.nowStamp(), me = Auth.email, sigla = App.me.sigla || '', id = s.id_spedizione, nDdt = s.n_ddt, dDdt = L.normDate(s.data_ddt) || L.isoToday();
@@ -6224,6 +6300,13 @@ Jun.salvaUscita = async function (id, idU) {
 };
 
 // ─ GOOD Juniper arrivata prima della faulty: la pratica (seriale good) dà l'FR quando c'è; altrimenti l'FR si associa all'arrivo della faulty
+// GOOD Juniper (MNFT/riparatore Juniper o seriale di una pratica): fuori processo, non va in inventario RMA da sola
+Jun.pratica = function (u) {
+  var t = DB.t.JUNIPER, s = L.up(u.seriale), s2 = L.up(L.afterSpace(u.seriale)); if (!t || !s) return null;
+  return t.rows.find(function (j) { return j.stato !== 'ANNULLATA' && L.s(j.good_seriale) && (L.up(j.good_seriale) === s || L.up(j.good_seriale) === s2); }) || null;
+};
+Jun.eGood = function (u) { return u.tipo === 'GOOD' && (L.up(u.mnft) === 'JUNIPER' || L.up(u.riparatore) === 'JUNIPER' || L.up(App.aliasRip(u.riparatore)) === 'JUNIPER' || !!Jun.pratica(u)); };
+Jun.liberata = function (u) { var p = Jun.pratica(u); return !!p && ['GOOD_IN_USCITA', 'GOOD_SPEDITA', 'CHIUSA'].indexOf(p.stato) >= 0; };
 Jun.perGood = function (ser) { var t = DB.t.JUNIPER, s = L.up(ser); if (!t || !s) return null; return t.rows.find(function (j) { return j.stato !== 'CHIUSA' && j.stato !== 'ANNULLATA' && L.up(j.good_seriale) === s; }) || null; };
 Jun.perFaulty = function (ser, fr) { var t = DB.t.JUNIPER, s = L.up(ser); if (!t) return null; return t.rows.find(function (j) { return j.stato !== 'CHIUSA' && j.stato !== 'ANNULLATA' && ((s && L.up(j.faulty_seriale) === s) || (fr && L.s(j.fr) === L.s(fr))); }) || null; };
 // dopo il caricamento di FAULTY: pratica trovata dal seriale faulty → FR sulla pratica e sulla GOOD già in giacenza (con i suoi movimenti)
