@@ -6512,7 +6512,11 @@ var Sto = {
       Modal.open('Importa movimenti', 'Rileggo i movimenti per evitare doppioni…', []);
       Sto.dati.cur = await Sto.colsSafe(DB.id, 'MOVIMENTI'); Modal.close();
       var chiave = function (o) { var d = o.direzione === 'IN' ? L.normDate(o.data_registrazione_vlt) || L.normDate(o.data_ora) : L.normDate(o.data_ora); return o.direzione + '|' + L.up(o.seriale) + '|' + L.up(o.tipo) + '|' + d; };
-      var gia = {}; Sto.dati.cur.forEach(function (r) { gia[chiave(r)] = r.id_mov || '1'; });
+      var gia = {}, perId = {}, perSer = {}; Sto.dati.cur.forEach(function (r) { gia[chiave(r)] = r.id_mov || '1'; if (r.id_mov) perId[r.id_mov] = r;
+        var k = r.direzione + '|' + L.up(r.seriale) + '|' + L.up(r.tipo); (perSer[k] = perSer[k] || []).push(r); });
+      // stesso pezzo, stessa direzione e tipo entro 7 giorni = probabilmente lo stesso movimento con una data diversa
+      var gg = function (a, b) { a = L.normDate(a); b = L.normDate(b); return a && b ? Math.abs((new Date(a) - new Date(b)) / 864e5) : 999; };
+      var simile = function (o) { return (perSer[o.direzione + '|' + L.up(o.seriale) + '|' + L.up(o.tipo)] || []).find(function (r) { return Math.min(gg(r.data_ora, o.data_ora), gg(r.data_registrazione_vlt || r.data_ora, o.data_registrazione_vlt || o.data_ora)) <= 7; }); };
       var uSer = {}; DB.t.UNITA.rows.forEach(function (u) { var k = L.up(u.seriale); if (k && (!uSer[k] || u.stato === 'IN_GIACENZA')) uSer[k] = u; });
       var visti = {}, list = rows.map(function (r, i) {
         var o = {}; Sto.COLS.forEach(function (c) { o[c] = L.s(r[L.up(c)]); }); o.direzione = L.up(o.direzione); o._riga = i + 2;
@@ -6520,16 +6524,22 @@ var Sto = {
         if (o.direzione !== 'IN' && o.direzione !== 'OUT') o._err = 'direzione deve essere IN o OUT';
         else if (!o.seriale || !o.data_ora || !o.tipo) o._err = 'mancano seriale, data_ora o tipo';
         else if (gia[chiave(o)]) o._err = 'già presente (' + gia[chiave(o)] + ')';
+        else if (o.id_mov && perId[o.id_mov] && L.up(perId[o.id_mov].seriale) === L.up(o.seriale)) o._err = 'già presente (stesso ID ' + o.id_mov + ')';
         else if (visti[chiave(o)]) o._err = 'ripetuto nel file';
+        else { var sm = simile(o); if (sm) o._dub = 'probabile doppione di ' + (sm.id_mov || '?') + ' del ' + L.itDate(sm.data_ora); }
+        if (o.id_mov && !/^IMPORT|EASYLOADER/i.test(o.origine)) o.origine = [o.origine, 'ID originale ' + o.id_mov].filter(Boolean).join(' · ');
         if (!o._err) { visti[chiave(o)] = 1; if (!o.id_unita && uSer[L.up(o.seriale)]) o.id_unita = uSer[L.up(o.seriale)].id_unita; if (!o.causale) o.causale = o.direzione === 'IN' ? 'INGRESSO' : ({ FAULTY: 'ACK', GOOD: 'RMA', NEW: 'RMA', REUSE: 'RMA', BALANCING: 'BALANCING' }[o.tipo] || ''); if (!o.origine) o.origine = 'IMPORT ' + f.name; }
         return o;
       }).filter(function (o) { return o.seriale || o._err; });
-      var ok = list.filter(function (o) { return !o._err; }), ko = list.filter(function (o) { return o._err; }), cnt = {};
+      var dub = list.filter(function (o) { return !o._err && o._dub; });
+      var ok = list.filter(function (o) { return !o._err && !o._dub; }), ko = list.filter(function (o) { return o._err; }), cnt = {};
       ok.forEach(function (o) { var k = o.direzione + ' ' + o.tipo; cnt[k] = (cnt[k] || 0) + 1; });
       Modal.html('Importa movimenti mancanti · ' + f.name, '<div style="font-size:13px;margin-bottom:8px"><b style="color:var(--green)">' + ok.length + '</b> da importare (' + Object.keys(cnt).map(function (k) { return k + ' ' + cnt[k]; }).join(', ') + ') · <b style="color:var(--red)">' + ko.length + '</b> saltati. Gli ID IN/OUT li assegna il tool (numerazione del database); l\'ID originale resta in "origine".</div>' +
         '<div class="tbl-wrap modal-scroll"><table><thead><tr><th>Riga</th><th>Dir</th><th>Tipo</th><th>Seriale</th><th>FR</th><th>Data in hub</th><th>Reg. VLT</th><th>Controparte</th><th>Origine</th><th>Esito</th></tr></thead><tbody>' +
         ko.concat(ok).slice(0, 400).map(function (o) { return '<tr class="' + (o._err ? 'r-err' : '') + '"><td class="mono">' + o._riga + '</td><td>' + esc(o.direzione) + '</td><td>' + esc(o.tipo) + '</td><td class="mono">' + esc(o.seriale) + '</td><td class="mono">' + esc(o.fr) + '</td><td class="mono">' + esc(L.itDate(o.data_ora)) + '</td><td class="mono">' + esc(L.itDate(o.data_registrazione_vlt)) + '</td><td>' + esc(o.controparte) + '</td><td class="hint">' + esc(o.origine) + '</td><td style="font-size:11.5px;color:' + (o._err ? 'var(--red)' : 'var(--green)') + '">' + esc(o._err || 'ok') + '</td></tr>'; }).join('') + '</tbody></table></div>',
-        [{ label: 'Annulla', cls: 'ghost' }].concat(ok.length ? [{ label: 'Importa ' + ok.length + ' movimenti', cls: 'green', fn: function () { Sto.scriviMancanti(ok, f.name); } }] : []), true);
+        [{ label: 'Annulla', cls: 'ghost' }].concat(ok.length || dub.length ? [{ label: 'Importa i movimenti', cls: 'green', fn: function () { var x = ok.concat($('stoDub') && $('stoDub').checked ? dub : []); if (x.length) Sto.scriviMancanti(x, f.name); else toast('Niente da importare', 'ko'); } }] : []), true);
+      if (dub.length) $('mBody').insertAdjacentHTML('afterbegin', '<div class="hint" style="color:var(--amber);margin-bottom:8px">⚠ <b>' + dub.length + '</b> probabili doppioni (stesso seriale, direzione e tipo entro 7 giorni di un movimento già presente): restano fuori. <label style="margin-left:8px"><input type="checkbox" id="stoDub"> importa anche questi</label>' +
+        '<details><summary style="cursor:pointer">vedi</summary><div style="font-size:12px;max-height:18vh;overflow:auto">' + dub.slice(0, 300).map(function (o) { return 'riga ' + o._riga + ' · ' + esc(o.tipo) + ' ' + esc(o.seriale) + ' del ' + esc(L.itDate(o.data_ora)) + ' → ' + esc(o._dub); }).join('<br>') + '</div></details></div>');
     } catch (e) { Modal.open('Importa movimenti', 'Errore: ' + e.message); }
   },
   scriviMancanti: async function (ok, nome) {
