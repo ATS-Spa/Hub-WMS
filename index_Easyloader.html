@@ -466,6 +466,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
           <div class="spacer"></div>
           <button class="btn ghost sm" onclick="Giacenze.grid().scegli()" title="Mostra o nascondi colonne">⚙ Colonne</button>
           <button class="btn ghost sm" onclick="Giacenze.excel()">⬇ Excel</button>
+          <button class="btn ghost sm" onclick="Rial.apri()" title="Pezzi con l'ingresso nei movimenti ma senza scheda in giacenza (e schede in giacenza già uscite). Serve la password">🔁 Riallinea da movimenti</button>
           <button class="btn ghost sm" onclick="Bon.apri()" title="Ricarica l'Excel di Giacenze con i dati mancanti compilati (FR, material…): cambia solo quello che hai scritto. Serve la password">⬆ Bonifica da Excel</button>
           <button class="btn ghost sm" id="gRett" style="display:none" onclick="Rett.aggiungi()" title="Solo admin: aggiungi un pezzo presente a scaffale ma mancante a sistema (movimento interno, non va in fatturazione)">＋ Rettifica: aggiungi pezzo</button>
         </div>
@@ -2003,7 +2004,7 @@ var Ingresso = {
     Xls.scarica('Pezzi_letti_' + (T.tipo || ''), [{ nome: 'Pezzi letti', headers: ['#', 'Tipo', 'FR', 'RMA', 'Seriale', 'P/N', 'P/N in anagrafica', 'MNFT', 'Riparatore', 'Stato VLT', 'Nota', 'Destinazione / Ubicazione', 'Controlli', 'Mittente', 'AWB', 'DDT mittente', 'Data ingresso'],
       rows: Ingresso.computed.map(function (c, i) { return [i + 1, c.tipo, c.fr, c.rma, c.ser, c.pn, c.pnAnag === undefined ? '' : (c.pnAnag ? 'SI' : 'NO'), c.mnft, c.rip, c.statoVlt, c.nota, c.tipo === 'NEW' || c.tipo === 'REUSE' ? c.ubicazione : [c.destinazione, c.ubicazione].filter(Boolean).join(' · '), c.msgs.map(function (m) { return m[1]; }).join(' / '), T.mittente, T.awb, T.ddt, T.data]; }) }]);
   },
-  etichetteLetti: function () { var T = Ingresso.T(); Etichette.pezzi(Ingresso.computed.map(function (c) { return { fr: c.fr, seriale: c.ser, riparatore: c.rip, pn: c.pn, tipo: c.tipo, sotto: T.mittente }; })); },
+  etichetteLetti: function () { var T = Ingresso.T(); Etichette.pezzi(Ingresso.computed.map(function (c) { return Etichette.ingresso({ tipo: c.tipo, fr: c.fr, po: T.po, seriale: c.ser, pn: c.pn, riparatore: c.rip, ubicazione: c.ubicazione, mittente: T.mittente }); })); },
   excelOggi: function () {
     var U = Ingresso._oggi || [];
     Xls.scarica('Ingressi_di_oggi', [Object.assign({ nome: 'Ingressi di oggi' }, Xls.oggetti(U, [['id_unita', 'ID'], ['tipo', 'Tipo'], ['fr', 'FR'], ['rma', 'RMA'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['mnft', 'MNFT'], ['riparatore', 'Riparatore'], ['destinazione_prevista', 'Destinazione'], ['ubicazione', 'Ubicazione'], ['note', 'Nota'], ['data_in', 'Data ingresso'], ['id_mov_in', 'Movimento'], ['creato_da', 'Operatore'], ['creato_il', 'Registrato il']]))]);
@@ -2023,7 +2024,11 @@ var Ingresso = {
       return { testa: { mittente: x.mittente, po: x.po_mrn, ddt: x.ddt_mittente || x.ddt, tipo: g[k][0].tipo, data: g[k][0].data_in }, pezzi: g[k].map(function (u) { return { pn: u.pn, ubicazione: u.ubicazione, nota: Rma.nota(u.note), plt: u.n_plt }; }) };
     }));
   },
-  etichetteOggi: function () { Etichette.pezzi((Ingresso._oggi || []).map(Etichette.daUnita)); },
+  etichetteOggi: async function () {
+    try { if (!DB.t.RICEZIONI) await DB.loadTables(['RICEZIONI']); } catch (e) { }
+    var ric = {}; ((DB.t.RICEZIONI || {}).rows || []).forEach(function (r) { ric[r.id_ricezione] = r; });
+    Etichette.pezzi((Ingresso._oggi || []).map(function (u) { var r = ric[u.id_ricezione] || {}; return Etichette.ingresso({ tipo: u.tipo, fr: u.fr, po: r.po_mrn, seriale: u.seriale, pn: u.pn, riparatore: u.riparatore, ubicazione: u.ubicazione, mittente: r.mittente, data: L.itDate(u.data_in) }); }));
+  },
   renderOggi: function () {
     var tutti = $('oggiTutti').checked, oggi = L.isoToday();
     var list = Ingresso._oggi = DB.t.UNITA.rows.filter(function (u) { return L.s(u.creato_il).slice(0, 10) === oggi && u.creato_da !== 'MIGRAZIONE' && u.stato !== 'ANNULLATO' && (tutti || u.creato_da === Auth.email); }).reverse();
@@ -2320,6 +2325,119 @@ var Giacenze = {
       if (Sto.dati.cur) { Sto.COLS.forEach(function (c) { if (!(c in mov)) mov[c] = ''; }); Sto.dati.cur.push(mov); }
       Modal.close(); toast(u.id_unita + ': ' + caus.toLowerCase() + ' salvato' + (spM.loc.length ? ' · aggiornati anche ' + spM.loc.length + ' campi nei movimenti' : ''), 'ok'); Giacenze.render();
     } catch (e) { Modal.progress(''); err('Non salvato: ' + e.message); }
+  }
+};
+
+// ───────────────────────── RIALLINEA GIACENZA DAI MOVIMENTI ─────────────────────────
+// A) pezzi con l'ultimo movimento IN (nessuna uscita dopo) ma senza scheda in giacenza (es. ingressi importati con
+//    "Importa movimenti mancanti", che scrive solo lo storico) → si propone di creare la scheda dal movimento, collegata ad esso.
+// B) schede ancora in giacenza con un'uscita registrata dopo l'ingresso → solo segnalate (da verificare a mano).
+// Per tutti, con la password; anteprima con spunta; LOG e movimento interno RIALLINEA per ogni scheda creata.
+var Rial = {
+  HUB_FAULTY: ['FAILED MATERIAL SENT', 'FAILED MATERIAL RECEIVED AND VERIFY', 'PENDING SERVICE DESK', 'FAILURE REPORT SENT', 'OPEN', 'ABORTED', 'PENDING FOR REPAIRER REJECT MANAGEMENT'],
+  apri: function () {
+    Modal.html('🔁 Riallinea giacenza dai movimenti', '<div class="hint" style="margin-bottom:8px">Cerca i pezzi che hanno <b>l\'ingresso nei movimenti ma non la scheda in giacenza</b> (e le schede in giacenza che hanno già un\'uscita). Prima vedi l\'anteprima.</div>' +
+      '<div class="fg"><span class="fl">Password *</span><input class="fc" type="password" id="rlPwd" autocomplete="new-password"></div><div class="hint" id="rlErr" style="margin-top:6px"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Controlla', cls: 'green', keep: true, fn: async function () {
+        var pw = $('rlPwd').value, par = L.s(DB.param('password_eliminazione', ''));
+        var ok = par ? (/^sha256:/i.test(par) ? (await Nr.sha(pw)) === par.slice(7).toLowerCase() : pw === par) : (await Nr.sha(pw)) === Nr.PWD;
+        if (!ok) { $('rlErr').textContent = 'Password errata'; $('rlErr').className = 'hint err'; return; }
+        Modal.open('Riallinea giacenza', 'Rileggo movimenti e giacenza…', []);
+        try { await DB.loadTables(['UNITA']); Sto.dati.cur = await Sto.colsSafe(DB.id, 'MOVIMENTI'); } catch (e) { Modal.open('Errore', e.message); return; }
+        var d = new Date(); d.setDate(d.getDate() - 60); Rial.da = L.isoToday(d); Rial.anteprima();
+      } }]);
+    setTimeout(function () { $('rlPwd').focus(); $('rlPwd').addEventListener('keydown', function (e) { if (e.key === 'Enter') document.querySelector('#mBtns .btn.green').click(); }); }, 50);
+  },
+  // data + ora confrontabili ("2026-10-15 10:20:00" / "2026-10-15")
+  t: function (x) { var s = L.s(x), d = L.normDate(s); return d ? d + (/\d{1,2}:\d{2}/.test(s) ? ' ' + /\d{1,2}:\d{2}(:\d{2})?/.exec(s)[0].padStart(5, '0') : '') : ''; },
+  calcola: function () {
+    var M = (Sto.dati.cur || []).filter(function (m) { return (m.direzione === 'IN' || m.direzione === 'OUT') && L.s(m.seriale) && m.causale !== 'INGRESSO_ANNULLATO'; });
+    var perSer = {}; M.forEach(function (m) { var k = L.up(m.seriale); (perSer[k] = perSer[k] || []).push(m); });
+    var U = DB.t.UNITA.rows, stock = {}, perMovIn = {}, frStock = {};
+    U.forEach(function (u) { if (L.s(u.id_mov_in)) perMovIn[u.id_mov_in] = u; if (Giacenze.A_MAG.indexOf(u.stato) >= 0) { stock[L.up(u.seriale)] = u; stock[L.up(L.afterSpace(u.seriale))] = stock[L.up(L.afterSpace(u.seriale))] || u; if (L.s(u.fr)) frStock[u.fr] = u; } });
+    var A = [], B = [];
+    Object.keys(perSer).forEach(function (k) {
+      var L0 = perSer[k], ins = L0.filter(function (m) { return m.direzione === 'IN'; }), outs = L0.filter(function (m) { return m.direzione === 'OUT'; });
+      if (!ins.length) return;
+      ins.sort(function (a, b) { return Rial.t(a.data_ora).localeCompare(Rial.t(b.data_ora)); });
+      var last = ins[ins.length - 1], dIn = L.normDate(last.data_ora);
+      // un'uscita nello stesso giorno o dopo = il pezzo è uscito (con le sole date non si sa l'ordine: prudenza)
+      var dopo = outs.filter(function (o) { return L.normDate(o.data_ora) >= dIn; });
+      var u = stock[k] || stock[L.up(L.afterSpace(k))];
+      if (!dopo.length && !u && !perMovIn[last.id_mov] && dIn >= Rial.da) {
+        var it = { m: last, avv: [], tipo: L.up(last.tipo) }, v = L.s(last.fr) ? DB.vltMap[L.frKey(last.fr)] : null;
+        if (TIPI.indexOf(it.tipo) < 0) it.avv.push('tipo "' + last.tipo + '" non valido');
+        if (L.s(last.fr) && frStock[L.frKey(last.fr)]) it.avv.push('FR già in giacenza su ' + frStock[L.frKey(last.fr)].id_unita);
+        if (it.tipo === 'FAULTY' && v && Rial.HUB_FAULTY.indexOf(L.up(v.stato)) < 0) it.avv.push('su VLT è "' + v.stato + '": forse già uscita');
+        it.v = v; A.push(it);
+      }
+      if (u) {
+        var dU = Rial.t((Sto.dati.cur || []).find(function (m) { return m.id_mov === u.id_mov_in; }) ? Sto.dati.cur.find(function (m) { return m.id_mov === u.id_mov_in; }).data_ora : u.data_in);
+        var o2 = outs.filter(function (o) { var t = Rial.t(o.data_ora); return t.slice(0, 10) > dU.slice(0, 10) || (t.length > 10 && dU.length > 10 && t > dU); });
+        if (o2.length) { o2.sort(function (a, b) { return Rial.t(a.data_ora).localeCompare(Rial.t(b.data_ora)); }); B.push({ u: u, o: o2[o2.length - 1] }); }
+      }
+    });
+    A.sort(function (a, b) { return Rial.t(b.m.data_ora).localeCompare(Rial.t(a.m.data_ora)); });
+    return { A: A, B: B };
+  },
+  anteprima: function () {
+    var R = Rial.R = Rial.calcola(), A = R.A, B = R.B;
+    var rA = A.map(function (it, i) { var m = it.m; return '<tr' + (it.avv.length ? ' class="r-warn"' : '') + '><td><input type="checkbox" class="rlSel" data-i="' + i + '"' + (it.avv.length ? '' : ' checked') + '></td><td class="mono">' + esc(m.id_mov) + '</td><td>' + esc(L.itDate(m.data_ora)) + '</td><td>' + esc(m.tipo) + '</td><td class="mono">' + esc(m.fr) + '</td><td class="mono">' + esc(m.seriale) + '</td><td class="mono">' + esc(m.pn) + '</td><td>' + esc(m.controparte) + '</td><td class="mono">' + esc(m.ubicazione_a) + '</td><td style="font-size:11.5px">' + esc(L.s(m.origine).slice(0, 40)) + '</td><td style="font-size:12px;color:var(--amber)">' + it.avv.map(esc).join('<br>') + '</td></tr>'; }).join('');
+    var rB = B.slice(0, 500).map(function (x) { return '<tr><td class="mono">' + esc(x.u.id_unita) + '</td><td>' + esc(x.u.tipo) + '</td><td class="mono">' + esc(x.u.seriale) + '</td><td class="mono">' + esc(x.u.fr) + '</td><td>' + esc(L.itDate(x.u.data_in)) + '</td><td class="mono">' + esc(x.o.id_mov) + '</td><td>' + esc(L.itDate(x.o.data_ora)) + '</td><td>' + esc(x.o.controparte) + '</td></tr>'; }).join('');
+    Modal.html('Riallinea giacenza dai movimenti',
+      '<div class="row" style="gap:10px;align-items:flex-end;margin-bottom:6px"><div class="fg"><span class="fl">Ingressi dal</span><input class="fc" type="date" id="rlDa" value="' + esc(Rial.da) + '"></div><button class="btn ghost sm" id="rlRic">↻ Ricalcola</button><div class="spacer"></div><button class="btn ghost sm" id="rlXls">⬇ Excel</button></div>' +
+      '<div style="font-size:13px;margin:6px 0"><b>A) ' + A.length + '</b> pezzi con l\'ingresso nei movimenti ma <b>senza scheda in giacenza</b> (nessuna uscita dopo). Quelli spuntati diventano schede IN GIACENZA collegate al loro movimento (nessun nuovo movimento IN, non cambia la fatturazione).' + (A.some(function (x) { return x.avv.length; }) ? ' <span style="color:var(--amber)">Le righe gialle hanno avvisi e partono senza spunta.</span>' : '') + '</div>' +
+      (A.length ? '<div class="tbl-wrap modal-scroll" style="max-height:34vh"><table><thead><tr><th><input type="checkbox" id="rlTutti"></th><th>Mov. IN</th><th>Data</th><th>Tipo</th><th>FR</th><th>Seriale</th><th>P/N</th><th>Mittente</th><th>Ubicazione</th><th>Origine</th><th>Avvisi</th></tr></thead><tbody>' + rA + '</tbody></table></div>' : '<div class="empty">Nessun pezzo da riallineare in questo periodo</div>') +
+      '<div style="font-size:13px;margin:10px 0 6px"><b>B) ' + B.length + '</b> schede <b>in giacenza</b> che hanno già un\'<b>uscita</b> dopo l\'ingresso: solo da verificare (non cambio niente).</div>' +
+      (B.length ? '<div class="tbl-wrap modal-scroll" style="max-height:22vh"><table><thead><tr><th>Scheda</th><th>Tipo</th><th>Seriale</th><th>FR</th><th>Entrata</th><th>Mov. OUT</th><th>Uscita</th><th>Destino</th></tr></thead><tbody>' + rB + '</tbody></table></div>' : ''),
+      [{ label: 'Chiudi', cls: 'ghost' }].concat(A.length ? [{ label: '📥 Crea le schede spuntate', cls: 'green', keep: true, fn: function () {
+        var sel = Array.prototype.slice.call(document.querySelectorAll('#mBody .rlSel')).filter(function (c) { return c.checked; }).map(function (c) { return Rial.R.A[+c.getAttribute('data-i')]; });
+        if (!sel.length) { toast('Spunta almeno un pezzo', 'ko'); return; }
+        Rial.crea(sel);
+      } }] : []), true);
+    $('rlRic').onclick = function () { Rial.da = $('rlDa').value || Rial.da; Rial.anteprima(); };
+    $('rlXls').onclick = function () { Rial.excel(); };
+    if ($('rlTutti')) $('rlTutti').onchange = function () { document.querySelectorAll('#mBody .rlSel').forEach(function (c) { c.checked = $('rlTutti').checked; }); };
+  },
+  excel: function () {
+    var R = Rial.R; if (!R) return;
+    Xls.scarica('Riallineamento_giacenza', [
+      { nome: 'A senza scheda', headers: ['Mov. IN', 'Data', 'Tipo', 'FR', 'Seriale', 'P/N', 'MNFT', 'Mittente', 'Ubicazione', 'Stato VLT', 'Origine', 'Avvisi'], rows: R.A.map(function (x) { var m = x.m; return [m.id_mov, L.itDate(m.data_ora), m.tipo, m.fr, m.seriale, m.pn, m.mnft, m.controparte, m.ubicazione_a, x.v ? x.v.stato : '', m.origine, x.avv.join(' / ')]; }) },
+      { nome: 'B in giacenza con uscita', headers: ['Scheda', 'Tipo', 'Seriale', 'FR', 'Entrata', 'Mov. OUT', 'Uscita', 'Destino', 'DDT'], rows: R.B.map(function (x) { return [x.u.id_unita, x.u.tipo, x.u.seriale, x.u.fr, L.itDate(x.u.data_in), x.o.id_mov, L.itDate(x.o.data_ora), x.o.controparte, x.o.ddt]; }) }]);
+  },
+  crea: async function (sel) {
+    if (!(await Modal.confirm('Crea ' + sel.length + ' schede', 'Le schede entrano IN GIACENZA collegate al loro movimento di ingresso. Nessun nuovo movimento IN: resta un movimento interno RIALLINEA e il LOG.'))) return;
+    Modal.open('Riallinea giacenza', 'Creo ' + sel.length + ' schede…', []);
+    try {
+      await DB.loadTables(['UNITA']);
+      var tU = DB.t.UNITA, now = L.nowStamp(), chi = App.chi(), pm = Bon.pnMat(), stock = {};
+      tU.rows.forEach(function (u) { if (Giacenze.A_MAG.indexOf(u.stato) >= 0) stock[L.up(u.seriale)] = 1; });
+      var lista = sel.filter(function (it) { return !stock[L.up(it.m.seriale)]; });
+      if (!lista.length) { Modal.close(); Modal.open('Niente da creare', 'Nel frattempo questi pezzi sono già entrati in giacenza.'); return; }
+      var objs = lista.map(function (it) {
+        var m = it.m, tipo = TIPI.indexOf(it.tipo) >= 0 ? it.tipo : 'FAULTY', fr = L.frKey(m.fr), v = it.v, pn = L.up(m.pn);
+        var mag = tipo === 'NEW' || tipo === 'REUSE' ? 'HUB_MAGAZZINO' : (tipo === 'SCRAP' ? 'SCRAP' : 'HUB_GUASTI'), dest = '';
+        if (tipo === 'GOOD' && v) { var dep = DB.t.DEPOT_VLT.rows.find(function (d) { return d.depot_vlt === v.depot_origine; }); if (dep) dest = dep.destinazione; }
+        return { seriale: L.s(m.seriale), pn: pn, mnft: L.up(m.mnft) || DB.artPn[pn] || '', material: (v && L.s(v.f_mat_material)) || pm[pn] || '', tipo: tipo, fr: fr, rma: L.s(m.rma), riparatore: L.s(m.riparatore) || (v ? v.riparatore : ''),
+          magazzino: mag, ubicazione: L.up(m.ubicazione_a), stato: 'IN_GIACENZA', destinazione_prevista: dest, id_mov_in: m.id_mov, data_in: L.normDate(m.data_ora),
+          note: [L.s(m.note), 'riallineata da movimento ' + m.id_mov + (L.s(m.origine) ? ' (' + L.s(m.origine) + ')' : '')].filter(Boolean).join(' · '), rev: 1, creato_il: now, creato_da: chi.email };
+      });
+      var rU = await API.append(DB.id, 'UNITA', objs.map(function (o) { return tU.toRow(o); })), uBase = parseInt(DB.param('unita_id_base', '0'), 10) || 0;
+      objs.forEach(function (o, i) { o.id_unita = 'U' + L.pad(uBase + rU + i - 1, 7); });
+      await API.batchUpdate(DB.id, [{ range: tU.cell('id_unita', rU) + ':' + tU.col('id_unita') + (rU + objs.length - 1), values: objs.map(function (o) { return [o.id_unita]; }) }]);
+      objs.forEach(function (o, i) { var x = {}; tU.header.forEach(function (h) { x[h] = o[h] === undefined ? '' : String(o[h]); }); x._r = rU + i; tU.rows.push(x); });
+      // il movimento IN prende l'ID della scheda nuova
+      var H = await Ingresso.heads(), tM = H.MOVIMENTI, mr = await Spec.righe(tM), upd = [];
+      if ('id_unita' in tM.idx) lista.forEach(function (it, i) { var r = mr[it.m.id_mov]; if (r) { upd.push({ range: tM.cell('id_unita', r), values: [[objs[i].id_unita]] }); it.m.id_unita = objs[i].id_unita; } });
+      for (var k = 0; k < upd.length; k += 400) await API.batchUpdate(DB.id, upd.slice(k, k + 400));
+      var movs = objs.map(function (o) { return { data_ora: now, direzione: 'INT', causale: 'RIALLINEA', id_unita: o.id_unita, seriale: o.seriale, pn: o.pn, mnft: o.mnft, tipo: o.tipo, fr: o.fr, rma: o.rma, riparatore: o.riparatore, ubicazione_a: o.ubicazione, operatore: chi.email, operatore_sigla: chi.sigla || '', note: 'Scheda creata dal movimento ' + o.id_mov_in + ' (riallineamento giacenza)', origine: 'APP' }; });
+      var r0 = await API.append(DB.id, 'MOVIMENTI', movs.map(function (m) { return tM.toRow(m); })), base = parseInt(DB.param('mov_id_base', ''), 10) || 0;
+      if (r0) { movs.forEach(function (m, i) { m.id_mov = 'MV' + (base + r0 + i); }); await API.batchUpdate(DB.id, [{ range: tM.cell('id_mov', r0) + ':' + tM.col('id_mov') + (r0 + movs.length - 1), values: movs.map(function (m) { return [m.id_mov]; }) }]).catch(function () { }); }
+      if (Sto.dati.cur) movs.forEach(function (m) { Sto.COLS.forEach(function (c) { if (!(c in m)) m[c] = ''; }); Sto.dati.cur.push(m); });
+      await API.append(DB.id, 'LOG', objs.map(function (o) { return App.log('RIALLINEA_GIACENZA', 'UNITA', o.id_unita, { seriale: o.seriale, fr: o.fr, tipo: o.tipo, movimento_in: o.id_mov_in }); }));
+      Export.scrivi().catch(function () { });
+      Modal.close(); Giacenze.render(); App.syncInfo(); toast(objs.length + ' schede create in giacenza', 'ok');
+    } catch (e) { Modal.close(); Modal.open('Errore', e.message + '\n\nPremi Aggiorna e rilancia il controllo: i pezzi già creati non vengono riproposti.'); }
   }
 };
 
@@ -3211,6 +3329,27 @@ var Chv = {
     if (!(await Modal.confirm('Rilascia ' + proc, 'Rilascio: ' + mie.join(', ') + '\nGli altri potranno prenderle.'))) return;
     try { await Chv.rilascia(g, proc, mie); await API.append(DB.id, 'LOG', [App.log('CHV_PRESE', 'CHV_PRESE', proc + ' ' + g, { rilasciate: mie })]); toast('Rilasciate', 'ok'); Chv.render(); } catch (e) { Modal.open('Errore', e.message); }
   },
+  // FR in OPEN e salvataggi rifiutati del giorno (ultimo esito di ogni scheda) → una mail al Service Desk con l'elenco e il motivo
+  mailSd: async function (proc) {
+    try { await DB.loadTables(['VLT_CHIUSURE']); } catch (e) { }
+    var g = Chv.giorno(), last = {};
+    ((DB.t.VLT_CHIUSURE || {}).rows || []).forEach(function (r) { if (r.giorno === g && r.procedura === proc) last[r.chiave] = r; });
+    var byFr = {}; DB.t.UNITA.rows.forEach(function (u) { if (L.s(u.fr) && (!byFr[u.fr] || Giacenze.A_MAG.indexOf(u.stato) >= 0)) byFr[u.fr] = u; });
+    var L0 = Object.keys(last).map(function (k) { return last[k]; }).filter(function (r) { return r.esito === 'ERRORE' || (r.esito === 'SALTATO' && /^open$/i.test(L.s(r.stato_prima))); })
+      .map(function (r) { var fr = L.s(r.chiave).replace(/^\w+:/, ''), u = byFr[fr] || {}, v = DB.vltMap[fr] || {};
+        return { fr: fr, ser: u.seriale || v.f_mat_serial_no || '', pn: u.pn || v.f_mat_tmpn || '', rip: v.riparatore || u.riparatore || '', stato: r.stato_prima || v.stato || '', motivo: r.esito === 'ERRORE' ? 'Salvataggio non riuscito su VLT: ' + L.s(r.dettaglio) : 'FR in stato OPEN: non si può chiudere' }; });
+    if (!L0.length) { toast('Nessuna FR in OPEN o rifiutata da VLT il ' + L.itDate(g), 'ok'); return; }
+    L0.sort(function (a, b) { return a.motivo.localeCompare(b.motivo) || a.fr.localeCompare(b.fr); });
+    var subj = 'Spare ferme in HUB - FR da verificare (' + L0.length + ') - ' + L.itDate(g);
+    var body = 'Ciao Ragazzi,\n\nchiudendo su VLT le spare ferme in HUB queste FR non sono state chiuse. Ci date un riscontro?\n\n' +
+      L0.map(function (x) { return 'FR ' + x.fr + ' | ' + x.ser + ' | ' + x.pn + ' | ' + x.rip + ' | ' + x.stato + ' | ' + x.motivo; }).join('\n') + '\n\nGrazie';
+    var e = function (x) { return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+    var th = 'style="background:#1f4e79;color:#fff;padding:5px 8px;border:1px solid #8ea9c1;text-align:left"', td = 'style="padding:5px 8px;border:1px solid #b7c7d6"';
+    var html = '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">Ciao Ragazzi,<br><br>chiudendo su VLT le <b>spare ferme in HUB</b> queste FR non sono state chiuse. Ci date un riscontro?<br><br>' +
+      '<table style="border-collapse:collapse;font-size:10.5pt"><tr>' + ['FR', 'Seriale', 'P/N', 'Riparatore', 'Stato VLT', 'Motivo'].map(function (h) { return '<th ' + th + '>' + h + '</th>'; }).join('') + '</tr>' +
+      L0.map(function (x) { return '<tr>' + [x.fr, x.ser, x.pn, x.rip, x.stato, x.motivo].map(function (v) { return '<td ' + td + '>' + e(v) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table><br>Grazie</div>';
+    Mail.apri('chv', subj, body, function () { API.append(DB.id, 'LOG', [App.log('CHV_MAIL_SD', 'VLT_CHIUSURE', proc + ' ' + g, { fr: L0.map(function (x) { return x.fr; }) })]).catch(function () { }); }, html);
+  },
   ricarica: async function () { Chv._cnt = null; try { await DB.loadTables(['VLT_CHIUSURE']); } catch (e) { } Chv.render(); },
   render: async function () {
     var box = $('chvBox'); if (!box) return;
@@ -3227,7 +3366,7 @@ var Chv = {
       html += '<div class="ack-card"><div class="t">' + esc(Chv.PROC[p]) + '</div><div class="hint">' + esc(Chv.DESC[p]) + '</div>' +
         (Chv.divisa(p) ? '<div class="hint" id="chvP_' + p + '" style="margin:2px 0 4px"></div>' : '') +
         '<div class="ack-nums"><span id="chvN_' + p + '" class="pill p-violet" title="Schede in coda per il giorno scelto">da chiudere …</span><span>chiuse <b>' + n.OK + '</b></span><span>già a posto <b>' + n.GIA_FATTO + '</b></span><span' + (n.ERRORE ? ' style="border-color:var(--red)"' : '') + '>errori <b>' + n.ERRORE + '</b></span><span>saltate <b>' + n.SALTATO + '</b></span></div>' +
-        '<div class="row"><button class="btn sm" onclick="Chv.invia(\'' + p + '\')"' + (b ? '' : ' disabled') + '>▶ Invia a VLT</button><button class="btn ghost sm" onclick="Chv.vedi(\'' + p + '\')">👁 Vedi coda</button><button class="btn ghost sm" onclick="Chv.excel(\'' + p + '\')">⬇ Excel</button></div></div>';
+        '<div class="row"><button class="btn sm" onclick="Chv.invia(\'' + p + '\')"' + (b ? '' : ' disabled') + '>▶ Invia a VLT</button><button class="btn ghost sm" onclick="Chv.vedi(\'' + p + '\')">👁 Vedi coda</button><button class="btn ghost sm" onclick="Chv.excel(\'' + p + '\')">⬇ Excel</button>' + (p === 'FERME' ? '<button class="btn ghost sm" onclick="Chv.mailSd(\'' + p + '\')" title="Mail al Service Desk con le FR trovate in OPEN e quelle che VLT non ha salvato, con il motivo">✉ Mail SD</button>' : '') + '</div></div>';
     });
     html += '</div>';
     var ult = es.slice(-400).reverse();
@@ -3274,6 +3413,7 @@ var Mail = {
     ack: { nome: 'ACK · uscite ai riparatori', a: function () { return [DB.param('mail_sd', ''), DB.param('mail_bollettazione', '')]; } },
     rma: { nome: 'RMA · uscite e DDT', a: function () { return [DB.param('mail_sd', ''), DB.param('mail_bollettazione', '')]; } },
     nr: { nome: 'Carichi NEW/REUSE', a: function () { return [DB.param('mail_new_reuse', '') || DB.param('mail_sd', '')]; } },
+    chv: { nome: 'Chiusure VLT · FR in OPEN e salvataggi rifiutati (Spare ferme in HUB)', a: function () { return [DB.param('mail_sd', 'servicedesk@atsgruppo.eu')]; } },
     // la manda il servizio sul PC server ogni mattina (ex RIEPILOGO MATERIALE FAULTY A MAGAZZINO); qui solo i destinatari
     riepilogo: { nome: 'Riepilogo FAULTY a magazzino · mail automatica del mattino dal server', a: function () { return ['servicedesk@atsgruppo.eu', 'spare&repair@atsgruppo.eu', 'resposito@atsgruppo.eu']; } }
   },
@@ -6855,14 +6995,15 @@ var Etichette = {
       var J = window.jspdf.jsPDF, d = new J({ unit: 'mm', format: [100, 50], orientation: 'landscape' }), logo = (Ack._lg || {}).sx;
       lista.forEach(function (e, i) {
         if (i) d.addPage([100, 50], 'landscape');
-        Etichette.testata(d, logo, e.riparatore);
-        Etichette.riga(d, 13, 'FR', e.fr, 20);
+        Etichette.testata(d, logo, e.ubi !== undefined ? e.ubi : e.riparatore);   // ingresso: in alto a destra l'ubicazione (vuoto se non c'è)
+        Etichette.riga(d, 13, e.lab || 'FR', e.fr, 20);
         Etichette.riga(d, 27, 'S/N', e.seriale, 16);
         d.setDrawColor(200); d.line(3, 41, 97, 41);
         d.setTextColor(0); d.setFont('helvetica', 'bold');
         Etichette.fit(d, e.pn ? 'P/N ' + e.pn : '', 3, 46.5, 52, 10, 7);
+        var wPn = e.pn ? d.getTextWidth('P/N ' + e.pn) : 0;   // il testo a destra usa tutto lo spazio che resta dopo il P/N
         d.setFont('helvetica', 'normal');
-        Etichette.fit(d, [e.tipo, e.sotto].filter(Boolean).join(' · '), 97, 46.5, 40, 9, 6, 'right');
+        Etichette.fit(d, [e.tipo, e.sotto].filter(Boolean).join(' · '), 97, 46.5, Math.max(40, 90 - wPn), 9, 5, 'right');
       });
       Ddt.apri(d, w);
     } catch (er) { if (w) w.close(); Modal.open('Etichette', er.message); }
@@ -6916,6 +7057,11 @@ var Etichette = {
       });
       Ddt.apri(d, w);
     } catch (er) { if (w) w.close(); Modal.open('Etichette RMA', er.message); }
+  },
+  // etichetta d'ingresso: NEW/REUSE mostrano il PO/MRN al posto dell'FR; in alto a destra l'ubicazione (vuota se non assegnata)
+  ingresso: function (x) {
+    var nr = x.tipo === 'NEW' || x.tipo === 'REUSE';
+    return { lab: nr ? 'PO/MRN' : 'FR', fr: nr ? L.s(x.po) : L.s(x.fr), seriale: x.seriale, pn: x.pn, tipo: x.tipo, ubi: L.up(x.ubicazione), sotto: [x.riparatore, x.mittente, x.data].map(L.s).filter(Boolean).join(' · ') };
   },
   daUnita: function (u) { return { fr: u.fr, seriale: u.seriale, riparatore: u.riparatore, pn: u.pn, tipo: u.tipo, sotto: L.s(u.data_in) }; }
 };
