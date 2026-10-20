@@ -366,7 +366,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
         <option value="">🌙 Scuro</option><option value="theme-dim">🌗 Dim</option><option value="theme-grafite">🩶 Grafite</option><option value="theme-sap">🔵 SAP</option><option value="theme-oceano">🌊 Oceano</option><option value="theme-light">☀️ Chiaro</option><option value="theme-avorio">🤍 Avorio</option><option value="theme-salvia">🌿 Salvia</option><option value="theme-rovere">🪵 Rovere</option>
       </select>
       <div class="user-wrap"><div class="user-badge" style="cursor:pointer" title="Account" onclick="App.menuUtente(event)"><div class="user-av" id="uAv">?</div><span id="uName"></span><span class="role-tag" id="uRole"></span><span style="font-size:10px">▾</span></div>
-        <div class="user-menu" id="userMenu"><div class="hint" id="uMail" style="padding:6px 12px"></div><button onclick="Auth.esci(true)">🔄 Cambia account</button><button onclick="Auth.esci(false)">⎋ Esci</button></div></div>
+        <div class="user-menu" id="userMenu"><div class="hint" id="uMail" style="padding:6px 12px"></div><button onclick="Pin.apri()">🔑 Il mio PIN</button><button onclick="Auth.esci(true)">🔄 Cambia account</button><button onclick="Auth.esci(false)">⎋ Esci</button></div></div>
     </div>
   </div>
   <div class="tabbar" id="tabbar"></div>
@@ -431,11 +431,11 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
       </div>
 
       <div class="card" id="pendCard">
-        <div class="card-h"><div class="card-t">⏳ In attesa di FR</div><span class="pill p-amber" id="pendN">0</span>
-          <span class="hint">FAULTY/GOOD entrate senza FR: in giacenza ma ferme (non vanno in ACK, RMA, export) finché non si assegna l'FR</span><div class="spacer"></div>
+        <div class="card-h"><div class="card-t" style="cursor:pointer;user-select:none" onclick="Ingresso.pendApri()" title="Apri / chiudi l'elenco"><span id="pendCar">▸</span> ⏳ In attesa di FR</div><span class="pill p-amber" id="pendN" style="cursor:pointer" onclick="Ingresso.pendApri()">0</span>
+          <span class="hint" id="pendHint">FAULTY/GOOD entrate senza FR: in giacenza ma ferme (non vanno in ACK, RMA, export) finché non si assegna l'FR</span><div class="spacer"></div>
           <button class="btn ghost sm" onclick="Ingresso.mailPend()" title="Una mail al Service Desk con l'elenco completo dei pezzi senza FR">✉ Mail Service Desk (elenco completo)</button>
           <button class="btn ghost sm" onclick="Ingresso.excelPend()">⬇ Excel</button></div>
-        <div class="tbl-wrap" style="max-height:40vh"><table>
+        <div class="tbl-wrap" id="pendBody" style="max-height:40vh"><table>
           <thead><tr><th>ID</th><th>Tipo</th><th>Seriale</th><th>P/N</th><th>Entrata</th><th>Giorni</th><th>Motivo</th><th>FR proposto da VLT</th><th>Assegna FR</th></tr></thead>
           <tbody id="pendRows"></tbody>
         </table></div>
@@ -2047,8 +2047,22 @@ var Ingresso = {
     c.sort(function (a, b) { return (parseInt(b.fr_id, 10) || 0) - (parseInt(a.fr_id, 10) || 0); });
     return c[0] || null;
   },
+  // pannello "In attesa di FR": chiuso di default (solo la barra con il numero), si apre col clic; resta come l'hai lasciato
+  pendAperto: function () { return lsG('pend_aperto') === true; },
+  pendApri: function (v) {
+    if (v === undefined) v = !Ingresso.pendAperto();
+    lsS('pend_aperto', !!v);
+    Ingresso.pendVista();
+  },
+  pendVista: function () {
+    var a = Ingresso.pendAperto();
+    if ($('pendBody')) $('pendBody').style.display = a ? '' : 'none';
+    if ($('pendCar')) $('pendCar').textContent = a ? '▾' : '▸';
+    if ($('pendHint')) $('pendHint').style.display = a ? '' : 'none';
+  },
   renderPend: function () {
     if (!$('pendRows')) return;
+    Ingresso.pendVista();
     var P = Ingresso.pendenti(), oggi = new Date(L.isoToday() + 'T00:00:00');
     $('pendN').textContent = P.length; $('pendCard').style.display = P.length ? '' : 'none';
     $('pendRows').innerHTML = P.map(function (u) {
@@ -2785,8 +2799,9 @@ var Admin = {
     if (acc) { document.querySelectorAll('#admTabs .subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-ACCESSI'); }); Accessi.render(); return; }
     if ($('accSuperBox')) $('accSuperBox').style.display = 'none';
     if (Admin.sez === 'OPERATORI' && DB.t.OPERATORI && !('pin' in DB.t.OPERATORI.idx) && !Admin._ec) {
-      Admin._ec = true; DB.ensureCols('OPERATORI', ['condiviso', 'pin']).then(function () { Admin.render(); }).catch(function (e) { toast('Colonne condiviso/PIN non aggiunte: ' + e.message, 'ko'); });
+      Admin._ec = true; DB.ensureCols('OPERATORI', ['condiviso', 'pin']).then(function () { return Pin.carica(true); }).then(function () { Admin.render(); }).catch(function (e) { toast('Colonne condiviso/PIN non aggiunte: ' + e.message, 'ko'); });
     }
+    if (Admin.sez === 'OPERATORI' && !Pin._t && !Admin._pc) { Admin._pc = true; Pin.carica(true).then(function () { if (Pin._t && Admin.sez === 'OPERATORI') Admin.render(); }); }   // PIN cambiati dagli operatori
     var c = Admin.CONF[Admin.sez], t = DB.t[Admin.sez];
     if (!t) { $('admRows').innerHTML = '<tr><td class="empty">Carico…</td></tr>'; Chi.load().then(Admin.render).catch(function (e) { toast(e.message, 'ko'); }); return; }
     document.querySelectorAll('.subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-' + Admin.sez); });
@@ -2799,7 +2814,7 @@ var Admin = {
         var d = Admin.dirty[i] && Admin.dirty[i][h] !== undefined;
         var v = d ? Admin.dirty[i][h] : r[h];
         var op = Admin.opz(h);
-        if (h === 'pin' && Admin.sez === 'OPERATORI') return '<td><input class="edit-cell' + (d ? ' dirty' : '') + '" type="password" inputmode="numeric" autocomplete="new-password" style="width:11ch" placeholder="' + (L.s(r.pin) ? '•••• impostato' : 'nessun PIN') + '" value="' + (d ? esc(v) : '') + '" onchange="Admin.set(' + i + ',\'pin\',this.value)"></td>';
+        if (h === 'pin' && Admin.sez === 'OPERATORI') return '<td><input class="edit-cell' + (d ? ' dirty' : '') + '" type="password" inputmode="numeric" autocomplete="new-password" style="width:11ch" placeholder="' + (Pin.refSync(r) ? '•••• impostato' : 'nessun PIN') + '" value="' + (d ? esc(v) : '') + '" onchange="Admin.set(' + i + ',\'pin\',this.value)"></td>';
         if (op) { var lst = op.indexOf(L.s(v)) < 0 && L.s(v) ? [L.s(v)].concat(op) : op;
           return '<td><select class="edit-cell' + (d ? ' dirty' : '') + '" onchange="Admin.set(' + i + ',\'' + h + '\',this.value)">' + (L.s(v) ? '' : '<option value=""></option>') + lst.map(function (x) { return '<option' + (x === L.s(v) ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></td>'; }
         return '<td><input class="edit-cell' + (d ? ' dirty' : '') + '" value="' + esc(v) + '" onchange="Admin.set(' + i + ',\'' + h + '\',this.value)"></td>';
@@ -2866,9 +2881,76 @@ var Admin = {
       if (upd.length) await API.batchUpdate(DB.id, upd);
       if (nuove.length) { var rr = await API.append(DB.id, t.name, nuove.map(function (r) { return t.toRow(r); })); nuove.forEach(function (r, i) { r._r = rr + i; delete r._new; }); }
       await API.append(DB.id, 'LOG', logs);
+      if (Admin.sez === 'OPERATORI') { var pn = keys.filter(function (k) { return 'pin' in Admin.dirty[k]; }).map(function (k) { return t.rows[k]; });
+        if (pn.length) await Pin.registra(pn.map(function (r) { return { email: r.email, sigla: r.sigla, pin: r.pin }; })).catch(function (e) { toast('PIN salvato in Operatori ma non nello storico PIN: ' + e.message, 'ko'); }); }
       Admin.dirty = {}; Admin.render(); App.fillLists(); toast('Salvato', 'ok');
       if (Admin.sez === 'CHIUSURE') Chi.dopo();
     } catch (e) { toast('Errore salvataggio: ' + Prot.msg(e), 'ko'); }
+  }
+};
+
+// ───────────────────────── PIN OPERATORE (cambiato dall'operatore stesso) ─────────────────────────
+// OPERATORI è protetto (solo admin), quindi il PIN scelto dall'operatore va nel foglio OPERATORI_PIN (sempre impronta sha256,
+// mai in chiaro): vale l'ultima riga per email (o sigla); se non c'è, quello di Admin → Operatori. Anche l'admin che imposta
+// un PIN scrive qui, così l'ultimo cambio vince sempre.
+var Pin = {
+  H: ['email', 'sigla', 'pin', 'aggiornato_il', 'aggiornato_da'],
+  _t: null, _ts: 0,
+  carica: async function (forza) {
+    if (!forza && Pin._t && Date.now() - Pin._ts < 30000) return Pin._t;
+    try { await DB.loadTables(['OPERATORI_PIN']); Pin._t = DB.t.OPERATORI_PIN; } catch (e) { Pin._t = Pin._t || null; }
+    Pin._ts = Date.now(); return Pin._t;
+  },
+  refSync: function (o) {
+    var t = Pin._t || DB.t.OPERATORI_PIN, em = L.s(o && o.email).toLowerCase(), sg = L.up(o && o.sigla), x = null;
+    // vale l'ultima riga (anche vuota = PIN tolto dall'admin)
+    if (t) t.rows.forEach(function (r) { if ((em && L.s(r.email).toLowerCase() === em) || (!em && sg && L.up(r.sigla) === sg)) x = L.s(r.pin); });
+    return x !== null ? x : L.s(o && o.pin);
+  },
+  ref: async function (o) { await Pin.carica(); return Pin.refSync(o); },
+  registra: async function (lista) {
+    var t = await Pin.carica(true); if (!t || !t.header.length) t = await DB.ensureSheet('OPERATORI_PIN', Pin.H);
+    var now = L.nowStamp();
+    await API.append(DB.id, 'OPERATORI_PIN', lista.map(function (x) { return t.toRow({ email: L.s(x.email).toLowerCase(), sigla: L.up(x.sigla), pin: L.s(x.pin), aggiornato_il: now, aggiornato_da: Auth.email }); }));
+    await Pin.carica(true);
+  },
+  apri: async function () {
+    $('userMenu') && $('userMenu').classList.remove('show');
+    await Pin.carica(true);
+    var cond = App.condiviso(), ops = cond ? Ack.operatori() : [], me = App.me || {};
+    var corpo = function (o) {
+      var ha = !!Pin.refSync(o);
+      return (ha ? '<div class="fg"><span class="fl">PIN attuale *</span><input class="fc mono" id="pinOld" type="password" inputmode="numeric" maxlength="6" autocomplete="off"></div>' :
+        '<div class="hint" style="margin-bottom:6px">' + (cond ? 'Questo operatore non ha ancora un PIN: dal palmarino condiviso non si può creare, entra con il tuo account o chiedi a un admin.' : 'Non hai ancora un PIN: crealo adesso (lo userai sul palmarino ACK e per caricare a nome tuo).') + '</div>') +
+        (ha || !cond ? '<div class="row" style="gap:10px;margin-top:6px"><div class="fg"><span class="fl">Nuovo PIN * (4-6 cifre)</span><input class="fc mono" id="pinNew" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></div>' +
+          '<div class="fg"><span class="fl">Ripeti il nuovo PIN *</span><input class="fc mono" id="pinNew2" type="password" inputmode="numeric" maxlength="6" autocomplete="new-password"></div></div>' : '');
+    };
+    var chi = function () { if (!cond) return me; var sg = $('pinOp') && $('pinOp').value; return ops.find(function (o) { return o.sigla === sg; }); };
+    Modal.html('🔑 ' + (cond ? 'PIN operatore' : 'Il mio PIN') + (cond ? '' : ' · ' + esc(me.sigla || Auth.email)),
+      (cond ? '<div class="fg" style="margin-bottom:8px"><span class="fl">Operatore</span><select class="fc" id="pinOp">' + ops.map(function (o) { return '<option value="' + esc(o.sigla) + '">' + esc(o.sigla + ' · ' + (o.nome || o.email)) + '</option>'; }).join('') + '</select></div>' : '') +
+      '<div id="pinCorpo"></div><div class="fb err" id="pinErr" style="margin-top:6px"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Salva PIN', cls: 'green', keep: true, fn: function () { Pin.salva(chi()); } }]);
+    var disegna = function () { var o = chi(); $('pinCorpo').innerHTML = o ? corpo(o) : '<div class="hint">Operatore non trovato in Admin → Operatori</div>'; var f = $('pinOld') || $('pinNew'); if (f) f.focus();
+      ['pinOld', 'pinNew', 'pinNew2'].forEach(function (id) { var e = $(id); if (e) e.addEventListener('keydown', function (ev) { if (ev.key === 'Enter') Pin.salva(chi()); }); }); };
+    if ($('pinOp')) $('pinOp').onchange = disegna;
+    disegna();
+  },
+  salva: async function (o) {
+    var err = function (m) { $('pinErr').textContent = m; };
+    if (!o || !L.s(o.email) && !L.s(o.sigla)) { err('Il tuo account non è tra gli operatori: chiedi a un admin'); return; }
+    if (!$('pinNew')) return;
+    var ref = Pin.refSync(o), old = $('pinOld') ? L.s($('pinOld').value) : '', n1 = L.s($('pinNew').value), n2 = L.s($('pinNew2').value);
+    if (ref) { if (!old) { err('Scrivi il PIN attuale'); $('pinOld').focus(); return; }
+      if (('sha256:' + (await Nr.sha(old))).toLowerCase() !== ref.toLowerCase()) { err('PIN attuale errato'); $('pinOld').value = ''; $('pinOld').focus(); return; } }
+    if (!/^\d{4,6}$/.test(n1)) { err('Il nuovo PIN deve avere da 4 a 6 cifre'); $('pinNew').focus(); return; }
+    if (n1 !== n2) { err('I due PIN nuovi non coincidono'); $('pinNew2').value = ''; $('pinNew2').focus(); return; }
+    if (ref && n1 === old) { err('Il nuovo PIN è uguale a quello attuale'); return; }
+    Modal.progress('Salvo il PIN…');
+    try {
+      await Pin.registra([{ email: o.email, sigla: o.sigla, pin: 'sha256:' + (await Nr.sha(n1)) }]);
+      await API.append(DB.id, 'LOG', [App.log(ref ? 'PIN_CAMBIATO' : 'PIN_CREATO', 'OPERATORI_PIN', L.up(o.sigla) || L.s(o.email), { operatore: L.up(o.sigla), email: L.s(o.email).toLowerCase() })]);
+      Modal.close(); toast(ref ? 'PIN cambiato' : 'PIN creato', 'ok');
+    } catch (e) { Modal.progress(''); err('PIN non salvato: ' + e.message); }
   }
 };
 
@@ -3191,7 +3273,9 @@ var Mail = {
     ingresso: { nome: 'Ingresso · balancing e FR in OPEN', a: function () { return [DB.param('mail_sd', 'servicedesk@atsgruppo.eu')]; } },
     ack: { nome: 'ACK · uscite ai riparatori', a: function () { return [DB.param('mail_sd', ''), DB.param('mail_bollettazione', '')]; } },
     rma: { nome: 'RMA · uscite e DDT', a: function () { return [DB.param('mail_sd', ''), DB.param('mail_bollettazione', '')]; } },
-    nr: { nome: 'Carichi NEW/REUSE', a: function () { return [DB.param('mail_new_reuse', '') || DB.param('mail_sd', '')]; } }
+    nr: { nome: 'Carichi NEW/REUSE', a: function () { return [DB.param('mail_new_reuse', '') || DB.param('mail_sd', '')]; } },
+    // la manda il servizio sul PC server ogni mattina (ex RIEPILOGO MATERIALE FAULTY A MAGAZZINO); qui solo i destinatari
+    riepilogo: { nome: 'Riepilogo FAULTY a magazzino · mail automatica del mattino dal server', a: function () { return ['servicedesk@atsgruppo.eu', 'spare&repair@atsgruppo.eu', 'resposito@atsgruppo.eu']; } }
   },
   lista: function (v) { var o = [], vis = {}; [].concat(v).join(',').split(/[,;\s]+/).forEach(function (x) { x = L.s(x); if (x && x.indexOf('@') > 0 && !vis[x.toLowerCase()]) { vis[x.toLowerCase()] = 1; o.push(x); } }); return o; },
   // parametro presente (anche vuoto) = vale quello; assente = indirizzi di prima (mail_sd, mail_cc…)
@@ -3961,7 +4045,7 @@ var Ack = {
   // '' = PIN giusto (o non richiesto), altrimenti il messaggio d'errore
   pinErr: async function (o, pin) {
     if (!o) return 'Scegli l\'operatore';
-    var obbl = L.up(DB.param('ack_pin_obbligatorio', 'SI')) !== 'NO', ref = L.s(o.pin);
+    var obbl = L.up(DB.param('ack_pin_obbligatorio', 'SI')) !== 'NO', ref = await Pin.ref(o);
     if (!ref && obbl) return 'PIN non impostato per ' + o.sigla + ': chiedi a un admin (Admin → Operatori → pin)';
     if (ref && ('sha256:' + (await Nr.sha(L.s(pin)))).toLowerCase() !== ref.toLowerCase()) return 'PIN errato';
     return '';
