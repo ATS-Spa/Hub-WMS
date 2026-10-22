@@ -3837,6 +3837,12 @@ function Grid(name, o) {
   this.w = {}; try { this.w = JSON.parse(localStorage.getItem('gw_' + name) || '{}') || {}; } catch (x) { }
   var h = null; try { h = JSON.parse(localStorage.getItem('gh_' + name) || 'null'); } catch (x) { }
   this.hid = {}; (h || o.hidden || []).forEach(function (k) { this.hid[k] = 1; }, this);
+  // cambio delle colonne di base (o.vis = { v: versione, mostra: [...], nascondi: [...] }): vale una volta anche per chi aveva già scelto le sue colonne
+  var vv = o.vis, vk = 'ghv_' + name, cur = null; try { cur = localStorage.getItem(vk); } catch (x) { }
+  if (vv && cur !== String(vv.v)) {
+    (vv.mostra || []).forEach(function (k) { delete this.hid[k]; }, this); (vv.nascondi || []).forEach(function (k) { this.hid[k] = 1; }, this);
+    try { if (h) localStorage.setItem('gh_' + name, JSON.stringify(Object.keys(this.hid))); localStorage.setItem(vk, String(vv.v)); } catch (x) { }
+  }
 }
 // colonne visibili (mostra/nascondi colonne, scelta salvata per utente/browser)
 Grid.prototype.vc = function () { var self = this; return this.o.cols.filter(function (c) { return !self.hid[c.k]; }); };
@@ -7212,10 +7218,11 @@ var Sto = {
   },
   grid: function (sez) {
     if (Sto.grids[sez]) return Sto.grids[sez];
-    var hid = { IN: ['causale', 'id_unita', 'id_ricezione', 'ubicazione_a', 'origine'], OUT: ['causale', 'id_unita', 'id_spedizione', 'ubicazione_da', 'origine'], INT: [], ALL: ['id_unita', 'origine'] }[sez];
+    var hid = { IN: ['causale', 'id_unita', 'id_ricezione', 'ubicazione_a', 'origine', 'data_in_merci'], OUT: ['causale', 'id_unita', 'id_spedizione', 'ubicazione_da', 'origine'], INT: [], ALL: ['id_unita', 'origine'] }[sez];
     return Sto.grids[sez] = new Grid('mov' + sez, {
       thead: 'stoHead', tbody: 'stoRows', foot: 'stoFoot', sort: 'data_ora', dir: -1, limit: 300, empty: 'Nessun movimento nel periodo',
-      hidden: hid, rows: function () { return Sto.righe(sez); }, cols: Sto.colonne(sez)
+      hidden: hid, rows: function () { return Sto.righe(sez); }, cols: Sto.colonne(sez),
+      vis: sez === 'IN' ? { v: 1, mostra: ['data_registrazione_vlt'], nascondi: ['data_in_merci'] } : null
     });
   },
   init: function () {
