@@ -2684,15 +2684,15 @@ var Rial = {
       { nome: 'B in giacenza con uscita', headers: ['Scheda', 'Tipo', 'Seriale', 'FR', 'Entrata', 'Mov. OUT', 'Uscita', 'Destino', 'DDT'], rows: R.B.map(function (x) { return [x.u.id_unita, x.u.tipo, x.u.seriale, x.u.fr, L.itDate(x.u.data_in), x.o.id_mov, L.itDate(x.o.data_ora), x.o.controparte, x.o.ddt]; }) },
       { nome: 'C create dal riallineamento', headers: ['Scheda', 'Creata il', 'Tipo', 'FR', 'Seriale', 'P/N', 'MNFT', 'Mov. IN', 'Note'], rows: (R.C || []).map(function (u) { return [u.id_unita, L.vedi(L.s(u.creato_il).slice(0, 16)), u.tipo, u.fr, u.seriale, u.pn, u.mnft, u.id_mov_in, u.note]; }) }]);
   },
-  crea: async function (sel) {
-    if (!(await Modal.confirm('Crea ' + sel.length + ' schede', 'Le schede entrano IN GIACENZA collegate al loro movimento di ingresso. Nessun nuovo movimento IN: resta un movimento interno RIALLINEA e il LOG.'))) return;
-    Modal.open('Riallinea giacenza', 'Creo ' + sel.length + ' schede…', []);
+  crea: async function (sel, quiet) {
+    if (!quiet && !(await Modal.confirm('Crea ' + sel.length + ' schede', 'Le schede entrano IN GIACENZA collegate al loro movimento di ingresso. Nessun nuovo movimento IN: resta un movimento interno RIALLINEA e il LOG.'))) return;
+    if (!quiet) Modal.open('Riallinea giacenza', 'Creo ' + sel.length + ' schede…', []);
     try {
       await DB.loadTables(['UNITA']);
       var tU = DB.t.UNITA, now = L.nowStamp(), chi = App.chi(), pm = Bon.pnMat(), stock = {};
       tU.rows.forEach(function (u) { if (Giacenze.A_MAG.indexOf(u.stato) >= 0) stock[L.up(u.seriale)] = 1; });
       var lista = sel.filter(function (it) { return !stock[L.up(it.m.seriale)]; });
-      if (!lista.length) { Modal.close(); Modal.open('Niente da creare', 'Nel frattempo questi pezzi sono già entrati in giacenza.'); return; }
+      if (!lista.length) { if (quiet) return 0; Modal.close(); Modal.open('Niente da creare', 'Nel frattempo questi pezzi sono già entrati in giacenza.'); return; }
       var objs = lista.map(function (it) {
         var m = it.m, tipo = TIPI.indexOf(it.tipo) >= 0 ? it.tipo : 'FAULTY', fr = L.frKey(m.fr), v = it.v, pn = L.up(m.pn);
         var mag = tipo === 'NEW' || tipo === 'REUSE' ? 'HUB_MAGAZZINO' : (tipo === 'SCRAP' ? 'SCRAP' : 'HUB_GUASTI'), dest = '';
@@ -2715,8 +2715,9 @@ var Rial = {
       if (Sto.dati.cur) movs.forEach(function (m) { Sto.COLS.forEach(function (c) { if (!(c in m)) m[c] = ''; }); Sto.dati.cur.push(m); });
       await API.append(DB.id, 'LOG', objs.map(function (o) { return App.log('RIALLINEA_GIACENZA', 'UNITA', o.id_unita, { seriale: o.seriale, fr: o.fr, tipo: o.tipo, movimento_in: o.id_mov_in }); }));
       Export.scrivi().catch(function () { });
+      if (quiet) return objs.length;
       Modal.close(); Giacenze.render(); App.syncInfo(); toast(objs.length + ' schede create in giacenza', 'ok');
-    } catch (e) { Modal.close(); Modal.open('Errore', e.message + '\n\nPremi Aggiorna e rilancia il controllo: i pezzi già creati non vengono riproposti.'); }
+    } catch (e) { if (quiet) throw e; Modal.close(); Modal.open('Errore', e.message + '\n\nPremi Aggiorna e rilancia il controllo: i pezzi già creati non vengono riproposti.'); }
   }
 };
 
@@ -4373,6 +4374,54 @@ var Ack = {
     });
   },
   giacRip: function (cod) { return Ack.giacLista(cod).length; },
+  // presenti senza scheda: rimetti la scheda tolta / crea dal movimento IN / aggiungi con rettifica (solo admin)
+  mettiMc: async function () {
+    if (!App.isAdmin) return;
+    var sel = [].slice.call(document.querySelectorAll('#mBody .mcSel')).filter(function (c) { return c.checked; }).map(function (c) { return Ack._mc[+c.getAttribute('data-i')]; });
+    if (!sel.length) { toast('Spunta almeno una riga', 'ko'); return; }
+    var s = Ack._nbS, cod = s ? s.destinatario : '', mot = 'presente alla spunta ACK ' + cod + ' del ' + L.itDate(s ? s.data : L.isoToday());
+    var n = { RIATTIVA: 0, CREA: 0, RETT: 0 }; sel.forEach(function (o) { n[o.azione]++; });
+    if (!(await Modal.confirm('Allinea ' + sel.length + ' pezzi in giacenza', 'Rimetto ' + n.RIATTIVA + ' schede tolte, creo ' + n.CREA + ' schede dal loro movimento di ingresso, aggiungo ' + n.RETT + ' con rettifica.\nNessun nuovo ingresso: la fatturazione non cambia. Tutto nel LOG (' + mot + ').'))) { Ack.giacDett(cod); return; }
+    Modal.open('Allineamento giacenza', 'Non chiudere la pagina.', []);
+    try {
+      await DB.loadTables(['UNITA']);
+      var tU = DB.t.UNITA, H = await Ingresso.heads(), tM = H.MOVIMENTI, mr = await Spec.righe(tM), now = L.nowStamp(), chi = App.chi(), fatti = 0, salt = [];
+      var stock = {}; tU.rows.forEach(function (u) { if (Giacenze.A_MAG.indexOf(u.stato) >= 0) { stock['S' + L.up(u.seriale)] = 1; if (u.fr) stock['F' + u.fr] = 1; } });
+      var gia = function (o) { return (o.x.fr && stock['F' + o.x.fr]) || (o.x.seriale && stock['S' + L.up(o.x.seriale)]); };
+      // 1. schede tolte rimesse in giacenza
+      for (var i = 0; i < sel.length; i++) {
+        var o = sel[i]; if (o.azione !== 'RIATTIVA') continue;
+        var u = tU.rows.find(function (y) { return y.id_unita === o.u.id_unita; });
+        if (!u || Giacenze.A_MAG.indexOf(u.stato) >= 0 || gia(o)) { salt.push(o.x.seriale); continue; }
+        var prima = u.stato, ch = { stato: 'IN_GIACENZA', data_out: '', note: [L.s(u.note), 'rimessa in giacenza: ' + mot + ' (' + o.x.fonte + ')'].filter(Boolean).join(' | '), modificato_il: now, modificato_da: chi.email, rev: (parseInt(u.rev, 10) || 1) + 1 };
+        var upd = Object.keys(ch).filter(function (h) { return h in tU.idx; }).map(function (h) { u[h] = String(ch[h]); return { range: tU.cell(h, u._r), values: [[u[h]]] }; });
+        if (u.id_mov_in && mr[u.id_mov_in] && 'id_unita' in tM.idx) upd.push({ range: tM.cell('id_unita', mr[u.id_mov_in]), values: [[u.id_unita]] });
+        await API.batchUpdate(DB.id, upd);
+        await Spec.traccia(H, u, 'RIPRISTINO GIACENZA · ' + mot, { seriale: u.seriale, fr: u.fr, stato_prima: prima, fonte: o.x.fonte }, 'GIACENZA_RIPRISTINATA', 'UNITA', u.id_unita, 'RIPRISTINO_IN');
+        stock['S' + L.up(u.seriale)] = 1; if (u.fr) stock['F' + u.fr] = 1; fatti++; Modal.progress('Rimesse ' + fatti);
+      }
+      // 2. schede nuove dal movimento di ingresso (come Riallinea)
+      var cr = sel.filter(function (o) { return o.azione === 'CREA' && !gia(o); }).map(function (o) { return { m: o.m, tipo: L.up(o.m.tipo) || 'FAULTY', v: o.v, avv: [] }; });
+      if (cr.length) { Modal.progress('Creo ' + cr.length + ' schede dai movimenti…'); fatti += (await Rial.crea(cr, true)) || 0; }
+      tU = DB.t.UNITA;   // Rial.crea rilegge le schede
+      // 3. senza ingresso: rettifica di aggiunta con i dati di VLT
+      var rt = sel.filter(function (o) { return o.azione === 'RETT' && !gia(o); });
+      for (var j = 0; j < rt.length; j++) {
+        var x = rt[j].x, v = rt[j].v, pn = L.up(x.pn || (v ? v.f_mat_tmpn : ''));
+        var ob = { seriale: L.up(x.seriale || (v ? v.f_mat_serial_no : '')), pn: pn, mnft: DB.artPn[pn] || '', material: v ? L.s(v.f_mat_material) : '', tipo: 'FAULTY', fr: x.fr, riparatore: v ? (App.ripNoto(v.riparatore) || v.riparatore) : cod,
+          magazzino: 'HUB_GUASTI', ubicazione: '', stato: 'IN_GIACENZA', data_in: L.isoToday(), note: 'RETTIFICA (aggiunto): ' + mot + ' (' + x.fonte + ', nessun ingresso nei movimenti)', rev: 1, creato_il: now, creato_da: chi.email };
+        var rU = await API.append(DB.id, 'UNITA', [tU.toRow(ob)]), uBase = parseInt(DB.param('unita_id_base', '0'), 10) || 0;
+        ob.id_unita = 'U' + L.pad(uBase + rU - 1, 7);
+        await API.batchUpdate(DB.id, [{ range: tU.cell('id_unita', rU), values: [[ob.id_unita]] }]);
+        var xx = {}; tU.header.forEach(function (h) { xx[h] = ob[h] === undefined ? '' : String(ob[h]); }); xx._r = rU; tU.rows.push(xx);
+        await Spec.traccia(H, xx, 'RETTIFICA INVENTARIO · aggiunto in giacenza: ' + mot, { seriale: ob.seriale, fr: ob.fr, tipo: 'FAULTY', pn: pn, motivo: mot }, 'RETTIFICA_AGGIUNTO', 'UNITA', ob.id_unita, 'RETTIFICA_IN');
+        fatti++; Modal.progress('Aggiunte con rettifica ' + (j + 1));
+      }
+      Export.scrivi().catch(function () { });
+      Modal.close(); toast(fatti + ' pezzi allineati in giacenza' + (salt.length ? ' · saltati ' + salt.length : ''), salt.length ? 'ko' : 'ok');
+      App.syncInfo(); Ack.renderDet(); Ack.giacDett(cod);
+    } catch (e) { Modal.open('Errore', e.message + '\n\nRiapri il dettaglio: i pezzi già sistemati non vengono riproposti.'); }
+  },
   // rettifica in blocco delle FAULTY a sistema ma non barcodate nella spunta (solo admin)
   rettNb: async function () {
     if (!App.isAdmin) return;
@@ -4399,7 +4448,8 @@ var Ack = {
       App.syncInfo(); Ack.renderDet(); Ack.giacDett(cod);
     } catch (e) { Modal.open('Errore', e.message); }
   },
-  giacDett: function (cod) {
+  giacDett: async function (cod) {
+    if (!Sto.dati.cur) { Modal.open('Giacenza FAULTY', 'Carico i movimenti…', []); try { Sto.dati.cur = await Sto.colsSafe(DB.id, 'MOVIMENTI'); } catch (e) { } }
     var U = Ack.giacLista(cod), c = Ack.cfg(), pend = {}, sp = {}, oggi = {};
     (DB.t.ACK_PENDING ? DB.t.ACK_PENDING.rows : []).forEach(function (p) { if (p.stato === 'APERTO') pend[p.fr] = p; });
     var s = Ack.cur && Ack.byId(Ack.cur); if (s) { Ack.righe(s.id_spedizione).forEach(function (r) { oggi[r.id_unita] = r.esito; }); Ack.spareFalse(s.id_spedizione).forEach(function (a) { sp[L.up(a.seriale)] = 1; }); }
@@ -4427,6 +4477,25 @@ var Ack = {
       nb = U.filter(function (u) { return !lette[u.id_unita] && !lette['S' + L.up(u.seriale)] && !(u.fr && lette['F' + u.fr]) && !inPend(u); });
     }
     Ack._nb = nb; Ack._nbS = s;
+    // pezzi presenti (ACK pending aperti del riparatore + spare false di questa spunta) che NON hanno la scheda in giacenza
+    var mc = [], visti = {}, inMag = {}, mag = {};
+    DB.t.UNITA.rows.forEach(function (u) { if (Giacenze.A_MAG.indexOf(u.stato) >= 0) { if (u.fr) inMag['F' + u.fr] = 1; inMag['S' + L.up(u.seriale)] = 1; } });
+    var pres = Ack.pending(cod).map(function (p) { return { fonte: 'ACK pending', fr: L.s(p.fr), seriale: L.s(p.seriale), pn: L.s(p.pn), nota: L.s(p.motivo) }; })
+      .concat(s ? Ack.spareFalse(s.id_spedizione).map(function (a) { return { fonte: 'spare false', fr: L.s(a.fr), seriale: L.s(a.seriale), pn: '', nota: L.s(a.descrizione) }; }) : []);
+    pres.forEach(function (x) {
+      var k = x.fr ? 'F' + x.fr : 'S' + L.up(x.seriale); if (visti[k]) return; visti[k] = 1;
+      if ((x.fr && inMag['F' + x.fr]) || (x.seriale && inMag['S' + L.up(x.seriale)])) return;
+      var stessa = function (o) { return (x.fr && L.s(o.fr) === x.fr) || (x.seriale && L.up(o.seriale) === L.up(x.seriale)); };
+      var tolte = DB.t.UNITA.rows.filter(function (u) { return (u.stato === 'ANNULLATO' || u.stato === 'RETTIFICATO') && stessa(u); }).sort(function (a, b) { return b._r - a._r; });
+      var M = (Sto.dati.cur || []).filter(function (m) { return (m.direzione === 'IN' || m.direzione === 'OUT') && !Sto.annullato(m) && stessa(m); }).sort(function (a, b) { return L.s(a.data_ora).localeCompare(L.s(b.data_ora)); });
+      var ins = M.filter(function (m) { return m.direzione === 'IN'; }), mi = ins[ins.length - 1], outDopo = mi && M.some(function (m) { return m.direzione === 'OUT' && L.s(m.data_ora) > L.s(mi.data_ora); });
+      var v = x.fr && DB.vltMap[x.fr], avv = [];
+      if (outDopo) avv.push('c\'è un\'uscita dopo l\'ultimo ingresso');
+      if (x.fonte === 'spare false' && v && /sent to repairer|good material|close/i.test(v.stato)) avv.push('su VLT è "' + v.stato + '"');
+      var o = { x: x, v: v, avv: avv, u: tolte[0] || null, m: mi || null };
+      o.azione = o.u ? 'RIATTIVA' : (o.m ? 'CREA' : 'RETT'); mc.push(o);
+    });
+    Ack._mc = mc;
     Ack._gd = U.map(function (u) { var v = u.fr && DB.vltMap[u.fr]; return [u.id_unita, u.seriale, u.fr, u.pn, u.stato, v ? v.stato : '', cat(u), u.ubicazione, L.itDate(u.data_in), pend[u.fr] ? pend[u.fr].motivo : '']; });
     Modal.html('Giacenza FAULTY · ' + cod + ' (' + U.length + ')',
       '<div class="hint" style="margin-bottom:8px">Sono tutte le FAULTY a magazzino per questo riparatore (stato scheda In giacenza, Bloccata, In lavorazione o In attesa), <b>qualunque sia lo stato su VLT</b>. La spunta ACK invece mostra solo gli FR in "' + esc(c.statoAck) + '": per questo il numero è più alto dei pezzi barcodati.</div>' +
@@ -4434,12 +4503,18 @@ var Ack = {
         (sc ? ' Se il barcodato è giusto, queste non sono a scaffale: spunta e togli con <b>rettifica</b> (escono dalla giacenza come RETTIFICATO, movimento interno e Log; non è un\'uscita). Vale <b>solo se avete barcodato tutte le FAULTY di questo riparatore</b> presenti a scaffale (quelle fuori lista diventano spare false); controlla le date di entrata: un pezzo entrato dopo la spunta non poteva essere barcodato.' : ' <span style="color:var(--amber)">La spunta è ancora aperta: chiudila prima di confrontare.</span>') + '</div>' +
         (nb.length ? '<div class="tbl-wrap" style="max-height:26vh"><table><thead><tr><th><input type="checkbox" id="nbTutti"></th><th>ID</th><th>Seriale</th><th>FR</th><th>Stato scheda</th><th>Stato VLT</th><th>Ubicazione</th><th>Entrata</th><th>Note</th></tr></thead><tbody>' +
           nb.map(function (u, i) { var v = u.fr && DB.vltMap[u.fr], pre = L.normDate(u.data_in) < L.normDate(s.data); return '<tr><td><input type="checkbox" class="nbSel" data-i="' + i + '"' + (sc ? '' : ' disabled') + '></td><td class="mono">' + esc(u.id_unita) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.fr) + '</td><td>' + esc(u.stato) + '</td><td>' + esc(v ? v.stato : '') + '</td><td>' + esc(u.ubicazione) + '</td><td>' + esc(L.itDate(u.data_in)) + '</td><td style="font-size:11px">' + esc(L.s(u.note).slice(0, 80)) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '') +
-        (nb.length && sc && App.isAdmin ? '<div class="row" style="gap:8px;margin-top:8px;align-items:flex-end"><div class="fg" style="flex:1"><span class="fl">Motivo</span><input class="fc" id="nbMot" value="non barcodato alla spunta ACK ' + esc(s.destinatario) + ' del ' + esc(L.itDate(s.data)) + '"></div><button class="btn red sm" onclick="Ack.rettNb()">🗑 Rettifica: togli le spuntate dalla giacenza</button></div>' : (nb.length && sc ? '<div class="hint" style="margin-top:6px">La rettifica la fa un admin.</div>' : '')) + '</div>' : '') +
+        (nb.length && sc && App.isAdmin ? '<div class="row" style="gap:8px;margin-top:8px;align-items:flex-end"><div class="fg" style="flex:1"><span class="fl">Motivo</span><input class="fc" id="nbMot" value="non barcodato alla spunta ACK ' + esc(s.destinatario) + ' del ' + esc(L.itDate(s.data)) + '"></div><button class="btn red sm" onclick="Ack.rettNb()">🗑 Rettifica: togli le spuntate dalla giacenza</button></div>' : (nb.length && sc ? '<div class="hint" style="margin-top:6px">La rettifica la fa un admin.</div>' : '')) +
+        '<div style="font-size:13px;margin:14px 0 6px"><b style="color:var(--amber)">Presenti ma senza scheda in giacenza: ' + mc.length + '</b> (ACK pending aperti di ' + esc(s.destinatario) + ' e spare false di questa spunta). Per ognuno: <b>rimetto</b> la scheda tolta (annullata/rettificata), oppure <b>creo</b> la scheda collegata al suo movimento di ingresso, oppure, se non c\'è nessun ingresso, la aggiungo con <b>rettifica</b> (dati da VLT). Le righe con avvisi partono senza spunta.</div>' +
+        (mc.length ? '<div class="tbl-wrap" style="max-height:26vh"><table><thead><tr><th><input type="checkbox" id="mcTutti"></th><th>Fonte</th><th>FR</th><th>Seriale</th><th>Stato VLT</th><th>Cosa faccio</th><th>Avvisi</th></tr></thead><tbody>' +
+          mc.map(function (o, i) { var az = o.azione === 'RIATTIVA' ? 'rimetto la scheda ' + o.u.id_unita + ' (' + o.u.stato + ')' : (o.azione === 'CREA' ? 'creo la scheda dal movimento ' + o.m.id_mov + ' del ' + L.itDate(o.m.data_ora) : 'aggiungo con rettifica (nessun ingresso)');
+            return '<tr' + (o.avv.length ? ' class="r-warn"' : '') + '><td><input type="checkbox" class="mcSel" data-i="' + i + '"' + (o.avv.length || !sc ? '' : ' checked') + (sc ? '' : ' disabled') + '></td><td>' + esc(o.x.fonte) + '</td><td class="mono">' + esc(o.x.fr) + '</td><td class="mono">' + esc(o.x.seriale) + '</td><td>' + esc(o.v ? o.v.stato : '') + '</td><td>' + esc(az) + '</td><td style="font-size:11.5px;color:var(--amber)">' + esc(o.avv.join(' · ')) + '</td></tr>'; }).join('') + '</tbody></table></div>' +
+          (sc && App.isAdmin ? '<div class="row" style="justify-content:flex-end;margin-top:8px"><button class="btn green sm" onclick="Ack.mettiMc()">📥 Rimetti / crea le schede spuntate</button></div>' : '') : '') + '</div>' : '') +
       '<div class="tbl-wrap" style="max-height:24vh;margin-bottom:10px"><table><thead><tr><th>Gruppo</th><th>Pezzi</th></tr></thead><tbody>' + K.map(function (k) { return '<tr><td>' + esc(k) + '</td><td class="mono"><b>' + G[k].length + '</b></td></tr>'; }).join('') + '</tbody></table></div>' +
       '<div class="tbl-wrap" style="max-height:40vh"><table><thead><tr><th>ID</th><th>Seriale</th><th>FR</th><th>P/N</th><th>Stato scheda</th><th>Stato VLT</th><th>Gruppo</th><th>Ubicazione</th><th>Entrata</th><th>Motivo pending</th></tr></thead><tbody>' +
       Ack._gd.map(function (r) { return '<tr>' + r.map(function (x, i) { return '<td' + (i < 3 ? ' class="mono"' : '') + '>' + esc(x) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>',
       [{ label: 'Chiudi', cls: 'ghost' }, { label: '⬇ Excel', cls: 'ghost', keep: true, fn: function () { Xls.scarica('Giacenza_faulty_' + cod, [{ nome: 'Giacenza faulty', headers: ['ID', 'Seriale', 'FR', 'P/N', 'Stato scheda', 'Stato VLT', 'Gruppo', 'Ubicazione', 'Entrata', 'Motivo pending'], rows: Ack._gd }]); } },
         { label: '🏷 Etichette', cls: 'ghost', keep: true, fn: function () { Etichette.pezzi(U.map(Etichette.daUnita), 'Giacenza faulty'); } }], true);
+    if ($('mcTutti')) $('mcTutti').onchange = function () { document.querySelectorAll('#mBody .mcSel:not([disabled])').forEach(function (c) { c.checked = $('mcTutti').checked; }); };
     if ($('nbTutti')) $('nbTutti').onchange = function () { document.querySelectorAll('#mBody .nbSel:not([disabled])').forEach(function (c) { c.checked = $('nbTutti').checked; }); };
   },
   pendTutti: function () {
