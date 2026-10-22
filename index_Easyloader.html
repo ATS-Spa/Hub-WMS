@@ -4421,13 +4421,16 @@ var Ack = {
     if (s) {
       var lette = {}; Ack.righe(s.id_spedizione).forEach(function (r) { if (r.esito === 'SPUNTATO') { lette[r.id_unita] = 1; lette['S' + L.up(r.seriale)] = 1; } });
       Ack.spareFalse(s.id_spedizione).forEach(function (a) { lette['S' + L.up(a.seriale)] = 1; if (a.fr) lette['F' + a.fr] = 1; });
-      nb = U.filter(function (u) { return !lette[u.id_unita] && !lette['S' + L.up(u.seriale)] && !(u.fr && lette['F' + u.fr]); });
+      // in ACK pending (di questa spunta o di un ACK precedente): il pezzo è a scaffale, solo non spedito
+      var inPend = function (u) { return !!(u.fr && pend[u.fr]); };
+      var nPend = U.filter(function (u) { return inPend(u) && !lette[u.id_unita] && !lette['S' + L.up(u.seriale)]; }).length;
+      nb = U.filter(function (u) { return !lette[u.id_unita] && !lette['S' + L.up(u.seriale)] && !(u.fr && lette['F' + u.fr]) && !inPend(u); });
     }
     Ack._nb = nb; Ack._nbS = s;
     Ack._gd = U.map(function (u) { var v = u.fr && DB.vltMap[u.fr]; return [u.id_unita, u.seriale, u.fr, u.pn, u.stato, v ? v.stato : '', cat(u), u.ubicazione, L.itDate(u.data_in), pend[u.fr] ? pend[u.fr].motivo : '']; });
-    Modal.html('Giacenza FAULTY · ' + esc(cod) + ' (' + U.length + ')',
+    Modal.html('Giacenza FAULTY · ' + cod + ' (' + U.length + ')',
       '<div class="hint" style="margin-bottom:8px">Sono tutte le FAULTY a magazzino per questo riparatore (stato scheda In giacenza, Bloccata, In lavorazione o In attesa), <b>qualunque sia lo stato su VLT</b>. La spunta ACK invece mostra solo gli FR in "' + esc(c.statoAck) + '": per questo il numero è più alto dei pezzi barcodati.</div>' +
-      (s ? '<div class="card" style="padding:10px 12px;margin-bottom:10px"><div style="font-size:13px;margin-bottom:6px"><b>Confronto con il barcodato</b> della spunta del ' + esc(L.itDate(s.data)) + ': a sistema <b>' + U.length + '</b>, barcodate e ancora qui (spare false) <b>' + (U.length - nb.length) + '</b>, <b style="color:var(--red)">non barcodate ' + nb.length + '</b>.' +
+      (s ? '<div class="card" style="padding:10px 12px;margin-bottom:10px"><div style="font-size:13px;margin-bottom:6px"><b>Confronto con il barcodato</b> della spunta del ' + esc(L.itDate(s.data)) + ': a sistema <b>' + U.length + '</b> · barcodate e ancora qui (spare false) <b>' + (U.length - nb.length - nPend) + '</b> · in ACK pending (a scaffale) <b>' + nPend + '</b> · <b style="color:var(--red)">non barcodate ' + nb.length + '</b>.' +
         (sc ? ' Se il barcodato è giusto, queste non sono a scaffale: spunta e togli con <b>rettifica</b> (escono dalla giacenza come RETTIFICATO, movimento interno e Log; non è un\'uscita). Vale <b>solo se avete barcodato tutte le FAULTY di questo riparatore</b> presenti a scaffale (quelle fuori lista diventano spare false); controlla le date di entrata: un pezzo entrato dopo la spunta non poteva essere barcodato.' : ' <span style="color:var(--amber)">La spunta è ancora aperta: chiudila prima di confrontare.</span>') + '</div>' +
         (nb.length ? '<div class="tbl-wrap" style="max-height:26vh"><table><thead><tr><th><input type="checkbox" id="nbTutti"></th><th>ID</th><th>Seriale</th><th>FR</th><th>Stato scheda</th><th>Stato VLT</th><th>Ubicazione</th><th>Entrata</th><th>Note</th></tr></thead><tbody>' +
           nb.map(function (u, i) { var v = u.fr && DB.vltMap[u.fr], pre = L.normDate(u.data_in) < L.normDate(s.data); return '<tr><td><input type="checkbox" class="nbSel" data-i="' + i + '"' + (sc ? '' : ' disabled') + '></td><td class="mono">' + esc(u.id_unita) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.fr) + '</td><td>' + esc(u.stato) + '</td><td>' + esc(v ? v.stato : '') + '</td><td>' + esc(u.ubicazione) + '</td><td>' + esc(L.itDate(u.data_in)) + '</td><td style="font-size:11px">' + esc(L.s(u.note).slice(0, 80)) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '') +
