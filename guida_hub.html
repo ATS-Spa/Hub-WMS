@@ -3221,7 +3221,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
     <h1 class="ch-title">Ingresso · Lettura Pezzi</h1>
     <p class="ch-desc">Si spara il seriale: l'app trova l'FR su VLT, il P/N e controlla le anomalie. I pezzi si accumulano in un elenco e si registrano tutti insieme con Carica dati.</p>
   </div>
-  <div class="steps">
+  <div class="steps"><div class="infobox info"><span class="ib-icon">ℹ️</span><div class="ib-body"><strong>Riparatore e MNFT uniformati</strong>: all'ingresso la stessa ditta esce sempre con la stessa scritta (Deltacom / DeltaComGroup / DELTACOM GROUP). Riparatore: codici di Admin → Riparatori e Admin → Alias riparatori VLT (aggiungi lì le varianti); maiuscole, spazi e punteggiatura non contano. MNFT: parametro <code>mnft_alias</code> (es. DELTACOM=DELTACOMGROUP;ALCATEL=ALU) e, per le sole differenze di scrittura, la forma più usata in anagrafica.</div></div>
     <div class="step">
       <div class="step-header">
         <span class="step-num purple">1</span>
@@ -3320,7 +3320,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
     <h1 class="ch-title">ACK verso i Riparatori</h1>
     <p class="ch-desc">Le FAULTY partono verso i riparatori nei giorni del calendario uscite. La lista degli FR attesi arriva da VLT (stato Repairer Ack Received); il magazzino spunta i pezzi e genera il DDT ACK.</p>
   </div>
-  <div class="steps">
+  <div class="steps"><div class="infobox info"><span class="ib-icon">ℹ️</span><div class="ib-body"><strong>Novità ACK</strong>: <strong>⏸ Pending non spuntate</strong> (in alto nella spunta) mette in pending in un colpo tutte le schede non barcodate: un motivo per tutte, o diverso riga per riga. Una scheda già in pending da un ACK precedente non crea doppioni: resta il primo pending. <strong>✎ nota</strong> su ogni riga: la nota esce sul DDT nella colonna NOTE (finché il DDT non è emesso). Nella dashboard della spunta, accanto a SPARE FALSE, c'è la <strong>giacenza faulty</strong> totale di quel riparatore. <strong>Spunta senza pezzi</strong> (nessun ACK in lista, oppure tutte rimosse o in pending): <strong>Chiudi spunta</strong> chiede conferma e la chiude come <span class="tag">CHIUSA</span>, senza DDT né colli; se poi arrivano ACK c'è <strong>Riapri spunta</strong>. <strong>Colli facoltativi</strong>: puoi togliere i colli (✕) o svuotare misura e peso; chiudendo senza colli l'app chiede conferma e il DDT esce senza colli e peso.</div></div>
     <div class="step">
       <div class="step-header">
         <span class="step-num purple">1</span>
@@ -3631,7 +3631,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
     <h1 class="ch-title">Carichi NEW / REUSE</h1>
     <p class="ch-desc">Per far uscire NEW e REUSE in giacenza verso una destinazione con un RMA si crea un carico. I carichi aperti compaiono nelle uscite insieme alle GOOD.</p>
   </div>
-  <div class="steps">
+  <div class="steps"><div class="infobox info"><span class="ib-icon">ℹ️</span><div class="ib-body"><strong>File lavorato dal cliente</strong>: l'RMA scritto con il prefisso ("RMA 199788") viene pulito e restano solo i numeri; senza RMA il carico entra lo stesso e <strong>può uscire</strong>, il Service Desk lo aggiunge dopo (griglia carichi o Movimenti → ✎). Le righe con destinazione <strong>MADDALONI</strong> (parametro <code>carichi_dest_in_giacenza</code>) non diventano carichi: il pezzo resta in giacenza in HUB_MAGAZZINO. Righe senza destinazione: prima del carico compare un avviso da confermare. La colonna <strong>Da</strong> mostra la sigla dell'operatore. Il file per il cliente ha la colonna <strong>POSIZIONE VLT</strong> (codifica VLT dell'ubicazione) prima di POSITION, con il menu a tendina del foglio DEPOSITI VLT.</div></div>
     <div class="step">
       <div class="step-header">
         <span class="step-num purple">1</span>
@@ -3684,7 +3684,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
     <h1 class="ch-title">Uscite e DDT RMA</h1>
     <p class="ch-desc">Una scheda per ogni destinazione del giorno, con i pezzi in uscita: GOOD con RMA, BALANCING con RMA e carichi NEW/REUSE. Il magazzino inserisce colli e AWB e genera un DDT per destinazione.</p>
   </div>
-  <div class="steps">
+  <div class="steps"><div class="infobox info"><span class="ib-icon">ℹ️</span><div class="ib-body"><strong>DDT</strong>: le colonne RMA, S/N e P/N sono larghe quanto il contenuto e la NOTE va a capo se è lunga; il dettaglio colli ha lo stesso corpo dell'etichetta DETTAGLIO COLLI. <strong>Resi</strong>: il tab RMA → Resi elenca i pezzi in reso (da spedire e, con la spunta, spediti); in <strong>📤 Reso senza RMA</strong> mentre scrivi i seriali (anche separati da ;) vedi subito se sono in giacenza e, se ce n'è più di uno o il seriale è simile, scegli tu quale.</div></div>
     <div class="step">
       <div class="step-header">
         <span class="step-num purple">1</span>
@@ -3809,7 +3809,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
     <h1 class="ch-title">Giacenze e Movimenti</h1>
     <p class="ch-desc">Giacenze mostra tutto ciò che è a magazzino; Movimenti è lo storico di ingressi e uscite con l'export Easyloader per la fatturazione.</p>
   </div>
-  <div class="steps">
+  <div class="steps"><div class="infobox info"><span class="ib-icon">ℹ️</span><div class="ib-body"><strong>Movimenti</strong>: nel ✎ di un movimento puoi cambiare la <strong>data in hub</strong> (o di uscita) e, solo un admin, la <strong>data di registrazione VLT</strong>; le stesse date si cambiano anche da Giacenze → ✎ (vanno a specchio sulla scheda e sul movimento di ingresso). <strong>🗑 Annulla movimento</strong> (con la password): la riga resta nello storico come …_ANNULLATO ma non conta più (Excel Easyloader, KPI, dashboard); per un ingresso puoi togliere anche la scheda, per un'uscita rimetterla in giacenza; tutto nel LOG. <strong>⬆ Importa movimenti mancanti</strong>: l'anteprima mostra prima le righe nuove, poi i probabili doppioni, poi le saltate raggruppate per motivo. In fondo alle colonne ci sono le <strong>date di cambio stato VLT</strong> (Open, Failed Material Sent, Received and Verify, Repairer Ack Received, Sent to Repairer, Failure Report Sent, Good Material Received, KPI 6) prese dal foglio TABLEAU per FR.</div></div>
     <div class="step">
       <div class="step-header">
         <span class="step-num purple">1</span>
@@ -3879,7 +3879,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
     <h1 class="ch-title">VLT e Chiusure VLT</h1>
     <p class="ch-desc">Il tab VLT mostra il foglio FR alimentato dal server; Chiusure VLT prepara le code di chiusura che lo script Tampermonkey esegue sulla pagina VLT.</p>
   </div>
-  <div class="steps">
+  <div class="steps"><div class="infobox tip"><span class="ib-icon">💡</span><div class="ib-body">Gli <strong>esiti delle chiusure</strong> fatte da altri operatori si aggiornano da soli ogni 30 secondi mentre sei sul tab Chiusure VLT (senza ricaricare la pagina).</div></div>
     <div class="step">
       <div class="step-header">
         <span class="step-num purple">1</span>
@@ -4001,7 +4001,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
     <h1 class="ch-title">KPI e Blocchi VLT</h1>
     <p class="ch-desc">I KPI di performance calcolati dai movimenti, mese per mese, come nella presentazione BPR. Il tab KPI è per gli ADMIN; il blocco VLT lo può registrare chiunque dal tab Ingresso.</p>
   </div>
-  <div class="steps">
+  <div class="steps"><div class="infobox info"><span class="ib-icon">ℹ️</span><div class="ib-body"><strong>Date reali VLT (TABLEAU)</strong>: con la spunta attiva (di base) il KPI₁ FAULTY usa la data <em>Received and Verify</em>, il KPI₂ GOOD la data <em>Good Material Received</em> e il KPI₆ parte dalla data <em>Repairer Ack Received</em>, presi dal foglio TABLEAU che il backend carica ogni lunedì dall'export E2FR; dove la data manca resta il calcolo di prima. Accanto vedi quante schede hanno usato le date VLT. Togli la spunta per il calcolo con le sole date dell'app.</div></div>
     <div class="step">
       <div class="step-header">
         <span class="step-num purple">1</span>
