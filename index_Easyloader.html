@@ -5964,7 +5964,7 @@ var Rma = {
       var s = g.s, k = Ack.key(g.dest), cp = Rma.cp(g.dest), st = s ? s.stato : 'DA PREPARARE', done = s && s.stato === 'SPEDITA', lock = '';
       var col = done ? Ack.colliDb(s.id_spedizione).map(function (c) { return { tipo: c.tipo_collo, misura: [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X'), peso: c.peso_kg }; })
         : (Rma.colli[k] || (s ? Ack.colliDb(s.id_spedizione).map(function (c) { return { tipo: c.tipo_collo, misura: [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X'), peso: c.peso_kg }; }) : []));
-      if (!done && !Rma.colli[k]) Rma.colli[k] = col.length || (s && s.stato === 'PRONTA') ? col : [{ tipo: 'COLLO', misura: '', peso: '' }];
+      if (!done && !Rma.colli[k]) Rma.colli[k] = col.length ? col : [{ tipo: 'COLLO', misura: '', peso: '' }];
       col = done ? col : Rma.colli[k];
       var peso = col.reduce(function (a, c) { return a + (parseFloat(String(c.peso).replace(',', '.')) || 0); }, 0);
       var bt = done ? '<button class="btn sm" onclick="Rma.stampa(\'' + s.id_spedizione + '\')">Stampa DDT</button> <button class="btn ghost sm" onclick="Rma.cedolini(\'' + s.id_spedizione + '\')">Cedolini</button>' + (s.link_pdf ? ' <a class="mail" target="_blank" href="' + esc(s.link_pdf) + '">PDF su Drive</a>' : '') +
@@ -5985,7 +5985,7 @@ var Rma = {
           return '<tr><td><select class="fc" style="width:86px;padding:4px 6px" onchange="Rma.collo(\'' + k + '\',' + i + ',\'tipo\',this.value)"><option' + (c.tipo === 'COLLO' ? ' selected' : '') + '>COLLO</option><option' + (c.tipo === 'PLT' ? ' selected' : '') + '>PLT</option></select></td>' +
             '<td><input class="fc mono' + (c.misura && !L.misura(c.misura) ? ' err' : '') + '" style="width:110px;padding:4px 6px" list="dlMisure" value="' + esc(c.misura) + '" placeholder="40X30X20" onchange="Rma.collo(\'' + k + '\',' + i + ',\'misura\',this.value)"></td>' +
             '<td><input class="fc mono" style="width:64px;padding:4px 6px" inputmode="decimal" value="' + esc(c.peso) + '" placeholder="kg" onchange="Rma.collo(\'' + k + '\',' + i + ',\'peso\',this.value)"></td><td><button class="ico-btn" onclick="Rma.collo(\'' + k + '\',' + i + ',\'del\')">✕</button></td></tr>';
-        }).join('') + '</tbody></table><div class="row" style="gap:6px"><button class="btn ghost sm" onclick="Rma.collo(\'' + k + '\',0,\'add\')">+ Collo</button><button class="btn sm' + (Rma.colliSalvati(s, col) ? ' ghost' : '') + '" onclick="Rma.salvaColli(\'' + esc(g.dest) + '\')">' + (Rma.colliSalvati(s, col) ? '✓ Colli salvati' : 'Salva colli e peso') + '</button></div>') +
+        }).join('') + '</tbody></table><div class="row" style="gap:6px"><button class="btn ghost sm" onclick="Rma.collo(\'' + k + '\',0,\'add\')">+ Collo</button>' + (s && s.stato !== 'SPEDITA' && Ack.colliDb(s.id_spedizione).length && !col.some(function (c) { return L.s(c.misura) || L.s(c.peso); }) ? '<button class="btn sm red" onclick="Rma.togliColli(\'' + esc(g.dest) + '\')" title="Toglie i colli salvati: la scheda torna da preparare">🗑 Togli i colli salvati</button>' : '<button class="btn sm' + (Rma.colliSalvati(s, col) ? ' ghost' : '') + '" onclick="Rma.salvaColli(\'' + esc(g.dest) + '\')">' + (Rma.colliSalvati(s, col) ? '✓ Colli salvati' : 'Salva colli e peso') + '</button>') + '</div>') +
         '<div class="row"><div class="fg" style="flex:1;min-width:130px"><span class="fl">AWB</span><input class="fc mono" id="uawb_' + k + '" value="' + esc(Rma.awbTmp[k] !== undefined ? Rma.awbTmp[k].awb : (s ? s.awb : '')) + '"' + lock + ' oninput="var v=L.vettoreDaAwb(this.value,DB.t.VETTORI.rows);if(v)$(\'uvet_' + k + '\').value=v;Rma.awbTmp[\'' + k + '\']={awb:this.value,vet:$(\'uvet_' + k + '\').value}"></div>' +
         '<div class="fg" style="width:110px"><span class="fl">Vettore</span><input class="fc" id="uvet_' + k + '" list="dlVettori" value="' + esc(Rma.awbTmp[k] !== undefined ? Rma.awbTmp[k].vet : (s ? s.vettore : '')) + '"' + lock + ' oninput="Rma.awbTmp[\'' + k + '\']={awb:$(\'uawb_' + k + '\').value,vet:this.value}"></div>' +
         '<button class="btn sm' + (s && L.s(s.awb) && Rma.awbTmp[k] === undefined ? ' ghost' : '') + '" onclick="Rma.salvaAwbRma(\'' + esc(g.dest) + '\')">' + (s && L.s(s.awb) && Rma.awbTmp[k] === undefined ? '✓ AWB salvato' : 'Salva AWB') + '</button></div>' +
@@ -5997,9 +5997,7 @@ var Rma = {
   awbTmp: {},
   // colli già salvati e uguali a quelli a video?
   colliSalvati: function (s, col) {
-    if (!s) return false; var db = Ack.colliDb(s.id_spedizione); col = col.filter(function (x) { return L.s(x.misura) || L.s(x.peso); });
-    if (!db.length && !col.length) return s.stato === 'PRONTA';   // salvata senza colli
-    if (!db.length || db.length !== col.length) return false;
+    if (!s) return false; var db = Ack.colliDb(s.id_spedizione); if (!db.length || db.length !== col.length) return false;
     return db.every(function (c, i) { var x = col[i] || {}, m = L.misura(x.misura) || []; return L.up(c.tipo_collo) === L.up(x.tipo || 'COLLO') && String(c.lunghezza_cm) === String(m[0]) && String(c.larghezza_cm) === String(m[1]) && String(c.altezza_cm) === String(m[2]) && parseFloat(c.peso_kg) === parseFloat(String(x.peso).replace(',', '.')); });
   },
   // AWB e vettore da soli (Service Desk o magazzino): non toccano colli e peso
@@ -6020,7 +6018,7 @@ var Rma = {
     // righe collo lasciate vuote (misura e peso cancellati) = collo tolto; senza colli si salva lo stesso, dopo conferma
     var d = $('uscData').value, k = Ack.key(dest), col = (Rma.colli[k] || []).filter(function (x) { return L.s(x.misura) || L.s(x.peso); }), err = col.length ? Ack.validaColli(col) : [];
     if (err.length) { Modal.open('Colli e peso · ' + dest, err.join('\n')); return; }
-    if (!col.length && !(await Modal.confirm('Nessun collo · ' + dest, 'Salvo la scheda senza colli e peso? Il DDT uscirà senza colli e peso.'))) return;
+    if (!col.length) return Rma.togliColli(dest);
     try {
       await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_COLLI']);
       var s = Rma.sped(d, dest), cp = Rma.cp(dest), tC = DB.t.SPEDIZIONI_COLLI;
@@ -6030,16 +6028,29 @@ var Rma = {
       if (vecchi.length) await API.call(API.S + DB.id + '/values:batchClear', { method: 'POST', body: JSON.stringify({ ranges: vecchi.map(function (c) { return API.q('SPEDIZIONI_COLLI') + '!A' + c._r + ':' + L.colLetter(tC.header.length - 1) + c._r; }) }) });
       tC.rows = tC.rows.filter(function (c) { return c.id_spedizione !== s.id_spedizione; });
       var objs = col.map(function (x, i) { var m = L.misura(x.misura); return { id_spedizione: s.id_spedizione, n_collo: i + 1, tipo_collo: x.tipo || 'COLLO', lunghezza_cm: m[0], larghezza_cm: m[1], altezza_cm: m[2], peso_kg: String(x.peso).replace(',', '.') }; });
-      var upd = [];
-      if (objs.length) {
-        var r = await API.append(DB.id, 'SPEDIZIONI_COLLI', objs.map(function (o) { return tC.toRow(o); }));
-        objs.forEach(function (o, i) { o.id_collo = 'C' + L.pad(DB.rid('SPEDIZIONI_COLLI', r + i), 6); Ack.pushRow(tC, o, r + i); });
-        upd.push({ range: tC.cell('id_collo', r) + ':' + tC.col('id_collo') + (r + objs.length - 1), values: objs.map(function (o) { return [o.id_collo]; }) });
-      }
+      var r = await API.append(DB.id, 'SPEDIZIONI_COLLI', objs.map(function (o) { return tC.toRow(o); }));
+      objs.forEach(function (o, i) { o.id_collo = 'C' + L.pad(DB.rid('SPEDIZIONI_COLLI', r + i), 6); Ack.pushRow(tC, o, r + i); });
       var peso = objs.reduce(function (a, o) { return a + parseFloat(o.peso_kg); }, 0);
-      await API.batchUpdate(DB.id, upd.concat(Ack.setS(s, { stato: 'PRONTA', n_colli: objs.length, peso_tot_kg: objs.length ? Math.round(peso * 100) / 100 : '' })));
+      await API.batchUpdate(DB.id, [{ range: tC.cell('id_collo', r) + ':' + tC.col('id_collo') + (r + objs.length - 1), values: objs.map(function (o) { return [o.id_collo]; }) }]
+        .concat(Ack.setS(s, { stato: 'PRONTA', n_colli: objs.length, peso_tot_kg: Math.round(peso * 100) / 100 })));
       await API.append(DB.id, 'LOG', [App.log('RMA_COLLI', 'SPEDIZIONI', s.id_spedizione, { destinazione: dest, colli: objs.length, peso_kg: Math.round(peso * 100) / 100 })]);
       delete Rma.colli[k]; toast(dest + ': colli e peso salvati' + (L.s(s.awb) ? '' : ' · manca l\'AWB'), 'ok'); Rma.render();
+    } catch (e) { Modal.open('Errore', e.message); }
+  },
+  // colli inseriti per errore o troppo presto: si tolgono quelli salvati e la scheda torna DA PREPARARE (AWB e pezzi restano)
+  togliColli: async function (dest) {
+    var d = $('uscData').value, k = Ack.key(dest);
+    try {
+      await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_COLLI']);
+      var s = Rma.sped(d, dest), tC = DB.t.SPEDIZIONI_COLLI, vecchi = s ? Ack.colliDb(s.id_spedizione) : [];
+      if (!s || (!vecchi.length && s.stato !== 'PRONTA')) { Rma.colli[k] = [{ tipo: 'COLLO', misura: '', peso: '' }]; Rma.render(); toast(dest + ': nessun collo salvato da togliere', 'ok'); return; }
+      if (s.stato === 'SPEDITA') { toast('Già spedita', 'ko'); Rma.render(); return; }
+      if (!(await Modal.confirm('Togli colli · ' + dest, 'Tolgo i ' + vecchi.length + ' colli salvati (' + vecchi.map(function (c) { return [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X') + ' ' + c.peso_kg + ' kg'; }).join(', ') + ').\nLa scheda torna DA PREPARARE: il DDT si potrà generare quando reinserisci e salvi i colli. Pezzi e AWB restano.'))) { delete Rma.colli[k]; Rma.render(); return; }
+      if (vecchi.length) await API.call(API.S + DB.id + '/values:batchClear', { method: 'POST', body: JSON.stringify({ ranges: vecchi.map(function (c) { return API.q('SPEDIZIONI_COLLI') + '!A' + c._r + ':' + L.colLetter(tC.header.length - 1) + c._r; }) }) });
+      tC.rows = tC.rows.filter(function (c) { return c.id_spedizione !== s.id_spedizione; });
+      await API.batchUpdate(DB.id, Ack.setS(s, { stato: 'BOZZA', n_colli: '', peso_tot_kg: '' }));
+      await API.append(DB.id, 'LOG', [App.log('RMA_COLLI_TOLTI', 'SPEDIZIONI', s.id_spedizione, { destinazione: dest, colli: vecchi.map(function (c) { return { tipo: c.tipo_collo, misura: [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X'), peso_kg: c.peso_kg }; }) })]);
+      delete Rma.colli[k]; toast(dest + ': colli tolti, la scheda torna da preparare', 'ok'); Rma.render();
     } catch (e) { Modal.open('Errore', e.message); }
   },
   creaSped: async function (d, dest, cp) {
