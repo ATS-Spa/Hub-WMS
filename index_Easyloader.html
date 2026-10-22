@@ -4478,13 +4478,22 @@ var Ack = {
     }
     Ack._nb = nb; Ack._nbS = s;
     // pezzi presenti (ACK pending aperti del riparatore + spare false di questa spunta) che NON hanno la scheda in giacenza
-    var mc = [], visti = {}, inMag = {}, mag = {};
-    DB.t.UNITA.rows.forEach(function (u) { if (Giacenze.A_MAG.indexOf(u.stato) >= 0) { if (u.fr) inMag['F' + u.fr] = 1; inMag['S' + L.up(u.seriale)] = 1; } });
+    var mc = [], visti = {}, inMag = {}, mag = {}, altrove = [], qd = { pend: 0, pendDup: 0, sf: 0, comuni: 0, conScheda: 0 };
+    var inU = {}; U.forEach(function (u) { inU[u.id_unita] = 1; });
+    DB.t.UNITA.rows.forEach(function (u) { if (Giacenze.A_MAG.indexOf(u.stato) >= 0) { if (u.fr) inMag['F' + u.fr] = u; inMag['S' + L.up(u.seriale)] = u; } });
     var pres = Ack.pending(cod).map(function (p) { return { fonte: 'ACK pending', fr: L.s(p.fr), seriale: L.s(p.seriale), pn: L.s(p.pn), nota: L.s(p.motivo) }; })
       .concat(s ? Ack.spareFalse(s.id_spedizione).map(function (a) { return { fonte: 'spare false', fr: L.s(a.fr), seriale: L.s(a.seriale), pn: '', nota: L.s(a.descrizione) }; }) : []);
     pres.forEach(function (x) {
-      var k = x.fr ? 'F' + x.fr : 'S' + L.up(x.seriale); if (visti[k]) return; visti[k] = 1;
-      if ((x.fr && inMag['F' + x.fr]) || (x.seriale && inMag['S' + L.up(x.seriale)])) return;
+      var k = x.fr ? 'F' + x.fr : 'S' + L.up(x.seriale);
+      if (visti[k]) { if (visti[k] === x.fonte) qd.pendDup++; else qd.comuni++; return; } visti[k] = x.fonte;
+      if (x.fonte === 'ACK pending') qd.pend++; else qd.sf++;
+      var su = (x.fr && inMag['F' + x.fr]) || (x.seriale && inMag['S' + L.up(x.seriale)]);
+      if (su) {
+        if (inU[su.id_unita]) { qd.conScheda++; return; }
+        // c'è la scheda a magazzino ma non è contata qui: riparatore (da VLT) o tipo diversi
+        var v2 = su.fr && DB.vltMap[su.fr]; altrove.push({ x: x, u: su, rip: v2 && L.s(v2.riparatore) ? v2.riparatore : su.riparatore });
+        return;
+      }
       var stessa = function (o) { return (x.fr && L.s(o.fr) === x.fr) || (x.seriale && L.up(o.seriale) === L.up(x.seriale)); };
       var tolte = DB.t.UNITA.rows.filter(function (u) { return (u.stato === 'ANNULLATO' || u.stato === 'RETTIFICATO') && stessa(u); }).sort(function (a, b) { return b._r - a._r; });
       var M = (Sto.dati.cur || []).filter(function (m) { return (m.direzione === 'IN' || m.direzione === 'OUT') && !Sto.annullato(m) && stessa(m); }).sort(function (a, b) { return L.s(a.data_ora).localeCompare(L.s(b.data_ora)); });
@@ -4495,7 +4504,7 @@ var Ack = {
       var o = { x: x, v: v, avv: avv, u: tolte[0] || null, m: mi || null };
       o.azione = o.u ? 'RIATTIVA' : (o.m ? 'CREA' : 'RETT'); mc.push(o);
     });
-    Ack._mc = mc;
+    Ack._mc = mc; Ack._alt = altrove;
     Ack._gd = U.map(function (u) { var v = u.fr && DB.vltMap[u.fr]; return [u.id_unita, u.seriale, u.fr, u.pn, u.stato, v ? v.stato : '', cat(u), u.ubicazione, L.itDate(u.data_in), pend[u.fr] ? pend[u.fr].motivo : '']; });
     Modal.html('Giacenza FAULTY · ' + cod + ' (' + U.length + ')',
       '<div class="hint" style="margin-bottom:8px">Sono tutte le FAULTY a magazzino per questo riparatore (stato scheda In giacenza, Bloccata, In lavorazione o In attesa), <b>qualunque sia lo stato su VLT</b>. La spunta ACK invece mostra solo gli FR in "' + esc(c.statoAck) + '": per questo il numero è più alto dei pezzi barcodati.</div>' +
@@ -4504,6 +4513,11 @@ var Ack = {
         (nb.length ? '<div class="tbl-wrap" style="max-height:26vh"><table><thead><tr><th><input type="checkbox" id="nbTutti"></th><th>ID</th><th>Seriale</th><th>FR</th><th>Stato scheda</th><th>Stato VLT</th><th>Ubicazione</th><th>Entrata</th><th>Note</th></tr></thead><tbody>' +
           nb.map(function (u, i) { var v = u.fr && DB.vltMap[u.fr], pre = L.normDate(u.data_in) < L.normDate(s.data); return '<tr><td><input type="checkbox" class="nbSel" data-i="' + i + '"' + (sc ? '' : ' disabled') + '></td><td class="mono">' + esc(u.id_unita) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.fr) + '</td><td>' + esc(u.stato) + '</td><td>' + esc(v ? v.stato : '') + '</td><td>' + esc(u.ubicazione) + '</td><td>' + esc(L.itDate(u.data_in)) + '</td><td style="font-size:11px">' + esc(L.s(u.note).slice(0, 80)) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '') +
         (nb.length && sc && App.isAdmin ? '<div class="row" style="gap:8px;margin-top:8px;align-items:flex-end"><div class="fg" style="flex:1"><span class="fl">Motivo</span><input class="fc" id="nbMot" value="non barcodato alla spunta ACK ' + esc(s.destinatario) + ' del ' + esc(L.itDate(s.data)) + '"></div><button class="btn red sm" onclick="Ack.rettNb()">🗑 Rettifica: togli le spuntate dalla giacenza</button></div>' : (nb.length && sc ? '<div class="hint" style="margin-top:6px">La rettifica la fa un admin.</div>' : '')) +
+        '<div class="card" style="padding:8px 12px;margin:12px 0 6px;font-size:12.5px;line-height:1.7"><b>Quadratura</b> · presenti a scaffale = ACK pending aperti <b>' + qd.pend + '</b>' + (qd.pendDup ? ' (+' + qd.pendDup + ' pending doppi sullo stesso FR, contati una volta)' : '') + ' + spare false <b>' + qd.sf + '</b>' + (qd.comuni ? ' (' + qd.comuni + ' erano anche in pending, contati una volta)' : '') + ' = <b>' + (qd.pend + qd.sf) + '</b>.<br>' +
+          'Di questi: con scheda contata qui <b>' + qd.conScheda + '</b> · con scheda a magazzino ma <b>contata su un altro riparatore o tipo</b> <b style="color:var(--amber)">' + altrove.length + '</b> · senza scheda <b style="color:var(--amber)">' + mc.length + '</b>.<br>' +
+          'Giacenza qui ' + U.length + ' = presenti con scheda ' + qd.conScheda + ' + non barcodate ' + nb.length + '.' +
+          (altrove.length ? '<details style="margin-top:4px"><summary style="cursor:pointer">Vedi i ' + altrove.length + ' contati altrove</summary><div class="tbl-wrap" style="max-height:20vh;margin-top:4px"><table><thead><tr><th>Fonte</th><th>FR</th><th>Seriale</th><th>Scheda</th><th>Tipo</th><th>Riparatore (VLT/scheda)</th></tr></thead><tbody>' +
+            altrove.map(function (a) { return '<tr><td>' + esc(a.x.fonte) + '</td><td class="mono">' + esc(a.x.fr) + '</td><td class="mono">' + esc(a.x.seriale) + '</td><td class="mono">' + esc(a.u.id_unita) + '</td><td>' + esc(a.u.tipo) + '</td><td>' + esc(a.rip) + '</td></tr>'; }).join('') + '</tbody></table></div></details>' : '') + '</div>' +
         '<div style="font-size:13px;margin:14px 0 6px"><b style="color:var(--amber)">Presenti ma senza scheda in giacenza: ' + mc.length + '</b> (ACK pending aperti di ' + esc(s.destinatario) + ' e spare false di questa spunta). Per ognuno: <b>rimetto</b> la scheda tolta (annullata/rettificata), oppure <b>creo</b> la scheda collegata al suo movimento di ingresso, oppure, se non c\'è nessun ingresso, la aggiungo con <b>rettifica</b> (dati da VLT). Le righe con avvisi partono senza spunta.</div>' +
         (mc.length ? '<div class="tbl-wrap" style="max-height:26vh"><table><thead><tr><th><input type="checkbox" id="mcTutti"></th><th>Fonte</th><th>FR</th><th>Seriale</th><th>Stato VLT</th><th>Cosa faccio</th><th>Avvisi</th></tr></thead><tbody>' +
           mc.map(function (o, i) { var az = o.azione === 'RIATTIVA' ? 'rimetto la scheda ' + o.u.id_unita + ' (' + o.u.stato + ')' : (o.azione === 'CREA' ? 'creo la scheda dal movimento ' + o.m.id_mov + ' del ' + L.itDate(o.m.data_ora) : 'aggiungo con rettifica (nessun ingresso)');
