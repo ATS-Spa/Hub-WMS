@@ -4434,6 +4434,31 @@ var Ack = {
       App.syncInfo(); Ack.renderDet(); Ack.giacDett(cod);
     } catch (e) { Modal.open('Errore', e.message + '\n\nRiapri il dettaglio: i pezzi già sistemati non vengono riproposti.'); }
   },
+  // mail al Service Desk con le anomalie della spunta (tutti gli spare false): stato e riparatore su VLT, nota, scheda
+  mailAnomalie: function (id) {
+    var s = Ack.byId(id); if (!s) return;
+    var A = Ack.spareFalse(id); if (!A.length) { toast('Nessuno spare false in questa spunta', 'ok'); return; }
+    var c = Ack.cfg(), k = App._k(App.ripNoto(s.destinatario) || s.destinatario), mag = {};
+    DB.t.UNITA.rows.forEach(function (u) { if (Giacenze.A_MAG.indexOf(u.stato) >= 0) { if (u.fr) mag['F' + u.fr] = u; mag['S' + L.up(u.seriale)] = u; } });
+    var R = A.map(function (a) {
+      var v = a.fr && DB.vltMap[a.fr], u = (a.fr && mag['F' + a.fr]) || mag['S' + L.up(a.seriale)] || null, ripV = v ? L.s(v.riparatore) : '';
+      var gr = !v ? 'FR non trovato su VLT' : (ripV && App._k(App.ripNoto(ripV) || ripV) !== k ? 'Riparatore su VLT diverso' : 'Stato VLT non da ACK');
+      var chi = gr === 'Riparatore su VLT diverso' ? 'il pezzo è con le FAULTY di ' + s.destinatario + ': correggere il riparatore su VLT o metterlo in pending' : (gr === 'FR non trovato su VLT' ? 'verificare l\'FR' : 'sistemare lo stato su VLT ("' + (v ? v.stato : '') + '") perché possa partire con l\'ACK');
+      return { gr: gr, fr: a.fr, ser: a.seriale, pn: (v && v.f_mat_tmpn) || (u && u.pn) || '', st: v ? v.stato : '', rip: ripV, sch: u ? u.id_unita : '', ubi: u ? u.ubicazione : '', nota: [L.s(v && v.note), L.s(u && u.note).split(' | fonte:')[0]].filter(function (x, i, arr) { return x && arr.indexOf(x) === i; }).join(' · '), letto: L.vedi(L.s(a.data).slice(0, 16)), chi: chi };
+    });
+    var ORD = ['Riparatore su VLT diverso', 'Stato VLT non da ACK', 'FR non trovato su VLT'];
+    R.sort(function (a, b) { return ORD.indexOf(a.gr) - ORD.indexOf(b.gr) || L.s(a.st).localeCompare(L.s(b.st)); });
+    var subj = 'Anomalie FAULTY ACK ' + s.destinatario + ' del ' + L.itDate(s.data) + ' - ' + R.length + (R.length === 1 ? ' pezzo' : ' pezzi');
+    var intro = 'Ciao Ragazzi,\n\nnella spunta ACK di ' + s.destinatario + ' del ' + L.itDate(s.data) + ' abbiamo letto questi pezzi FAULTY che non erano nella lista ACK (stato "' + c.statoAck + '"): sono fisicamente in hub con le FAULTY di ' + s.destinatario + ' ma non sono partiti. Ci sistemate VLT?\n\n';
+    var body = intro + ORD.map(function (g) { var X = R.filter(function (x) { return x.gr === g; }); return X.length ? g.toUpperCase() + ' (' + X.length + ')\n' + X.map(function (x) { return x.fr + ' | ' + x.ser + ' | ' + x.pn + ' | VLT: ' + x.st + ' | riparatore VLT: ' + x.rip + (x.sch ? ' | ' + x.sch : '') + (x.ubi ? ' | ' + x.ubi : '') + (x.nota ? ' | ' + x.nota : '') + ' | ' + x.chi; }).join('\n') + '\n\n' : ''; }).join('') + 'Grazie';
+    var e = function (x) { return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+    var th = 'style="background:#1f4e79;color:#fff;padding:5px 8px;border:1px solid #8ea9c1;text-align:left"', td = 'style="padding:5px 8px;border:1px solid #b7c7d6;vertical-align:top"';
+    var html = '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">' + e(intro).replace(/\n/g, '<br>') +
+      ORD.map(function (g) { var X = R.filter(function (x) { return x.gr === g; }); if (!X.length) return '';
+        return '<b style="color:#1f4e79">' + e(g) + ' (' + X.length + ')</b><table style="border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:10pt;margin:4px 0 14px"><tr>' + ['#', 'FR', 'Seriale', 'P/N', 'Stato VLT', 'Riparatore VLT', 'Scheda', 'Ubicazione', 'Nota', 'Letto', 'Cosa chiediamo'].map(function (h) { return '<th ' + th + '>' + h + '</th>'; }).join('') + '</tr>' +
+          X.map(function (x, i) { return '<tr' + (i % 2 ? ' style="background:#f2f6fa"' : '') + '>' + [i + 1, '<b>' + e(x.fr) + '</b>', e(x.ser), e(x.pn), e(x.st), e(x.rip), e(x.sch), e(x.ubi), e(x.nota), e(x.letto), e(x.chi)].map(function (v) { return '<td ' + td + '>' + v + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>'; }).join('') + 'Grazie</div>';
+    Mail.apri('ingresso', subj, body, function () { API.append(DB.id, 'LOG', [App.log('ACK_MAIL_ANOMALIE', 'SPEDIZIONI', id, { riparatore: s.destinatario, pezzi: R.length, fr: R.map(function (x) { return x.fr; }) })]).catch(function () { }); }, html);
+  },
   // rettifica in blocco delle FAULTY a sistema ma non barcodate nella spunta (solo admin)
   rettNb: async function () {
     if (!App.isAdmin) return;
@@ -4520,7 +4545,9 @@ var Ack = {
     });
     Ack._mc = mc; Ack._alt = altrove;
     Ack._gd = U.map(function (u) { var v = u.fr && DB.vltMap[u.fr]; return [u.id_unita, u.seriale, u.fr, u.pn, u.stato, v ? v.stato : '', cat(u), u.ubicazione, L.itDate(u.data_in), pend[u.fr] ? pend[u.fr].motivo : '']; });
+    var nSf = s ? Ack.spareFalse(s.id_spedizione).length : 0;
     Modal.html('Giacenza FAULTY · ' + cod + ' (' + U.length + ')',
+      (nSf ? '<div class="row" style="align-items:center;margin-bottom:8px"><span style="color:var(--amber);font-weight:600">⚠ risultano ' + nSf + ' FAULTY con anomalie (spare false della spunta)</span><div class="spacer"></div><button class="btn ghost sm" onclick="Ack.mailAnomalie(\'' + s.id_spedizione + '\')">✉ Mail anomalie SD</button></div>' : '') +
       '<div class="hint" style="margin-bottom:8px">Sono tutte le FAULTY a magazzino per questo riparatore (stato scheda In giacenza, Bloccata, In lavorazione o In attesa), <b>qualunque sia lo stato su VLT</b>. La spunta ACK invece mostra solo gli FR in "' + esc(c.statoAck) + '": per questo il numero è più alto dei pezzi barcodati.</div>' +
       (s ? '<div class="card" style="padding:10px 12px;margin-bottom:10px"><div style="font-size:13px;margin-bottom:6px"><b>Confronto con il barcodato</b> della spunta del ' + esc(L.itDate(s.data)) + ': a sistema <b>' + U.length + '</b> · presenti oggi con scheda <b>' + qd.conScheda + '</b> · <b style="color:var(--red)">non presenti oggi ' + nb.length + '</b> (non spuntate, non spare false, oppure rimosse con un motivo come \'non trovato\').' +
         (sc ? ' Se il barcodato è giusto, queste non sono a scaffale: spunta e togli con <b>rettifica</b> (escono dalla giacenza come RETTIFICATO, movimento interno e Log; non è un\'uscita). Vale <b>solo se avete barcodato tutte le FAULTY di questo riparatore</b> presenti a scaffale (quelle fuori lista diventano spare false); controlla le date di entrata: un pezzo entrato dopo la spunta non poteva essere barcodato.' : ' <span style="color:var(--amber)">La spunta è ancora aperta: chiudila prima di confrontare.</span>') + '</div>' +
@@ -5459,7 +5486,7 @@ var Ack = {
         return '<tr class="' + cls + '"><td class="mono">' + esc(r.fr) + '</td><td class="mono">' + esc(r.seriale) + (L.s(r.nota_ddt) ? '<div style="font-size:11px;color:var(--blue)">📝 ' + esc(r.nota_ddt) + '</div>' : '') + '</td><td class="mono">' + esc(r.pn) + '</td><td style="font-size:11.5px;color:var(--subtle)">' + esc(v ? v.stato : '') + (v && v.note ? ' · ' + esc(v.note) : '') + '</td>' +
           '<td>' + (r.flag_vlt ? '<span class="pill ' + (r.flag_vlt === 'BAN' ? 'p-amber' : 'p-violet') + '">' + esc(r.flag_vlt) + '</span>' : '') + '</td><td>' + es + (r.esito === 'RIMOSSO' && Ack.pendingDi(r) ? '<div style="font-size:11px;color:var(--amber);margin-top:3px">' + esc(Ack.pendingDi(r).motivo) + '</div>' : '') + '</td><td style="font-size:11.5px">' + (r.id_unita ? esc(r.id_unita) : '<span style="color:var(--amber)">non in giacenza</span>') + '</td><td>' + act + '</td></tr>';
       }).join('') : '<tr><td colspan="8" class="empty">Nessun FR in stato ACK per questo riparatore</td></tr>') + '</tbody></table></div>';
-    if (sf.length) html += '<div class="card-h" style="margin-top:14px"><div class="card-t" style="font-size:15px;color:var(--red)">SPARE FALSE · letti ma non in lista (non si spediscono, finiscono nell\'export FR da chiudere)</div></div>' +
+    if (sf.length) html += '<div class="card-h" style="margin-top:14px"><div class="card-t" style="font-size:15px;color:var(--red)">SPARE FALSE · letti ma non in lista (non si spediscono, finiscono nell\'export FR da chiudere)</div><div class="spacer"></div><button class="btn ghost sm" onclick="Ack.mailAnomalie(\'' + s.id_spedizione + '\')" title="Mail al Service Desk con tutti gli spare false: stato e riparatore su VLT, nota, scheda e ubicazione">✉ Mail anomalie SD</button></div>' +
       '<div class="tbl-wrap" style="max-height:30vh"><table><thead><tr><th>FR</th><th>Seriale</th><th>Descrizione</th><th>Letto</th><th></th></tr></thead><tbody>' +
       sf.map(function (a, i) { return '<tr class="r-err"><td class="mono">' + esc(a.fr) + '</td><td class="mono">' + esc(a.seriale) + '</td><td style="font-size:11.5px">' + esc(a.descrizione) + '</td><td class="mono" style="font-size:11px">' + esc(a.data) + '</td><td class="nw">' + (edit ? (Ack.sfUnita(a) ? '<button class="btn ghost sm" title="Stato cambiato (es. su VLT dopo le 7:00): mettilo comunque in uscita con un motivo" onclick="Ack.sfInAck(' + i + ')">➕ Metti in ACK</button> ' : '') + '<button class="ico-btn" title="Letto per errore" onclick="Ack.annullaSf(' + i + ')">✕</button>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>';
     // colli
