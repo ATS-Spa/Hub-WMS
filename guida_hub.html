@@ -303,6 +303,26 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
 #panel-e .tm-logo,#panel-e .tm-btn{white-space:nowrap}
 #panel-e .topbar-mock{flex-wrap:wrap}
 @media(max-width:780px){.mod-switcher{overflow-x:auto}.mod-btn{flex-shrink:0;white-space:nowrap}}
+
+/* ── RICERCA NELLA GUIDA ed EXPORT WORD ── */
+.gs-wrap{margin-left:auto;display:flex;align-items:center;gap:8px;padding-right:14px;position:relative}
+.gs-in{width:300px;max-width:42vw;background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--text);font-family:var(--ff);font-size:13px;padding:7px 10px;outline:none}
+.gs-in:focus{border-color:var(--blue)}
+.gs-word{background:var(--card);border:1px solid var(--border);border-radius:8px;color:var(--subtle);font-family:var(--ff);font-size:12.5px;padding:7px 12px;cursor:pointer;white-space:nowrap}
+.gs-word:hover{color:var(--text);border-color:var(--blue)}
+.gs-word[disabled]{opacity:.6;cursor:progress}
+.gs-res{display:none;position:absolute;top:44px;right:14px;width:min(560px,92vw);max-height:70vh;overflow:auto;background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 14px 36px rgba(0,0,0,.45);z-index:500}
+.gs-res.show{display:block}
+.gs-item{padding:9px 12px;border-bottom:1px solid var(--border);cursor:pointer}
+.gs-item:last-child{border-bottom:none}
+.gs-item.on,.gs-item:hover{background:var(--card)}
+.gs-path{font-size:10.5px;color:var(--muted);font-family:var(--ffm);letter-spacing:.3px}
+.gs-tit{font-size:13.5px;font-weight:600;color:var(--text);margin:2px 0}
+.gs-snip{font-size:12px;color:var(--subtle);line-height:1.45}
+.gs-snip mark,.gs-tit mark,mark.gs-mark{background:rgba(245,158,11,.35);color:inherit;border-radius:2px;padding:0 1px}
+.gs-none{padding:14px;font-size:12.5px;color:var(--muted)}
+.gs-hit{outline:2px solid var(--amber);outline-offset:4px;border-radius:8px;transition:outline-color 1.5s}
+@media(max-width:780px){.gs-in{width:150px}.gs-word span{display:none}}
 </style>
 </head>
 <body>
@@ -313,6 +333,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
   <button class="mod-btn" id="mbtn-s" onclick="switchModule('s')"><span class="mod-icon">📦</span>Spedizioni AWB</button>
   <button class="mod-btn" id="mbtn-g" onclick="switchModule('g')"><span class="mod-icon">🟢</span>GRN Manager</button>
   <button class="mod-btn" id="mbtn-e" onclick="switchModule('e')"><span class="mod-icon">🚚</span>Fastweb FLM</button>
+  <div class="gs-wrap"><input class="gs-in" id="gsQ" placeholder="🔎 Cerca nella guida…  ( / )" autocomplete="off" oninput="GS.digita()" onkeydown="GS.tasti(event)" onfocus="if(this.value)GS.digita()"><div class="gs-res" id="gsRes"></div><button class="gs-word" id="gsWord" onclick="GW.esporta()" title="Scarica il modulo aperto come documento Word (.docx) impaginato">⬇ <span>Word</span></button></div>
 </div>
 
 <div class="layout">
@@ -3101,7 +3122,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
         </div>
       </div>
       <div class="step-detail"><div class="gtbl"><div class="gtbl-head" style="display:flex"><div class="gtbl-th" style="flex:1">Scheda</div><div class="gtbl-th" style="flex:1">A cosa serve</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">Ingresso</div><div class="gtbl-cell" style="flex:1">Registrare i pezzi che arrivano (FAULTY, GOOD, NEW, REUSE, BALANCING, RESO, SCRAP)</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">ACK</div><div class="gtbl-cell" style="flex:1">Spunta e DDT delle FAULTY in uscita verso i riparatori</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">RMA</div><div class="gtbl-cell" style="flex:1">Inventario giornaliero GOOD, ritorni in giacenza, carichi NEW/REUSE, uscite e DDT RMA</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">Balancing</div><div class="gtbl-cell" style="flex:1">Previsioni di arrivo delle balancing inserite dal Service Desk</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">Carichi NEW/REUSE</div><div class="gtbl-cell" style="flex:1">Pratiche NEW/REUSE: file al Service Desk e ritorno lavorato</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">Juniper</div><div class="gtbl-cell" style="flex:1">Pratiche fuori processo Juniper (faulty via UPS, GOOD in sostituzione)</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">Giacenze</div><div class="gtbl-cell" style="flex:1">Tutto ciò che è a magazzino, con modifica dei dati del pezzo</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">VLT</div><div class="gtbl-cell" style="flex:1">Il foglio FR di VLT, con rettifiche ed etichette</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">Chiusure VLT</div><div class="gtbl-cell" style="flex:1">Code di chiusura su VLT eseguite dallo script Tampermonkey</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">Movimenti</div><div class="gtbl-cell" style="flex:1">Storico ingressi/uscite ed export Easyloader per la fatturazione</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">Dashboard · KPI · Log · Anagrafiche · Admin</div><div class="gtbl-cell" style="flex:1">Statistiche, KPI di performance, registro delle operazioni, articoli e configurazione</div></div></div></div>
-    </div><div class="infobox info"><span class="ib-icon">ℹ️</span><div class="ib-body">Ogni operazione che scrive dati (ingresso, modifica, uscita, pending, import…) viene registrata nel <strong>Log</strong> con utente, data e valori prima/dopo.</div></div><div class="infobox tip"><span class="ib-icon">💡</span><div class="ib-body"><strong>Chi è online e chat</strong>: in alto a destra i pallini con le sigle di chi sta usando l'app (passaci sopra per vedere su quale tab; bordo arancio = palmarino). Se un collega ha aperta la tua stessa spunta ACK compare l'avviso <em>Aperta anche da…</em>. Il pulsante <strong>💬</strong> apre la chat: <strong># Generale</strong> per tutti oppure un collega per i messaggi diretti (pallino verde = online); Invio manda, Maiusc+Invio va a capo. Il numero rosso sono i messaggi non letti; quando arriva un messaggio compare un avviso (con suono, disattivabile) e, se la pagina è in secondo piano, la notifica del browser. I messaggi arrivano in pochi secondi (non è istantanea come WhatsApp) e si cancellano dopo i giorni del parametro <code>chat_giorni</code> (90). Sul palmarino la chat è spenta (parametro <code>chat_palmarino</code>).</div></div>
+    </div><div class="infobox info"><span class="ib-icon">ℹ️</span><div class="ib-body">Ogni operazione che scrive dati (ingresso, modifica, uscita, pending, import…) viene registrata nel <strong>Log</strong> con utente, data e valori prima/dopo.</div></div><div class="infobox tip"><span class="ib-icon">💡</span><div class="ib-body"><strong>Chi è online e chat</strong>: in alto a destra i pallini con le sigle di chi sta usando l'app (passaci sopra per vedere su quale tab; bordo arancio = palmarino). Se un collega ha aperta la tua stessa spunta ACK compare l'avviso <em>Aperta anche da…</em>. Il pulsante <strong>💬</strong> apre la chat: <strong># Generale</strong> per tutti oppure un collega per i messaggi diretti (nome come <em>Francesco.C</em>, pallino verde = online); Invio manda, Maiusc+Invio va a capo. Passando sopra un tuo messaggio compaiono ✎ e 🗑: si può modificare o eliminare entro i minuti del parametro <code>chat_modifica_min</code> (5); gli altri vedono <em>modificato</em> o <em>messaggio eliminato</em>. Il bordo sinistro della chat si trascina per allargarla o stringerla (la larghezza resta salvata). Scrivendo <em>FR 132456</em>, <em>RMA 213822</em> o <em>DDT 440</em> il riferimento diventa un link che apre Movimenti con la ricerca fatta; nel ✎ di una scheda o di un movimento il pulsante <strong>📎 in chat</strong> apre la chat con il riferimento già scritto. Il numero rosso sono i messaggi non letti; quando arriva un messaggio compare un avviso (con suono, disattivabile) e, se la pagina è in secondo piano, la notifica del browser. I messaggi arrivano in pochi secondi (non è istantanea come WhatsApp) e si cancellano dopo i giorni del parametro <code>chat_giorni</code> (90). Sul palmarino la chat è spenta (parametro <code>chat_palmarino</code>).</div></div><div class="infobox tip"><span class="ib-icon">💡</span><div class="ib-body"><strong>🔔 Proposte da confermare</strong> (accanto alla chat, con il numero): il sistema confronta schede e movimenti con il file FR di VLT e propone: <strong>FR in Aborted</strong> (schede in magazzino e movimenti IN/OUT) → FR più recente dello stesso seriale (esclusi Aborted, Draft e Close), con la nota <em>FR … ABORTED</em>; <strong>schede in attesa di FR</strong> e <strong>schede FAULTY senza FR</strong> → FR trovato su VLT con le regole <code>pending_fr_stati</code> / <code>pending_fr_giorni</code>. Vedi l'anteprima (FR attuale → nuovo, stato VLT, nota), spunti e <strong>Conferma</strong>: le schede non passano a tuo nome (modificato da AUTO VLT), resta tutto nel LOG. <strong>🏷 Etichette delle spuntate</strong> stampa le etichette con il FR nuovo; <strong>Scarta</strong> toglie le proposte sbagliate (non ricompaiono). Il controllo gira da solo ogni 5 minuti.</div></div><div class="infobox tip"><span class="ib-icon">💡</span><div class="ib-body"><strong>Temi</strong>: dal menu in alto scegli il colore dell'app (resta salvato su quel browser). Scuri: Scuro, Dim, Grafite, SAP, Oceano, Foresta, Ametista, Carbone; chiari: Chiaro, Avorio, Salvia, Rovere, Celeste, Lavanda, Perla.</div></div>
   </div>
   <div class="nav-btns">
     <button class="nbtn prev" disabled>← Indietro</button>
@@ -3809,7 +3830,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
     <h1 class="ch-title">Giacenze e Movimenti</h1>
     <p class="ch-desc">Giacenze mostra tutto ciò che è a magazzino; Movimenti è lo storico di ingressi e uscite con l'export Easyloader per la fatturazione.</p>
   </div>
-  <div class="steps"><div class="infobox info"><span class="ib-icon">ℹ️</span><div class="ib-body"><strong>Movimenti</strong>: nel ✎ di un movimento puoi cambiare la <strong>data in hub</strong> (o di uscita) e, solo un admin, la <strong>data di registrazione VLT</strong>; le stesse date si cambiano anche da Giacenze → ✎ (vanno a specchio sulla scheda e sul movimento di ingresso). <strong>🗑 Annulla movimento</strong> (con la password): la riga resta nello storico come …_ANNULLATO ma non conta più (Excel Easyloader, KPI, dashboard); per un ingresso puoi togliere anche la scheda, per un'uscita rimetterla in giacenza; tutto nel LOG. <strong>⬆ Importa movimenti mancanti</strong>: l'anteprima mostra prima le righe nuove, poi i probabili doppioni, poi le saltate raggruppate per motivo. In fondo alle colonne ci sono le <strong>date di cambio stato VLT</strong> (Open, Failed Material Sent, Received and Verify, Repairer Ack Received, Sent to Repairer, Failure Report Sent, Good Material Received, KPI 6) prese dal foglio TABLEAU per FR. Nelle uscite, accanto a RMA, c'è la <strong>Data creazione RMA</strong> (data apertura dell'RMA su VLT, foglio RMA_DATE scritto dal backend). Queste date <strong>si salvano nei movimenti</strong> (colonne vlt_… e data_creazione_rma) appena compaiono e si aggiornano con ogni nuovo file, senza mai cancellarle: restano anche quando l'FR o l'RMA esce dall'export VLT; il salvataggio avviene in sottofondo, senza bloccare. <strong>KPI 6 (VLT)</strong> è il valore del file TABLEAU: giorni di calendario da Received and Verify a Sent to Repairer + 2 (verificato su tutte le righe del file). Tutte le date nelle tabelle sono nel formato <strong>gg/mm/aaaa</strong> (con l'ora quando c'è). In tutte le tabelle, <strong>scorrendo verso il fondo</strong> si caricano da sole altre righe (resta anche <em>mostra altre</em>).</div></div>
+  <div class="steps"><div class="infobox info"><span class="ib-icon">ℹ️</span><div class="ib-body"><strong>Movimenti</strong>: nel ✎ di un movimento puoi cambiare la <strong>data in hub</strong> (o di uscita) e, solo un admin, la <strong>data di registrazione VLT</strong>; le stesse date si cambiano anche da Giacenze → ✎ (vanno a specchio sulla scheda e sul movimento di ingresso). <strong>🗑 Annulla movimento</strong> (con la password): la riga resta nello storico come …_ANNULLATO ma non conta più (Excel Easyloader, KPI, dashboard); per un ingresso puoi togliere anche la scheda, per un'uscita rimetterla in giacenza; tutto nel LOG. <strong>⬆ Importa movimenti mancanti</strong>: l'anteprima mostra prima le righe nuove, poi i probabili doppioni, poi le saltate raggruppate per motivo. In fondo alle colonne ci sono le <strong>date di cambio stato VLT</strong> (Open, Failed Material Sent, Received and Verify, Repairer Ack Received, Sent to Repairer, Failure Report Sent, Good Material Received, KPI 6) prese dal foglio TABLEAU per FR. Nelle uscite, accanto a RMA, c'è la <strong>Data creazione RMA</strong> (data apertura dell'RMA su VLT, foglio RMA_DATE scritto dal backend). Queste date <strong>si salvano nei movimenti</strong> (colonne vlt_… e data_creazione_rma) appena compaiono e si aggiornano con ogni nuovo file, senza mai cancellarle: restano anche quando l'FR o l'RMA esce dall'export VLT; il salvataggio avviene in sottofondo, senza bloccare. <strong>KPI 6 (VLT)</strong> è il valore del file TABLEAU: giorni di calendario da Received and Verify a Sent to Repairer + 2 (verificato su tutte le righe del file). Tutte le date nelle tabelle sono nel formato <strong>gg/mm/aaaa</strong> (con l'ora quando c'è). <strong>🏷 Etichette</strong> (in Movimenti e in Giacenze) stampa un'etichetta 10×5 per ogni riga che vedi con filtri e ricerca. In tutte le tabelle, <strong>scorrendo verso il fondo</strong> si caricano da sole altre righe (resta anche <em>mostra altre</em>).</div></div>
     <div class="step">
       <div class="step-header">
         <span class="step-num purple">1</span>
@@ -4092,7 +4113,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
           <div class="step-body">Da modificare con attenzione:</div>
         </div>
       </div>
-      <div class="step-detail"><div class="gtbl"><div class="gtbl-head" style="display:flex"><div class="gtbl-th" style="flex:1">Parametro</div><div class="gtbl-th" style="flex:1">Uso</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">ddt_ack_prossimo / ddt_rma_prossimo</div><div class="gtbl-cell" style="flex:1">Numerazione DDT</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">rma_cifre</div><div class="gtbl-cell" style="flex:1">Cifre RMA: 6 oggi, poi "6,7"</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">chat_giorni</div><div class="gtbl-cell" style="flex:1">Giorni dopo cui i messaggi della chat si cancellano (90)</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">chat_palmarino</div><div class="gtbl-cell" style="flex:1">SI per attivare la chat sul palmarino (NO)</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">rma_ritorni_giorni</div><div class="gtbl-cell" style="flex:1">Ritorni in giacenza più vecchi di questi giorni lavorativi: non si vedono e non si propongono (3)</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">rma_giorni_scadenza</div><div class="gtbl-cell" style="flex:1">Giorni lavorativi di scadenza dei ritorni (4)</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">rma_vlt_foglio</div><div class="gtbl-cell" style="flex:1">Foglio dei ritorni automatici (RMA; "-" = spento)</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">password_eliminazione</div><div class="gtbl-cell" style="flex:1">Password admin per eliminare pratiche</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">ruoli</div><div class="gtbl-cell" style="flex:1">Ruoli della tendina operatori</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">vlt_stati_fr_da_chiudere</div><div class="gtbl-cell" style="flex:1">Stati delle FAULTY nell'export FR da chiudere</div></div></div></div>
+      <div class="step-detail"><div class="gtbl"><div class="gtbl-head" style="display:flex"><div class="gtbl-th" style="flex:1">Parametro</div><div class="gtbl-th" style="flex:1">Uso</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">ddt_ack_prossimo / ddt_rma_prossimo</div><div class="gtbl-cell" style="flex:1">Numerazione DDT</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">rma_cifre</div><div class="gtbl-cell" style="flex:1">Cifre RMA: 6 oggi, poi "6,7"</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">chat_giorni</div><div class="gtbl-cell" style="flex:1">Giorni dopo cui i messaggi della chat si cancellano (90)</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">chat_palmarino</div><div class="gtbl-cell" style="flex:1">SI per attivare la chat sul palmarino (NO)</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">chat_modifica_min</div><div class="gtbl-cell" style="flex:1">Minuti per modificare o eliminare un proprio messaggio in chat (5)</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">rma_ritorni_giorni</div><div class="gtbl-cell" style="flex:1">Ritorni in giacenza più vecchi di questi giorni lavorativi: non si vedono e non si propongono (3)</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">rma_giorni_scadenza</div><div class="gtbl-cell" style="flex:1">Giorni lavorativi di scadenza dei ritorni (4)</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">rma_vlt_foglio</div><div class="gtbl-cell" style="flex:1">Foglio dei ritorni automatici (RMA; "-" = spento)</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">password_eliminazione</div><div class="gtbl-cell" style="flex:1">Password admin per eliminare pratiche</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">ruoli</div><div class="gtbl-cell" style="flex:1">Ruoli della tendina operatori</div></div><div class="gtbl-row"><div class="gtbl-cell mono" style="flex:1">vlt_stati_fr_da_chiudere</div><div class="gtbl-cell" style="flex:1">Stati delle FAULTY nell'export FR da chiudere</div></div></div></div>
     </div>
     <div class="step">
       <div class="step-header">
@@ -4332,6 +4353,274 @@ function updateProgress(mod) {
 updateSidebarActive('p', 0);
 updateProgress('p');
 if (/easyloader/i.test(location.hash)) switchModule('e');
+
+// ── RICERCA NELLA GUIDA ─────────────────────────
+// cerca in tutti i moduli (titoli dei capitoli e dei passi, testi, riquadri, tabelle); senza accenti, parole a metà, più parole = tutte
+var GS = {
+  idx: null, res: [], sel: -1,
+  SIN: {
+    elimina: ['annulla', 'storno', 'storna', 'rettifica', 'togli', 'cancella', 'rimuovi'], annulla: ['elimina', 'storno', 'storna', 'cancella'],
+    cancella: ['elimina', 'annulla', 'togli'], storno: ['storna', 'annulla', 'rientr'], togli: ['rimuovi', 'elimina'],
+    etichett: ['stampa', 'cedolin', 'etichette'], stampa: ['etichett', 'pdf', 'cedolin'],
+    fr: ['failure report'], ddt: ['documento di trasporto', 'bolla', 'bollettazione'], awb: ['vettore', 'tracking'],
+    giacenza: ['magazzino', 'scheda', 'giacenze'], magazzino: ['giacenza', 'scaffale', 'ubicazione'],
+    chat: ['messaggi', 'messaggio'], online: ['presenze', 'collegati'], password: ['pin', 'accesso'], login: ['accesso', 'account'],
+    errore: ['problema', 'avviso', 'non riuscito'], modifica: ['cambia', 'correggi', 'aggiorna'], importa: ['import', 'carica', 'caricamento'],
+    esporta: ['export', 'excel', 'scarica'], excel: ['export', 'xlsx', 'scarica'], riparatore: ['repairer', 'ack'], pending: ['in attesa', 'sospeso']
+  },
+  norm: function (s) { return String(s || '').toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, '').replace(/\s+/g, ' ').trim(); },
+  testo: function (el) { if (!el) return ''; var c = el.cloneNode(true); c.querySelectorAll('.mockup,.topbar-mock,.nav-btns,script,style').forEach(function (x) { x.remove(); }); c.querySelectorAll('br').forEach(function (x) { x.replaceWith(' '); }); return c.textContent.replace(/\s+/g, ' ').trim(); },
+  modNome: function (m) { var b = document.getElementById('mbtn-' + m); if (!b) return m; var c = b.cloneNode(true); c.querySelectorAll('.mod-icon').forEach(function (x) { x.remove(); }); return ({ e: 'ATS - Fastweb FLM' })[m] || c.textContent.replace(/\s+/g, ' ').trim(); },
+  indicizza: function () {
+    var out = [];
+    document.querySelectorAll('.module-panel').forEach(function (p) {
+      var mod = p.id.replace('panel-', '');
+      p.querySelectorAll('.chapter').forEach(function (ch) {
+        var ci = parseInt(ch.id.split('-ch-')[1], 10), chT = GS.testo(ch.querySelector('.ch-title'));
+        out.push({ mod: mod, ch: ci, el: ch.querySelector('.chapter-header') || ch, chT: chT, tit: chT, txt: GS.testo(ch.querySelector('.chapter-header')), liv: 1 });
+        ch.querySelectorAll('.step').forEach(function (st) {
+          var t = GS.testo(st.querySelector('.step-title'));
+          out.push({ mod: mod, ch: ci, el: st, chT: chT, tit: t, txt: GS.testo(st), liv: 2 });
+        });
+        // riquadri fuori dai passi
+        ch.querySelectorAll('.infobox').forEach(function (b) { if (b.closest('.step')) return; out.push({ mod: mod, ch: ci, el: b, chT: chT, tit: chT + ' · nota', txt: GS.testo(b), liv: 3 }); });
+      });
+    });
+    out.forEach(function (o) { o.nTit = GS.norm(o.tit); o.nTxt = GS.norm(o.txt); o.nCh = GS.norm(o.chT); });
+    GS.idx = out;
+  },
+  varianti: function (t) {
+    var v = [t]; Object.keys(GS.SIN).forEach(function (k) { if (t.indexOf(k) === 0 || k.indexOf(t) === 0 && t.length >= 4) v = v.concat(GS.SIN[k].map(GS.norm)); });
+    return v;
+  },
+  cerca: function (q) {
+    if (!GS.idx) GS.indicizza();
+    var T = GS.norm(q).split(' ').filter(function (x) { return x.length >= 2; }); if (!T.length) return [];
+    var V = T.map(GS.varianti), R = [];
+    GS.idx.forEach(function (o) {
+      var sc = 0;
+      for (var i = 0; i < V.length; i++) {
+        var best = 0;
+        V[i].forEach(function (w, j) { var pes = j ? 0.6 : 1; if (o.nTit.indexOf(w) >= 0) best = Math.max(best, 6 * pes); else if (o.nCh.indexOf(w) >= 0) best = Math.max(best, 3 * pes); else if (o.nTxt.indexOf(w) >= 0) best = Math.max(best, 1 * pes); });
+        if (!best) return; sc += best;
+      }
+      if (o.mod === activeModule) sc += 0.5; if (o.liv === 2) sc += 0.3;
+      R.push({ o: o, sc: sc });
+    });
+    R.sort(function (a, b) { return b.sc - a.sc; });
+    return { R: R.slice(0, 25).map(function (x) { return x.o; }), parole: [].concat.apply([], V) };
+  },
+  esc: function (s) { return String(s).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); },
+  evid: function (testo, parole) {
+    // evidenzia le parole (senza accenti) mantenendo il testo originale
+    var n = GS.norm(testo), segni = [];
+    parole.forEach(function (w) { if (!w) return; var i = n.indexOf(w); while (i >= 0) { segni.push([i, i + w.length]); i = n.indexOf(w, i + w.length); } });
+    if (!segni.length || n.length !== testo.replace(/\s+/g, ' ').trim().length) return GS.esc(testo);
+    var t = testo.replace(/\s+/g, ' ').trim(); segni.sort(function (a, b) { return a[0] - b[0]; });
+    var out = '', p = 0; segni.forEach(function (s) { if (s[0] < p) return; out += GS.esc(t.slice(p, s[0])) + '<mark>' + GS.esc(t.slice(s[0], s[1])) + '</mark>'; p = s[1]; });
+    return out + GS.esc(t.slice(p));
+  },
+  snip: function (o, parole) {
+    var t = o.txt, n = GS.norm(t), i = -1;
+    parole.some(function (w) { i = n.indexOf(w); return i >= 0; });
+    if (i < 0) return GS.esc(t.slice(0, 160)) + (t.length > 160 ? '…' : '');
+    var a = Math.max(0, i - 60), b = Math.min(t.length, i + 140);
+    return (a ? '…' : '') + GS.evid(t.slice(a, b), parole) + (b < t.length ? '…' : '');
+  },
+  digita: function () {
+    var q = document.getElementById('gsQ').value, box = document.getElementById('gsRes');
+    if (GS.norm(q).length < 2) { box.classList.remove('show'); return; }
+    var r = GS.cerca(q); GS.res = r.R; GS.parole = r.parole; GS.sel = r.R.length ? 0 : -1;
+    box.innerHTML = r.R.length ? r.R.map(function (o, i) {
+      return '<div class="gs-item' + (i === GS.sel ? ' on' : '') + '" onmousedown="GS.vai(' + i + ')"><div class="gs-path">' + GS.esc(GS.modNome(o.mod)) + ' › ' + GS.esc(o.chT) + '</div><div class="gs-tit">' + GS.evid(o.tit, r.parole) + '</div><div class="gs-snip">' + GS.snip(o, r.parole) + '</div></div>';
+    }).join('') : '<div class="gs-none">Nessun risultato per "' + GS.esc(q) + '". Prova con meno parole o un sinonimo.</div>';
+    box.classList.add('show');
+  },
+  tasti: function (ev) {
+    var box = document.getElementById('gsRes'), n = GS.res.length;
+    if (ev.key === 'Escape') { box.classList.remove('show'); ev.target.blur(); return; }
+    if (!n) return;
+    if (ev.key === 'ArrowDown' || ev.key === 'ArrowUp') {
+      ev.preventDefault(); GS.sel = (GS.sel + (ev.key === 'ArrowDown' ? 1 : -1) + n) % n;
+      box.querySelectorAll('.gs-item').forEach(function (x, i) { x.classList.toggle('on', i === GS.sel); if (i === GS.sel) x.scrollIntoView({ block: 'nearest' }); });
+    }
+    if (ev.key === 'Enter') { ev.preventDefault(); GS.vai(GS.sel < 0 ? 0 : GS.sel); }
+  },
+  vai: function (i) {
+    var o = GS.res[i]; if (!o) return;
+    document.getElementById('gsRes').classList.remove('show');
+    if (activeModule !== o.mod) switchModule(o.mod);
+    goto(o.mod, o.ch);
+    setTimeout(function () {
+      var el = o.el; var top = el.getBoundingClientRect().top + window.scrollY - 70;
+      window.scrollTo({ top: Math.max(0, top), behavior: 'smooth' });
+      el.classList.add('gs-hit'); GS.marca(el, GS.parole);
+      setTimeout(function () { el.classList.remove('gs-hit'); GS.smarca(el); }, 4500);
+    }, 120);
+  },
+  marca: function (el, parole) {
+    var W = parole.filter(function (w) { return w && w.length >= 2; }); if (!W.length) return;
+    var tw = document.createTreeWalker(el, NodeFilter.SHOW_TEXT, null), nodi = [], n;
+    while ((n = tw.nextNode())) { if (n.parentNode.closest('.mockup,.topbar-mock,mark')) continue; nodi.push(n); }
+    nodi.forEach(function (t) {
+      var s = t.nodeValue, ns = GS.norm(s); if (ns.length !== s.toLowerCase().length) return;   // testo con caratteri composti: niente evidenziazione
+      var low = s.toLowerCase().normalize('NFD').replace(/[̀-ͯ]/g, ''), seg = [];
+      W.forEach(function (w) { var i = low.indexOf(w); while (i >= 0) { seg.push([i, i + w.length]); i = low.indexOf(w, i + w.length); } });
+      if (!seg.length) return; seg.sort(function (a, b) { return a[0] - b[0]; });
+      var f = document.createDocumentFragment(), p = 0;
+      seg.forEach(function (g) { if (g[0] < p) return; f.appendChild(document.createTextNode(s.slice(p, g[0]))); var m = document.createElement('mark'); m.className = 'gs-mark'; m.textContent = s.slice(g[0], g[1]); f.appendChild(m); p = g[1]; });
+      f.appendChild(document.createTextNode(s.slice(p))); t.parentNode.replaceChild(f, t);
+    });
+  },
+  smarca: function (el) { el.querySelectorAll('mark.gs-mark').forEach(function (m) { m.replaceWith(document.createTextNode(m.textContent)); }); el.normalize(); }
+};
+document.addEventListener('keydown', function (ev) {
+  var a = document.activeElement; if (a && /INPUT|TEXTAREA/.test(a.tagName)) return;
+  if (ev.key === '/' || (ev.ctrlKey && ev.key.toLowerCase() === 'k')) { ev.preventDefault(); document.getElementById('gsQ').focus(); }
+});
+document.addEventListener('click', function (ev) { if (!ev.target.closest('.gs-wrap')) document.getElementById('gsRes').classList.remove('show'); });
+
+// ── EXPORT WORD (.docx) DEL MODULO APERTO ───────
+// copertina, indice, intestazione con il modulo, piè di pagina "Pagina X di Y"; capitoli → Titolo 1, passi → Titolo 2,
+// riquadri → paragrafi ombreggiati, elenchi puntati, tabelle; i disegni delle schermate (mockup) non si esportano
+var GW = {
+  lib: function () {
+    if (window.docx) return Promise.resolve(window.docx);
+    return new Promise(function (ok, ko) { var s = document.createElement('script'); s.src = 'https://cdn.jsdelivr.net/npm/docx@8.5.0/build/index.umd.js'; s.onload = function () { ok(window.docx); }; s.onerror = function () { ko(new Error('libreria Word non scaricata (connessione?)')); }; document.head.appendChild(s); });
+  },
+  BOX: { tip: ['Suggerimento', 'E8F5E9', '2E7D32'], warn: ['Attenzione', 'FFF4E5', 'B45309'], info: ['Nota', 'E8F1FB', '1D4ED8'], danger: ['Importante', 'FDECEC', 'B91C1C'] },
+  esporta: async function () {
+    var b = document.getElementById('gsWord'), lab = b.innerHTML; b.disabled = true; b.innerHTML = '⏳ Preparo il Word…';
+    try {
+      var D = await GW.lib(), mod = activeModule, nome = GS.modNome(mod), panel = document.getElementById('panel-' + mod);
+      var oggi = new Date(), dt = ('0' + oggi.getDate()).slice(-2) + '/' + ('0' + (oggi.getMonth() + 1)).slice(-2) + '/' + oggi.getFullYear();
+      var corpo = [];
+      panel.querySelectorAll('.chapter').forEach(function (ch, ci) {
+        var tit = GS.testo(ch.querySelector('.ch-title')), tag = GS.testo(ch.querySelector('.ch-tag')), desc = ch.querySelector('.ch-desc');
+        corpo.push(new D.Paragraph({ text: (ci + 1) + '. ' + tit, heading: D.HeadingLevel.HEADING_1, pageBreakBefore: ci > 0 }));
+        if (tag) corpo.push(new D.Paragraph({ children: [new D.TextRun({ text: tag, color: '7A869A', size: 18, italics: true })], spacing: { after: 120 } }));
+        if (desc) corpo.push(new D.Paragraph({ children: GW.runs(D, desc, {}), spacing: { after: 200 } }));
+        ch.querySelectorAll(':scope > *').forEach(function (x) { if (!x.classList.contains('chapter-header')) GW.blocchi(D, x, corpo); });
+      });
+      var doc = new D.Document({
+        creator: 'ATS Spa', title: 'Guida ' + nome, description: 'Guida operativa ' + nome,
+        features: { updateFields: true },
+        styles: {
+          default: { document: { run: { font: 'Calibri', size: 21, color: '1F2937' }, paragraph: { spacing: { after: 100 } } } },
+          paragraphStyles: [
+            { id: 'Heading1', name: 'Heading 1', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: { size: 34, bold: true, color: '1F3864', font: 'Calibri' }, paragraph: { spacing: { before: 120, after: 120 } } },
+            { id: 'Heading2', name: 'Heading 2', basedOn: 'Normal', next: 'Normal', quickFormat: true, run: { size: 26, bold: true, color: '2E5597', font: 'Calibri' }, paragraph: { spacing: { before: 260, after: 80 }, keepNext: true } }
+          ]
+        },
+        numbering: { config: [{ reference: 'pallini', levels: [{ level: 0, format: D.LevelFormat.BULLET, text: '•', alignment: D.AlignmentType.LEFT, style: { paragraph: { indent: { left: 540, hanging: 260 } } } }, { level: 1, format: D.LevelFormat.BULLET, text: '–', alignment: D.AlignmentType.LEFT, style: { paragraph: { indent: { left: 1000, hanging: 260 } } } }] }] },
+        sections: [
+          { properties: { page: { margin: { top: 1440, bottom: 1440, left: 1300, right: 1300 } } },
+            children: [
+              new D.Paragraph({ spacing: { before: 3000 }, children: [new D.TextRun({ text: 'WMS · Guida', size: 28, color: '7A869A' })] }),
+              new D.Paragraph({ spacing: { after: 200 }, children: [new D.TextRun({ text: nome, size: 64, bold: true, color: '1F3864' })] }),
+              new D.Paragraph({ children: [new D.TextRun({ text: 'Guida operativa per gli utenti', size: 28, color: '374151' })] }),
+              new D.Paragraph({ spacing: { before: 600 }, children: [new D.TextRun({ text: 'ATS Spa · aggiornata al ' + dt, size: 22, color: '7A869A' })] }),
+              new D.Paragraph({ children: [new D.PageBreak()] }),
+              new D.Paragraph({ children: [new D.TextRun({ text: 'Indice', size: 34, bold: true, color: '1F3864' })], spacing: { after: 200 } }),
+              new D.TableOfContents('Indice', { hyperlink: true, headingStyleRange: '1-2' }),
+              new D.Paragraph({ children: [new D.TextRun({ text: 'Se l\'indice è vuoto: tasto destro sull\'indice → Aggiorna campo.', size: 16, color: '9CA3AF', italics: true })] })
+            ] },
+          { properties: { page: { margin: { top: 1300, bottom: 1300, left: 1300, right: 1300 }, pageNumbers: { start: 1 } } },
+            headers: { default: new D.Header({ children: [new D.Paragraph({ alignment: D.AlignmentType.RIGHT, border: { bottom: { color: 'C7CED9', size: 6, style: D.BorderStyle.SINGLE, space: 4 } }, children: [new D.TextRun({ text: 'Guida · ' + nome, size: 16, color: '7A869A' })] })] }) },
+            footers: { default: new D.Footer({ children: [new D.Paragraph({ alignment: D.AlignmentType.CENTER, children: [new D.TextRun({ children: ['Pagina ', D.PageNumber.CURRENT, ' di ', D.PageNumber.TOTAL_PAGES], size: 16, color: '7A869A' })] })] }) },
+            children: corpo }
+        ]
+      });
+      var blob = await D.Packer.toBlob(doc), a = document.createElement('a');
+      a.href = URL.createObjectURL(blob); a.download = 'Guida ' + nome.replace(/[\\/:*?"<>|]/g, '_') + ' ' + dt.replace(/\//g, '-') + '.docx';
+      document.body.appendChild(a); a.click(); setTimeout(function () { URL.revokeObjectURL(a.href); a.remove(); }, 2000);
+      window._gwUltimo = { nome: a.download, size: blob.size, paragrafi: corpo.length };
+    } catch (e) { alert('Export Word non riuscito: ' + e.message); }
+    finally { b.disabled = false; b.innerHTML = lab; }
+  },
+  // testo inline → TextRun (grassetto, corsivo, codice)
+  runs: function (D, el, f) {
+    var out = [];
+    el.childNodes.forEach(function (n) {
+      if (n.nodeType === 3) { var t = n.nodeValue.replace(/\s+/g, ' '); if (t) out.push(new D.TextRun(Object.assign({ text: t }, f))); return; }
+      if (n.nodeType !== 1 || n.matches('.mockup,.topbar-mock,.nav-btns,script,style')) return;
+      var tg = n.tagName, g = Object.assign({}, f);
+      if (tg === 'BR') { out.push(new D.TextRun({ text: '', break: 1 })); return; }
+      if (tg === 'STRONG' || tg === 'B' || n.classList.contains('tag') || n.classList.contains('fm-btn')) g.bold = true;
+      if (tg === 'EM' || tg === 'I') g.italics = true;
+      if (tg === 'CODE' || tg === 'KBD' || n.classList.contains('mono')) { g.font = 'Consolas'; g.size = 19; g.color = '0F4C81'; }
+      if (n.classList.contains('step-num') || n.classList.contains('ib-icon')) return;
+      out = out.concat(GW.runs(D, n, g));
+    });
+    // spazi doppi ai bordi
+    return out;
+  },
+  BLK: 'DIV,P,UL,OL,TABLE,H1,H2,H3,H4,SECTION',
+  haBlocchi: function (el) { for (var i = 0; i < el.children.length; i++) { var c = el.children[i]; if (GW.BLK.indexOf(c.tagName) >= 0 && !c.classList.contains('fm-btn')) return true; } return false; },
+  blocchi: function (D, el, out, liv) {
+    if (el.nodeType !== 1 || el.matches('.mockup,.topbar-mock,.nav-btns,script,style')) return;
+    var c = el.classList;
+    if (c.contains('step')) {
+      var num = GS.testo(el.querySelector('.step-num')), tit = el.querySelector('.step-title');
+      out.push(new D.Paragraph({ heading: D.HeadingLevel.HEADING_2, children: [new D.TextRun({ text: (num ? num + '. ' : '') + GS.testo(tit) })] }));
+      var body = el.querySelector('.step-body'); if (body) GW.blocchi(D, body, out);
+      var det = el.querySelector('.step-detail'); if (det) GW.blocchi(D, det, out);
+      return;
+    }
+    if (c.contains('infobox')) {
+      var k = ['tip', 'warn', 'info', 'danger'].find(function (x) { return c.contains(x); }) || 'info', B = GW.BOX[k];
+      out.push(new D.Paragraph({ shading: { type: D.ShadingType.CLEAR, fill: B[1], color: 'auto' }, border: { left: { color: B[2], size: 18, style: D.BorderStyle.SINGLE, space: 8 } }, indent: { left: 200, right: 120 }, spacing: { before: 120, after: 160 },
+        children: [new D.TextRun({ text: B[0] + ': ', bold: true, color: B[2] })].concat(GW.runs(D, el.querySelector('.ib-body') || el, {})) }));
+      return;
+    }
+    if (c.contains('filters-mock')) {
+      var bt = [].slice.call(el.querySelectorAll('.fm-btn')).map(function (x) { return '[' + x.textContent.trim() + ']'; });
+      var cp = [].slice.call(el.querySelectorAll('.fm-label')).map(function (x) { return x.textContent.trim(); });
+      var t = (bt.length ? 'Pulsanti: ' + bt.join('  ') : '') + (cp.length ? (bt.length ? ' · ' : '') + 'Campi: ' + cp.join(', ') : '');
+      if (t) out.push(new D.Paragraph({ children: [new D.TextRun({ text: t, italics: true, color: '4B5563', size: 19 })] }));
+      return;
+    }
+    if (c.contains('gtbl') || el.tagName === 'TABLE') { GW.tabella(D, el, out); return; }
+    if (el.tagName === 'UL' || el.tagName === 'OL') {
+      [].slice.call(el.children).forEach(function (li) {
+        var sub = li.querySelector('ul,ol');
+        out.push(new D.Paragraph({ numbering: { reference: 'pallini', level: liv ? 1 : 0 }, children: GW.runs(D, sub ? (function () { var x = li.cloneNode(true); x.querySelectorAll('ul,ol').forEach(function (y) { y.remove(); }); return x; })() : li, {}) }));
+        if (sub) GW.blocchi(D, sub, out, 1);
+      });
+      return;
+    }
+    if (!GW.haBlocchi(el)) { var r = GW.runs(D, el, {}); if (r.length && el.textContent.trim()) out.push(new D.Paragraph({ children: r })); return; }
+    // contenitore misto: testo sciolto in un paragrafo, blocchi a parte
+    var buf = [];
+    var flush = function () { if (buf.length) { var tmp = document.createElement('span'); buf.forEach(function (n) { tmp.appendChild(n.cloneNode(true)); }); if (tmp.textContent.trim()) out.push(new D.Paragraph({ children: GW.runs(D, tmp, {}) })); buf = []; } };
+    el.childNodes.forEach(function (n) { if (n.nodeType === 1 && GW.BLK.indexOf(n.tagName) >= 0 && !n.classList.contains('fm-btn')) { flush(); GW.blocchi(D, n, out, liv); } else buf.push(n); });
+    flush();
+  },
+  tabella: function (D, el, out) {
+    var righe = [];
+    if (el.tagName === 'TABLE') el.querySelectorAll('tr').forEach(function (tr, i) { righe.push({ h: i === 0 && !!tr.querySelector('th'), c: [].slice.call(tr.children) }); });
+    else {
+      var h = el.querySelector('.gtbl-head'); if (h) righe.push({ h: true, c: [].slice.call(h.children) });
+      el.querySelectorAll('.gtbl-row').forEach(function (r) { righe.push({ h: false, c: [].slice.call(r.children) }); });
+    }
+    if (!righe.length) return;
+    var n = Math.max.apply(null, righe.map(function (r) { return r.c.length; }));
+    var bordo = { style: D.BorderStyle.SINGLE, size: 4, color: 'C7CED9' };
+    out.push(new D.Table({
+      width: { size: 100, type: D.WidthType.PERCENTAGE },
+      borders: { top: bordo, bottom: bordo, left: bordo, right: bordo, insideHorizontal: bordo, insideVertical: bordo },
+      rows: righe.map(function (r) {
+        return new D.TableRow({ tableHeader: r.h, children: Array.from({ length: n }, function (_, i) {
+          var cel = r.c[i];
+          return new D.TableCell({ shading: r.h ? { fill: 'E5EAF2', type: D.ShadingType.CLEAR, color: 'auto' } : undefined, margins: { top: 60, bottom: 60, left: 100, right: 100 },
+            children: [new D.Paragraph({ children: cel ? GW.runs(D, cel, r.h ? { bold: true } : {}) : [] })] });
+        }) });
+      })
+    }));
+    out.push(new D.Paragraph({ text: '' }));
+  }
+};
+
 </script>
 </body>
 </html>
