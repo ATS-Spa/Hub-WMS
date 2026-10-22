@@ -5263,7 +5263,7 @@ var Rma = {
     return d ? d.destinazione : r.deposito_dest_rma;
   },
   annullaImport: function () {
-    var att = Rma.attivi(), ids = {}; att.forEach(function (r) { ids[r.id_rma] = 1; });
+    var att = Rma.attivi(true), ids = {}; att.forEach(function (r) { ids[r.id_rma] = 1; });
     var ass = Rma.inventario().filter(function (u) { return L.s(u.rma) && ids[L.s(u.rma)]; });
     Modal.html('Annulla import ritorni',
       '<div style="font-size:13px;line-height:1.6">Annullo i <b>' + att.length + '</b> RMA dell\'ultimo import (' + esc(Rma.ultimoImport()) + ').<br>Non saranno più proposti come RMA giacenza; restano nel foglio come ANNULLATI e tornano attivi se li reimporti.</div>' +
@@ -5311,9 +5311,14 @@ var Rma = {
     if (u) return 'RMA ' + rma + ' già usato su ' + u.seriale + ' verso ' + Rma.dv(u, 'dest');
     return '';
   },
-  attivi: function () {
+  // ritorni aperti dell'ultimo import; senza "tutti" restano fuori i più vecchi di N giorni lavorativi (non si vedono e non si propongono)
+  attivi: function (tutti) {
     var ult = Rma.ultimoImport();
-    return DB.t.RMA_RITORNI.rows.filter(function (r) { return r.importato_il === ult && (r.stato === 'DA_EVADERE' || r.stato === 'ASSEGNATA') && DB.daQuestAnno(r.data_apertura); });
+    return DB.t.RMA_RITORNI.rows.filter(function (r) { return r.importato_il === ult && (r.stato === 'DA_EVADERE' || r.stato === 'ASSEGNATA') && DB.daQuestAnno(r.data_apertura) && (tutti || !Rma.vecchio(r)); });
+  },
+  vecchio: function (r) {
+    var n = parseInt(DB.param('rma_ritorni_giorni', '3'), 10); if (!(n > 0)) return false;
+    var d = L.normDate(r.data_apertura); return !!d && /^\d{4}-/.test(d) && L.workday(d, n) < L.isoToday();
   },
   // GOOD/BALANCING in giacenza; le GOOD Juniper entrano solo quando la pratica le mette in uscita ("📦 Metti GOOD in uscita RMA");
   // i pezzi in reso escono a parte (senza RMA)
@@ -5391,9 +5396,9 @@ var Rma = {
     var imp = '<label class="btn ghost sm" style="cursor:pointer" title="CSV esportato da VLT: Ritorni in giacenza">⬆ Importa CSV ritorni<input type="file" accept=".csv,.txt" style="display:none" onchange="Rma.importa(this)"></label>';
     var au = Rma.ultimoAuto();
     imp = '<button class="btn ghost sm" onclick="Rma.autoVlt(true)" title="Rilegge il foglio RMA scritto ogni mattina dal backend (rma.csv: To Ship From CW, senza i Minore)">🔄 Ritorni da VLT</button> ' + imp;
-    var info = '<div class="hint" style="margin-top:8px">' + (ult ? 'Ultimo import ritorni: ' + esc(ult) + (au ? ' (automatico, rma.csv del ' + esc(au) + ')' : '') + ' · ' + Rma.attivi().length + ' RMA aperte dal ' + esc(L.itDate(DB.dataInizio())) : 'Nessun import ritorni: carica il CSV esportato da VLT.') + '</div>';
+    var info = '<div class="hint" style="margin-top:8px">' + (ult ? 'Ultimo import ritorni: ' + esc(ult) + (au ? ' (automatico, rma.csv del ' + esc(au) + ')' : '') + ' · ' + Rma.attivi().length + ' RMA aperte dal ' + esc(L.itDate(DB.dataInizio())) + (function () { var v = Rma.attivi(true).length - Rma.attivi().length; return v ? ' · ' + v + ' più vecchie di ' + (parseInt(DB.param('rma_ritorni_giorni', '3'), 10) || 3) + ' giorni lavorativi nascoste (non si propongono)' : ''; })() : 'Nessun import ritorni: carica il CSV esportato da VLT.') + '</div>';
     var xl = ' <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button>';
-    var ann = Rma.attivi().length ? ' <button class="btn ghost sm" onclick="Rma.annullaImport()" title="Annulla i ritorni dell\'ultimo import (es. file sbagliato): poi puoi caricarne uno nuovo">🗑 Annulla import ritorni</button>' : '';
+    var ann = Rma.attivi(true).length ? ' <button class="btn ghost sm" onclick="Rma.annullaImport()" title="Annulla i ritorni dell\'ultimo import (es. file sbagliato): poi puoi caricarne uno nuovo">🗑 Annulla import ritorni</button>' : '';
     var xr = ' <button class="btn ghost sm" onclick="Rma.excelRma()" title="Schede filtrate da far compilare al Service Desk (RMA creato e nuova destinazione), poi da reimportare">⬇ Excel RMA</button>' +
       ' <label class="btn ghost sm" style="cursor:pointer" title="Reimporta l Excel RMA compilato: anteprima e anomalie prima di confermare">⬆ Importa RMA<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Rma.importaRma(this)"></label>';
     if (s === 'inv') return '<div class="row" style="justify-content:flex-end">' + imp + ann + xl + xr + ' <button class="btn ghost sm" onclick="Rma.etichette()" title="Etichetta 10x5 solo per le schede con variazione di destino (tra le righe filtrate)">🏷 Etichette RMA</button>' + (Rma.ieri().length ? ' <button class="btn sm" onclick="Rma.associaIeri()" title="Gli RMA giacenza aperti ieri diventano RMA creato; i più vecchi li controlla il Service Desk">✓ Associa RMA di ieri (' + Rma.ieri().length + ')</button>' : '') + ' <button class="btn sm" ' + (nD ? '' : 'disabled') + ' onclick="Rma.salva()">Salva modifiche' + (nD ? ' (' + nD + ')' : '') + '</button></div>' + info;
@@ -5492,13 +5497,13 @@ var Rma = {
     if (s === 'rit') {
       var byRma = function () { var m = {}; Object.keys(Rma.abb).forEach(function (k) { m[Rma.abb[k].rma.id_rma] = k; }); return m; };
       Rma.grids.rit = new Grid('rmaRit', Object.assign({}, base, {
-        empty: 'Nessuna RMA aperta: importa il CSV dei ritorni in giacenza esportato da VLT', sort: 'data_scadenza',
+        empty: 'Nessuna RMA aperta negli ultimi ' + (parseInt(DB.param('rma_ritorni_giorni', '3'), 10) || 3) + ' giorni lavorativi (le più vecchie non si mostrano e non si propongono)', sort: 'data_scadenza',
         rows: function () { Rma._byRma = byRma(); return Rma.attivi(); },
         rowAttr: function (r) { return Rma._byRma[r.id_rma] ? '' : 'class="r-warn"'; },
         cols: [
           { k: 'id_rma', label: 'RMA', filter: 'text', cls: 'mono' },
           { k: 'data_apertura', label: 'Data open', cls: 'mono' },
-          { k: 'data_scadenza', label: 'Scadenza', cls: 'mono', html: function (r) { return '<span' + (r.data_scadenza && r.data_scadenza < oggi() ? ' style="color:var(--red)"' : '') + '>' + esc(r.data_scadenza) + '</span>'; } },
+          { k: 'data_scadenza', label: 'Scadenza', cls: 'mono', html: function (r) { return '<span' + (r.data_scadenza && r.data_scadenza < oggi() ? ' style="color:var(--red)"' : '') + '>' + esc(L.vedi(r.data_scadenza)) + '</span>'; } },
           { k: 'material', label: 'Material', filter: 'select', cls: 'mono' },
           { k: 'pnc', label: 'P/N cercato', filter: 'select', cls: 'mono', get: function (r) { return Rma.lk.pnByMat[Rma.mk(r.material)] || ''; } },
           { k: 'descrizione', label: 'Descrizione', filter: 'text' },
@@ -5857,7 +5862,7 @@ var Rma = {
         else { o.stato = 'DA_EVADERE'; o.rev = 1; nuove.push(o); }
       });
       // backend senza ritorni oggi: quelli dell'ultimo import non sono più in To Ship From CW
-      if (!recs.length) Rma.attivi().forEach(function (r) { r.stato = 'NON_IN_VLT'; tolti.push(r.id_rma); upd.push({ range: t.cell('stato', r._r), values: [['NON_IN_VLT']] }); });
+      if (!recs.length) Rma.attivi(true).forEach(function (r) { r.stato = 'NON_IN_VLT'; tolti.push(r.id_rma); upd.push({ range: t.cell('stato', r._r), values: [['NON_IN_VLT']] }); });
       if (upd.length) await API.batchUpdate(DB.id, upd);
       if (nuove.length) { var r0 = await API.append(DB.id, 'RMA_RITORNI', nuove.map(function (o) { return t.toRow(o); })); nuove.forEach(function (o, i) { Ack.pushRow(t, o, r0 + i); }); }
       if (recs.length || tolti.length) await API.append(DB.id, 'LOG', [App.log(auto ? 'IMPORT_RITORNI_AUTO' : 'IMPORT_RITORNI', 'RMA_RITORNI', nome, { righe: recs.length, nuove: nuove.length, aggiornate: upd.length - tolti.length, non_piu_in_vlt: tolti, estratto_il: auto || undefined })]);
