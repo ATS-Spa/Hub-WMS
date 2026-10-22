@@ -51,6 +51,26 @@ button{font-family:var(--ff-sans)}
 .topbar-logo span{color:var(--subtle);font-weight:600}
 .topbar-right{margin-left:auto;display:flex;align-items:center;gap:10px}
 .sync{font-size:11px;color:var(--muted);font-family:var(--ff-mono)}
+.pres{display:flex;align-items:center;padding-left:6px}
+.pres-av{width:24px;height:24px;border-radius:50%;background:var(--card);border:2px solid var(--green);font-size:9px;font-weight:700;display:flex;align-items:center;justify-content:center;color:var(--text);margin-left:-6px;font-family:var(--ff-mono);cursor:default}
+.pres-av.pal{border-color:var(--amber)}
+.chat-btn{position:relative}
+.chat-badge{position:absolute;top:-7px;right:-7px;background:var(--red);color:#fff;border-radius:9px;font-size:10px;line-height:16px;min-width:16px;padding:0 4px;text-align:center}
+.chat-panel{position:fixed;top:60px;right:12px;bottom:12px;width:min(420px,calc(100vw - 24px));background:var(--surface);border:1px solid var(--border);border-radius:12px;box-shadow:0 12px 32px rgba(0,0,0,.35);display:none;flex-direction:column;z-index:250}
+.chat-panel.show{display:flex}
+.chat-top{display:flex;align-items:center;gap:8px;padding:10px 12px;border-bottom:1px solid var(--border);font-weight:600}
+.chat-conv{display:flex;gap:6px;flex-wrap:wrap;padding:8px 10px;border-bottom:1px solid var(--border);max-height:30%;overflow:auto}
+.chat-conv button{background:var(--card);border:1px solid var(--border);color:var(--subtle);border-radius:14px;padding:3px 10px;font-size:12px;cursor:pointer;display:flex;align-items:center;gap:5px}
+.chat-conv button.on{border-color:var(--blue);color:var(--text)}
+.chat-conv .dot{width:7px;height:7px;border-radius:50%;background:var(--muted)}
+.chat-conv .dot.on{background:var(--green)}
+.chat-conv .n{background:var(--red);color:#fff;border-radius:8px;font-size:10px;padding:0 5px}
+.chat-msgs{flex:1;overflow:auto;padding:10px 12px;display:flex;flex-direction:column;gap:6px;min-height:0}
+.chat-m{max-width:85%;align-self:flex-start;background:var(--card);border:1px solid var(--border);border-radius:10px;padding:6px 10px;font-size:13px;white-space:pre-wrap;word-break:break-word}
+.chat-m.mio{align-self:flex-end;border-color:var(--blue)}
+.chat-m .h{font-size:10.5px;color:var(--muted);margin-bottom:2px}
+.chat-in{display:flex;gap:6px;padding:8px 10px;border-top:1px solid var(--border)}
+.chat-in textarea{flex:1;resize:none;height:40px}
 .user-wrap{position:relative}
 .user-menu{display:none;position:absolute;right:0;top:calc(100% + 6px);background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.3);min-width:220px;z-index:250;padding:4px 0}
 .user-menu.show{display:block}
@@ -362,6 +382,8 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
   <div class="topbar">
     <div class="topbar-logo">ATS <span>· FASTWEB FLM</span></div>
     <div class="topbar-right">
+      <div class="pres" id="presBox"></div>
+      <button class="btn ghost sm chat-btn" id="chatBtn" style="display:none" onclick="Chat.apri()" title="Chat: canale generale e messaggi diretti">💬<span class="chat-badge" id="chatBadge" style="display:none"></span></button>
       <span class="sync" id="syncInfo"></span>
       <button class="btn ghost sm" onclick="App.reload()" title="Ricarica i dati dal database">↻<span class="lbl"> Aggiorna</span></button>
       <select class="fc" style="width:auto;padding:5px 8px;font-size:11px" id="themeSel" onchange="App.setTheme(this.value)">
@@ -678,6 +700,12 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
   <div class="row" id="mBtns"></div>
 </div></div>
 <div id="toast"></div>
+<div class="chat-panel" id="chatPanel">
+  <div class="chat-top">💬 Chat<div class="spacer" style="flex:1"></div><label class="hint" style="display:flex;gap:4px;align-items:center;font-weight:400"><input type="checkbox" id="chatSuono" onchange="Chat.suono(this.checked)"> suono</label><button class="ico-btn" onclick="Chat.chiudi()" title="Chiudi">✕</button></div>
+  <div class="chat-conv" id="chatConv"></div>
+  <div class="chat-msgs" id="chatMsgs"></div>
+  <div class="chat-in"><textarea class="fc" id="chatTxt" maxlength="1000" placeholder="Scrivi… (Invio per mandare, Maiusc+Invio per andare a capo)"></textarea><button class="btn sm" onclick="Chat.invia()">Invia</button></div>
+</div>
 
 <!-- ═════════════════════ LOGICA PURA (testabile) ═════════════════════ -->
 <script id="logic">
@@ -1263,7 +1291,7 @@ var App = {
     if (App.isAdmin) setTimeout(Spz.avviso, 8000);
     Chi.load().catch(function () { });
     AckV.load().then(AckV.sync).catch(function (e) { console.warn('ACK VLT: ' + e.message); });
-    Sync.avvia(); Chv.init(); Jun.tab().catch(function () { }); setTimeout(function () { Spec.mov().then(function () { Ingresso.ricalcola(); }).catch(function () { }); }, 3000);
+    Sync.avvia(); Chat.avvia(); App.paramBase(); Chv.init(); Jun.tab().catch(function () { }); setTimeout(function () { Spec.mov().then(function () { Ingresso.ricalcola(); }).catch(function () { }); }, 3000);
   },
   go: function (k) {
     var t = TABS.find(function (x) { return x.k === k; }) || TABS[0];
@@ -1325,6 +1353,18 @@ var App = {
     } catch (e) { Modal.close(); toast('Errore aggiornamento: ' + e.message, 'ko'); }
   },
   // account condiviso (palmarino ACK): chi lavora davvero è l'operatore scelto con il PIN
+  // parametri nuovi: se mancano in PARAMETRI li aggiunge (admin) con il valore di base, così si cambiano subito da Admin → Parametri
+  paramBase: async function () {
+    if (!App.isAdmin || !DB.t.PARAMETRI) return;
+    var P = [['chat_giorni', '90', 'Chat: i messaggi più vecchi di questi giorni si cancellano (pulizia una volta al giorno)'],
+      ['chat_palmarino', 'NO', 'Chat sul palmarino (account condiviso): SI per attivarla'],
+      ['rma_ritorni_giorni', '3', 'Ritorni in giacenza più vecchi di questi giorni lavorativi: non si vedono e non si propongono'],
+      ['carichi_dest_in_giacenza', 'MADDALONI', 'Carichi NEW/REUSE con queste destinazioni (separate da ;) restano in giacenza (HUB_MAGAZZINO)']];
+    var t = DB.t.PARAMETRI, ci = {}; t.rows.forEach(function (r) { ci[L.s(r.chiave)] = 1; });
+    var nuovi = P.filter(function (x) { return !ci[x[0]]; }).map(function (x) { return { chiave: x[0], valore: x[1], descrizione: x[2] }; });
+    if (!nuovi.length) return;
+    try { await API.append(DB.id, 'PARAMETRI', nuovi.map(function (o) { return t.toRow(o); }), true); nuovi.forEach(function (o) { t.rows.push(o); }); } catch (e) { }
+  },
   condiviso: function () { return !!(App.me && L.up(App.me.condiviso) === 'SI'); },
   opAtt: null,
   chi: function () { return App.condiviso() && App.opAtt ? App.opAtt : { email: Auth.email, sigla: (App.me && App.me.sigla) || '', nome: (App.me && App.me.nome) || '' }; },
@@ -5143,7 +5183,8 @@ var Ack = {
     var R = Ack.righe(s.id_spedizione), n = Ack.conta(R), sf = Ack.spareFalse(s.id_spedizione), edit = s.stato === 'IN_SPUNTA';
     var ORD = { MANCANTE: 0, DA_SPUNTARE: 1, SPUNTATO: 2, RIMOSSO: 3, ESCLUSO_BAN: 4 };
     var RR = R.slice().sort(function (a, b) { return (ORD[a.esito] - ORD[b.esito]) || ((parseInt(a.fr, 10) || 0) - (parseInt(b.fr, 10) || 0)); });
-    var html = '<div class="card"><div class="card-h"><div class="card-t">' + (edit ? 'Spunta ' : 'ACK ') + esc(s.destinatario) + ' · ' + esc(L.itDate(s.data)) + '</div><span class="hint">' + esc(s.id_spedizione) + '</span><div class="spacer"></div>' +
+    var anche = window.Chat ? Chat.altriSu(s.id_spedizione) : [];
+    var html = (anche.length ? '<div class="fb" style="margin-bottom:8px;color:var(--amber)">👥 Aperta anche da ' + esc(anche.join(', ')) + ': attenzione a non lavorare in due sulla stessa spunta</div>' : '') + '<div class="card"><div class="card-h"><div class="card-t">' + (edit ? 'Spunta ' : 'ACK ') + esc(s.destinatario) + ' · ' + esc(L.itDate(s.data)) + '</div><span class="hint">' + esc(s.id_spedizione) + '</span><div class="spacer"></div>' +
       (edit ? '<span class="hint" id="ackSave"></span><button class="btn ghost sm" onclick="Ack.aggiornaVista()" title="Rilegge le spunte fatte dagli altri dispositivi (si aggiorna anche da solo ogni 30 secondi)">↻ Spunte</button><button class="btn ghost sm" onclick="Ack.pendTutti()" title="Mette in pending tutte le schede della lista non ancora spuntate (non barcodate): scegli il motivo per tutte o per qualcuna">⏸ Pending non spuntate</button><button class="btn ghost sm" onclick="Ack.aggiornaLista()">Aggiorna lista da VLT</button><button class="btn green" onclick="Ack.chiudi()">Chiudi spunta</button>' : '') +
       ((s.stato === 'PRONTA' || s.stato === 'CHIUSA') ? '<button class="btn ghost sm" onclick="Ack.riapri()">Riapri spunta</button>' : '') +
       (s.stato === 'SPEDITA' && s.n_ddt && App.isAdmin ? '<button class="btn ghost sm" onclick="Ack.riapriDdt(\'' + s.id_spedizione + '\')" title="Riapre la spunta per aggiungere o togliere pezzi: poi Rigenera DDT (stesso numero). Solo admin, tracciato nel LOG.">↺ Riapri DDT</button>' +
@@ -8105,6 +8146,155 @@ var Tab = {
   },
   data: function (fr, k) { var t = Tab.di(fr); return t && t[k] ? t[k] : ''; },
   info: function () { return Tab.map ? 'VLT TABLEAU: ' + Object.keys(Tab.map).length + ' FR' + (Tab.estratto ? ' · file del ' + L.s(Tab.estratto).slice(0, 16) : '') : (Tab.err ? 'VLT TABLEAU non letto: ' + Tab.err : 'VLT TABLEAU non ancora caricato'); }
+};
+
+// ─ utenti online e chat (fogli PRESENZE e CHAT): segnale ogni 45 s, messaggi letti a polling (8 s con la chat aperta, 30 s chiusa)
+var Chat = {
+  HP: ['email', 'sigla', 'nome', 'dispositivo', 'tab', 'rif', 'dettaglio', 'ultimo', 'ts'],
+  HC: ['quando', 'ts', 'da_email', 'da_sigla', 'a', 'testo'],
+  pres: [], online: [], msgs: [], n: 1, conv: 'TUTTI', aperta: false, _visto: {}, _row: 0, ok: false,
+  me: function () { return L.s(Auth.email).toLowerCase(); },
+  disp: function () { return App.condiviso() ? 'palmarino' : 'pc'; },
+  abilitata: function () { return !App.condiviso() || L.up(DB.param('chat_palmarino', 'NO')) === 'SI'; },   // palmarino: previsto, spento di base
+  avvia: async function () {
+    if (Chat._avv) return; Chat._avv = true;
+    try {
+      await DB.ensureSheet('PRESENZE', Chat.HP);
+      var hc = (await API.batchGet(DB.id, [API.q('CHAT') + '!A1:F1']).catch(function () { return [[]]; }))[0];
+      if (!hc || !hc.length) await DB.ensureSheet('CHAT', Chat.HC);
+      var r = (await API.batchGet(DB.id, [API.q('CHAT') + '!A2:F']))[0] || [];
+      Chat.n = r.length + 1; r.forEach(function (x, i) { Chat.aggiungi(x, i + 2); });
+      if (!lsG('chat_letto')) { var l = {}; Chat.msgs.forEach(function (m) { var c = Chat.convDi(m); l[c] = Math.max(l[c] || 0, m.ts); }); lsS('chat_letto', l); }
+      Chat.ok = true;
+    } catch (e) { console.warn('chat non disponibile', e); return; }
+    if (Chat.abilitata()) $('chatBtn').style.display = '';
+    try { $('chatSuono').checked = lsG('chat_suono') !== 0; } catch (e) { }
+    $('chatTxt').onkeydown = function (ev) { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); Chat.invia(); } };
+    Chat.badge(); Chat.battito(); setInterval(Chat.battito, 45000);
+    Chat.giro();
+    if (App.isAdmin) Chat.pulisci().catch(function () { });
+  },
+  // ─ presenze
+  rif: function () { return App.tab === 'ack' && Ack.cur ? Ack.cur : ''; },
+  dett: function () {
+    var t = TABS.find(function (x) { return x.k === App.tab; }), d = t ? t.label : App.tab;
+    var s = App.tab === 'ack' && Ack.cur && Ack.byId(Ack.cur); return d + (s ? ' · ' + s.destinatario : '');
+  },
+  battito: async function () {
+    if (!Chat.ok || !DB.id || !Auth.token) return;
+    try {
+      var c = App.chi(), o = { email: Chat.me(), sigla: c.sigla || '', nome: c.nome || '', dispositivo: Chat.disp(), tab: App.tab, rif: Chat.rif(), dettaglio: Chat.dett(), ultimo: L.nowStamp(), ts: String(Date.now()) };
+      var v = (await API.batchGet(DB.id, [API.q('PRESENZE') + '!A1:I']))[0] || [], h = (v[0] || Chat.HP).map(L.s), ix = function (k) { return h.indexOf(k); };
+      var row = 0, P = [];
+      v.slice(1).forEach(function (x, i) {
+        var p = {}; h.forEach(function (k, j) { p[k] = L.s(x[j]); }); p._r = i + 2; if (!p.email) return;
+        if (p.email.toLowerCase() === o.email && p.dispositivo === o.dispositivo) row = p._r; else P.push(p);
+      });
+      var vals = [h.map(function (k) { return o[k] !== undefined ? o[k] : ''; })];
+      if (row) await API.batchUpdate(DB.id, [{ range: API.q('PRESENZE') + '!A' + row + ':' + L.colLetter(h.length - 1) + row, values: vals }], true);
+      else await API.append(DB.id, 'PRESENZE', vals, true);
+      // online: chi ha dato segnale da poco (si guarda quando il suo segnale è cambiato, così l'orologio dei PC non conta)
+      var ora = Date.now();
+      P.forEach(function (p) { var k = p.email + '|' + p.dispositivo, vi = Chat._visto[k]; if (!vi) Chat._visto[k] = { ts: p.ts, quando: Math.abs(ora - (parseInt(p.ts, 10) || 0)) < 150000 ? ora : 0 }; else if (vi.ts !== p.ts) Chat._visto[k] = { ts: p.ts, quando: ora }; });
+      Chat.pres = P; Chat.online = P.filter(function (p) { var vi = Chat._visto[p.email + '|' + p.dispositivo]; return vi && ora - vi.quando < 150000; });
+      Chat.renderPres();
+      if (App.tab === 'ack' && Ack.cur && !$('modal').classList.contains('show')) { var a = Chat.altriSu(Ack.cur).join(); if (a !== Chat._ackA) { Chat._ackA = a; Ack.renderDet(); } }
+      if (Chat.aperta) Chat.renderConv();
+    } catch (e) { }
+  },
+  renderPres: function () {
+    var O = Chat.online.slice().sort(function (a, b) { return a.sigla.localeCompare(b.sigla); });
+    $('presBox').innerHTML = O.slice(0, 8).map(function (p) { return '<span class="pres-av' + (p.dispositivo === 'palmarino' ? ' pal' : '') + '" title="' + esc((p.nome || p.email) + (p.dispositivo === 'palmarino' ? ' (palmarino)' : '') + ' · ' + p.dettaglio) + '">' + esc((p.sigla || p.email).slice(0, 3).toUpperCase()) + '</span>'; }).join('') +
+      (O.length > 8 ? '<span class="pres-av" title="' + esc(O.slice(8).map(function (p) { return p.sigla || p.email; }).join(', ')) + '">+' + (O.length - 8) + '</span>' : '');
+    $('presBox').title = O.length ? O.length + ' online' : '';
+  },
+  altriSu: function (rif) { return rif ? Chat.online.filter(function (p) { return p.rif === rif; }).map(function (p) { return p.sigla || p.email; }) : []; },
+  // ─ messaggi
+  aggiungi: function (x, r) {
+    if (!x || !x.length) return null;
+    var m = {}; Chat.HC.forEach(function (k, j) { m[k] = L.s(x[j]); }); m.ts = parseInt(m.ts, 10) || 0; m._r = r;
+    if (!m.testo || !Chat.per(m)) return null;
+    Chat.msgs.push(m); return m;
+  },
+  per: function (m) { var me = Chat.me(); return m.a === 'TUTTI' || L.s(m.a).toLowerCase() === me || L.s(m.da_email).toLowerCase() === me; },
+  convDi: function (m) { return m.a === 'TUTTI' ? 'TUTTI' : (L.s(m.da_email).toLowerCase() === Chat.me() ? L.s(m.a).toLowerCase() : L.s(m.da_email).toLowerCase()); },
+  nonLetti: function (conv) {
+    var l = lsG('chat_letto') || {}, me = Chat.me();
+    return Chat.msgs.filter(function (m) { var c = Chat.convDi(m); return (!conv || c === conv) && L.s(m.da_email).toLowerCase() !== me && m.ts > (l[c] || 0); }).length;
+  },
+  segnaLetto: function (conv) { var l = lsG('chat_letto') || {}, max = l[conv] || 0; Chat.msgs.forEach(function (m) { if (Chat.convDi(m) === conv && m.ts > max) max = m.ts; }); l[conv] = max; lsS('chat_letto', l); Chat.badge(); },
+  badge: function () { var n = Chat.nonLetti(), b = $('chatBadge'); if (!b) return; b.textContent = n > 99 ? '99+' : n; b.style.display = n ? '' : 'none'; },
+  giro: async function () {
+    if (Chat._run) { Chat._ancora = true; return Chat._run; }   // un giro alla volta: niente messaggi doppi
+    clearTimeout(Chat._t);
+    var fine; Chat._run = new Promise(function (r) { fine = r; });
+    if (Chat.ok && DB.id && Auth.token && Chat.abilitata()) {
+      try {
+        var r = (await API.batchGet(DB.id, [API.q('CHAT') + '!A' + (Chat.n + 1) + ':F' + (Chat.n + 300)]))[0] || [], nuovi = [];
+        r.forEach(function (x, i) { var m = Chat.aggiungi(x, Chat.n + 1 + i); if (m) nuovi.push(m); });
+        Chat.n += r.length;
+        if (nuovi.length) Chat.arrivati(nuovi);
+      } catch (e) { }
+    }
+    Chat._run = null; fine();
+    if (Chat._ancora) { Chat._ancora = false; return Chat.giro(); }
+    Chat._t = setTimeout(Chat.giro, Chat.aperta && !document.hidden ? 8000 : 30000);
+  },
+  arrivati: function (nuovi) {
+    var me = Chat.me(), altrui = nuovi.filter(function (m) { return L.s(m.da_email).toLowerCase() !== me; });
+    if (Chat.aperta && !document.hidden) { Chat.segnaLetto(Chat.conv); Chat.renderMsgs(); Chat.renderConv(); }
+    Chat.badge();
+    var da_avvisare = altrui.filter(function (m) { return !(Chat.aperta && !document.hidden && Chat.convDi(m) === Chat.conv); });
+    if (!da_avvisare.length) return;
+    var m = da_avvisare[da_avvisare.length - 1], tit = '💬 ' + (m.da_sigla || m.da_email) + (m.a === 'TUTTI' ? ' (generale)' : ' (a te)');
+    toast(tit + ': ' + m.testo.slice(0, 90) + (da_avvisare.length > 1 ? ' · +' + (da_avvisare.length - 1) : ''), 'ok');
+    if (lsG('chat_suono') !== 0) Chat.beep();
+    try { if (document.hidden && window.Notification && Notification.permission === 'granted') new Notification(tit, { body: m.testo.slice(0, 140) }); } catch (e) { }
+  },
+  beep: function () { try { var A = window.AudioContext || window.webkitAudioContext, c = Chat._ac = Chat._ac || new A(), o = c.createOscillator(), g = c.createGain(); o.frequency.value = 880; g.gain.value = 0.06; o.connect(g); g.connect(c.destination); o.start(); o.stop(c.currentTime + 0.15); } catch (e) { } },
+  suono: function (on) { lsS('chat_suono', on ? 1 : 0); },
+  invia: async function () {
+    var e = $('chatTxt'), t = L.s(e.value).slice(0, 1000); if (!t) return;
+    var c = App.chi(), o = { quando: L.nowStamp(), ts: String(Date.now()), da_email: Chat.me(), da_sigla: c.sigla || '', a: Chat.conv, testo: t };
+    e.value = ''; e.disabled = true;
+    try { await API.append(DB.id, 'CHAT', [Chat.HC.map(function (k) { return o[k]; })], true); await Chat.giro(); }
+    catch (x) { e.value = t; toast('Messaggio non inviato: ' + x.message, 'ko'); }
+    finally { e.disabled = false; e.focus(); }
+  },
+  // ─ pannello
+  apri: function (conv) {
+    Chat.aperta = true; if (conv) Chat.conv = conv; $('chatPanel').classList.add('show');
+    try { if (window.Notification && Notification.permission === 'default') Notification.requestPermission(); } catch (e) { }
+    Chat.segnaLetto(Chat.conv); Chat.renderConv(); Chat.renderMsgs(); setTimeout(function () { $('chatTxt').focus(); }, 50); Chat.giro();
+  },
+  chiudi: function () { Chat.aperta = false; $('chatPanel').classList.remove('show'); },
+  scegli: function (conv) { Chat.conv = conv; Chat.segnaLetto(conv); Chat.renderConv(); Chat.renderMsgs(); $('chatTxt').focus(); },
+  persone: function () {
+    var me = Chat.me(), m = {};
+    ((DB.t.OPERATORI || {}).rows || []).forEach(function (o) { var e = L.s(o.email).toLowerCase(); if (e && e !== me && L.up(o.condiviso) !== 'SI' && L.up(o.attivo || 'SI') !== 'NO') m[e] = { email: e, sigla: L.s(o.sigla) || e.split('@')[0], nome: L.s(o.nome) }; });
+    Chat.msgs.forEach(function (x) { var c = Chat.convDi(x); if (c !== 'TUTTI' && !m[c]) m[c] = { email: c, sigla: c === L.s(x.da_email).toLowerCase() ? (x.da_sigla || c.split('@')[0]) : c.split('@')[0], nome: '' }; });
+    var on = {}; Chat.online.forEach(function (p) { on[p.email.toLowerCase()] = 1; });
+    return Object.keys(m).map(function (k) { m[k].on = !!on[k]; return m[k]; }).sort(function (a, b) { return (b.on - a.on) || a.sigla.localeCompare(b.sigla); });
+  },
+  renderConv: function () {
+    var b = function (conv, lbl, on, tip) { var n = Chat.nonLetti(conv); return '<button class="' + (Chat.conv === conv ? 'on' : '') + '" title="' + esc(tip || '') + '" onclick="Chat.scegli(\'' + esc(conv) + '\')">' + (on === null ? '' : '<span class="dot' + (on ? ' on' : '') + '"></span>') + esc(lbl) + (n ? '<span class="n">' + n + '</span>' : '') + '</button>'; };
+    $('chatConv').innerHTML = b('TUTTI', '# Generale', null, 'Canale per tutti') + Chat.persone().map(function (p) { return b(p.email, p.sigla, p.on, (p.nome || p.email) + (p.on ? ' · online' : '')); }).join('');
+  },
+  renderMsgs: function () {
+    var me = Chat.me(), L0 = Chat.msgs.filter(function (m) { return Chat.convDi(m) === Chat.conv; }).sort(function (a, b) { return a.ts - b.ts; }).slice(-300), box = $('chatMsgs');
+    box.innerHTML = L0.length ? L0.map(function (m) { var mio = L.s(m.da_email).toLowerCase() === me; return '<div class="chat-m' + (mio ? ' mio' : '') + '"><div class="h">' + esc(mio ? 'tu' : (m.da_sigla || m.da_email)) + ' · ' + esc(L.vedi(L.s(m.quando).slice(0, 16))) + '</div>' + esc(m.testo) + '</div>'; }).join('')
+      : '<div class="hint" style="text-align:center;margin-top:20px">' + (Chat.conv === 'TUTTI' ? 'Nessun messaggio nel canale generale' : 'Nessun messaggio: scrivi il primo') + '</div>';
+    box.scrollTop = box.scrollHeight;
+  },
+  // ─ pulizia (admin, una volta al giorno): messaggi più vecchi di chat_giorni (90) e presenze ferme da 30 giorni
+  pulisci: async function () {
+    var oggi = L.isoToday(); if (lsG('chat_pulizia') === oggi) return; lsS('chat_pulizia', oggi);
+    var gg = parseInt(DB.param('chat_giorni', '90'), 10) || 90, lim = Date.now() - gg * 86400000, limP = Date.now() - 30 * 86400000, R = [];
+    var v = await API.batchGet(DB.id, [API.q('CHAT') + '!B2:B', API.q('PRESENZE') + '!I2:I']);
+    (v[0] || []).forEach(function (x, i) { var t = parseInt(x && x[0], 10); if (t && t < lim) R.push(API.q('CHAT') + '!A' + (i + 2) + ':F' + (i + 2)); });
+    (v[1] || []).forEach(function (x, i) { var t = parseInt(x && x[0], 10); if (t && t < limP) R.push(API.q('PRESENZE') + '!A' + (i + 2) + ':I' + (i + 2)); });
+    if (R.length) await API.call(API.S + DB.id + '/values:batchClear', { method: 'POST', body: JSON.stringify({ ranges: R }), quiet: true });
+  }
 };
 
 // ─ storno di un DDT già emesso (ACK o RMA): tutti i pezzi rientrano in magazzino, il numero DDT resta ANNULLATO (non si riusa)
