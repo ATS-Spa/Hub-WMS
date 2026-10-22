@@ -3948,9 +3948,23 @@ Grid.prototype.render = function (rifaiTesta) {
   }).join('') : '<tr><td colspan="' + vis.length + '" class="empty">' + esc(o.empty || 'Nessuna riga') + '</td></tr>';
   var nf = Object.keys(this.f).length;
   if (o.foot && $(o.foot)) $(o.foot).innerHTML = list.length + ' righe' + (list.length !== all.length ? ' su ' + all.length : '') +
-    (list.length > this.limit ? ' · mostrate ' + this.limit + ' <a class="mail" href="javascript:Grid.all[\'' + this.name + '\'].altri()">mostra altre</a>' : '') +
+    (list.length > this.limit ? ' · mostrate ' + this.limit + ' (scorri la tabella per vederne altre) <a class="mail" href="javascript:Grid.all[\'' + this.name + '\'].altri()">mostra altre</a>' : '') +
     (nf ? ' · <a class="mail" href="javascript:Grid.all[\'' + this.name + '\'].reset()">togli i filtri (' + nf + ')</a>' : '');
   this.visibili = list;
+  // scorrendo la tabella verso il fondo si caricano da sole altre righe (resta anche "mostra altre")
+  var wr = tb.closest ? tb.closest('.tbl-wrap') : null;
+  if (wr) {
+    wr._gName = this.name;   // più griglie possono usare la stessa tabella (es. Movimenti IN/OUT): vale l'ultima disegnata
+    if (!wr._gScroll) {
+      wr._gScroll = true;
+      wr.addEventListener('scroll', function () {
+        var g = Grid.all[wr._gName]; if (!g || g._scr || !g.visibili || g.visibili.length <= g.limit) return;
+        if (wr.scrollTop + wr.clientHeight < wr.scrollHeight - 250) return;
+        g._scr = true; g.limit += g.o.limit || 300;
+        requestAnimationFrame(function () { try { g.render(); } finally { g._scr = false; } });
+      }, { passive: true });
+    }
+  }
   return list;
 };
 
@@ -5950,7 +5964,7 @@ var Rma = {
       var s = g.s, k = Ack.key(g.dest), cp = Rma.cp(g.dest), st = s ? s.stato : 'DA PREPARARE', done = s && s.stato === 'SPEDITA', lock = '';
       var col = done ? Ack.colliDb(s.id_spedizione).map(function (c) { return { tipo: c.tipo_collo, misura: [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X'), peso: c.peso_kg }; })
         : (Rma.colli[k] || (s ? Ack.colliDb(s.id_spedizione).map(function (c) { return { tipo: c.tipo_collo, misura: [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X'), peso: c.peso_kg }; }) : []));
-      if (!done && !Rma.colli[k]) Rma.colli[k] = col.length ? col : [{ tipo: 'COLLO', misura: '', peso: '' }];
+      if (!done && !Rma.colli[k]) Rma.colli[k] = col.length || (s && s.stato === 'PRONTA') ? col : [{ tipo: 'COLLO', misura: '', peso: '' }];
       col = done ? col : Rma.colli[k];
       var peso = col.reduce(function (a, c) { return a + (parseFloat(String(c.peso).replace(',', '.')) || 0); }, 0);
       var bt = done ? '<button class="btn sm" onclick="Rma.stampa(\'' + s.id_spedizione + '\')">Stampa DDT</button> <button class="btn ghost sm" onclick="Rma.cedolini(\'' + s.id_spedizione + '\')">Cedolini</button>' + (s.link_pdf ? ' <a class="mail" target="_blank" href="' + esc(s.link_pdf) + '">PDF su Drive</a>' : '') +
@@ -5983,7 +5997,9 @@ var Rma = {
   awbTmp: {},
   // colli già salvati e uguali a quelli a video?
   colliSalvati: function (s, col) {
-    if (!s) return false; var db = Ack.colliDb(s.id_spedizione); if (!db.length || db.length !== col.length) return false;
+    if (!s) return false; var db = Ack.colliDb(s.id_spedizione); col = col.filter(function (x) { return L.s(x.misura) || L.s(x.peso); });
+    if (!db.length && !col.length) return s.stato === 'PRONTA';   // salvata senza colli
+    if (!db.length || db.length !== col.length) return false;
     return db.every(function (c, i) { var x = col[i] || {}, m = L.misura(x.misura) || []; return L.up(c.tipo_collo) === L.up(x.tipo || 'COLLO') && String(c.lunghezza_cm) === String(m[0]) && String(c.larghezza_cm) === String(m[1]) && String(c.altezza_cm) === String(m[2]) && parseFloat(c.peso_kg) === parseFloat(String(x.peso).replace(',', '.')); });
   },
   // AWB e vettore da soli (Service Desk o magazzino): non toccano colli e peso
@@ -6001,8 +6017,10 @@ var Rma = {
   },
   // colli e peso da soli (magazzino, prima che ci sia l'AWB): l'AWB già salvato resta com'è
   salvaColli: async function (dest) {
-    var d = $('uscData').value, k = Ack.key(dest), col = Rma.colli[k] || [], err = Ack.validaColli(col);
+    // righe collo lasciate vuote (misura e peso cancellati) = collo tolto; senza colli si salva lo stesso, dopo conferma
+    var d = $('uscData').value, k = Ack.key(dest), col = (Rma.colli[k] || []).filter(function (x) { return L.s(x.misura) || L.s(x.peso); }), err = col.length ? Ack.validaColli(col) : [];
     if (err.length) { Modal.open('Colli e peso · ' + dest, err.join('\n')); return; }
+    if (!col.length && !(await Modal.confirm('Nessun collo · ' + dest, 'Salvo la scheda senza colli e peso? Il DDT uscirà senza colli e peso.'))) return;
     try {
       await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_COLLI']);
       var s = Rma.sped(d, dest), cp = Rma.cp(dest), tC = DB.t.SPEDIZIONI_COLLI;
@@ -6012,11 +6030,14 @@ var Rma = {
       if (vecchi.length) await API.call(API.S + DB.id + '/values:batchClear', { method: 'POST', body: JSON.stringify({ ranges: vecchi.map(function (c) { return API.q('SPEDIZIONI_COLLI') + '!A' + c._r + ':' + L.colLetter(tC.header.length - 1) + c._r; }) }) });
       tC.rows = tC.rows.filter(function (c) { return c.id_spedizione !== s.id_spedizione; });
       var objs = col.map(function (x, i) { var m = L.misura(x.misura); return { id_spedizione: s.id_spedizione, n_collo: i + 1, tipo_collo: x.tipo || 'COLLO', lunghezza_cm: m[0], larghezza_cm: m[1], altezza_cm: m[2], peso_kg: String(x.peso).replace(',', '.') }; });
-      var r = await API.append(DB.id, 'SPEDIZIONI_COLLI', objs.map(function (o) { return tC.toRow(o); }));
-      objs.forEach(function (o, i) { o.id_collo = 'C' + L.pad(DB.rid('SPEDIZIONI_COLLI', r + i), 6); Ack.pushRow(tC, o, r + i); });
+      var upd = [];
+      if (objs.length) {
+        var r = await API.append(DB.id, 'SPEDIZIONI_COLLI', objs.map(function (o) { return tC.toRow(o); }));
+        objs.forEach(function (o, i) { o.id_collo = 'C' + L.pad(DB.rid('SPEDIZIONI_COLLI', r + i), 6); Ack.pushRow(tC, o, r + i); });
+        upd.push({ range: tC.cell('id_collo', r) + ':' + tC.col('id_collo') + (r + objs.length - 1), values: objs.map(function (o) { return [o.id_collo]; }) });
+      }
       var peso = objs.reduce(function (a, o) { return a + parseFloat(o.peso_kg); }, 0);
-      await API.batchUpdate(DB.id, [{ range: tC.cell('id_collo', r) + ':' + tC.col('id_collo') + (r + objs.length - 1), values: objs.map(function (o) { return [o.id_collo]; }) }]
-        .concat(Ack.setS(s, { stato: 'PRONTA', n_colli: objs.length, peso_tot_kg: Math.round(peso * 100) / 100 })));
+      await API.batchUpdate(DB.id, upd.concat(Ack.setS(s, { stato: 'PRONTA', n_colli: objs.length, peso_tot_kg: objs.length ? Math.round(peso * 100) / 100 : '' })));
       await API.append(DB.id, 'LOG', [App.log('RMA_COLLI', 'SPEDIZIONI', s.id_spedizione, { destinazione: dest, colli: objs.length, peso_kg: Math.round(peso * 100) / 100 })]);
       delete Rma.colli[k]; toast(dest + ': colli e peso salvati' + (L.s(s.awb) ? '' : ' · manca l\'AWB'), 'ok'); Rma.render();
     } catch (e) { Modal.open('Errore', e.message); }
@@ -7021,6 +7042,7 @@ var Sto = {
       tipo: { k: 'tipo', label: 'Type', filter: 'select', html: function (r) { return r.tipo ? Pill.tipo(r.tipo) : ''; } },
       fr: { k: 'fr', label: 'FR', filter: 'text', cls: 'mono' },
       rma: { k: 'rma', label: sez === 'IN' ? 'RMA balancing' : 'RMA', filter: 'text', cls: 'mono' },
+      drma: { k: 'data_creazione_rma', label: 'Data creazione RMA', cls: 'mono nw', filter: 'date', get: function (r) { return RmaD.data(r.rma); } },
       data: { k: 'data_ora', label: sez === 'OUT' ? 'Data out' : (sez === 'IN' ? 'Data in hub' : 'Data'), cls: 'mono nw', filter: 'date', get: function (r) { return L.s(r.data_ora); }, html: function (r) { return esc(Sto.dataOra(r.data_ora)); } },
       vlt: { k: 'data_registrazione_vlt', label: 'Data received and verify (reg. VLT)', cls: 'mono', filter: 'date', get: function (r) { return L.normDate(r.data_registrazione_vlt); } },
       po: { k: 'po_mrn', label: sez === 'OUT' ? 'PO new / MRN' : 'PO/MRN', filter: 'text', cls: 'mono' },
@@ -7052,7 +7074,7 @@ var Sto = {
     var TB = Tab.COL.map(function (x) { return 't_' + x[0]; });
     var ord = {
       IN: ['az', 'id', 'tipo', 'fr', 'rma', 'data', 'vlt', 'svlt', 'po', 'cp', 'awb', 'vet', 'ddt', 'op', 'mnft', 'ser', 'pn', 'rip', 'note', 'pos', 'merci', 'anom', 'caus', 'uid', 'ric', 'uba', 'orig'].concat(TB),
-      OUT: ['az', 'id', 'tipo', 'fr', 'po', 'rma', 'cp', 'data', 'awb', 'vet', 'ddt', 'op', 'mnft', 'ser', 'pn', 'rip', 'note', 'caus', 'uid', 'sped', 'ubda', 'orig'].concat(TB),
+      OUT: ['az', 'id', 'tipo', 'fr', 'po', 'rma', 'drma', 'cp', 'data', 'awb', 'vet', 'ddt', 'op', 'mnft', 'ser', 'pn', 'rip', 'note', 'caus', 'uid', 'sped', 'ubda', 'orig'].concat(TB),
       INT: ['id', 'data', 'caus', 'tipo', 'ser', 'fr', 'pn', 'rip', 'uid', 'note', 'op'],
       ALL: ['az', 'id', 'data', 'dirz', 'caus', 'tipo', 'fr', 'rma', 'ser', 'pn', 'mnft', 'cp', 'awb', 'vet', 'ddt', 'po', 'rip', 'op', 'note', 'uid', 'orig']
     }[sez];
@@ -7142,7 +7164,8 @@ var Sto = {
     if ($('stoImp')) $('stoImp').style.display = App.isAdmin ? '' : 'none';
     Sto.init(); Sto.tabs();
     try { await Sto.carica(false); Sto.render(true); } catch (e) { $('stoRows').innerHTML = '<tr><td class="empty">Errore: ' + esc(e.message) + '</td></tr>'; }
-    if (!Tab.map) Tab.load().then(function (m) { if (m && App.tab === 'movimenti') Sto.render(); });   // date VLT TABLEAU nelle colonne
+    if (!Tab.map) Tab.load().then(function (m) { if (m && App.tab === 'storico') Sto.render(); });   // date VLT TABLEAU nelle colonne
+    if (!RmaD.map) RmaD.load().then(function (m) { if (m && App.tab === 'storico') Sto.render(); });   // data creazione RMA (VLT)
   },
   tabs: function () {
     var R = Sto.dati[Sto.fonte] || [], q = L.up($('stoQ').value), n = { IN: 0, OUT: 0, INT: 0, ALL: 0 };
@@ -7886,6 +7909,32 @@ var Tab = {
   di: function (fr) { return (Tab.map && fr && Tab.map[L.frKey(fr)]) || null; },
   data: function (fr, k) { var t = Tab.di(fr); return t && t[k] ? t[k] : ''; },
   info: function () { return Tab.map ? 'VLT TABLEAU: ' + Object.keys(Tab.map).length + ' FR' + (Tab.estratto ? ' · file del ' + L.s(Tab.estratto).slice(0, 16) : '') : (Tab.err ? 'VLT TABLEAU non letto: ' + Tab.err : 'VLT TABLEAU non ancora caricato'); }
+};
+
+// date di apertura degli RMA (foglio RMA_DATE del file VLT, scritto dal backend fr_rma da rma.csv: tutti gli stati, ultimi 13 mesi)
+var RmaD = {
+  FOGLIO: 'RMA_DATE', map: null, _p: null, err: '',
+  load: function (forza) {
+    if (RmaD._p && !forza) return RmaD._p;
+    return RmaD._p = (async function () {
+      var c = forza ? null : await DB.cacheGet('rma_date');
+      if (!c || DB.vltStale(c.ts)) {
+        var f = await DB.vltFoglio(L.s(DB.param('rma_date_foglio', '')) || RmaD.FOGLIO, '', '');
+        var rows = await DB.loadCols(CFG.VLT_ID, f, ['Id RMA', 'Data Apertura']);
+        var m = {}; rows.forEach(function (r) { var k = RmaD.k(r['Id RMA']); if (k && L.s(r['Data Apertura'])) m[k] = L.normDate(r['Data Apertura']); });
+        c = { ts: Date.now(), map: m }; await DB.cacheSet('rma_date', c);
+      }
+      RmaD.map = c.map; RmaD.err = ''; return RmaD.map;
+    })().catch(function (e) { RmaD._p = null; RmaD.err = e.message; return null; });
+  },
+  k: function (v) { var x = L.s(v).replace(/\.0$/, ''); return /\d/.test(x) ? x.replace(/\D/g, '').replace(/^0+(?=\d)/, '') : ''; },
+  // data di creazione dell'RMA: da VLT; se manca, la data apertura del ritorno in giacenza (stesso dato VLT, già nel database)
+  data: function (rma) {
+    var k = RmaD.k(rma); if (!k) return '';
+    if (RmaD.map && RmaD.map[k]) return RmaD.map[k];
+    var t = DB.t.RMA_RITORNI, r = t && t.rows.find(function (x) { return RmaD.k(x.id_rma) === k && L.s(x.data_apertura); });
+    return r ? L.normDate(r.data_apertura) : '';
+  }
 };
 
 var AckV = {
