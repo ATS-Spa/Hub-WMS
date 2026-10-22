@@ -7314,16 +7314,18 @@ var Sto = {
   colonneScegli: function () { Sto.grid(Sto.sez).scegli(); },
   excelVista: function () { var p = Sto.periodo(); Sto.grid(Sto.sez).excel('Movimenti_' + Sto.sez + '_' + p[0] + '_' + p[1]); },
   // Excel come l'Easyloader: foglio INBOUND e foglio OUTBOUND con le colonne originali, per il periodo scelto
-  excelEasyloader: function () {
+  excelEasyloader: async function () {
+    try { await Promise.all([Tab.load(), RmaD.load()]); } catch (e) { }   // date VLT (TABLEAU) e data creazione RMA, in coda alle colonne Easyloader
+    var TBH = Tab.COL.map(function (x) { return x[2].toUpperCase(); }), tb = function (r) { return Tab.COL.map(function (x) { return L.vedi(Tab.data(r.fr, x[0])); }); };
     var p = Sto.periodo(), q = L.up($('stoQ').value), R = (Sto.dati[Sto.fonte] || []).filter(function (r) { return Sto.nelPeriodo(r) && (!q || Sto.cerca_(r, q)); });
     var ord = function (a, b) { return L.s(a.data_ora).localeCompare(L.s(b.data_ora)) || L.s(a.id_mov).localeCompare(L.s(b.id_mov)); };
     var IN = R.filter(function (r) { return r.direzione === 'IN' && !Sto.annullato(r); }).sort(ord), OUT = R.filter(function (r) { return r.direzione === 'OUT' && !Sto.annullato(r); }).sort(ord);
     var dt = function (v) { return Sto.dataOra(v); }, d = function (v) { return L.normDate(v) ? L.itDate(L.normDate(v)) : L.s(v); };
     Xls.scarica('EASYLOADER_' + (p[0] === '0000-00-00' ? 'inizio' : p[0]) + '_' + (p[1] === '9999-99-99' ? 'oggi' : p[1]), [
-      { nome: 'INBOUND', headers: ['GES', 'TYPE', 'FR', 'RMA BALANCING', 'DATA IN HUB', 'DATA RECEIVED AND VERIFY (REGISTRAZIONE VLT)', 'PO/MRN', 'MITTENTE', '#AWB1-3', 'CARRIER', 'DDT', 'OP', 'MNFT', 'SERIAL No.', 'PRODUCT No.', 'REPAIRER', 'NOTE ', 'POSIZIONE E NOTE NEW E REUSE - NOTE BUG SISTEMA', 'DATA IN MERCI', 'ANOMALIA'],
-        rows: IN.map(function (r) { return [r.id_mov, r.tipo, r.fr, r.rma, dt(r.data_ora), d(r.data_registrazione_vlt), r.po_mrn, r.controparte, r.awb, r.vettore, r.ddt, Sto.op(r), r.mnft, r.seriale, r.pn, r.riparatore, r.note, r.posizione_note, d(r.data_in_merci), r.anomalia]; }) },
-      { nome: 'OUTBOUND', headers: ['ID', 'TYPE', 'FR', 'PO NEW / MRN', 'RMA', 'DESTINO', 'data out', '#AWB2-4', 'DDT', 'OP', 'MNFT', 'SERIAL No.', 'PRODUCT No.', 'REPAIR', 'NOTE'],
-        rows: OUT.map(function (r) { return [r.id_mov, r.tipo, r.fr, r.po_mrn, r.rma, r.controparte, dt(r.data_ora), r.awb, r.ddt, Sto.op(r), r.mnft, r.seriale, r.pn, r.riparatore, r.note]; }) }
+      { nome: 'INBOUND', headers: ['GES', 'TYPE', 'FR', 'RMA BALANCING', 'DATA IN HUB', 'DATA RECEIVED AND VERIFY (REGISTRAZIONE VLT)', 'PO/MRN', 'MITTENTE', '#AWB1-3', 'CARRIER', 'DDT', 'OP', 'MNFT', 'SERIAL No.', 'PRODUCT No.', 'REPAIRER', 'NOTE ', 'POSIZIONE E NOTE NEW E REUSE - NOTE BUG SISTEMA', 'DATA IN MERCI', 'ANOMALIA'].concat(TBH),
+        rows: IN.map(function (r) { return [r.id_mov, r.tipo, r.fr, r.rma, dt(r.data_ora), d(r.data_registrazione_vlt), r.po_mrn, r.controparte, r.awb, r.vettore, r.ddt, Sto.op(r), r.mnft, r.seriale, r.pn, r.riparatore, r.note, r.posizione_note, d(r.data_in_merci), r.anomalia].concat(tb(r)); }) },
+      { nome: 'OUTBOUND', headers: ['ID', 'TYPE', 'FR', 'PO NEW / MRN', 'RMA', 'DESTINO', 'data out', '#AWB2-4', 'DDT', 'OP', 'MNFT', 'SERIAL No.', 'PRODUCT No.', 'REPAIR', 'NOTE', 'DATA CREAZIONE RMA'].concat(TBH),
+        rows: OUT.map(function (r) { return [r.id_mov, r.tipo, r.fr, r.po_mrn, r.rma, r.controparte, dt(r.data_ora), r.awb, r.ddt, Sto.op(r), r.mnft, r.seriale, r.pn, r.riparatore, r.note, L.vedi(RmaD.data(r.rma) || L.normDate(r.data_creazione_rma))].concat(tb(r)); }) }
     ]);
     toast('Easyloader: ' + IN.length + ' inbound, ' + OUT.length + ' outbound', 'ok');
   }
