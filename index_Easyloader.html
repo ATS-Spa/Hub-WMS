@@ -504,6 +504,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
         <span class="subtab" id="rmaT-inv" onclick="Rma.apri('inv')">Inventario giornaliero</span>
         <span class="subtab" id="rmaT-rit" onclick="Rma.apri('rit')">Ritorni in giacenza (VLT)</span>
         <span class="subtab" id="rmaT-car" onclick="Rma.apri('car')">Carichi NEW/REUSE</span>
+        <span class="subtab" id="rmaT-res" onclick="Rma.apri('res')">Resi</span>
         <span class="subtab" id="rmaT-usc" onclick="Rma.apri('usc')">Uscite e DDT RMA</span>
       </div>
       <div class="card" id="rmaBar"></div>
@@ -633,6 +634,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
     <div class="view" id="view-kpi">
       <div class="card"><div class="row">
         <div class="fg" style="width:170px"><span class="fl">Mese</span><input class="fc" type="month" id="kpiMese" onchange="if(this.value){Kpi.mese=this.value;Kpi.render()}"></div>
+        <label style="font-size:12px;display:flex;gap:6px;align-items:center;margin-bottom:9px" title="KPI₁ FAULTY: data Received and Verify · KPI₂ GOOD: data Good Material Received · KPI₆: data Repairer Ack Received, prese dal foglio TABLEAU di VLT (dove manca resta il calcolo di prima)"><input type="checkbox" id="kpiTab" checked onchange="Kpi.usaTab=this.checked;Kpi.render()"> date reali VLT (TABLEAU)</label><span class="hint" id="kpiTabInfo" style="margin-bottom:9px"></span>
         <div class="spacer"></div>
         <button class="btn ghost sm" onclick="Blk.apri()">⛔ Blocco VLT</button>
         <button class="btn ghost sm" onclick="Chi.nuova()">📅 Chiusura</button>
@@ -1662,7 +1664,7 @@ var Ingresso = {
     if (frOrig === 'HUAWEI') o.msgs.push(['info', 'FR ricavato dal file Huawei (seriale → FR)']);
     if (frScart && !frIn) o.msgs.push(['info', 'Su VLT c\'è l\'FR ' + frScart.fr_id + ' (' + frScart.stato + (frScart.data_apertura ? ', aperto il ' + L.s(frScart.data_apertura).slice(0, 10) : '') + ') ma non è stato associato: troppo vecchio o in uno stato non valido']);
     if (jg) o.msgs.push(['info', 'GOOD Juniper · pratica ' + jg.id_juniper + (L.s(jg.fr) ? ' · FR dalla pratica' : ' · faulty non ancora arrivata: l\'FR si associa da solo quando la ricevi')]);
-    o.rip = r.man.rip || (v ? v.riparatore : '');
+    o.rip = r.man.rip || App.normRip(v ? v.riparatore : '');   // sempre la stessa scritta (Admin → Riparatori / Alias riparatori)
     var sn = DB.serNoti[L.up(o.ser)];
     var scP = r.bc ? Ingresso.pulisci(r.bc, o.rip) : { pn: L.scegliPn(o.ser, o.ser, o.rip, regole, App.pnEsiste).pn, fonte: 'regole barcode' };
     o.pn = r.man.pn || scP.pn || (sn && sn.pn) || (v ? v.f_mat_tmpn : '');
@@ -1677,7 +1679,7 @@ var Ingresso = {
     if (!r.man.pn && scP.pn && scP.fonte && !o.pnDaMat) o.msgs.push(['info', 'P/N da ' + scP.fonte + (scP.scartati && scP.scartati.length ? ' (scartati: ' + scP.scartati.join(', ') + ')' : '')]);
     if (!r.man.ser && scP.sospettoS) o.msgs.push(['info', 'Barcode con prefisso S: senza S sarebbe ' + scP.sospettoS]);   // senza barcode le regole si applicano al seriale VLT
     var rp = DB.t.RIPARATORI.rows.find(function (x) { return L.up(x.codice) === L.up(App.aliasRip(o.rip)); });
-    o.mnft = r.man.mnft || DB.artPn[L.up(o.pn)] || (sn && sn.mnft) || (rp && rp.mnft_default) || '';
+    o.mnft = r.man.mnft || App.normMnft(DB.artPn[L.up(o.pn)] || (sn && sn.mnft) || (rp && rp.mnft_default) || '');
     if (v) {
       o.vltStato = L.s(v.stato);
       o.statoVlt = '| ' + v.stato + (v.note ? ' | ' + v.note : '');
@@ -2157,6 +2159,39 @@ App.pnSimile = function (pn) {
   if (!App._pnKeys) App._pnKeys = Object.keys(DB.pnSet || {}).filter(function (k) { return k.length >= 5; });
   return App._pnKeys.find(function (k) { return pn.indexOf(k) === 0 || k.indexOf(pn) === 0; }) || '';
 };
+// sigla dell'operatore da email (se non è tra gli operatori: la parte prima della @)
+App.sigla = function (email) {
+  var e = L.s(email).toLowerCase(); if (!e) return '';
+  if (!App._sg || App._sgN !== DB.t.OPERATORI.rows.length) { App._sg = {}; App._sgN = DB.t.OPERATORI.rows.length; DB.t.OPERATORI.rows.forEach(function (o) { var m = L.s(o.email).toLowerCase(); if (m && L.s(o.sigla) && !App._sg[m]) App._sg[m] = L.up(o.sigla); }); }
+  return App._sg[e] || e.split('@')[0];
+};
+// riparatore e MNFT uniformati: stessa scritta per tutte le varianti ("Deltacom", "DeltaComGroup", "DELTACOM GROUP"…)
+// riparatore: Alias riparatori VLT (nome → codice) e codici di Admin → Riparatori, confrontati senza maiuscole/spazi/punteggiatura
+// MNFT: parametro mnft_alias (VARIANTE=GIUSTO;…) e, per le sole differenze di scrittura, la forma più usata in anagrafica articoli
+App._k = function (x) { return L.up(x).replace(/[^A-Z0-9]/g, ''); };
+App.normRip = function (nome) {
+  var n = L.s(nome); if (!n) return '';
+  var a = App.aliasRip(n); if (L.up(a) !== L.up(n)) return a;
+  var k = App._k(n);
+  if (!App._rk || App._rkN !== DB.t.RIPARATORI.rows.length + DB.t.RIPARATORI_ALIAS.rows.length) {
+    App._rk = {}; App._rkN = DB.t.RIPARATORI.rows.length + DB.t.RIPARATORI_ALIAS.rows.length;
+    DB.t.RIPARATORI.rows.forEach(function (r) { if (L.s(r.codice)) App._rk[App._k(r.codice)] = L.s(r.codice); });
+    DB.t.RIPARATORI_ALIAS.rows.forEach(function (r) { if (L.s(r.nome_vlt) && L.s(r.codice_riparatore)) App._rk[App._k(r.nome_vlt)] = L.s(r.codice_riparatore); });
+  }
+  return App._rk[k] || n;
+};
+App.normMnft = function (m) {
+  var n = L.s(m); if (!n) return '';
+  var par = L.s(DB.param('mnft_alias', ''));
+  if (App._maP !== par) { App._maP = par; App._ma = {}; par.split(/[;\n]/).forEach(function (x) { var p = x.split('='); if (p.length === 2 && L.s(p[0]) && L.s(p[1])) App._ma[App._k(p[0])] = L.up(p[1]); }); }
+  var k = App._k(n); if (App._ma[k]) return App._ma[k];
+  if (!App._mf || App._mfN !== Object.keys(DB.artPn || {}).length) {
+    var c = {}; Object.keys(DB.artPn || {}).forEach(function (pn) { var v = L.s(DB.artPn[pn]); if (v) { var kk = App._k(v); c[kk] = c[kk] || {}; c[kk][v] = (c[kk][v] || 0) + 1; } });
+    App._mf = {}; App._mfN = Object.keys(DB.artPn || {}).length;
+    Object.keys(c).forEach(function (kk) { App._mf[kk] = Object.keys(c[kk]).sort(function (a, b) { return c[kk][b] - c[kk][a]; })[0]; });
+  }
+  return App._mf[k] || n;
+};
 App.aliasRip = function (nome) {
   var a = DB.t.RIPARATORI_ALIAS.rows.find(function (x) { return L.up(x.nome_vlt) === L.up(nome); });
   return a ? a.codice_riparatore : nome;
@@ -2258,7 +2293,7 @@ var Giacenze = {
   excel: function () { Giacenze.grid().excel('Giacenze'); },
 
   // ─ gestione item: nota, blocco, attesa, variazione dati (tracciati in MOVIMENTI come movimenti interni + LOG)
-  VAR_F: [['tipo', 'Tipo'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['fr', 'FR'], ['rma', 'RMA'], ['riparatore', 'Riparatore'], ['magazzino', 'Magazzino'], ['ubicazione', 'Ubicazione'], ['destinazione_prevista', 'Destinazione']],
+  VAR_F: [['data_in', 'Data ingresso'], ['reg_vlt', 'Data reg. VLT (solo admin)'], ['tipo', 'Tipo'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['fr', 'FR'], ['rma', 'RMA'], ['riparatore', 'Riparatore'], ['magazzino', 'Magazzino'], ['ubicazione', 'Ubicazione'], ['destinazione_prevista', 'Destinazione']],
   gestisci: function (id) {
     var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); if (!u) return;
     var gestibile = Giacenze.A_MAG.indexOf(u.stato) >= 0 && u.stato !== 'IN_LAVORAZIONE';
@@ -2267,6 +2302,8 @@ var Giacenze = {
     var campo = function (f) {
       var k = f[0], v = L.s(u[k]);
       if (k === 'tipo') return '<select class="fc" id="gv_tipo">' + opz(v, TIPI) + '</select>';
+      if (k === 'data_in') return '<input class="fc" type="date" id="gv_data_in" value="' + esc(L.normDate(v)) + '">';
+      if (k === 'reg_vlt') { var mI = (Sto.dati.cur || []).find(function (m) { return m.id_mov === u.id_mov_in; }); return '<input class="fc" type="date" id="gv_reg_vlt" data-prima="' + esc(mI ? L.normDate(mI.data_registrazione_vlt) : '') + '" value="' + esc(mI ? L.normDate(mI.data_registrazione_vlt) : '') + '"' + (!App.isAdmin || !mI ? ' disabled title="' + (mI ? 'Solo un admin' : 'Movimento di ingresso non trovato (apri prima Movimenti)') + '"' : '') + '>'; }
       if (k === 'magazzino') return '<select class="fc" id="gv_magazzino">' + opz(v, DB.t.MAGAZZINI.rows.map(function (m) { return m.codice; }).concat(v && !DB.t.MAGAZZINI.rows.some(function (m) { return m.codice === v; }) ? [v] : [])) + '</select>';
       return '<input class="fc' + (/seriale|pn|fr|rma|ubicazione/.test(k) ? ' mono' : '') + '" id="gv_' + k + '" value="' + esc(v) + '"' + (k === 'destinazione_prevista' ? ' list="dlControparti"' : '') + '>';
     };
@@ -2289,7 +2326,9 @@ var Giacenze = {
     var motivo = L.s($('gvMotivo').value), notaOld = L.s(u.note).split(' | fonte:')[0].replace(/^fonte:.*$/i, ''), nota = L.s($('gvNota').value);
     var r = document.querySelector('input[name=gvStato]:checked'); if (r && r.value !== u.stato) ch.stato = r.value;
     Giacenze.VAR_F.forEach(function (f) {
-      var e = $('gv_' + f[0]); if (!e) return; var v = L.s(e.value);
+      var e = $('gv_' + f[0]); if (!e || e.disabled) return; var v = L.s(e.value);
+      if (f[0] === 'reg_vlt') { if (v && v !== e.getAttribute('data-prima')) ch.reg_vlt = v; return; }
+      if (f[0] === 'data_in') { if (v && v !== L.normDate(u.data_in)) ch.data_in = v; return; }
       if (/^(seriale|pn|tipo|magazzino)$/.test(f[0])) v = v.toUpperCase(); if (f[0] === 'fr' && v) v = L.frKey(v);
       if (v !== L.s(u[f[0]])) ch[f[0]] = v;
     });
@@ -2311,9 +2350,15 @@ var Giacenze = {
       // specchio: stessi cambi nei movimenti IN/OUT della scheda e nelle righe di spedizione; la nota nel movimento di ingresso
       var cambi = {}; Object.keys(ch).forEach(function (k) { if (Spec.CAMPI.indexOf(k) >= 0) cambi[k] = [L.s(u[k]), L.s(ch[k])]; });
       var spM = { upd: [], loc: [] }, spS = { upd: [], loc: [] };
-      if (Object.keys(cambi).length || 'note' in ch) {
+      if (Object.keys(cambi).length || 'note' in ch || 'data_in' in ch || 'reg_vlt' in ch) {
         await Spec.mov(); var tM0 = (await Ingresso.heads()).MOVIMENTI, mr = await Spec.righe(tM0);
         spM = Spec.movimenti(tM0, mr, u.id_unita, cambi, null);
+        // date a specchio sul movimento di ingresso: data in hub (l'ora resta) e data di registrazione VLT (solo admin)
+        var mI = u.id_mov_in && Sto.dati.cur.find(function (m) { return m.id_mov === u.id_mov_in; });
+        if (mI && mr[mI.id_mov]) {
+          if ('data_in' in ch) { var ora = /\d{1,2}:\d{2}(:\d{2})?/.exec(L.s(mI.data_ora)), dv = ch.data_in + (ora ? ' ' + ora[0] : ''); spM.upd.push({ range: tM0.cell('data_ora', mr[mI.id_mov]), values: [[dv]] }); spM.loc.push([mI, 'data_ora', dv]); }
+          if ('reg_vlt' in ch && App.isAdmin && ('data_registrazione_vlt' in tM0.idx)) { spM.upd.push({ range: tM0.cell('data_registrazione_vlt', mr[mI.id_mov]), values: [[ch.reg_vlt]] }); spM.loc.push([mI, 'data_registrazione_vlt', ch.reg_vlt]); }
+        }
         if ('note' in ch && u.id_mov_in && ('note' in tM0.idx)) {
           var mi = Sto.dati.cur.find(function (m) { return m.id_mov === u.id_mov_in; });
           if (mi && mr[mi.id_mov] && (!L.s(mi.note) || L.s(mi.note) === notaOld)) { spM.upd.push({ range: tM0.cell('note', mr[mi.id_mov]), values: [[nota]] }); spM.loc.push([mi, 'note', nota]); }
@@ -2348,36 +2393,50 @@ var Reso = {
   apri: function () {
     var A = Reso.attivi();
     Modal.html('📤 Reso senza RMA',
-      '<div class="hint" style="margin-bottom:8px">I pezzi vanno in <b>Uscite e DDT RMA</b> sotto la destinazione scelta e partono con il DDT di quel giorno, <b>senza RMA</b> (causale RESO). Seriali uno per riga o separati da ; (anche incollati da Excel).</div>' +
-      '<div class="fg"><span class="fl">Seriali *</span><textarea class="fc mono" id="rsSer" rows="4" placeholder="es. 102016770000110"></textarea></div>' +
+      '<div class="hint" style="margin-bottom:8px">I pezzi vanno in <b>Uscite e DDT RMA</b> sotto la destinazione scelta e partono con il DDT di quel giorno, <b>senza RMA</b> (causale RESO). Seriali uno per riga o separati da <b>;</b> (anche incollati da Excel): sotto vedi subito se sono in giacenza.</div>' +
+      '<div class="fg"><span class="fl">Seriali *</span><textarea class="fc mono" id="rsSer" rows="3" placeholder="es. 102016770000110; VFI166751I"></textarea></div>' +
+      '<div id="rsPrev" style="margin-top:6px"></div>' +
       '<div class="row" style="gap:10px;margin-top:8px;justify-content:flex-start;flex-wrap:wrap"><div class="fg" style="min-width:260px;flex:1"><span class="fl">Destinazione *</span><input class="fc" id="rsDest" list="dlControparti" autocomplete="off"></div>' +
       '<div class="fg" style="min-width:260px;flex:1"><span class="fl">Nota DDT (oltre a "RESO")</span><input class="fc" id="rsNota" autocomplete="off" placeholder="es. reso materiale non conforme"></div></div>' +
       '<div class="hint" id="rsErr" style="margin-top:6px"></div>' +
-      (A.length ? '<div style="font-size:13px;margin-top:12px"><b>' + A.length + '</b> pezzi già in reso (non ancora spediti):</div><div class="tbl-wrap modal-scroll" style="max-height:26vh"><table><thead><tr><th></th><th>Scheda</th><th>Tipo</th><th>Seriale</th><th>P/N</th><th>Destinazione</th><th>Nota DDT</th></tr></thead><tbody>' +
-        A.map(function (u) { return '<tr><td><input type="checkbox" class="rsSel" data-id="' + esc(u.id_unita) + '"></td><td class="mono">' + esc(u.id_unita) + '</td><td>' + esc(u.tipo) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.destinazione_prevista) + '</td><td>' + esc(u.nota_ddt) + '</td></tr>'; }).join('') + '</tbody></table></div>' : ''),
-      [{ label: 'Chiudi', cls: 'ghost' }].concat(A.length ? [{ label: '↩ Togli dal reso i spuntati', cls: 'ghost', keep: true, fn: function () {
-        var ids = Array.prototype.slice.call(document.querySelectorAll('#mBody .rsSel')).filter(function (c) { return c.checked; }).map(function (c) { return c.getAttribute('data-id'); });
-        if (!ids.length) { toast('Spunta i pezzi da togliere', 'ko'); return; }
-        Reso.scrivi(ids.map(function (id) { return DB.t.UNITA.rows.find(function (u) { return u.id_unita === id; }); }).filter(Boolean), null, '');
-      } }] : []).concat([{ label: '📤 Metti in reso', cls: 'green', keep: true, fn: function () { Reso.controlla(); } }]), true);
+      (A.length ? '<div style="font-size:13px;margin-top:12px"><b>' + A.length + '</b> pezzi già in reso (non ancora spediti) · li vedi anche in RMA → Resi</div>' : ''),
+      [{ label: 'Chiudi', cls: 'ghost' }, { label: '📤 Metti in reso', cls: 'green', keep: true, fn: function () { Reso.controlla(); } }], true);
+    var t; $('rsSer').addEventListener('input', function () { clearTimeout(t); t = setTimeout(Reso.anteprima, 250); });
+    $('rsSer').addEventListener('paste', function () { setTimeout(Reso.anteprima, 30); });
     setTimeout(function () { $('rsSer').focus(); }, 50);
+  },
+  // per ogni seriale scritto: pezzi trovati (esatti; se non c'è l'esatto, quelli che lo contengono) con la spunta
+  cerca: function (s) {
+    var U = DB.t.UNITA.rows.filter(function (x) { return Giacenze.A_MAG.indexOf(x.stato) >= 0; });
+    var es = U.filter(function (x) { return L.up(x.seriale) === s || L.up(L.afterSpace(x.seriale)) === s; });
+    if (es.length || s.length < 5) return { esatti: true, l: es };
+    return { esatti: false, l: U.filter(function (x) { return L.up(x.seriale).indexOf(s) >= 0; }).slice(0, 10) };
+  },
+  anteprima: function () {
+    var box = $('rsPrev'); if (!box) return;
+    var ser = L.s($('rsSer').value).split(/[\s;,]+/).map(L.up).filter(Boolean), vis = {}, righe = [], nOk = 0;
+    ser.forEach(function (s) {
+      if (vis[s]) return; vis[s] = 1;
+      var c = Reso.cerca(s);
+      if (!c.l.length) { righe.push('<tr class="r-err"><td></td><td class="mono">' + esc(s) + '</td><td colspan="5" style="color:var(--red)">non in giacenza</td></tr>'); return; }
+      c.l.forEach(function (u) {
+        var ok = u.stato === 'IN_GIACENZA', gia = L.up(u.uscita_reso) === 'SI', sel = ok && !gia && c.esatti && c.l.length === 1;
+        if (sel) nOk++;
+        righe.push('<tr' + (ok ? '' : ' class="r-warn"') + '><td><input type="checkbox" class="rsPick" data-id="' + esc(u.id_unita) + '"' + (sel ? ' checked' : '') + (ok ? '' : ' disabled') + '></td><td class="mono">' + esc(s) + '</td><td class="mono">' + esc(u.seriale) + '</td><td>' + esc(u.tipo) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.stato) + (gia ? ' · già in reso → ' + esc(u.destinazione_prevista) : '') + '</td><td style="font-size:11.5px;color:var(--amber)">' + (!c.esatti ? 'seriale simile: spunta se è questo' : (c.l.length > 1 ? 'più schede con questo seriale: scegli' : (ok ? '' : (u.stato === 'IN_LAVORAZIONE' ? 'in un carico RMA: annullalo prima' : 'sbloccalo prima')))) + '</td></tr>');
+      });
+    });
+    box.innerHTML = ser.length ? '<div class="tbl-wrap modal-scroll" style="max-height:30vh"><table><thead><tr><th></th><th>Scritto</th><th>Seriale in giacenza</th><th>Tipo</th><th>P/N</th><th>Stato</th><th></th></tr></thead><tbody>' + righe.join('') + '</tbody></table></div><div class="hint">' + nOk + ' pronti da mettere in reso</div>' : '';
   },
   controlla: function () {
     var err = function (m) { $('rsErr').textContent = m; $('rsErr').className = 'hint err'; };
-    var ser = L.s($('rsSer').value).split(/[\s;,]+/).map(L.up).filter(Boolean), dest = L.s($('rsDest').value), nota = L.s($('rsNota').value);
-    if (!ser.length) return err('Scrivi almeno un seriale');
+    Reso.anteprima();
+    var dest = L.s($('rsDest').value), nota = L.s($('rsNota').value);
+    var ids = Array.prototype.slice.call(document.querySelectorAll('#rsPrev .rsPick')).filter(function (c) { return c.checked; }).map(function (c) { return c.getAttribute('data-id'); });
+    var trov = ids.map(function (id) { return DB.t.UNITA.rows.find(function (u) { return u.id_unita === id; }); }).filter(Boolean);
+    if (!trov.length) return err('Nessun pezzo spuntato: scrivi i seriali e spunta quelli da mettere in reso');
     if (!dest) return err('Scegli la destinazione');
     var D = Rma.destinazioni ? Rma.destinazioni() : {}; if (D[L.up(dest)]) dest = D[L.up(dest)];
-    var U = DB.t.UNITA.rows, trov = [], no = [];
-    ser.forEach(function (s) {
-      var u = U.find(function (x) { return Giacenze.A_MAG.indexOf(x.stato) >= 0 && (L.up(x.seriale) === s || L.up(L.afterSpace(x.seriale)) === s); });
-      if (!u) no.push(s + ': non in giacenza');
-      else if (u.stato !== 'IN_GIACENZA') no.push(s + ': ' + u.stato + (u.stato === 'IN_LAVORAZIONE' ? ' (è in un carico RMA: annullalo prima)' : ' (sbloccalo prima)'));
-      else if (trov.indexOf(u) < 0) trov.push(u);
-    });
-    if (no.length && !trov.length) return err(no.join(' · '));
     if (!DB.t.CONTROPARTI.rows.some(function (c) { return L.up(c.codice) === L.up(dest); }) && !confirm('"' + dest + '" non è tra le controparti: il DDT uscirà senza indirizzo. Continuo?')) return;
-    if (no.length && !confirm('Questi non si possono mettere in reso:\n' + no.join('\n') + '\n\nContinuo con gli altri ' + trov.length + '?')) return;
     Reso.scrivi(trov, dest, nota);
   },
   // dest = null → toglie dal reso
@@ -2424,7 +2483,7 @@ var Rial = {
   // data + ora confrontabili ("2026-10-15 10:20:00" / "2026-10-15")
   t: function (x) { var s = L.s(x), d = L.normDate(s); return d ? d + (/\d{1,2}:\d{2}/.test(s) ? ' ' + /\d{1,2}:\d{2}(:\d{2})?/.exec(s)[0].padStart(5, '0') : '') : ''; },
   calcola: function () {
-    var M = (Sto.dati.cur || []).filter(function (m) { return (m.direzione === 'IN' || m.direzione === 'OUT') && L.s(m.seriale) && m.causale !== 'INGRESSO_ANNULLATO'; });
+    var M = (Sto.dati.cur || []).filter(function (m) { return (m.direzione === 'IN' || m.direzione === 'OUT') && L.s(m.seriale) && !Sto.annullato(m); });
     var perSer = {}; M.forEach(function (m) { var k = L.up(m.seriale); (perSer[k] = perSer[k] || []).push(m); });
     var U = DB.t.UNITA.rows, stock = {}, perMovIn = {}, frStock = {};
     U.forEach(function (u) { if (L.s(u.id_mov_in)) perMovIn[u.id_mov_in] = u; if (Giacenze.A_MAG.indexOf(u.stato) >= 0) { stock[L.up(u.seriale)] = u; stock[L.up(L.afterSpace(u.seriale))] = stock[L.up(L.afterSpace(u.seriale))] || u; if (L.s(u.fr)) frStock[u.fr] = u; } });
@@ -2868,10 +2927,10 @@ var Rett = {
 var MovEd = {
   campi: function (r) {
     var IN = r.direzione === 'IN';
-    return [['tipo', 'Tipo'], ['fr', 'FR'], ['rma', IN ? 'RMA balancing' : 'RMA'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['mnft', 'MNFT'], ['riparatore', IN ? 'Repairer' : 'Repair'], ['po_mrn', 'PO/MRN'],
+    return [['data_ora', IN ? 'Data in hub' : 'Data uscita']].concat(IN ? [['data_registrazione_vlt', 'Data reg. VLT (solo admin)']] : []).concat([['tipo', 'Tipo'], ['fr', 'FR'], ['rma', IN ? 'RMA balancing' : 'RMA'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['mnft', 'MNFT'], ['riparatore', IN ? 'Repairer' : 'Repair'], ['po_mrn', 'PO/MRN'],
       ['controparte', IN ? 'Mittente' : 'Destino'], ['awb', 'AWB'], ['vettore', 'Carrier'], ['ddt', 'DDT']]
-      .concat(IN ? [['data_registrazione_vlt', 'Data reg. VLT'], ['posizione_note', 'Posizione e note new/reuse'], ['anomalia', 'Anomalia']] : [])
-      .concat([['note', 'Note']]);
+      .concat(IN ? [['posizione_note', 'Posizione e note new/reuse'], ['anomalia', 'Anomalia']] : [])
+      .concat([['note', 'Note']]));
   },
   apri: function (idMov) {
     var r = (Sto.dati.cur || []).find(function (x) { return x.id_mov === idMov; }); if (!r) return;
@@ -2879,6 +2938,7 @@ var MovEd = {
     var campo = function (f) {
       var k = f[0], v = L.s(r[k]);
       if (k === 'tipo') return '<select class="fc" id="mv_tipo">' + TIPI.concat(v && TIPI.indexOf(v) < 0 ? [v] : []).map(function (x) { return '<option' + (x === v ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select>';
+      if (k === 'data_ora' || k === 'data_registrazione_vlt') return '<input class="fc" type="date" id="mv_' + k + '" value="' + esc(L.normDate(v)) + '"' + (k === 'data_registrazione_vlt' && !App.isAdmin ? ' disabled title="Solo un admin può cambiare la data di registrazione VLT"' : '') + '>';
       return '<input class="fc' + (/seriale|pn|fr|rma|awb|ddt|po_mrn/.test(k) ? ' mono' : '') + '" id="mv_' + k + '" value="' + esc(v) + '"' + (k === 'controparte' ? ' list="dlControparti"' : (k === 'vettore' ? ' list="dlVettori"' : '')) + '>';
     };
     Modal.html('Modifica movimento ' + r.id_mov,
@@ -2887,17 +2947,71 @@ var MovEd = {
       '<div class="g-var">' + MovEd.campi(r).map(function (f) { return '<div class="fg"><span class="fl">' + esc(f[1]) + '</span>' + campo(f) + '</div>'; }).join('') + '</div>' +
       '<div class="hint" style="margin-top:8px">' + (u ? 'Seriale, P/N, MNFT, tipo, FR, RMA e riparatore si aggiornano anche sulla scheda in Giacenze e negli altri suoi movimenti' + (u.id_mov_in === r.id_mov ? '; la nota anche sulla scheda.' : '.') : 'Movimento senza scheda: cambia solo questa riga.') + '</div>' +
       '<div class="hint" id="mvErr" style="margin-top:6px"></div>',
-      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Salva', keep: true, fn: function () { MovEd.salva(idMov); } }], true);
+      [{ label: 'Annulla', cls: 'ghost' }].concat(Sto.annullato(r) ? [] : [{ label: '🗑 Annulla movimento', cls: 'red', keep: true, fn: function () { MovEd.annullaApri(idMov); } }, { label: 'Salva', keep: true, fn: function () { MovEd.salva(idMov); } }]), true);
+  },
+  // ─ ANNULLA un movimento sbagliato: la riga non si cancella (gli ID dipendono dalla riga) ma diventa …_ANNULLATO e non conta più
+  annullaApri: function (idMov) {
+    var r = (Sto.dati.cur || []).find(function (x) { return x.id_mov === idMov; }); if (!r) return;
+    var u = r.id_unita && DB.t.UNITA.rows.find(function (x) { return x.id_unita === r.id_unita; });
+    var inSuo = u && r.direzione === 'IN' && u.id_mov_in === r.id_mov && Giacenze.A_MAG.indexOf(u.stato) >= 0;
+    var outSuo = u && r.direzione === 'OUT' && u.stato === 'USCITO' && (!L.s(r.id_spedizione) || L.s(u.id_spedizione) === L.s(r.id_spedizione));
+    Modal.html('🗑 Annulla movimento ' + r.id_mov,
+      '<div style="font-size:12.5px;color:var(--subtle);margin-bottom:8px">' + esc(r.direzione) + ' · ' + esc(r.causale) + ' · ' + esc(r.tipo) + ' · ' + esc(r.seriale) + ' · ' + esc(Sto.dataOra(r.data_ora)) + (r.ddt ? ' · DDT ' + esc(r.ddt) : '') + '</div>' +
+      '<div class="hint" style="margin-bottom:8px">La riga <b>resta nello storico</b> con causale <b>' + esc((r.direzione === 'IN' ? 'INGRESSO' : (L.s(r.causale) || r.direzione)) + '_ANNULLATO') + '</b> (gli ID delle altre righe non cambiano), ma non conta più: esce dall\'Excel Easyloader, dai KPI e dalla dashboard. Resta un movimento interno e il LOG.</div>' +
+      (inSuo ? '<label style="display:block;margin:6px 0"><input type="checkbox" id="maScheda" checked> togli anche la scheda <b>' + esc(u.id_unita) + '</b> dalla giacenza (era entrata con questo movimento)</label>' : '') +
+      (outSuo ? '<label style="display:block;margin:6px 0"><input type="checkbox" id="maScheda"> rimetti la scheda <b>' + esc(u.id_unita) + '</b> in giacenza (il DDT già emesso non cambia)</label>' : '') +
+      (u && !inSuo && !outSuo ? '<div class="hint">La scheda ' + esc(u.id_unita) + ' (' + esc(u.stato) + ') non cambia.</div>' : '') +
+      '<div class="fg" style="margin-top:8px"><span class="fl">Motivo *</span><input class="fc" id="maMot" autocomplete="off" placeholder="es. ingresso doppio, importato per errore"></div>' +
+      '<div class="fg" style="margin-top:8px"><span class="fl">Password *</span><input class="fc" type="password" id="maPwd" autocomplete="new-password"></div><div class="hint" id="maErr" style="margin-top:6px"></div>',
+      [{ label: 'Indietro', cls: 'ghost', fn: function () { MovEd.apri(idMov); } }, { label: '🗑 Annulla il movimento', cls: 'red', keep: true, fn: function () { MovEd.annulla(idMov, inSuo ? 'togli' : (outSuo ? 'rimetti' : '')); } }]);
+    setTimeout(function () { $('maMot').focus(); }, 50);
+  },
+  annulla: async function (idMov, azU) {
+    var err = function (t) { $('maErr').textContent = t; $('maErr').className = 'hint err'; };
+    var mot = L.s($('maMot').value), pw = $('maPwd').value, conU = azU && $('maScheda') && $('maScheda').checked;
+    if (!mot) return err('Scrivi il motivo');
+    var par = L.s(DB.param('password_eliminazione', ''));
+    var ok = par ? (/^sha256:/i.test(par) ? (await Nr.sha(pw)) === par.slice(7).toLowerCase() : pw === par) : (await Nr.sha(pw)) === Nr.PWD;
+    if (!ok) return err('Password errata');
+    Modal.progress('Annullo…');
+    try {
+      var H = await Ingresso.heads(), tM = H.MOVIMENTI, mr = await Spec.righe(tM), row = mr[idMov];
+      if (!row) throw new Error('movimento non trovato nel foglio: premi Ricarica');
+      var r = Sto.dati.cur.find(function (x) { return x.id_mov === idMov; }), now = L.nowStamp(), chi = App.chi();
+      var caus = (r.direzione === 'IN' ? 'INGRESSO' : (L.s(r.causale) || r.direzione)) + '_ANNULLATO', nota = [L.s(r.note), 'ANNULLATO da ' + (chi.sigla || chi.email) + ' il ' + L.itDate(L.isoToday()) + ': ' + mot].filter(Boolean).join(' | ');
+      var upd = [{ range: tM.cell('causale', row), values: [[caus]] }, { range: tM.cell('note', row), values: [[nota]] }], uCh = null, u = null;
+      if (conU) {
+        await DB.loadTables(['UNITA']); var tU = DB.t.UNITA; u = tU.rows.find(function (x) { return x.id_unita === r.id_unita; });
+        if (u) {
+          uCh = azU === 'togli' ? { stato: 'ANNULLATO', note: [L.s(u.note), 'ingresso ' + idMov + ' annullato: ' + mot].join(' | ') }
+            : { stato: 'IN_GIACENZA', id_spedizione: '', data_out: '', note: [L.s(u.note), 'uscita ' + idMov + ' annullata: ' + mot].join(' | ') };
+          Object.assign(uCh, { modificato_il: now, modificato_da: chi.email, rev: (parseInt(u.rev, 10) || 1) + 1 });
+          Object.keys(uCh).forEach(function (h) { if (h in tU.idx) upd.push({ range: tU.cell(h, u._r), values: [[String(uCh[h])]] }); });
+        }
+      }
+      await API.batchUpdate(DB.id, upd);
+      r.causale = caus; r.note = nota; if (u && uCh) Object.keys(uCh).forEach(function (h) { u[h] = String(uCh[h]); });
+      await Spec.traccia(H, u || r, 'Movimento ' + idMov + ' (' + r.direzione + ' ' + L.itDate(r.data_ora) + ') annullato: ' + mot + (uCh ? (azU === 'togli' ? ' · scheda tolta dalla giacenza' : ' · scheda rimessa in giacenza') : ''),
+        { movimento: idMov, motivo: mot, scheda: u ? u.id_unita : '', azione_scheda: uCh ? azU : '' }, 'MOVIMENTO_ANNULLATO', 'MOVIMENTI', idMov, 'MOVIMENTO_ANNULLATO');
+      Export.scrivi().catch(function () { });
+      Modal.close(); toast('Movimento ' + idMov + ' annullato', 'ok'); Sto.render(true); App.syncInfo();
+    } catch (e) { Modal.progress(''); err('Non annullato: ' + e.message); }
   },
   salva: async function (idMov) {
     var r = (Sto.dati.cur || []).find(function (x) { return x.id_mov === idMov; }), err = function (t) { $('mvErr').textContent = t; $('mvErr').className = 'hint err'; };
     if (!r) return;
     var ch = {}, motivo = L.s($('mvMotivo').value);
     MovEd.campi(r).forEach(function (f) {
-      var e = $('mv_' + f[0]); if (!e) return; var v = L.s(e.value);
+      var e = $('mv_' + f[0]); if (!e || e.disabled) return; var v = L.s(e.value);
+      if (f[0] === 'data_ora' || f[0] === 'data_registrazione_vlt') {   // date: si confronta il giorno; l'ora della data in hub resta quella di prima
+        if (!v || v === L.normDate(r[f[0]])) return;
+        var ora = /\d{1,2}:\d{2}(:\d{2})?/.exec(L.s(r[f[0]]));
+        ch[f[0]] = f[0] === 'data_ora' && ora ? v + ' ' + ora[0] : v; return;
+      }
       if (/^(seriale|pn|tipo|mnft)$/.test(f[0])) v = v.toUpperCase(); if (f[0] === 'fr' && v) v = L.frKey(v);
       if (v !== L.s(r[f[0]])) ch[f[0]] = v;
     });
+    if ('data_registrazione_vlt' in ch && !App.isAdmin) { err('Solo un admin può cambiare la data di registrazione VLT'); return; }
     if (!Object.keys(ch).length) { Modal.close(); return; }
     if (!motivo) { err('Scrivi il motivo'); $('mvMotivo').focus(); return; }
     if ('seriale' in ch && !ch.seriale) { err('Il seriale non può essere vuoto'); return; }
@@ -2915,6 +3029,9 @@ var MovEd = {
       if (u) {
         Object.keys(cambi).forEach(function (k) { if ((k in tU.idx) && L.s(u[k]) === cambi[k][0]) uCh[k] = cambi[k][1]; });
         if ('note' in ch && u.id_mov_in === r.id_mov) { var cl = Spec.pulita(u.note); if (!cl || cl === L.s(r.note)) uCh.note = ch.note + Spec.fonte(u.note); }
+        // date a specchio sulla scheda: ingresso → data_in, uscita della sua spedizione → data_out
+        if ('data_ora' in ch && u.id_mov_in === r.id_mov && ('data_in' in tU.idx)) uCh.data_in = L.normDate(ch.data_ora);
+        if ('data_ora' in ch && r.direzione === 'OUT' && L.s(r.id_spedizione) && L.s(u.id_spedizione) === L.s(r.id_spedizione) && ('data_out' in tU.idx)) uCh.data_out = L.normDate(ch.data_ora);
         if (Object.keys(uCh).length) {
           var last = L.colLetter(tU.header.length - 1), cur = (await API.batchGet(DB.id, [API.q('UNITA') + '!A' + u._r + ':' + last + u._r]))[0][0] || [];
           if (L.s(cur[tU.idx.id_unita]) !== u.id_unita) throw new Error('la scheda non è più al suo posto: premi Aggiorna e riprova');
@@ -3000,7 +3117,7 @@ var Admin = {
   CONF: {
     OPERATORI: { title: 'Operatori', hint: 'Email Gmail di accesso per ogni sigla. Ruolo ADMIN = può modificare la configurazione e vede Admin e Dashboard (salvando si aggiorna anche la protezione Google). Altri ruoli (da Parametri → ruoli) sono per ora solo descrittivi: valgono come OPERATORE. Attivo NO = non entra. Condiviso SI = account usato da più persone (palmarino ACK): prima della spunta si sceglie l\'operatore con il suo PIN (4-6 cifre, salvato cifrato).', cols: ['email', 'nome', 'sigla', 'ruolo', 'attivo', 'condiviso', 'pin'], add: true },
     RIPARATORI: { title: 'Riparatori', hint: 'Dati stampati sul DDT ACK. ack_include_as = SI fa entrare gli AS nell\'ACK del giorno.', cols: ['codice', 'ragione_sociale', 'indirizzo', 'ack_include_as', 'mnft_default', 'attivo', 'note'], add: true },
-    RIPARATORI_ALIAS: { title: 'Alias riparatori VLT', hint: 'Nome riparatore come scritto in VLT → codice riparatore.', cols: ['nome_vlt', 'codice_riparatore'], add: true },
+    RIPARATORI_ALIAS: { title: 'Alias riparatori VLT', hint: 'Nome riparatore come scritto in VLT (anche le varianti: Deltacom, DeltaComGroup…) → codice riparatore. All\'ingresso il riparatore si uniforma da solo; maiuscole, spazi e punteggiatura non contano. Per il produttore (MNFT) usa il parametro mnft_alias (es. DELTACOM=DELTACOMGROUP;ALCATEL=ALU).', cols: ['nome_vlt', 'codice_riparatore'], add: true },
     DEPOT_VLT: { title: 'Depositi VLT', hint: 'Codice deposito VLT → destinazione: usato per mittente e destinazione GOOD.', cols: ['depot_vlt', 'destinazione', 'sigla', 'destinazione_conversione'], add: true },
     CONTROPARTI: { title: 'Controparti', hint: 'Mittenti e destinazioni (ASP / field) con indirizzo per i DDT RMA.', cols: ['codice', 'indirizzo_completo', 'tipo', 'attivo', 'note'], add: true },
     CALENDARIO_USCITE: { title: 'Calendario uscite', hint: 'Riparatori in uscita per giorno (una riga per data e riparatore).', cols: ['data', 'riparatore', 'stato', 'id_spedizione', 'note'], add: true },
@@ -3432,6 +3549,12 @@ var Chv = {
   },
   show: async function () {
     Chv.init(); Chv.ping(); setTimeout(function () { if (App.tab === 'chiusure') Chv.render(); }, 1200);
+    // esiti scritti da altri operatori: si rileggono da soli ogni 30 secondi mentre sei sul tab (non con un popup aperto)
+    clearInterval(Chv._poll); Chv._poll = setInterval(async function () {
+      if (App.tab !== 'chiusure') { clearInterval(Chv._poll); return; }
+      if (document.hidden || document.querySelector('.modal-bg.show')) return;
+      try { var n0 = ((DB.t.VLT_CHIUSURE || {}).rows || []).length; await DB.loadTables(['VLT_CHIUSURE']); if (DB.t.VLT_CHIUSURE.rows.length !== n0) { Chv._cnt = null; Chv.render(); } } catch (e) { }
+    }, 30000);
     if (!$('chvData').value) $('chvData').value = L.isoToday();
     try { await Chv.tab(); } catch (e) { $('chvBox').innerHTML = '<div class="empty">Errore: ' + esc(e.message) + '</div>'; return; }
     Chv.render();
@@ -3942,30 +4065,40 @@ var Ddt = {
     y += 18;
     // dettaglio colli in grande (tipo, misure, peso): due colli per riga
     if (C.length) {
-      d.setFont('helvetica', 'bold'); d.setFontSize(9); d.text('DETTAGLIO COLLI', M, y + 1); y += 6;
-      d.setFontSize(12);
+      d.setFont('helvetica', 'bold'); d.setFontSize(9); d.text('DETTAGLIO COLLI', M, y + 1); y += 5.5;
+      d.setFontSize(9);   // stesso corpo dell'etichetta "DETTAGLIO COLLI"
       var tc = C.map(function (c, ci) { return (ci + 1) + ') ' + L.s(c.tipo_collo || 'PLT') + '  ' + c.lunghezza_cm + 'x' + c.larghezza_cm + 'x' + c.altezza_cm + ' cm  ' + c.peso_kg + ' kg'; });
       var per = tc.every(function (t) { return d.getTextWidth(t) < W / 2 - 4; }) ? 2 : 1;   // due per riga se ci stanno
       for (var ci = 0; ci < C.length; ci++) {
         d.text(tc[ci], M + (ci % per) * (W / 2), y);
-        if (ci % per === per - 1 || ci === C.length - 1) y += 5.8;
+        if (ci % per === per - 1 || ci === C.length - 1) y += 4.6;
         if (y > 250) { d.addPage(); y = 20; }
       }
       d.setFont('helvetica', 'normal'); y += 2;
     }
-    var cols = [{ h: '#', w: 10 }].concat(p.cols), used = cols.reduce(function (a, c) { return a + (c.w || 0); }, 0);
-    cols.forEach(function (c) { if (!c.w) c.w = W - used; });
+    // colonne larghe quanto il contenuto (minimo l'intestazione, massimo 2× la larghezza standard); il resto va alle NOTE, che vanno a capo
+    var cols = [{ h: '#', w: 10 }].concat(p.cols.map(function (c) { return Object.assign({}, c); }));
+    d.setFontSize(8.5);
+    cols.forEach(function (c, j) {
+      if (!c.w || j === 0) return;
+      var m = d.getTextWidth(c.h) * 9 / 8.5;
+      p.righe.forEach(function (r) { m = Math.max(m, d.getTextWidth(L.s(r[j - 1]))); });
+      c.w = Math.min(Math.max(14, m + 4), c.w * 2);
+    });
+    var used = cols.reduce(function (a, c) { return a + (c.w || 0); }, 0);
+    cols.forEach(function (c) { if (!c.w) c.w = Math.max(30, W - used); });
     function head() {
       d.setFillColor(230); d.rect(M, y, W, 7, 'F'); d.setFont('helvetica', 'bold'); d.setFontSize(9);
       var x = M; cols.forEach(function (c) { d.text(c.h, x + 1.5, y + 5); x += c.w; }); y += 7; d.setFont('helvetica', 'normal');
     }
     head();
     p.righe.forEach(function (r, i) {
-      if (y > 268) { d.addPage(); y = 14; head(); }
       var vals = [String(i + 1)].concat(r), x = M;
       d.setFontSize(8.5);
-      cols.forEach(function (c, j) { d.text(d.splitTextToSize(L.s(vals[j]), c.w - 2)[0] || '', x + 1.5, y + 4.6); x += c.w; });
-      d.setDrawColor(210); d.line(M, y + 6.5, M + W, y + 6.5); y += 6.5;
+      var lin = cols.map(function (c, j) { return d.splitTextToSize(L.s(vals[j]), c.w - 2.5); }), n = Math.max.apply(null, lin.map(function (l) { return l.length || 1; })), h = 2.7 + n * 3.8;
+      if (y + h > 274) { d.addPage(); y = 14; head(); }
+      cols.forEach(function (c, j) { if (lin[j].length) d.text(lin[j], x + 1.5, y + 4.6, { lineHeightFactor: 1.15 }); x += c.w; });
+      d.setDrawColor(210); d.line(M, y + h, M + W, y + h); y += h;
     });
     y += 4; if (y > 262) { d.addPage(); y = 20; }
     d.setFont('helvetica', 'bold'); d.setFontSize(9); d.text('Totale pezzi: ' + p.righe.length, M, y);
@@ -4075,7 +4208,8 @@ var Ack = {
     return (DB.t.ACK_PENDING ? DB.t.ACK_PENDING.rows : []).filter(function (p) { return L.up(App.aliasRip(p.riparatore)) === L.up(cod) && (tutti || p.stato === 'APERTO'); })
       .sort(function (a, b) { return a.data < b.data ? 1 : -1; });
   },
-  pendingDi: function (r) { return (DB.t.ACK_PENDING ? DB.t.ACK_PENDING.rows : []).find(function (p) { return p.id_spedizione === r.id_spedizione && p.fr === r.fr && p.stato === 'APERTO'; }); },
+  // pending aperto del FR: prima quello di questa spedizione, poi il primo aperto (anche di un ACK precedente)
+  pendingDi: function (r) { var P = (DB.t.ACK_PENDING ? DB.t.ACK_PENDING.rows : []).filter(function (p) { return p.fr === r.fr && p.stato === 'APERTO'; }); return P.find(function (p) { return p.id_spedizione === r.id_spedizione; }) || P[0]; },
   setP: function (p, obj) { var t = DB.t.ACK_PENDING, upd = []; Object.keys(obj).forEach(function (h) { p[h] = L.s(obj[h]); if (p._r && (h in t.idx)) upd.push({ range: t.cell(h, p._r), values: [[p[h]]] }); }); return upd; },
   chiediMotivo: function (r) {
     var usati = []; (DB.t.ACK_PENDING ? DB.t.ACK_PENDING.rows : []).forEach(function (p) { if (p.motivo && usati.indexOf(p.motivo) < 0) usati.push(p.motivo); });
@@ -4088,6 +4222,58 @@ var Ack = {
         [{ label: 'Annulla', cls: 'ghost', fn: function () { res(''); } }, { label: 'Rimuovi', cls: 'red', keep: true, fn: ok }]);
       setTimeout(function () { var e = $('mMotivo'); e.focus(); e.onkeydown = function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); ok(); } }; }, 50);
     });
+  },
+  // tutte le righe non spuntate in pending in un colpo: un motivo per tutte, o diverso riga per riga
+  // FAULTY a magazzino di quel riparatore (riparatore della scheda o dell'FR su VLT, con alias)
+  giacRip: function (cod) {
+    var k = L.up(App.aliasRip(cod));
+    return DB.t.UNITA.rows.filter(function (u) { if (u.tipo !== 'FAULTY' || Giacenze.A_MAG.indexOf(u.stato) < 0) return false; var v = u.fr && DB.vltMap[u.fr], r = L.up(App.aliasRip(L.s(u.riparatore) || (v ? v.riparatore : ''))); return r === k || L.up(App.normRip(L.s(u.riparatore))) === k; }).length;
+  },
+  pendTutti: function () {
+    var s = Ack.byId(Ack.cur); if (!s || s.stato !== 'IN_SPUNTA') return;
+    var L0 = Ack.righe(s.id_spedizione).filter(function (r) { return r.esito === 'DA_SPUNTARE' || r.esito === 'MANCANTE'; });
+    if (!L0.length) { toast('Nessuna scheda da spuntare in lista', 'ok'); return; }
+    var P = (DB.t.ACK_PENDING ? DB.t.ACK_PENDING.rows : []).filter(function (p) { return p.stato === 'APERTO'; }), gia = {}; P.forEach(function (p) { gia[p.fr] = p; });
+    (function () { var usati = []; P.concat(DB.t.ACK_PENDING ? DB.t.ACK_PENDING.rows : []).forEach(function (p) { if (p.motivo && usati.indexOf(p.motivo) < 0) usati.push(p.motivo); });
+      $('dlMotivi').innerHTML = Ack.MOTIVI.concat(usati.filter(function (m) { return Ack.MOTIVI.indexOf(m) < 0; }).slice(0, 30)).map(function (m) { return '<option value="' + esc(m) + '">'; }).join(''); })();
+    Modal.html('⏸ Pending delle schede non spuntate · ' + esc(s.destinatario),
+      '<div class="hint" style="margin-bottom:8px">Le schede spuntate qui sotto escono dall\'ACK, restano in giacenza e ripartono con l\'ACK successivo (ACK Pending). Scrivi un motivo per tutte; se per qualcuna serve un motivo diverso, scrivilo sulla sua riga.</div>' +
+      '<div class="row" style="gap:8px;align-items:flex-end;justify-content:flex-start;margin-bottom:8px"><div class="fg" style="flex:1;min-width:280px"><span class="fl">Motivo per tutte *</span><input class="fc" id="ptMot" list="dlMotivi" autocomplete="off" placeholder="scegli o scrivi il motivo"></div></div>' +
+      '<div class="tbl-wrap modal-scroll" style="max-height:48vh"><table><thead><tr><th><input type="checkbox" id="ptTutti" checked></th><th>FR</th><th>Seriale</th><th>P/N</th><th>Esito</th><th>Motivo diverso (facoltativo)</th></tr></thead><tbody>' +
+      L0.map(function (r, i) { var g = gia[r.fr]; return '<tr><td><input type="checkbox" class="ptSel" data-i="' + i + '" checked></td><td class="mono">' + esc(r.fr) + '</td><td class="mono">' + esc(r.seriale) + '</td><td class="mono">' + esc(r.pn) + '</td><td>' + esc(r.esito === 'MANCANTE' ? 'mancante' : 'da spuntare') + '</td><td>' +
+        (g ? '<span class="hint" style="color:var(--amber)">già in pending dal ' + esc(L.itDate(L.s(g.data).slice(0, 10))) + ': ' + esc(g.motivo) + ' (resta quello)</span>' : '<input class="fc ptMotR" data-i="' + i + '" list="dlMotivi" autocomplete="off" style="padding:4px 8px" placeholder="come tutte">') + '</td></tr>'; }).join('') + '</tbody></table></div><div class="hint" id="ptErr" style="margin-top:6px"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: '⏸ Metti in pending', cls: 'red', keep: true, fn: function () { Ack.pendTuttiSalva(L0, gia); } }], true);
+    $('ptTutti').onchange = function () { document.querySelectorAll('#mBody .ptSel').forEach(function (c) { c.checked = $('ptTutti').checked; }); };
+    setTimeout(function () { $('ptMot').focus(); }, 50);
+  },
+  pendTuttiSalva: async function (L0, gia) {
+    var err = function (m) { $('ptErr').textContent = m; $('ptErr').className = 'hint err'; };
+    var mot = L.s($('ptMot').value), sel = [];
+    document.querySelectorAll('#mBody .ptSel').forEach(function (c) { if (!c.checked) return; var i = +c.getAttribute('data-i'), mr = document.querySelector('#mBody .ptMotR[data-i="' + i + '"]'); sel.push({ r: L0[i], mot: L.s(mr && mr.value) || mot }); });
+    if (!sel.length) return err('Spunta almeno una scheda');
+    // il pannello può restare aperto mentre la lista si rilegge (spunte da altri dispositivi): uso le righe attuali
+    var attuali = {}; Ack.righe(Ack.cur).forEach(function (r) { attuali[r.id_riga] = r; });
+    sel.forEach(function (x) { if (attuali[x.r.id_riga]) x.r = attuali[x.r.id_riga]; });
+    sel = sel.filter(function (x) { return x.r.esito === 'DA_SPUNTARE' || x.r.esito === 'MANCANTE'; });
+    if (!sel.length) return err('Nel frattempo sono state spuntate tutte: niente da mettere in pending');
+    var manca = sel.filter(function (x) { return !x.mot && !gia[x.r.fr]; });
+    if (manca.length) { $('ptMot').classList.add('err'); return err('Scrivi il motivo per tutte (o sulle righe: ne mancano ' + manca.length + ')'); }
+    Modal.progress('Metto in pending ' + sel.length + ' schede…');
+    try {
+      var s = Ack.byId(Ack.cur), tP = DB.t.ACK_PENDING, chi = App.chi(), now = L.nowStamp();
+      var nuovi = sel.filter(function (x) { return !gia[x.r.fr]; }).map(function (x) { return { data: now, riparatore: s ? s.destinatario : '', fr: x.r.fr, seriale: x.r.seriale, pn: x.r.pn, id_unita: x.r.id_unita, id_spedizione: x.r.id_spedizione, motivo: x.mot, stato: 'APERTO', rimosso_da: chi.email }; });
+      if (nuovi.length) {
+        var rr = await API.append(DB.id, 'ACK_PENDING', nuovi.map(function (o) { return tP.toRow(o); }));
+        nuovi.forEach(function (o, i) { o.id_pending = 'P' + L.pad(rr + i - 1, 6); });
+        await API.batchUpdate(DB.id, [{ range: tP.cell('id_pending', rr) + ':' + tP.col('id_pending') + (rr + nuovi.length - 1), values: nuovi.map(function (o) { return [o.id_pending]; }) }]);
+        nuovi.forEach(function (o, i) { Ack.pushRow(tP, o, rr + i); });
+      }
+      sel.forEach(function (x) { Ack.setR(x.r, 'RIMOSSO'); });
+      await Ack.flush();
+      API.append(DB.id, 'LOG', [App.log('ACK_PENDING_MULTIPLO', 'ACK_PENDING', s ? s.id_spedizione : '', { schede: sel.length, nuovi: nuovi.length, gia_in_pending: sel.length - nuovi.length, fr: sel.map(function (x) { return x.r.fr; }) })]).catch(function () { });
+      Modal.close(); toast(sel.length + ' schede in pending' + (sel.length - nuovi.length ? ' (' + (sel.length - nuovi.length) + ' lo erano già: resta il primo pending)' : ''), 'ok');
+      Ack.renderDet(); Ack.renderCards();
+    } catch (e) { Modal.progress(''); err('Non salvato: ' + e.message); }
   },
   vediPending: function (cod, tutti) {
     var L0 = Ack.pending(cod, tutti), ST = { APERTO: 'p-amber', RISOLTO: 'p-green', ANNULLATO: '' };
@@ -4220,9 +4406,10 @@ var Ack = {
   qInfo: function () { var e = $('ackSave'); if (e) e.textContent = (Ack.q.length || Ack.qA.length) ? '● salvataggio in corso…' : '✓ spunta salvata'; },
   // rilegge spedizioni e righe dal database (spunte fatte da altri dispositivi, es. il palmarino), tenendo le modifiche locali non ancora salvate
   fresca: async function () {
+    var prima = Object.assign({}, Ack._loc);   // modifiche di questo dispositivo appena salvate: valgono anche se la lettura arriva un attimo prima
     await Ack.flush();
     await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_RIGHE']);
-    DB.t.SPEDIZIONI_RIGHE.rows.forEach(function (r) { var l = Ack._loc[r.id_riga]; if (l) Object.keys(l).forEach(function (k) { r[k] = l[k]; }); });
+    DB.t.SPEDIZIONI_RIGHE.rows.forEach(function (r) { [prima, Ack._loc].forEach(function (o) { var l = o[r.id_riga]; if (l) Object.keys(l).forEach(function (k) { r[k] = l[k]; }); }); });
   },
   aggiornaVista: async function (quiet) {
     try {
@@ -4258,6 +4445,17 @@ var Ack = {
     return Ack._fl;
   },
   _loc: {},   // modifiche locali non ancora salvate: sopravvivono a una rilettura della lista
+  // nota libera di una riga dell'ACK (esce sul DDT, colonna NOTE, dopo AS/BAN)
+  notaRiga: async function (id) {
+    var r = DB.t.SPEDIZIONI_RIGHE.rows.find(function (x) { return x.id_riga === id; }); if (!r) return;
+    var v = prompt('Nota DDT per FR ' + r.fr + ' · ' + r.seriale + '\n(vuota = la togli)', L.s(r.nota_ddt)); if (v === null) return; v = L.s(v);
+    try {
+      if (!('nota_ddt' in DB.t.SPEDIZIONI_RIGHE.idx)) { await Ack.flush(); await DB.ensureCols('SPEDIZIONI_RIGHE', ['nota_ddt']); r = DB.t.SPEDIZIONI_RIGHE.rows.find(function (x) { return x.id_riga === id; }); }
+      r.nota_ddt = v; Ack.qPush([{ range: DB.t.SPEDIZIONI_RIGHE.cell('nota_ddt', r._r), values: [[v]] }]);
+      API.append(DB.id, 'LOG', [App.log('ACK_NOTA_RIGA', 'SPEDIZIONI_RIGHE', id, { fr: r.fr, nota: v })]).catch(function () { });
+      Ack.renderDet();
+    } catch (e) { Modal.open('Nota non salvata', e.message); }
+  },
   setR: function (r, esito) {
     var t = DB.t.SPEDIZIONI_RIGHE;
     r.esito = esito; r.spuntato_da = esito === 'SPUNTATO' ? App.chi().email : ''; Ack.opTocca(); r.spuntato_il = esito === 'SPUNTATO' ? L.nowStamp() : '';
@@ -4405,6 +4603,12 @@ var Ack = {
       if (p) Ack.qPush(Ack.setP(p, { stato: 'ANNULLATO', risolto_il: L.nowStamp(), risolto_da: App.chi().email, nota_risoluzione: 'rimozione annullata in spunta' }));
       Ack.setR(r, 'DA_SPUNTARE'); Ack.renderDet(); Ack.renderCards(); return;
     }
+    var gia = (tP ? tP.rows : []).find(function (p) { return p.fr === r.fr && p.stato === 'APERTO'; });
+    if (gia) {   // già in pending da un ACK precedente: niente doppione, resta il primo pending (con il suo motivo)
+      Ack.setR(r, 'RIMOSSO'); Ack.fb('FR ' + r.fr + ' è già in pending dal ' + L.itDate(L.s(gia.data).slice(0, 10)) + ' (' + gia.motivo + '): resta quel pending', 'warn');
+      API.append(DB.id, 'LOG', [App.log('ACK_PENDING_GIA_APERTO', 'ACK_PENDING', gia.id_pending, { fr: r.fr, id_spedizione: r.id_spedizione })]).catch(function () { });
+      Ack.renderDet(); Ack.renderCards(); return;
+    }
     var motivo = await Ack.chiediMotivo(r); if (!motivo) return;
     try {
       var o = { data: L.nowStamp(), riparatore: s ? s.destinatario : '', fr: r.fr, seriale: r.seriale, pn: r.pn, id_unita: r.id_unita, id_spedizione: r.id_spedizione, motivo: motivo, stato: 'APERTO', rimosso_da: App.chi().email };
@@ -4495,9 +4699,11 @@ var Ack = {
       if (!(await Modal.confirm(manc.length + ' FR mancanti', lista + '\n\nProcedo comunque? I mancanti restano in giacenza.'))) return;
     }
     var sp = R.filter(function (r) { return r.esito === 'SPUNTATO'; });
-    if (!sp.length) { Modal.open('Niente da spedire', 'Nessun pezzo spuntato.'); return; }
-    var col = Ack.colli[s.id_spedizione] || [], err = Ack.validaColli(col);
+    if (!sp.length) return Ack.chiudiVuota(s, R);
+    // righe collo lasciate vuote (misura e peso cancellati) = collo tolto
+    var col = (Ack.colli[s.id_spedizione] || []).filter(function (x) { return L.s(x.misura) || L.s(x.peso); }), err = col.length ? Ack.validaColli(col) : [];
     if (err.length) { Modal.open('Colli e peso', err.join('\n')); return; }
+    if (!col.length && !(await Modal.confirm('Nessun collo', 'Non hai inserito colli né peso.\nChiudo la spunta senza colli? Il DDT uscirà senza colli e peso.'))) return;
     var peso = col.reduce(function (a, x) { return a + parseFloat(String(x.peso).replace(',', '.')); }, 0);
     var sf = Ack.spareFalse(s.id_spedizione).length;
     if (App.condiviso()) {
@@ -4509,10 +4715,13 @@ var Ack = {
     try {
       var tC = DB.t.SPEDIZIONI_COLLI;
       var objs = col.map(function (x, i) { var m = L.misura(x.misura); return { id_spedizione: s.id_spedizione, n_collo: i + 1, tipo_collo: x.tipo || 'PLT', lunghezza_cm: m[0], larghezza_cm: m[1], altezza_cm: m[2], peso_kg: String(x.peso).replace(',', '.') }; });
-      var r = await API.append(DB.id, 'SPEDIZIONI_COLLI', objs.map(function (o) { return tC.toRow(o); }));
-      objs.forEach(function (o, i) { o.id_collo = 'C' + L.pad(DB.rid('SPEDIZIONI_COLLI', r + i), 6); });
-      var upd = [{ range: tC.cell('id_collo', r) + ':' + tC.col('id_collo') + (r + objs.length - 1), values: objs.map(function (o) { return [o.id_collo]; }) }];
-      objs.forEach(function (o, i) { Ack.pushRow(tC, o, r + i); });
+      var upd = [];
+      if (objs.length) {
+        var r = await API.append(DB.id, 'SPEDIZIONI_COLLI', objs.map(function (o) { return tC.toRow(o); }));
+        objs.forEach(function (o, i) { o.id_collo = 'C' + L.pad(DB.rid('SPEDIZIONI_COLLI', r + i), 6); });
+        upd.push({ range: tC.cell('id_collo', r) + ':' + tC.col('id_collo') + (r + objs.length - 1), values: objs.map(function (o) { return [o.id_collo]; }) });
+        objs.forEach(function (o, i) { Ack.pushRow(tC, o, r + i); });
+      }
       var chiC = App.chi();
       upd = upd.concat(Ack.setS(s, { stato: 'PRONTA', n_pezzi: sp.length, n_colli: col.length, peso_tot_kg: Math.round(peso * 100) / 100, operatore_sigla: chiC.sigla, operatore_email: chiC.email }));
       await API.batchUpdate(DB.id, upd);
@@ -4523,8 +4732,27 @@ var Ack = {
       if (L.s(s.awb)) await Ack.emetti(s.id_spedizione); else toast('Spunta chiusa: genera il DDT anche senza AWB per la bollettazione', 'ok');
     } catch (e) { Modal.open('Errore chiusura', e.message); }
   },
+  // spunta senza pezzi da spedire (nessun ACK in lista, o tutti rimossi/in pending): si chiude senza DDT né colli
+  chiudiVuota: async function (s, R) {
+    var n = Ack.conta(R), sf = Ack.spareFalse(s.id_spedizione).length;
+    if (App.condiviso()) {
+      if (!Ack.opValido(s) && !(await Ack.scegliOp(s))) return;
+      if (!(await Ack.confermaOp(s))) return;
+    }
+    if (!(await Modal.confirm('Chiudi spunta ' + s.destinatario + ' senza pezzi', (n.tot ? 'Nessun pezzo spuntato (' + n.tot + ' in lista: ' + (n.rim || 0) + ' rimossi, ' + (n.man || 0) + ' mancanti).' : 'Nessun FR in ACK per questo riparatore.') +
+      (sf ? '\n' + sf + ' SPARE FALSE segnalati (vanno nell\'export FR da chiudere).' : '') + '\n\nChiudo la spunta senza DDT, colli e peso: niente da spedire. Se arrivano ACK puoi riaprirla.'))) return;
+    Modal.open('Chiusura spunta', 'Salvo…', []);
+    try {
+      var chi = App.chi();
+      await API.batchUpdate(DB.id, Ack.setS(s, { stato: 'CHIUSA', n_pezzi: 0, n_colli: '', peso_tot_kg: '', operatore_sigla: chi.sigla, operatore_email: chi.email }));
+      await API.append(DB.id, 'LOG', [App.log('ACK_CHIUSA_SENZA_PEZZI', 'SPEDIZIONI', s.id_spedizione, { in_lista: n.tot, rimossi: n.rim || 0, mancanti: n.man || 0, spare_false: sf })]);
+      lsS('colli_' + s.id_spedizione, null); delete Ack.colli[s.id_spedizione];
+      if (sf) { try { await Export.scrivi(); } catch (e) { toast('Export FR da chiudere non aggiornato: ' + e.message, 'ko'); } }
+      Modal.close(); Ack.render(); toast('Spunta ' + s.destinatario + ' chiusa: niente da spedire', 'ok');
+    } catch (e) { Modal.open('Errore chiusura', e.message); }
+  },
   riapri: async function () {
-    var s = Ack.byId(Ack.cur); if (!s || s.stato !== 'PRONTA' || s.n_ddt) return;
+    var s = Ack.byId(Ack.cur); if (!s || (s.stato !== 'PRONTA' && s.stato !== 'CHIUSA') || s.n_ddt) return;
     if (!(await Modal.confirm('Riapri spunta', 'La spedizione torna in spunta; colli e peso andranno reinseriti/confermati.'))) return;
     try {
       var cl = Ack.colliDb(s.id_spedizione), tC = DB.t.SPEDIZIONI_COLLI;
@@ -4625,7 +4853,7 @@ var Ack = {
         var u = ix.id[r.id_unita] || null, v = DB.vltMap[r.fr];
         return { data_ora: oggi + ' ' + L.nowStamp().slice(11), direzione: 'OUT', causale: 'ACK', id_unita: r.id_unita, seriale: r.seriale, pn: r.pn, mnft: mnft, tipo: 'FAULTY', fr: r.fr, rma: r.rma, controparte: s.destinatario,
           awb: s.awb, vettore: s.vettore, ddt: nDdt, id_spedizione: id, riparatore: v ? v.riparatore : (u ? u.riparatore : ''), ubicazione_da: u ? u.ubicazione : '',
-          operatore: me, operatore_sigla: sigla, note: r.flag_vlt, origine: 'APP' };
+          operatore: me, operatore_sigla: sigla, note: [r.flag_vlt, r.nota_ddt].map(L.s).filter(Boolean).join(' · '), origine: 'APP' };
       });
       var rM = await API.append(DB.id, 'MOVIMENTI', mObjs.map(function (o) { return tM.toRow(o); }));
       var oBase = parseInt(DB.param('mov_out_id_base', ''), 10);
@@ -4676,7 +4904,7 @@ var Ack = {
   pdf: function (id) {
     var s = Ack.byId(id), rp = Ack.rip(s.destinatario), R = Ack.righe(id).filter(function (r) { return r.esito === 'SPUNTATO'; });
     return Ddt.pdf({ numero: s.n_ddt, data: s.data_ddt, destinatario: rp.ragione_sociale || s.destinatario, indirizzo: rp.indirizzo || '', vettore: s.vettore, awb: L.s(s.awb) || 'DA ASSEGNARE', colli: Ack.colliDb(id),
-      cols: [{ h: 'FR', w: 26 }, { h: 'S/N', w: 70 }, { h: 'P/N', w: 50 }, { h: 'NOTE' }], righe: R.map(function (r) { return [r.fr, r.seriale, r.pn, r.flag_vlt]; }) });
+      cols: [{ h: 'FR', w: 26 }, { h: 'S/N', w: 70 }, { h: 'P/N', w: 50 }, { h: 'NOTE' }], righe: R.map(function (r) { return [r.fr, r.seriale, r.pn, [r.flag_vlt, r.nota_ddt].map(L.s).filter(Boolean).join(' · ')]; }) });
   },
   cedolini: function (id) { Ddt.formato('Cedolini', function (f) {
     var w = window.open('', '_blank');
@@ -4743,7 +4971,7 @@ var Ack = {
     var d = $('ackData').value || L.isoToday(), giro = Ack.giro(d), ix = Ack.idxU();
     $('ackInfo').textContent = 'VLT aggiornato ' + (DB.vlt ? new Date(DB.vlt.ts).toLocaleString('it-IT') : '—') + ' · ' + giro.length + ' riparatori il ' + L.itDate(d) + ' · lista ACK = FR in stato "' + Ack.cfg().statoAck + '" (+ AS dove abilitato), BAN esclusi';
     if (!giro.length) { $('ackCards').innerHTML = '<div class="card empty" style="grid-column:1/-1">Nessun riparatore in calendario per il ' + esc(L.itDate(d)) + '. Aggiungilo da "Riparatore fuori calendario" o compila il calendario in Admin.</div>'; return; }
-    var PILL = { BOZZA: 'p-blue', IN_SPUNTA: 'p-amber', PRONTA: 'p-violet', SPEDITA: 'p-green' };
+    var PILL = { BOZZA: 'p-blue', IN_SPUNTA: 'p-amber', PRONTA: 'p-violet', SPEDITA: 'p-green', CHIUSA: 'p-teal' };
     $('ackCards').innerHTML = giro.map(function (cod) {
       var s = Ack.sped(d, cod), rp = Ack.rip(cod), k = Ack.key(cod), st = s ? s.stato : 'DA AVVIARE', nums, btn = '';
       if (s && s.stato !== 'BOZZA') {
@@ -4759,7 +4987,7 @@ var Ack = {
       else btn = '<button class="btn sm ' + (s.stato === 'IN_SPUNTA' ? '' : 'ghost') + '" onclick="Ack.apri(\'' + s.id_spedizione + '\')">' + (s.stato === 'IN_SPUNTA' ? 'Apri spunta' : 'Dettaglio') + '</button>';
       if (s && s.stato === 'PRONTA') btn += ' <button class="btn sm green"' + (L.s(s.awb) ? '' : ' title="Senza AWB: DDT per la bollettazione, l\'AWB si inserisce dopo e il PDF si aggiorna"') + ' onclick="Ack.genera(\'' + s.id_spedizione + '\')">Genera DDT' + (L.s(s.awb) ? '' : ' (senza AWB)') + '</button>';
       if (s && s.n_ddt) btn += ' <button class="btn sm" onclick="Ack.stampa(\'' + s.id_spedizione + '\')">Stampa DDT</button>' + (s.link_pdf ? ' <a class="mail" target="_blank" href="' + esc(s.link_pdf) + '">PDF su Drive</a>' : '');
-      if (s && s.stato !== 'BOZZA') btn += ' <a class="mail" href="#" onclick="Ack.inviaMail([\'' + s.id_spedizione + '\']);return false" title="Mail a Service Desk e bollettazione: destinatario, indirizzo, DDT, AWB, colli, misure e peso">✉ mail</a>';
+      if (s && s.stato !== 'BOZZA' && s.stato !== 'CHIUSA') btn += ' <a class="mail" href="#" onclick="Ack.inviaMail([\'' + s.id_spedizione + '\']);return false" title="Mail a Service Desk e bollettazione: destinatario, indirizzo, DDT, AWB, colli, misure e peso">✉ mail</a>';
       if (s && (s.stato === 'PRONTA' || s.stato === 'SPEDITA')) btn += ' <button class="btn ghost sm" onclick="Ack.cedolini(\'' + s.id_spedizione + '\')" title="Un foglio per collo/pallet con destinazione, DDT e AWB">Cedolini</button>';
       if (s) btn += Mail.pill(s.id_spedizione);
       if (s && s.n_ddt && !L.s(s.awb)) btn += ' <span class="pill p-amber" title="DDT emesso: inserisci l\'AWB appena la bollettazione lo comunica">AWB da inserire</span>';
@@ -4785,8 +5013,8 @@ var Ack = {
     var ORD = { MANCANTE: 0, DA_SPUNTARE: 1, SPUNTATO: 2, RIMOSSO: 3, ESCLUSO_BAN: 4 };
     var RR = R.slice().sort(function (a, b) { return (ORD[a.esito] - ORD[b.esito]) || ((parseInt(a.fr, 10) || 0) - (parseInt(b.fr, 10) || 0)); });
     var html = '<div class="card"><div class="card-h"><div class="card-t">' + (edit ? 'Spunta ' : 'ACK ') + esc(s.destinatario) + ' · ' + esc(L.itDate(s.data)) + '</div><span class="hint">' + esc(s.id_spedizione) + '</span><div class="spacer"></div>' +
-      (edit ? '<span class="hint" id="ackSave"></span><button class="btn ghost sm" onclick="Ack.aggiornaVista()" title="Rilegge le spunte fatte dagli altri dispositivi (si aggiorna anche da solo ogni 30 secondi)">↻ Spunte</button><button class="btn ghost sm" onclick="Ack.aggiornaLista()">Aggiorna lista da VLT</button><button class="btn green" onclick="Ack.chiudi()">Chiudi spunta</button>' : '') +
-      (s.stato === 'PRONTA' ? '<button class="btn ghost sm" onclick="Ack.riapri()">Riapri spunta</button>' : '') +
+      (edit ? '<span class="hint" id="ackSave"></span><button class="btn ghost sm" onclick="Ack.aggiornaVista()" title="Rilegge le spunte fatte dagli altri dispositivi (si aggiorna anche da solo ogni 30 secondi)">↻ Spunte</button><button class="btn ghost sm" onclick="Ack.pendTutti()" title="Mette in pending tutte le schede della lista non ancora spuntate (non barcodate): scegli il motivo per tutte o per qualcuna">⏸ Pending non spuntate</button><button class="btn ghost sm" onclick="Ack.aggiornaLista()">Aggiorna lista da VLT</button><button class="btn green" onclick="Ack.chiudi()">Chiudi spunta</button>' : '') +
+      ((s.stato === 'PRONTA' || s.stato === 'CHIUSA') && !s.n_ddt ? '<button class="btn ghost sm" onclick="Ack.riapri()">Riapri spunta</button>' : '') +
       '<button class="btn ghost sm" onclick="Ack.excel(\'' + s.id_spedizione + '\')">⬇ Excel</button> <button class="btn ghost sm" onclick="Ack.cur=null;Ack.render()">Chiudi pannello</button></div>';
     var opS = App.condiviso() && edit ? Ack._op[s.id_spedizione] : null;
     if (opS) html += '<div class="row" style="align-items:center;margin:4px 0 8px"><span class="pill p-violet">👤 ' + esc(opS.sigla) + ' · ' + esc(opS.nome) + '</span><button class="btn ghost sm" onclick="Ack.cambiaOp()">Cambia operatore</button></div>';
@@ -4795,14 +5023,16 @@ var Ack = {
     html += '<div class="stats" style="margin-top:10px"><div class="stat"><b>' + n.tot + '</b><span>attesi</span></div><div class="stat"><b style="color:var(--green)">' + n.sp + '</b><span>spuntati</span></div>' +
       '<div class="stat"><b' + (n.da + n.man ? ' style="color:var(--red)"' : '') + '>' + (n.da + n.man) + '</b><span>mancanti</span></div>' + (n.rim ? '<div class="stat"><b>' + n.rim + '</b><span>rimossi</span></div>' : '') +
       (n.as ? '<div class="stat"><b>' + n.as + '</b><span>di cui AS</span></div>' : '') + (n.ban ? '<div class="stat"><b style="color:var(--amber)">' + n.ban + '</b><span>BAN esclusi</span></div>' : '') +
-      '<div class="stat"><b' + (sf.length ? ' style="color:var(--red)"' : '') + '>' + sf.length + '</b><span>spare false</span></div></div>';
+      '<div class="stat"><b' + (sf.length ? ' style="color:var(--red)"' : '') + '>' + sf.length + '</b><span>spare false</span></div>' +
+      '<div class="stat" title="FAULTY a magazzino (in giacenza, bloccate, in attesa) con riparatore ' + esc(s.destinatario) + '"><b>' + Ack.giacRip(s.destinatario) + '</b><span>giacenza faulty</span></div></div>';
     html += '<div class="tbl-wrap" style="max-height:46vh"><table><thead><tr><th>FR</th><th>Seriale</th><th>P/N</th><th>Stato VLT</th><th>Flag</th><th>Esito</th><th>Giacenza</th><th></th></tr></thead><tbody>' +
       (RR.length ? RR.map(function (r) {
         var v = DB.vltMap[r.fr], cls = r.esito === 'SPUNTATO' ? 'r-ok' : (r.esito === 'MANCANTE' ? 'r-err' : (r.esito === 'RIMOSSO' || r.esito === 'ESCLUSO_BAN' ? 'r-off' : ''));
         var es = { DA_SPUNTARE: '<span class="pill">da spuntare</span>', SPUNTATO: '<span class="pill p-green">spuntato</span>', MANCANTE: '<span class="pill p-red">mancante</span>', RIMOSSO: '<span class="pill">rimosso</span>', ESCLUSO_BAN: '<span class="pill p-amber">BAN · non spedire</span>' }[r.esito] || esc(r.esito);
         var act = !edit ? '' : (r.esito === 'DA_SPUNTARE' || r.esito === 'MANCANTE' ? '<button class="btn ghost sm" onclick="Ack.rimuovi(\'' + r.id_riga + '\')" title="Non spedire: resta in giacenza e riparte con l\'ACK successivo">Rimuovi</button>' : (r.esito === 'RIMOSSO' ? '<button class="btn ghost sm" onclick="Ack.rimuovi(\'' + r.id_riga + '\',1)">Ripristina</button>' :
           (r.esito === 'SPUNTATO' ? '<button class="btn ghost sm" onclick="Ack.annullaSpunta(\'' + r.id_riga + '\')" title="Torna da spuntare">Annulla spunta</button>' : '')));
-        return '<tr class="' + cls + '"><td class="mono">' + esc(r.fr) + '</td><td class="mono">' + esc(r.seriale) + '</td><td class="mono">' + esc(r.pn) + '</td><td style="font-size:11.5px;color:var(--subtle)">' + esc(v ? v.stato : '') + (v && v.note ? ' · ' + esc(v.note) : '') + '</td>' +
+        if (!s.n_ddt && r.esito !== 'RIMOSSO' && r.esito !== 'ESCLUSO_BAN') act += ' <button class="btn ghost sm" onclick="Ack.notaRiga(\'' + r.id_riga + '\')" title="Nota di questa riga: esce sul DDT nella colonna NOTE">✎ nota</button>';
+        return '<tr class="' + cls + '"><td class="mono">' + esc(r.fr) + '</td><td class="mono">' + esc(r.seriale) + (L.s(r.nota_ddt) ? '<div style="font-size:11px;color:var(--blue)">📝 ' + esc(r.nota_ddt) + '</div>' : '') + '</td><td class="mono">' + esc(r.pn) + '</td><td style="font-size:11.5px;color:var(--subtle)">' + esc(v ? v.stato : '') + (v && v.note ? ' · ' + esc(v.note) : '') + '</td>' +
           '<td>' + (r.flag_vlt ? '<span class="pill ' + (r.flag_vlt === 'BAN' ? 'p-amber' : 'p-violet') + '">' + esc(r.flag_vlt) + '</span>' : '') + '</td><td>' + es + (r.esito === 'RIMOSSO' && Ack.pendingDi(r) ? '<div style="font-size:11px;color:var(--amber);margin-top:3px">' + esc(Ack.pendingDi(r).motivo) + '</div>' : '') + '</td><td style="font-size:11.5px">' + (r.id_unita ? esc(r.id_unita) : '<span style="color:var(--amber)">non in giacenza</span>') + '</td><td>' + act + '</td></tr>';
       }).join('') : '<tr><td colspan="8" class="empty">Nessun FR in stato ACK per questo riparatore</td></tr>') + '</tbody></table></div>';
     if (sf.length) html += '<div class="card-h" style="margin-top:14px"><div class="card-t" style="font-size:15px;color:var(--red)">SPARE FALSE · letti ma non in lista (non si spediscono, finiscono nell\'export FR da chiudere)</div></div>' +
@@ -4819,7 +5049,7 @@ var Ack = {
           '<td><input class="fc mono' + (c.misura && !L.misura(c.misura) ? ' err' : '') + '" style="width:150px" list="dlMisure" value="' + esc(c.misura) + '" placeholder="120X80X100" onchange="Ack.collo(' + i + ',\'misura\',this.value)"></td>' +
           '<td><input class="fc mono" style="width:90px" inputmode="decimal" value="' + esc(c.peso) + '" onchange="Ack.collo(' + i + ',\'peso\',this.value)"></td><td><button class="ico-btn" onclick="Ack.collo(' + i + ',\'del\')">✕</button></td></tr>';
       }).join('') + '</tbody></table></div>';
-    if (!edit) html += '<div class="hint" style="margin-top:10px">' + (s.stato === 'PRONTA' ? (L.s(s.awb) ? 'AWB presente: premi "Genera DDT" se il DDT non è partito da solo.' : 'Spunta chiusa: genera il DDT (anche senza AWB) e mandalo alla bollettazione; l\'AWB si inserisce dopo e il PDF si aggiorna.') : 'Spedita · DDT ' + esc(s.n_ddt) + ' del ' + esc(L.itDate(s.data_ddt)) + (L.s(s.awb) ? '' : ' · <b style="color:var(--amber)">AWB da inserire</b>')) + '</div>';
+    if (!edit) html += '<div class="hint" style="margin-top:10px">' + (s.stato === 'CHIUSA' ? 'Spunta chiusa senza pezzi da spedire: niente DDT. Se arrivano ACK premi "Riapri spunta".' : s.stato === 'PRONTA' ? (L.s(s.awb) ? 'AWB presente: premi "Genera DDT" se il DDT non è partito da solo.' : 'Spunta chiusa: genera il DDT (anche senza AWB) e mandalo alla bollettazione; l\'AWB si inserisce dopo e il PDF si aggiorna.') : 'Spedita · DDT ' + esc(s.n_ddt) + ' del ' + esc(L.itDate(s.data_ddt)) + (L.s(s.awb) ? '' : ' · <b style="color:var(--amber)">AWB da inserire</b>')) + '</div>';
     html += '</div>';
     var foc = document.activeElement && document.activeElement.id === 'ackScan';
     box.innerHTML = html; Ack.qInfo();
@@ -4865,7 +5095,7 @@ var Rma = {
     try { await Chi.syncRma(); } catch (e) { toast('Pending per chiusura: ' + e.message, 'ko'); }
   },
   excel: function () {
-    if (Rma.sez !== 'usc') { Rma.grid(Rma.sez).excel({ inv: 'Inventario_giornaliero', rit: 'Ritorni_in_giacenza', car: 'Carichi_NEW_REUSE' }[Rma.sez]); return; }
+    if (Rma.sez !== 'usc') { Rma.grid(Rma.sez).excel({ inv: 'Inventario_giornaliero', rit: 'Ritorni_in_giacenza', car: 'Carichi_NEW_REUSE', res: 'Resi' }[Rma.sez]); return; }
     // da spedire: pezzi in uscita; spedite: righe del DDT (la giacenza non li ha più)
     var rows = [], U = {}; DB.t.UNITA.rows.forEach(function (u) { U[u.id_unita] = u; });
     Rma.gruppi().forEach(function (g) {
@@ -4961,6 +5191,8 @@ var Rma = {
   // GOOD/BALANCING in giacenza; le GOOD Juniper entrano solo quando la pratica le mette in uscita ("📦 Metti GOOD in uscita RMA");
   // i pezzi in reso escono a parte (senza RMA)
   inventario: function () { return DB.t.UNITA.rows.filter(function (u) { return u.stato === 'IN_GIACENZA' && (u.tipo === 'GOOD' || u.tipo === 'BALANCING') && L.up(u.uscita_reso) !== 'SI' && !(Jun.eGood(u) && !Jun.liberata(u)); }); },
+  resi: function (tutti) { return DB.t.UNITA.rows.filter(function (u) { return L.up(u.uscita_reso) === 'SI' && (u.stato === 'IN_GIACENZA' || (tutti && u.stato === 'USCITO')); }); },
+  resTogli: async function (id) { var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); if (!u) return; if (!(await Modal.confirm('Togli dal reso', u.seriale + ' torna in giacenza normale (non esce più come reso).'))) return; Reso.scrivi([u], null, ''); },
   junFerme: function () { return DB.t.UNITA.rows.filter(function (u) { return u.stato === 'IN_GIACENZA' && u.tipo === 'GOOD' && L.up(u.uscita_reso) !== 'SI' && Jun.eGood(u) && !Jun.liberata(u); }); },
   // destinazione d'origine della GOOD = deposito VLT da cui è partito l'FR (non cambia quando il SD modifica la destinazione)
   origine: function (u) {
@@ -5039,6 +5271,9 @@ var Rma = {
       ' <label class="btn ghost sm" style="cursor:pointer" title="Reimporta l Excel RMA compilato: anteprima e anomalie prima di confermare">⬆ Importa RMA<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Rma.importaRma(this)"></label>';
     if (s === 'inv') return '<div class="row" style="justify-content:flex-end">' + imp + ann + xl + xr + ' <button class="btn ghost sm" onclick="Rma.etichette()" title="Etichetta 10x5 solo per le schede con variazione di destino (tra le righe filtrate)">🏷 Etichette RMA</button>' + (Rma.ieri().length ? ' <button class="btn sm" onclick="Rma.associaIeri()" title="Gli RMA giacenza aperti ieri diventano RMA creato; i più vecchi li controlla il Service Desk">✓ Associa RMA di ieri (' + Rma.ieri().length + ')</button>' : '') + ' <button class="btn sm" ' + (nD ? '' : 'disabled') + ' onclick="Rma.salva()">Salva modifiche' + (nD ? ' (' + nD + ')' : '') + '</button></div>' + info;
     if (s === 'rit') return '<div class="row" style="justify-content:flex-end">' + imp + ann + xl + '</div>' + info;
+    if (s === 'res') return '<div class="row" style="align-items:center"><div class="hint" style="flex:1;min-width:260px">Pezzi in reso senza RMA: escono con il DDT di <b>Uscite e DDT RMA</b> della loro destinazione (causale RESO). ✕ toglie dal reso finché il DDT non è emesso.</div>' +
+      '<label style="font-size:12px;display:flex;gap:6px;align-items:center"><input type="checkbox"' + (Rma.resTutti ? ' checked' : '') + ' onchange="Rma.resTutti=this.checked;Rma.render()"> anche spediti</label>' +
+      '<button class="btn sm" onclick="Reso.apri()">📤 Nuovo reso</button> <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button></div>';
     if (s === 'car') return '<div class="row">' +
       '<div class="fg" style="width:240px"><span class="fl">Seriale *</span><input class="fc mono" id="carSer" autocomplete="off" placeholder="spara il seriale" onkeydown="if(event.key===\'Enter\'){event.preventDefault();$(\'carRma\').focus()}" oninput="Rma.carInfo()"></div>' +
       '<div class="fg" style="width:120px"><span class="fl">RMA</span><input class="fc mono" id="carRma" autocomplete="off" placeholder="anche dopo"></div>' +
@@ -5082,6 +5317,9 @@ var Rma = {
       var att = Rma.attivi(), con = {}; Object.keys(abb).forEach(function (k) { con[abb[k].rma.id_rma] = 1; });
       var nOk = att.filter(function (r) { return con[r.id_rma]; }).length, nLate = att.filter(function (r) { return r.data_scadenza && r.data_scadenza < oggi; }).length;
       h = '<div class="stat"><b>' + att.length + '</b><span>rma aperte</span></div><div class="stat"><b style="color:var(--green)">' + nOk + '</b><span>con pezzo</span></div><div class="stat"><b style="color:var(--amber)">' + (att.length - nOk) + '</b><span>senza pezzo</span></div>' + (nLate ? '<div class="stat"><b style="color:var(--red)">' + nLate + '</b><span>scadute</span></div>' : '');
+    } else if (s === 'res') {
+      var R0 = Rma.resi(true), dS = R0.filter(function (u) { return u.stato === 'IN_GIACENZA'; }).length;
+      h = '<div class="stat"><b style="color:var(--amber)">' + dS + '</b><span>da spedire</span></div><div class="stat"><b style="color:var(--green)">' + (R0.length - dS) + '</b><span>spediti</span></div>';
     } else if (s === 'car') {
       var c = Rma.carichi();
       h = '<div class="stat"><b>' + c.length + '</b><span>carichi aperti</span></div><div class="stat"><b>' + c.filter(function (x) { return x.tipo === 'NEW'; }).length + '</b><span>new</span></div><div class="stat"><b>' + c.filter(function (x) { return x.tipo === 'REUSE'; }).length + '</b><span>reuse</span></div>';
@@ -5145,6 +5383,23 @@ var Rma = {
         ]
       }));
     }
+    if (s === 'res') Rma.grids.res = new Grid('rmaRes', Object.assign({}, base, {
+      empty: 'Nessun reso', sort: 'modificato_il', dir: -1,
+      rows: function () { return Rma.resi(Rma.resTutti); },
+      cols: [
+        { k: 'stato', label: 'Stato', filter: 'select', html: function (u) { return u.stato === 'USCITO' ? '<span class="pill p-green">spedito</span>' : '<span class="pill p-amber">da spedire</span>'; } },
+        { k: 'tipo', label: 'Tipo', filter: 'select', html: function (u) { return Pill.tipo(u.tipo); } },
+        { k: 'seriale', label: 'Seriale', filter: 'text', cls: 'mono' },
+        { k: 'pn', label: 'P/N', filter: 'select', cls: 'mono' },
+        { k: 'fr', label: 'FR', filter: 'text', cls: 'mono' },
+        { k: 'destinazione_prevista', label: 'Destinazione', filter: 'select' },
+        { k: 'nota_ddt', label: 'Nota DDT', filter: 'text' },
+        { k: 'ddt', label: 'DDT', filter: 'text', cls: 'mono', get: function (u) { var sp = L.s(u.id_spedizione) && DB.t.SPEDIZIONI.rows.find(function (x) { return x.id_spedizione === u.id_spedizione; }); return sp ? L.s(sp.n_ddt) : ''; } },
+        { k: 'data_out', label: 'Uscita', cls: 'mono', filter: 'date' },
+        { k: 'modificato_il', label: 'Messo in reso', cls: 'mono', get: function (u) { return L.s(u.modificato_il).slice(0, 16) + ' · ' + App.sigla(u.modificato_da); } },
+        { k: 'az', label: '', noXls: true, html: function (u) { return u.stato === 'IN_GIACENZA' ? '<button class="ico-btn" title="Togli dal reso (torna in giacenza normale)" onclick="Rma.resTogli(\'' + u.id_unita + '\')">✕</button>' : ''; } }
+      ]
+    }));
     if (s === 'car') Rma.grids.car = new Grid('rmaCar', Object.assign({}, base, {
       empty: 'Nessun carico aperto', sort: 'data', dir: -1,
       rows: function () { return Rma.carichi(); },
@@ -5158,7 +5413,7 @@ var Rma = {
         { k: 'po_mrn', label: 'PO / MRN', filter: 'text', cls: 'mono' },
         { k: 'posizione', label: 'Posizione', filter: 'select', cls: 'mono' },
         { k: 'note', label: 'Note', filter: 'text' },
-        { k: 'creato_da', label: 'Da', filter: 'select', get: function (c) { return L.s(c.creato_da).split('@')[0]; } },
+        { k: 'creato_da', label: 'Da', filter: 'select', get: function (c) { return App.sigla(c.creato_da); } },
         { k: 'pend', label: 'Pending', filter: 'text', get: function (c) { var p = Rma.pend(c.id_unita); return p ? p.motivo : ''; }, html: function (c) { return Rma.pendCella({ id_unita: c.id_unita }); } },
         { k: 'az', label: '', html: function (c) { return '<button class="ico-btn" title="Annulla carico: il pezzo torna in giacenza" onclick="Rma.carAnnulla(\'' + c.id_carico + '\')">✕</button>'; } }
       ]
@@ -5523,14 +5778,14 @@ var Rma = {
     h.className = 'hint' + (!u || gia ? ' err' : '');
   },
   // controlla una riga di carico; restituisce { u, err }
-  carValida: function (o, visti) {
+  carValida: function (o, visti, destFac) {
     var u = Rma.carUnita(o.seriale);
     if (!L.s(o.seriale)) return { err: 'seriale mancante' };
     if (!u) return { err: 'seriale non trovato tra NEW/REUSE in giacenza' };
     if (Rma.carichi().some(function (c) { return c.id_unita === u.id_unita; })) return { u: u, err: 'già in un carico aperto' };
     if (visti && visti[u.id_unita]) return { u: u, err: 'seriale ripetuto nel file' };
-    if (!L.s(o.destinazione)) return { u: u, err: 'destinazione mancante' };
-    if (!L.s(o.rma)) return { u: u, err: '', manca: true };   // carico in attesa di RMA: compare nelle uscite ma non parte finché non c'è l'RMA
+    if (!L.s(o.destinazione) && !destFac) return { u: u, err: 'destinazione mancante' };
+    if (!L.s(o.rma)) return { u: u, err: '', manca: true };   // carico senza RMA: può uscire lo stesso, il Service Desk lo aggiunge dopo
     var re = Rma.rmaErr(o.rma, true); if (re) return { u: u, err: re };
     var cf = Rma.rmaConflitto(o.rma, o.destinazione, u.id_unita, visti && visti.rma); if (cf) return { u: u, err: cf };
     return { u: u, err: '' };
@@ -5552,7 +5807,7 @@ var Rma = {
   // RMA / destinazione di un carico aperto (griglia carichi o Importa RMA): scheda e carico allineati, nel Log
   carSet: async function (idCar, ch, silenzioso) {
     var c = DB.t.CARICHI_RMA.rows.find(function (x) { return x.id_carico === idCar; }); if (!c) return false;
-    var nuovo = { rma: 'rma' in ch ? L.frKey(ch.rma) : L.s(c.rma), destinazione: 'destinazione' in ch ? L.s(ch.destinazione) : L.s(c.destinazione) };
+    var nuovo = { rma: 'rma' in ch ? Rma.rmaPulito(ch.rma) : L.s(c.rma), destinazione: 'destinazione' in ch ? L.s(ch.destinazione) : L.s(c.destinazione) };
     if ('destinazione' in ch) { var D = Rma.destinazioni(); if (!nuovo.destinazione || !D[L.up(nuovo.destinazione)]) { toast('Destinazione "' + nuovo.destinazione + '" non in anagrafica', 'ko'); Rma.render(); return false; } nuovo.destinazione = D[L.up(nuovo.destinazione)]; }
     var e = nuovo.rma ? (Rma.rmaErr(nuovo.rma, true) || Rma.rmaConflitto(nuovo.rma, nuovo.destinazione, c.id_unita)) : '';
     if (e) { toast(c.seriale + ': ' + e, 'ko'); Rma.render(); return false; }
@@ -5568,7 +5823,7 @@ var Rma = {
     } catch (x) { toast('Non salvato: ' + x.message, 'ko'); return false; }
   },
   carAggiungi: async function () {
-    var o = { seriale: L.s($('carSer').value), rma: L.frKey($('carRma').value), destinazione: L.s($('carDest').value), po_mrn: L.s($('carPo').value), note: L.s($('carNote').value) };
+    var o = { seriale: L.s($('carSer').value), rma: Rma.rmaPulito($('carRma').value), destinazione: L.s($('carDest').value), po_mrn: L.s($('carPo').value), note: L.s($('carNote').value) };
     var v = Rma.carValida(o);
     if (v.err) { toast(v.err, 'ko'); (v.u ? (!o.rma ? $('carRma') : $('carDest')) : $('carSer')).focus(); return; }
     if (!DB.t.CONTROPARTI.rows.some(function (c) { return L.up(c.codice) === L.up(o.destinazione); }) && !(await Modal.confirm('Destinazione non in anagrafica', '"' + o.destinazione + '" non è tra le controparti: il DDT uscirà senza indirizzo. Continuo?'))) return;
@@ -5585,22 +5840,48 @@ var Rma = {
     if (!rows.length) { Modal.open('Import Excel', 'Il file è vuoto.'); return; }
     Rma.carAnteprima(rows, f.name);
   },
+  // RMA scritto dal cliente: solo le cifre ("RMA 199788" / "rma199788" → 199788)
+  rmaPulito: function (v) { var x = L.s(v); return /\d/.test(x) ? x.replace(/\D/g, '').replace(/^0+(?=\d)/, '') : ''; },
+  // destinazione che resta in hub: il pezzo non esce, resta in giacenza a Maddaloni (HUB_MAGAZZINO)
+  resta: function (d) { var k = L.s(DB.param('carichi_dest_in_giacenza', 'MADDALONI')).split(';').map(L.up).filter(Boolean); d = L.up(d); return !!d && k.some(function (x) { return d.indexOf(x) >= 0; }); },
   carAnteprima: function (rows, titolo, dopo) {
     var f = { name: titolo };
     var visti = {}, righe = rows.map(function (r) {
-      var o = { seriale: campo(r, ['SERIALE', 'SERIAL', 'SERIAL NO.', 'SN', 'S/N']), rma: L.frKey(campo(r, ['RMA'])), destinazione: campo(r, ['DESTINAZIONE', 'PV DESTINO', 'DESTINO', 'DESTINAZIONE INTERA']),
+      var rRaw = campo(r, ['RMA']);
+      var o = { seriale: campo(r, ['SERIALE', 'SERIAL', 'SERIAL NO.', 'SN', 'S/N']), rma: Rma.rmaPulito(rRaw), rmaRaw: rRaw, destinazione: campo(r, ['DESTINAZIONE', 'PV DESTINO', 'DESTINO', 'DESTINAZIONE INTERA']),
         po_mrn: campo(r, ['PO', 'P.O', 'PO / MRN', 'PO/MRN', 'MRN', 'PO NEW / MRN']), note: campo(r, ['NOTE', 'NOTE SD / FR', 'NOTE SD']),
         material: campo(r, ['MATERIAL SAP CODE', 'MATERIAL SAPCODE', 'SAP CODE', 'MATERIAL']) };
-      visti.rma = visti.rma || {}; var v = Rma.carValida(o, visti); if (v.u && !v.err) { visti[v.u.id_unita] = 1; if (o.rma) visti.rma[o.rma] = o.destinazione; } o.manca = !!v.manca; o.u = v.u; o.err = v.err; return o;
+      visti.rma = visti.rma || {};
+      if (Rma.resta(o.destinazione)) { var ur = Rma.carUnita(o.seriale); o.u = ur; o.resta = true; o.err = ur ? '' : 'seriale non trovato tra NEW/REUSE in giacenza'; return o; }
+      var v = Rma.carValida(o, visti, true); if (v.u && !v.err) { visti[v.u.id_unita] = 1; if (o.rma) visti.rma[o.rma] = o.destinazione; } o.manca = !!v.manca; o.u = v.u; o.err = v.err; o.senzaDest = !L.s(o.destinazione); return o;
     }).filter(function (o) { return o.seriale || o.rma; });
-    var ok = righe.filter(function (o) { return !o.err; }), ko = righe.filter(function (o) { return o.err; });
-    var html = '<div style="font-size:13px;margin-bottom:8px">' + ok.length + ' righe valide' + (ko.length ? ', <b style="color:var(--red)">' + ko.length + ' con errori (non verranno caricate)</b>' : '') + '</div>' +
+    var ok = righe.filter(function (o) { return !o.err && !o.resta; }), ko = righe.filter(function (o) { return o.err; }), rest = righe.filter(function (o) { return o.resta && !o.err; }), sd = ok.filter(function (o) { return o.senzaDest; });
+    var esito = function (o) { return o.err || (o.resta ? 'resta in giacenza (' + o.destinazione + ')' : (o.senzaDest ? '⚠ senza destinazione' : 'ok') + (o.manca ? ' · senza RMA: può uscire, il SD lo aggiunge dopo' : '') + (o.rmaRaw && o.rmaRaw !== o.rma ? ' · RMA pulito da "' + o.rmaRaw + '"' : '')); };
+    var col = function (o) { return o.err ? 'var(--red)' : (o.resta ? 'var(--blue)' : (o.senzaDest ? 'var(--amber)' : 'var(--green)')); };
+    var html = '<div style="font-size:13px;margin-bottom:8px"><b style="color:var(--green)">' + ok.length + '</b> carichi da creare' + (sd.length ? ' (<b style="color:var(--amber)">' + sd.length + ' senza destinazione</b>)' : '') + (rest.length ? ' · <b style="color:var(--blue)">' + rest.length + '</b> restano in giacenza a Maddaloni' : '') + (ko.length ? ' · <b style="color:var(--red)">' + ko.length + ' con errori (non vengono caricate)</b>' : '') + '</div>' +
       '<div class="tbl-wrap modal-scroll"><table><thead><tr><th>Seriale</th><th>Tipo</th><th>P/N</th><th>RMA</th><th>Destinazione</th><th>PO</th><th>Material SAP</th><th>Note</th><th>Esito</th></tr></thead><tbody>' +
-      righe.map(function (o) { return '<tr class="' + (o.err ? 'r-err' : '') + '"><td class="mono">' + esc(o.seriale) + '</td><td>' + esc(o.u ? o.u.tipo : '') + '</td><td class="mono">' + esc(o.u ? o.u.pn : '') + '</td><td class="mono">' + esc(o.rma) + '</td><td>' + esc(o.destinazione) + '</td><td class="mono">' + esc(o.po_mrn) + '</td><td class="mono">' + esc(o.material) + '</td><td>' + esc(o.note) + '</td><td style="font-size:11.5px;color:' + (o.err ? 'var(--red)' : 'var(--green)') + '">' + esc(o.err || (o.manca ? 'ok · in attesa di RMA (esce quando c\'è)' : 'ok')) + '</td></tr>'; }).join('') + '</tbody></table></div>';
-    Modal.html('Import carichi NEW/REUSE · ' + f.name, html, [{ label: 'Annulla', cls: 'ghost' }].concat(ok.length ? [{ label: 'Carica ' + ok.length + ' righe', cls: 'green', fn: async function () {
-      Modal.open('Import carichi', 'Salvo ' + ok.length + ' carichi…', []);
-      try { await Rma.carScrivi(ok); Modal.close(); toast(ok.length + ' carichi importati', 'ok'); Rma.render(); if (dopo) await dopo(ok.length); } catch (e) { Modal.open('Import non riuscito', e.message); }
+      righe.map(function (o) { return '<tr class="' + (o.err ? 'r-err' : (o.senzaDest ? 'r-warn' : '')) + '"><td class="mono">' + esc(o.seriale) + '</td><td>' + esc(o.u ? o.u.tipo : '') + '</td><td class="mono">' + esc(o.u ? o.u.pn : '') + '</td><td class="mono">' + esc(o.rma) + '</td><td>' + esc(o.destinazione) + '</td><td class="mono">' + esc(o.po_mrn) + '</td><td class="mono">' + esc(o.material) + '</td><td>' + esc(o.note) + '</td><td style="font-size:11.5px;color:' + col(o) + '">' + esc(esito(o)) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+    Modal.html('Import carichi NEW/REUSE · ' + f.name, html, [{ label: 'Annulla', cls: 'ghost' }].concat(ok.length || rest.length ? [{ label: 'Carica ' + (ok.length + rest.length) + ' righe', cls: 'green', fn: async function () {
+      if (sd.length && !(await Modal.confirm('Destinazione mancante', sd.length + ' righe non hanno la destinazione:\n• ' + sd.slice(0, 15).map(function (o) { return o.seriale; }).join('\n• ') + (sd.length > 15 ? '\n…' : '') + '\n\nLe carico lo stesso? In Uscite compariranno senza destinazione finché non la scrivi nella griglia dei carichi.'))) return;
+      Modal.open('Import carichi', 'Salvo ' + (ok.length + rest.length) + ' righe…', []);
+      try {
+        if (ok.length) await Rma.carScrivi(ok);
+        if (rest.length) await Rma.carResta(rest, f.name);
+        Modal.close(); toast(ok.length + ' carichi importati' + (rest.length ? ' · ' + rest.length + ' restano in giacenza a Maddaloni' : ''), 'ok'); Rma.render(); if (dopo) await dopo(ok.length + rest.length);
+      } catch (e) { Modal.open('Import non riuscito', e.message); }
     } }] : []), true);
+  },
+  // righe con destinazione MADDALONI: nessun carico, il pezzo resta in giacenza in HUB_MAGAZZINO (traccia nella scheda e nel LOG)
+  carResta: async function (lista, file) {
+    var tU = DB.t.UNITA, now = L.nowStamp(), upd = [], logs = [];
+    lista.forEach(function (x) {
+      var u = x.u, ch = { destinazione_prevista: L.s(x.destinazione), magazzino: 'HUB_MAGAZZINO', note: [L.s(u.note), 'resta a Maddaloni (file ' + file + ')'].filter(Boolean).join(' | '), modificato_il: now, modificato_da: Auth.email, rev: (parseInt(u.rev, 10) || 1) + 1 };
+      if (x.material) ch.material = L.s(x.material);
+      Object.keys(ch).forEach(function (h) { if (h in tU.idx) { u[h] = String(ch[h]); upd.push({ range: tU.cell(h, u._r), values: [[u[h]]] }); } });
+      logs.push(App.log('CARICO_RESTA_IN_GIACENZA', 'UNITA', u.id_unita, { seriale: u.seriale, destinazione: x.destinazione, file: file }));
+    });
+    if (upd.length) await API.batchUpdate(DB.id, upd);
+    if (logs.length) await API.append(DB.id, 'LOG', logs);
   },
   carModello: async function () {
     try {
@@ -5635,7 +5916,7 @@ var Rma = {
       }
     });
     var U = {}; DB.t.UNITA.rows.forEach(function (u) { U[u.id_unita] = u; });
-    Rma.carichi().forEach(function (c) { var u = U[c.id_unita]; if (u && u.stato === 'IN_LAVORAZIONE') out.push({ u: u, rma: c.rma, dest: c.destinazione, po: c.po_mrn, fonte: 'Carico ' + c.tipo, causale: 'RMA', car: c, manca: !L.s(c.rma) }); });
+    Rma.carichi().forEach(function (c) { var u = U[c.id_unita]; if (u && u.stato === 'IN_LAVORAZIONE') out.push({ u: u, rma: c.rma, dest: c.destinazione, po: c.po_mrn, fonte: 'Carico ' + c.tipo, causale: 'RMA', car: c, manca: !L.s(c.destinazione), senzaRma: !L.s(c.rma) }); });   // senza RMA esce lo stesso (il SD lo aggiunge dopo); senza destinazione no
     var R = {}; DB.t.RMA_RITORNI.rows.forEach(function (r) { R[r.id_rma] = r; });
     out.forEach(function (x) { if (!x.rit && R[x.rma]) x.rit = R[x.rma]; });
     return out.filter(function (x) { return L.s(x.dest) && !Rma.pend(x.u.id_unita); });   // in pending: fermo a deposito finché non viene sbloccato
@@ -5683,7 +5964,7 @@ var Rma = {
         '<div class="usc-lista">' + lista.map(function (p) {
           var off = !done && !p.manca && esc0[p.u.id_unita];
           var cb = done ? '' : (p.manca ? '<input type="checkbox" disabled title="Si spunta da solo quando c\'è l\'RMA">' : '<input type="checkbox"' + (off ? '' : ' checked') + ' title="Togli dall\'uscita di oggi" onchange="Rma.toggle(\'' + p.u.id_unita + '\',this.checked)">');
-          return '<div class="usc-p' + (off ? ' off' : '') + (p.manca ? ' manca' : '') + '">' + cb + '<div class="usc-pi"><span class="mono">' + esc(p.u.seriale) + '</span><span class="usc-pd">· ' + esc(p.u.pn) + ' · ' + (p.manca ? '<span class="pill p-amber">manca RMA</span>' : 'RMA <b class="mono">' + esc(p.rma) + '</b>') + (p.rit && L.s(p.rit.failure_report) ? ' · RITORNO GIACENZA FR ' + esc(p.rit.failure_report) : (p.fonte ? ' · ' + esc(p.fonte) : '')) + '</span></div>' + (done ? '' : '<button class="ico-btn" title="Metti in pending: non esce, resta fermo a deposito finché non lo sblocchi" onclick="Rma.pendMetti(\'' + p.u.id_unita + '\')">⏸</button>') + '</div>';
+          return '<div class="usc-p' + (off ? ' off' : '') + (p.manca ? ' manca' : '') + '">' + cb + '<div class="usc-pi"><span class="mono">' + esc(p.u.seriale) + '</span><span class="usc-pd">· ' + esc(p.u.pn) + ' · ' + (p.manca ? '<span class="pill p-amber">' + (p.car && !L.s(p.car.destinazione) ? 'manca destinazione' : 'manca RMA') + '</span>' : (L.s(p.rma) ? 'RMA <b class="mono">' + esc(p.rma) + '</b>' : '<span class="pill p-blue" title="Esce senza RMA: il Service Desk lo aggiunge dopo (Movimenti → ✎)">senza RMA</span>')) + (p.rit && L.s(p.rit.failure_report) ? ' · RITORNO GIACENZA FR ' + esc(p.rit.failure_report) : (p.fonte ? ' · ' + esc(p.fonte) : '')) + '</span></div>' + (done ? '' : '<button class="ico-btn" title="Metti in pending: non esce, resta fermo a deposito finché non lo sblocchi" onclick="Rma.pendMetti(\'' + p.u.id_unita + '\')">⏸</button>') + '</div>';
         }).join('') + '</div></details>' +
         '<div style="font-size:12px;color:var(--subtle)">Colli: ' + col.length + ' · ' + Math.round(peso * 100) / 100 + ' kg</div>' +
         (done ? '' : '<table style="width:auto;font-size:12px"><tbody>' + col.map(function (c, i) {
@@ -6385,8 +6666,16 @@ var Nr = {
   // ─ file: stesso tracciato dello script (CREAZIONE FILE NEW & REUSE + STAMPA CEDOLINO)
   nomeFile: function (p) { return (L.s(p.mittente) + ' ' + L.s(p.po_mrn) + ' | ' + L.s(p.ddt)).replace(/[\\/:*?"<>]/g, '_') + '.xlsx'; },
   // colonne del file: RMA, DESTINAZIONE e MATERIAL le compila il cliente (il material è proposto dal P/N, da verificare)
-  NRH: ['S/N', 'P/N', 'RMA', 'DESTINAZIONE', 'MATERIAL SAP CODE', 'POSITION', 'NOTE', 'MITTENTE', 'PO/MRN', 'PL'],
+  NRH: ['S/N', 'P/N', 'RMA', 'DESTINAZIONE', 'MATERIAL SAP CODE', 'POSIZIONE VLT', 'POSITION', 'NOTE', 'MITTENTE', 'PO/MRN', 'PL'],
   NOTA_MAT: 'Verificare esattezza del material',
+  // codifica VLT di un'ubicazione (Anagrafiche → UBICAZIONI, colonna codice_vlt) ed elenco dei depositi VLT per la tendina
+  posVlt: function (ubi) {
+    var p = L.up(ubi); if (!p) return '';
+    if (DB.ubVlt && DB.ubVlt[p]) return DB.ubVlt[p];                      // bin → codice VLT
+    var t = p.split(/[\s\/]+/)[0]; if (DB.ubVlt && DB.ubVlt[t]) return DB.ubVlt[t];
+    return DB.ubBin && DB.ubBin[t] ? t : '';                                 // è già un codice VLT (es. "DC12BB / FLM 550")
+  },
+  depositiVlt: function () { return Object.keys(DB.ubBin || {}).filter(Boolean).sort(); },
   // material proposto dal P/N (anagrafica articoli): { m: primo material, alt: altri material con lo stesso P/N }
   matDi: function (pn) {
     if (!Nr._pm || Nr._pmN !== Object.keys(DB.matPn || {}).length) {
@@ -6398,10 +6687,10 @@ var Nr = {
   },
   crea: async function (p, pezzi) {
     await Lib.xlsx();
-    var righe = pezzi.map(function (u, i) { var mt = Nr.matDi(u.pn); return { r: [u.seriale, u.pn, '', '', mt.m, u.ubicazione || '', Rma.nota(u.note), i ? '' : p.mittente, i ? '' : p.po_mrn, i ? '' : p.ddt], mt: mt }; });
+    var righe = pezzi.map(function (u, i) { var mt = Nr.matDi(u.pn); return { r: [u.seriale, u.pn, '', '', mt.m, Nr.posVlt(u.ubicazione), u.ubicazione || '', Rma.nota(u.note), i ? '' : p.mittente, i ? '' : p.po_mrn, i ? '' : p.ddt], mt: mt }; });
     var g = {}, ord = []; pezzi.forEach(function (u) { var k = L.s(u.pn); if (!g[k]) { g[k] = { q: 0, pos: [] }; ord.push(k); } g[k].q++; if (u.ubicazione && g[k].pos.indexOf(u.ubicazione) < 0) g[k].pos.push(u.ubicazione); });
     var c = [['TPN', 'NOTE', 'Q', 'POS.']].concat(ord.map(function (k) { return [k, '', g[k].q, g[k].pos.join(' / ')]; }));
-    var W = [26, 18, 12, 30, 20, 18, 30, 24, 16, 22];
+    var W = [26, 18, 12, 30, 20, 22, 18, 30, 24, 16, 22];
     try {
       await Lib.exceljs();
       var D = Rma.destinazioni(), dest = Object.keys(D).map(function (k) { return D[k]; }).sort(), H = Nr.NRH, n = righe.length + 1;
@@ -6416,6 +6705,10 @@ var Nr = {
       ws.getCell(1, cR).note = 'Facoltativo: RMA già destinato a questo pezzo (' + Rma.cifre().join(' o ') + ' cifre). Lo stesso RMA può stare su più righe solo con la stessa DESTINAZIONE.';
       righe.forEach(function (x, k) { var cell = ws.getCell(k + 2, cM); cell.note = x.mt.m ? Nr.NOTA_MAT + (x.mt.alt.length ? ' (stesso P/N anche: ' + x.mt.alt.join(', ') + ')' : '') : 'Material non trovato in anagrafica per questo P/N: inseriscilo'; });
       var w2 = wb.addWorksheet('STAMPA CEDOLINO'); c.forEach(function (r) { w2.addRow(r); }); w2.getRow(1).font = { bold: true }; [22, 20, 6, 40].forEach(function (w, k) { w2.getColumn(k + 1).width = w; });
+      // POSIZIONE VLT: codifica VLT dell'ubicazione, con il menu a tendina dei depositi VLT (foglio DEPOSITI VLT)
+      var dep = Nr.depositiVlt(), cV = H.indexOf('POSIZIONE VLT') + 1;
+      if (dep.length && cV) { var wv = wb.addWorksheet('DEPOSITI VLT'); wv.addRow(['POSIZIONE VLT']); dep.forEach(function (d) { wv.addRow([d]); }); wv.getColumn(1).width = 30; wv.getRow(1).font = { bold: true };
+        ws.dataValidations.add(Lt(cV) + '2:' + Lt(cV) + n, { type: 'list', allowBlank: true, formulae: ["'DEPOSITI VLT'!$A$2:$A$" + (dep.length + 1)], showErrorMessage: true, errorStyle: 'warning', errorTitle: 'Posizione VLT', error: 'Posizione non tra i depositi VLT: controlla' }); }
       if (dest.length) { var wd = wb.addWorksheet('DESTINAZIONI'); wd.addRow(['DESTINAZIONE']); dest.forEach(function (d) { wd.addRow([d]); }); wd.getColumn(1).width = 46; wd.getRow(1).font = { bold: true };
         ws.dataValidations.add(Lt(cD) + '2:' + Lt(cD) + n, { type: 'list', allowBlank: true, formulae: ['DESTINAZIONI!$A$2:$A$' + (dest.length + 1)], showErrorMessage: true, errorStyle: 'warning', errorTitle: 'Destinazione', error: 'Destinazione non in elenco: controlla' }); }
       ws.dataValidations.add(Lt(cR) + '2:' + Lt(cR) + n, { type: 'textLength', operator: 'between', allowBlank: true, formulae: [Math.min.apply(null, Rma.cifre()), Math.max.apply(null, Rma.cifre())], showErrorMessage: true, errorStyle: 'warning', errorTitle: 'RMA', error: 'L\'RMA deve avere ' + Rma.cifre().join(' o ') + ' cifre' });
@@ -6500,7 +6793,7 @@ var Nr = {
     Rma.inventario().forEach(function (u) { var v = L.s(Rma.dv(u, 'rma')); if (v) usati[v] = { s: u.seriale, d: L.s(Rma.dv(u, 'dest')) }; });
     Rma.carichi().forEach(function (c) { if (c.rma) usati[L.s(c.rma)] = { s: c.seriale, d: L.s(c.destinazione) }; });
     rows.forEach(function (r) {
-      var sn = L.s(campo(r, ['S/N', 'SERIALE', 'SERIAL NO.'])), rma = L.frKey(campo(r, ['RMA'])), de = L.s(campo(r, ['DESTINAZIONE', 'PV DESTINO', 'DESTINO'])), mat = L.s(campo(r, ['MATERIAL SAP CODE', 'MATERIAL']));
+      var sn = L.s(campo(r, ['S/N', 'SERIALE', 'SERIAL NO.'])), rma = Rma.rmaPulito(campo(r, ['RMA'])), de = L.s(campo(r, ['DESTINAZIONE', 'PV DESTINO', 'DESTINO'])), mat = L.s(campo(r, ['MATERIAL SAP CODE', 'MATERIAL']));
       if (!sn && !rma) return; if (rma) n++;
       if (rma && !de) av.push(sn + ': RMA ' + rma + ' senza DESTINAZIONE');
       if (rma && cif.indexOf(rma.length) < 0) av.push(sn + ': RMA ' + rma + ' non ha ' + cif.join(' o ') + ' cifre');
@@ -6528,7 +6821,7 @@ var Nr = {
       var lista = Nr.t().rows.filter(function (p) { return p.stato === 'IN_USCITA'; });
       for (var i = 0; i < lista.length; i++) {
         var P = Nr.pezziRic(lista[i].id_ricezione);
-        if (P.length && P.every(function (u) { return u.stato === 'USCITO' || u.stato === 'ANNULLATO'; })) await Nr.set(lista[i], { stato: 'SPEDITA' }, 'NR_SPEDITA');
+        if (P.length && P.every(function (u) { return u.stato === 'USCITO' || u.stato === 'ANNULLATO' || Rma.resta(u.destinazione_prevista); })) await Nr.set(lista[i], { stato: 'SPEDITA' }, 'NR_SPEDITA');   // i pezzi per Maddaloni restano in hub
       }
     } catch (e) { }
   },
@@ -6711,6 +7004,8 @@ var Sto = {
   dataOra: function (v) { v = L.s(v); var g = L.normDate(v), t = /(\d{1,2}:\d{2})/.exec(v.slice(10)); return g ? L.itDate(g) + (t ? ' ' + t[1] : '') : v; },
   op: function (r) { return r.operatore_sigla || L.s(r.operatore).split('@')[0]; },
   dir: function (r) { return r.direzione === 'IN' || r.direzione === 'OUT' ? r.direzione : 'INT'; },
+  // movimento annullato (causale …_ANNULLATO): resta nello storico ma non conta (Easyloader, KPI, dashboard, riallineamento)
+  annullato: function (r) { return /_ANNULLATO$/.test(L.s(r && r.causale)); },
   periodo: function () { return [$('stoDa').value || '0000-00-00', $('stoA').value || '9999-99-99']; },
   nelPeriodo: function (r) { var g = L.normDate(r.data_ora), p = Sto.periodo(); return !g || (g >= p[0] && g <= p[1]); },
   cerca_: function (r, q) { if (Sto._qv !== q) { Sto._qv = q; Sto._qf = L.qm(q); } var m = Sto._qf; return !m || [r.seriale, r.fr, r.rma, r.ddt, r.awb, r.id_mov, r.pn, r.po_mrn, r.controparte, r.id_unita, Sto.dir(r) === 'INT' ? r.note : ''].some(m); },
@@ -6752,9 +7047,12 @@ var Sto = {
       orig: { k: 'origine', label: 'Origine', filter: 'select' },
       svlt: { k: 'stato_vlt', label: 'Stato VLT all\'ingresso', filter: 'select' }
     };
+    // date di cambio stato da VLT TABLEAU (abbinate per FR)
+    Tab.COL.forEach(function (x) { C['t_' + x[0]] = { k: 't_' + x[0], label: x[2], cls: 'mono nw', filter: x[0] === 'k6' ? 'text' : 'date', get: function (r) { return Tab.data(r.fr, x[0]); } }; });
+    var TB = Tab.COL.map(function (x) { return 't_' + x[0]; });
     var ord = {
-      IN: ['az', 'id', 'tipo', 'fr', 'rma', 'data', 'vlt', 'svlt', 'po', 'cp', 'awb', 'vet', 'ddt', 'op', 'mnft', 'ser', 'pn', 'rip', 'note', 'pos', 'merci', 'anom', 'caus', 'uid', 'ric', 'uba', 'orig'],
-      OUT: ['az', 'id', 'tipo', 'fr', 'po', 'rma', 'cp', 'data', 'awb', 'vet', 'ddt', 'op', 'mnft', 'ser', 'pn', 'rip', 'note', 'caus', 'uid', 'sped', 'ubda', 'orig'],
+      IN: ['az', 'id', 'tipo', 'fr', 'rma', 'data', 'vlt', 'svlt', 'po', 'cp', 'awb', 'vet', 'ddt', 'op', 'mnft', 'ser', 'pn', 'rip', 'note', 'pos', 'merci', 'anom', 'caus', 'uid', 'ric', 'uba', 'orig'].concat(TB),
+      OUT: ['az', 'id', 'tipo', 'fr', 'po', 'rma', 'cp', 'data', 'awb', 'vet', 'ddt', 'op', 'mnft', 'ser', 'pn', 'rip', 'note', 'caus', 'uid', 'sped', 'ubda', 'orig'].concat(TB),
       INT: ['id', 'data', 'caus', 'tipo', 'ser', 'fr', 'pn', 'rip', 'uid', 'note', 'op'],
       ALL: ['az', 'id', 'data', 'dirz', 'caus', 'tipo', 'fr', 'rma', 'ser', 'pn', 'mnft', 'cp', 'awb', 'vet', 'ddt', 'po', 'rip', 'op', 'note', 'uid', 'orig']
     }[sez];
@@ -6804,12 +7102,20 @@ var Sto = {
       var dub = list.filter(function (o) { return !o._err && o._dub; });
       var ok = list.filter(function (o) { return !o._err && !o._dub; }), ko = list.filter(function (o) { return o._err; }), cnt = {};
       ok.forEach(function (o) { var k = o.direzione + ' ' + o.tipo; cnt[k] = (cnt[k] || 0) + 1; });
-      Modal.html('Importa movimenti mancanti · ' + f.name, '<div style="font-size:13px;margin-bottom:8px"><b style="color:var(--green)">' + ok.length + '</b> da importare (' + Object.keys(cnt).map(function (k) { return k + ' ' + cnt[k]; }).join(', ') + ') · <b style="color:var(--red)">' + ko.length + '</b> saltati. Gli ID IN/OUT li assegna il tool (numerazione del database); l\'ID originale resta in "origine".</div>' +
-        '<div class="tbl-wrap modal-scroll"><table><thead><tr><th>Riga</th><th>Dir</th><th>Tipo</th><th>Seriale</th><th>FR</th><th>Data in hub</th><th>Reg. VLT</th><th>Controparte</th><th>Origine</th><th>Esito</th></tr></thead><tbody>' +
-        ko.concat(ok).slice(0, 400).map(function (o) { return '<tr class="' + (o._err ? 'r-err' : '') + '"><td class="mono">' + o._riga + '</td><td>' + esc(o.direzione) + '</td><td>' + esc(o.tipo) + '</td><td class="mono">' + esc(o.seriale) + '</td><td class="mono">' + esc(o.fr) + '</td><td class="mono">' + esc(L.itDate(o.data_ora)) + '</td><td class="mono">' + esc(L.itDate(o.data_registrazione_vlt)) + '</td><td>' + esc(o.controparte) + '</td><td class="hint">' + esc(o.origine) + '</td><td style="font-size:11.5px;color:' + (o._err ? 'var(--red)' : 'var(--green)') + '">' + esc(o._err || 'ok') + '</td></tr>'; }).join('') + '</tbody></table></div>',
-        [{ label: 'Annulla', cls: 'ghost' }].concat(ok.length || dub.length ? [{ label: 'Importa i movimenti', cls: 'green', fn: function () { var x = ok.concat($('stoDub') && $('stoDub').checked ? dub : []); if (x.length) Sto.scriviMancanti(x, f.name); else toast('Niente da importare', 'ko'); } }] : []), true);
-      if (dub.length) $('mBody').insertAdjacentHTML('afterbegin', '<div class="hint" style="color:var(--amber);margin-bottom:8px">⚠ <b>' + dub.length + '</b> probabili doppioni (stesso seriale, direzione e tipo entro 7 giorni di un movimento già presente): restano fuori. <label style="margin-left:8px"><input type="checkbox" id="stoDub"> importa anche questi</label>' +
-        '<details><summary style="cursor:pointer">vedi</summary><div style="font-size:12px;max-height:18vh;overflow:auto">' + dub.slice(0, 300).map(function (o) { return 'riga ' + o._riga + ' · ' + esc(o.tipo) + ' ' + esc(o.seriale) + ' del ' + esc(L.itDate(o.data_ora)) + ' → ' + esc(o._dub); }).join('<br>') + '</div></details></div>');
+      // anteprima: prima quello che entra (con il riepilogo), poi i probabili doppioni, poi i saltati raggruppati per motivo
+      var riga = function (o, col) { return '<tr><td class="mono">' + o._riga + '</td><td>' + esc(o.direzione) + '</td><td>' + esc(o.tipo) + '</td><td class="mono">' + esc(o.seriale) + '</td><td class="mono">' + esc(o.fr) + '</td><td class="mono">' + esc(L.itDate(o.data_ora)) + '</td><td class="mono">' + esc(L.itDate(o.data_registrazione_vlt)) + '</td><td>' + esc(o.controparte) + '</td><td class="hint">' + esc(o.origine) + '</td><td style="font-size:11.5px;color:' + col + '">' + esc(o._err || o._dub || 'nuovo') + '</td></tr>'; };
+      var TH = '<thead><tr><th>Riga</th><th>Dir</th><th>Tipo</th><th>Seriale</th><th>FR</th><th>Data</th><th>Reg. VLT</th><th>Controparte</th><th>Origine</th><th>Esito</th></tr></thead>';
+      var mot = {}; ko.forEach(function (o) { var k = o._err.replace(/\s*\(.*\)$/, ''); mot[k] = (mot[k] || 0) + 1; });
+      Modal.html('Importa movimenti mancanti · ' + f.name,
+        '<div style="font-size:14px;margin-bottom:6px">Nel file ci sono <b>' + list.length + '</b> righe: <b style="color:var(--green)">' + ok.length + ' nuove da importare</b>' + (dub.length ? ', <b style="color:var(--amber)">' + dub.length + ' probabili doppioni</b>' : '') + ', <b>' + ko.length + ' già presenti o non valide</b> (non si toccano).</div>' +
+        '<div class="hint" style="margin-bottom:8px">Si importano solo le righe <b>nuove</b>: diventano movimenti (storico e Excel Easyloader), non schede in giacenza. Gli ID IN/OUT li assegna il tool; l\'ID originale resta in "origine".</div>' +
+        '<div style="font-size:13px;margin:6px 0"><b style="color:var(--green)">✚ Da importare (' + ok.length + ')</b>' + (ok.length ? ' · ' + Object.keys(cnt).map(function (k) { return k + ' ' + cnt[k]; }).join(', ') : '') + '</div>' +
+        (ok.length ? '<div class="tbl-wrap modal-scroll" style="max-height:30vh"><table>' + TH + '<tbody>' + ok.slice(0, 500).map(function (o) { return riga(o, 'var(--green)'); }).join('') + '</tbody></table></div>' + (ok.length > 500 ? '<div class="hint">… e altre ' + (ok.length - 500) + '</div>' : '') : '<div class="hint">Nessuna riga nuova: il database ha già tutto.</div>') +
+        (dub.length ? '<div style="font-size:13px;margin:10px 0 4px;color:var(--amber)">⚠ <b>Probabili doppioni (' + dub.length + ')</b>: stesso seriale, direzione e tipo entro 7 giorni di un movimento già presente. Restano fuori. <label style="margin-left:8px;color:var(--text)"><input type="checkbox" id="stoDub"> importa anche questi</label></div>' +
+          '<div class="tbl-wrap modal-scroll" style="max-height:18vh"><table>' + TH + '<tbody>' + dub.slice(0, 300).map(function (o) { return riga(o, 'var(--amber)'); }).join('') + '</tbody></table></div>' : '') +
+        '<details style="margin-top:10px"><summary style="cursor:pointer;font-size:13px"><b>Saltate (' + ko.length + ')</b>: ' + Object.keys(mot).map(function (k) { return esc(k) + ' ' + mot[k]; }).join(' · ') + '</summary>' +
+          '<div class="tbl-wrap modal-scroll" style="max-height:22vh"><table>' + TH + '<tbody>' + ko.slice(0, 300).map(function (o) { return riga(o, 'var(--red)'); }).join('') + '</tbody></table></div></details>',
+        [{ label: 'Annulla', cls: 'ghost' }].concat(ok.length || dub.length ? [{ label: 'Importa i movimenti nuovi', cls: 'green', fn: function () { var x = ok.concat($('stoDub') && $('stoDub').checked ? dub : []); if (x.length) Sto.scriviMancanti(x, f.name); else toast('Niente da importare', 'ko'); } }] : []), true);
     } catch (e) { Modal.open('Importa movimenti', 'Errore: ' + e.message); }
   },
   scriviMancanti: async function (ok, nome) {
@@ -6836,6 +7142,7 @@ var Sto = {
     if ($('stoImp')) $('stoImp').style.display = App.isAdmin ? '' : 'none';
     Sto.init(); Sto.tabs();
     try { await Sto.carica(false); Sto.render(true); } catch (e) { $('stoRows').innerHTML = '<tr><td class="empty">Errore: ' + esc(e.message) + '</td></tr>'; }
+    if (!Tab.map) Tab.load().then(function (m) { if (m && App.tab === 'movimenti') Sto.render(); });   // date VLT TABLEAU nelle colonne
   },
   tabs: function () {
     var R = Sto.dati[Sto.fonte] || [], q = L.up($('stoQ').value), n = { IN: 0, OUT: 0, INT: 0, ALL: 0 };
@@ -6857,7 +7164,7 @@ var Sto = {
   excelEasyloader: function () {
     var p = Sto.periodo(), q = L.up($('stoQ').value), R = (Sto.dati[Sto.fonte] || []).filter(function (r) { return Sto.nelPeriodo(r) && (!q || Sto.cerca_(r, q)); });
     var ord = function (a, b) { return L.s(a.data_ora).localeCompare(L.s(b.data_ora)) || L.s(a.id_mov).localeCompare(L.s(b.id_mov)); };
-    var IN = R.filter(function (r) { return r.direzione === 'IN' && r.causale !== 'INGRESSO_ANNULLATO'; }).sort(ord), OUT = R.filter(function (r) { return r.direzione === 'OUT'; }).sort(ord);
+    var IN = R.filter(function (r) { return r.direzione === 'IN' && !Sto.annullato(r); }).sort(ord), OUT = R.filter(function (r) { return r.direzione === 'OUT' && !Sto.annullato(r); }).sort(ord);
     var dt = function (v) { return Sto.dataOra(v); }, d = function (v) { return L.normDate(v) ? L.itDate(L.normDate(v)) : L.s(v); };
     Xls.scarica('EASYLOADER_' + (p[0] === '0000-00-00' ? 'inizio' : p[0]) + '_' + (p[1] === '9999-99-99' ? 'oggi' : p[1]), [
       { nome: 'INBOUND', headers: ['GES', 'TYPE', 'FR', 'RMA BALANCING', 'DATA IN HUB', 'DATA RECEIVED AND VERIFY (REGISTRAZIONE VLT)', 'PO/MRN', 'MITTENTE', '#AWB1-3', 'CARRIER', 'DDT', 'OP', 'MNFT', 'SERIAL No.', 'PRODUCT No.', 'REPAIRER', 'NOTE ', 'POSIZIONE E NOTE NEW E REUSE - NOTE BUG SISTEMA', 'DATA IN MERCI', 'ANOMALIA'],
@@ -7549,6 +7856,38 @@ var Chi = {
 // ───────────────────────── DATA ACK SU VLT (base del KPI₆) ─────────────────────────
 // Ogni giorno, alla lettura del VLT, si registra il primo giorno in cui una FAULTY in giacenza risulta in ACK
 // (o AS per i riparatori che li prevedono). Al primo avvio le schede già in ACK sono "INIZIALE": data vera ignota, fuori dal KPI.
+// ───────────────────────── VLT TABLEAU (date di cambio stato dei FR) ─────────────────────────
+// Foglio TABLEAU del file VLT, caricato dal backend fr_rma dall'export E2FR del lunedì: un FR per riga con le date in cui
+// è entrato in ogni stato. L'app le affianca ai movimenti (abbinate per FR) e le usa nei KPI quando ci sono.
+var Tab = {
+  FOGLIO: 'TABLEAU', GID: 1821001975,
+  COL: [['open', 'DATA_OPEN', 'VLT Open'], ['fms', 'DATA_FAILED_MATERIAL_SENT', 'VLT Failed Material Sent'], ['rv', 'DATA_FAILED_MATERIAL_RECEIVED_AND_VERIFY', 'VLT Received and Verify'],
+    ['frs', 'DATA_FAILURE_REPORT_SENT', 'VLT Failure Report Sent'], ['rar', 'DATA_REPAIRER_ACK_RECEIVED', 'VLT Repairer Ack Received'], ['str', 'DATA_FAILED_MATERIAL_SENT_TO_REPAIRER', 'VLT Sent to Repairer'],
+    ['gmr', 'DATA_GOOD_MATERIAL_RECEIVED', 'VLT Good Material Received'], ['k6', 'KPI 6', 'KPI 6 (VLT)']],
+  map: null, estratto: '', _p: null,
+  load: function (forza) {
+    if (Tab._p && !forza) return Tab._p;
+    return Tab._p = (async function () {
+      var c = forza ? null : await DB.cacheGet('tableau');
+      if (!c || DB.vltStale(c.ts)) {
+        var f = await DB.vltFoglio(Tab.FOGLIO, Tab.GID, '');
+        var h = ((await API.batchGet(CFG.VLT_ID, [API.q(f) + '!1:1']))[0] || [[]])[0] || [];
+        var cols = ['Fr Id'].concat(Tab.COL.map(function (x) { return x[1]; })).concat(['Estratto Il']).filter(function (x) { return h.map(L.s).indexOf(x) >= 0; });
+        if (cols.indexOf('Fr Id') < 0) throw new Error('foglio TABLEAU senza la colonna "Fr Id"');
+        var rows = await DB.loadCols(CFG.VLT_ID, f, cols);
+        var m = {}, est = '';
+        rows.forEach(function (r) { var fr = L.s(r['Fr Id']).replace(/\.0$/, ''); if (!fr) return; var o = {}; Tab.COL.forEach(function (x) { if (L.s(r[x[1]])) o[x[0]] = L.s(r[x[1]]); }); m[fr] = o; if (!est && L.s(r['Estratto Il'])) est = L.s(r['Estratto Il']); });
+        c = { ts: Date.now(), map: m, estratto: est }; await DB.cacheSet('tableau', c);
+      }
+      Tab.map = c.map; Tab.estratto = c.estratto || '';
+      return Tab.map;
+    })().catch(function (e) { Tab._p = null; Tab.map = Tab.map || null; Tab.err = e.message; return null; });
+  },
+  di: function (fr) { return (Tab.map && fr && Tab.map[L.frKey(fr)]) || null; },
+  data: function (fr, k) { var t = Tab.di(fr); return t && t[k] ? t[k] : ''; },
+  info: function () { return Tab.map ? 'VLT TABLEAU: ' + Object.keys(Tab.map).length + ' FR' + (Tab.estratto ? ' · file del ' + L.s(Tab.estratto).slice(0, 16) : '') : (Tab.err ? 'VLT TABLEAU non letto: ' + Tab.err : 'VLT TABLEAU non ancora caricato'); }
+};
+
 var AckV = {
   H: ['fr', 'data_ack', 'stato_vlt', 'riparatore', 'id_unita', 'origine', 'registrato_il'],
   map: null,
@@ -7609,6 +7948,7 @@ var Kpi = {
     if (!Kpi.art || forza) job.push(DB.loadCols(DB.id, 'ARTICOLI', ['material', 'pn', 'gruppo_articoli', 'technology']).then(function (a) { Kpi.art = a; }).catch(function () { Kpi.art = []; }));
     if (forza) job.push(Blk.load().catch(function () { }), Chi.load().catch(function () { }), AckV.load().catch(function () { }));
     else { if (!DB.t.CHIUSURE) job.push(Chi.load().catch(function () { })); if (!DB.t.ACK_VLT) job.push(AckV.load().catch(function () { })); }
+    job.push(Tab.load(forza));   // date di cambio stato VLT (TABLEAU): se ci sono, KPI₁ ₂ ₆ partono da quelle
     // archivio dell'anno prima: serve per i 12 mesi (resta in cache, non cambia)
     var y = String(new Date().getFullYear() - 1);
     if (!Kpi._archY || forza) job.push((async function () {
@@ -7664,12 +8004,15 @@ var Kpi = {
     var mesi = Kpi.mesi(), M = {}, sel = Kpi.mese, R = (Sto.dati.cur || []).concat(Kpi.arch || []);
     Kpi._blk = Blk.giorni(); Kpi._ats = Chi.giorniAts(); Kpi._cd = {}; Kpi._gg = {}; Kpi._fest = null; Kpi._al = null; Kpi._rip = null;
     var t6 = {}, r6 = {}, ini6 = AckV.inizio(); AckV.indice();
+    Kpi._nTab = 0; Kpi._nTab6 = 0; if (Kpi.usaTab === undefined) Kpi.usaTab = true;
     mesi.forEach(function (m) { M[m] = { inF: 0, inG: 0, outF: 0, outG: 0, inNR: 0, outNR: 0, outB: 0, ddt: {}, k: {} }; });
     var tempi = { 1: {}, 2: {}, 3: {} }, dest = {}, idSped = {};
     R.forEach(function (r) {
+      if (Sto.annullato(r)) return;
       if (r.direzione === 'IN') {
-        if (r.causale === 'INGRESSO_ANNULLATO') return;
-        var reg = L.normDate(r.data_registrazione_vlt) || L.normDate(r.data_ora), mk = reg.slice(0, 7), o = M[mk]; if (!o) return;
+        var tb = Kpi.usaTab ? Tab.di(r.fr) : null, regT = tb ? L.normDate(r.tipo === 'FAULTY' ? tb.rv : (r.tipo === 'GOOD' ? tb.gmr : '')) : '';
+        if (regT && regT >= L.normDate(r.data_ora)) Kpi._nTab++; else regT = '';
+        var reg = regT || L.normDate(r.data_registrazione_vlt) || L.normDate(r.data_ora), mk = reg.slice(0, 7), o = M[mk]; if (!o) return;
         if (r.tipo === 'FAULTY') o.inF++; else if (r.tipo === 'GOOD') o.inG++; else if (r.tipo === 'NEW' || r.tipo === 'REUSE') o.inNR++;
         var n = r.tipo === 'FAULTY' ? 1 : r.tipo === 'GOOD' ? 2 : (r.tipo === 'NEW' || r.tipo === 'REUSE') ? 3 : 0;
         var a = L.normDate(r.data_ora);
@@ -7678,7 +8021,7 @@ var Kpi = {
         var d = L.normDate(r.data_ora), mk2 = d.slice(0, 7), q = M[mk2]; if (!q) return;
         if (r.tipo === 'FAULTY') q.outF++; else if (r.tipo === 'GOOD') q.outG++; else if (r.tipo === 'NEW' || r.tipo === 'REUSE') q.outNR++; else if (r.tipo === 'BALANCING') q.outB++;
         var kd = L.s(r.ddt) || L.s(r.id_spedizione); if (kd) q.ddt[kd] = 1;
-        if (r.causale === 'ACK' && r.fr) { var av = AckV.map[r.fr]; if (av && !av.ini && av.d <= d) { var w6 = Kpi.gg(av.d, d, r.controparte); (t6[mk2] = t6[mk2] || []).push(w6); if (mk2 === sel) { var rr = Kpi.gruppo(r.controparte); (r6[rr] = r6[rr] || []).push(w6); } } }
+        if (r.causale === 'ACK' && r.fr) { var av = AckV.map[r.fr], d6 = Kpi.usaTab ? L.normDate(Tab.data(r.fr, 'rar')) : ''; if (d6 && d6 <= d) { av = { d: d6 }; Kpi._nTab6++; } if (av && !av.ini && av.d <= d) { var w6 = Kpi.gg(av.d, d, r.controparte); (t6[mk2] = t6[mk2] || []).push(w6); if (mk2 === sel) { var rr = Kpi.gruppo(r.controparte); (r6[rr] = r6[rr] || []).push(w6); } } }
         if (mk2 === sel) {
           var g = Kpi.gruppo(r.controparte), x = dest[g] = dest[g] || { g: g, schede: 0, ddt: {}, sped: {} };
           x.schede++; if (kd) x.ddt[kd] = 1; if (r.id_spedizione) { x.sped[r.id_spedizione] = 1; idSped[r.id_spedizione] = 1; }
@@ -7749,6 +8092,7 @@ var Kpi = {
   render: function () {
     if (!Sto.dati.cur) return;
     var C = Kpi.dati = Kpi.calcola(), mesi = C.mesi, i = mesi.indexOf(Kpi.mese), M = C.M, cur = M[Kpi.mese];
+    if ($('kpiTabInfo')) $('kpiTabInfo').textContent = Kpi.usaTab ? (Tab.map ? Tab.info() + ' · usate per ' + Kpi._nTab + ' ingressi e ' + Kpi._nTab6 + ' ACK' : Tab.info()) : 'calcolo con le date dell\'app';
     var v = function (k) { return mesi.map(function (m) { return M[m][k]; }); }, n = function (x) { return (x || 0).toLocaleString('it-IT'); };
     var pc = function (x) { return x === null ? '—' : String(x).replace('.', ',') + '%'; };
     var h = '';
@@ -7853,7 +8197,7 @@ var Dash = {
     var iv = Dash.intervallo(), ev = [];
     (Sto.dati.cur || []).forEach(function (m) {
       var g = L.normDate(m.data_ora); if (!g || g < iv[0] || g > iv[1]) return;
-      var k = m.direzione === 'IN' ? (m.causale === 'INGRESSO_ANNULLATO' ? null : 'in') : (m.causale === 'ACK' ? 'ack' : (m.direzione === 'OUT' ? 'rma' : null));
+      var k = Sto.annullato(m) ? null : m.direzione === 'IN' ? 'in' : (m.causale === 'ACK' ? 'ack' : (m.direzione === 'OUT' ? 'rma' : null));
       if (k) ev.push({ g: g, op: Dash.nome(m.operatore, m.operatore_sigla), k: k });
     });
     (DB.t.SPEDIZIONI_RIGHE ? DB.t.SPEDIZIONI_RIGHE.rows : []).forEach(function (r) {
@@ -8024,7 +8368,7 @@ var Arc = {
   FOGLI: [
     { n: 'MOVIMENTI', tipo: 'pre', base: ['mov_id_base', 'mov_out_id_base'], ok: function (r, A) { var d = L.normDate(r.data_ora); return d && d < A; } },
     { n: 'RICEZIONI', tipo: 'pre', base: ['idbase_RICEZIONI'], ok: function (r, A) { var d = L.normDate(r.data_arrivo) || L.normDate(r.creato_il); return d && d < A; } },
-    { n: 'SPEDIZIONI', tipo: 'pre', base: ['idbase_SPEDIZIONI'], ok: function (r, A) { var d = L.normDate(r.data); return d && d < A && (r.stato === 'SPEDITA' || r.stato === 'ANNULLATA'); } },
+    { n: 'SPEDIZIONI', tipo: 'pre', base: ['idbase_SPEDIZIONI'], ok: function (r, A) { var d = L.normDate(r.data); return d && d < A && (r.stato === 'SPEDITA' || r.stato === 'ANNULLATA' || r.stato === 'CHIUSA'); } },
     { n: 'SPEDIZIONI_RIGHE', tipo: 'pre', base: ['idbase_SPEDIZIONI_RIGHE'], ok: function (r, A, X) { return !!X.sped[r.id_spedizione]; } },
     { n: 'SPEDIZIONI_COLLI', tipo: 'pre', base: ['idbase_SPEDIZIONI_COLLI'], ok: function (r, A, X) { return !!X.sped[r.id_spedizione]; } },
     { n: 'DDT_REGISTRO', tipo: 'pre', ok: function (r, A) { return L.s(r.anno) && parseInt(r.anno, 10) < parseInt(A, 10); } },
