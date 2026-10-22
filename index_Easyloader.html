@@ -7007,7 +7007,8 @@ var Vlt = {
 var Sto = {
   fonte: 'cur', dati: {}, sez: 'IN', grids: {},
   COLS: ['id_mov', 'data_ora', 'data_registrazione_vlt', 'data_in_merci', 'direzione', 'causale', 'id_unita', 'seriale', 'pn', 'mnft', 'tipo', 'fr', 'rma', 'po_mrn', 'controparte', 'awb', 'vettore', 'ddt',
-    'id_ricezione', 'id_spedizione', 'riparatore', 'ubicazione_da', 'ubicazione_a', 'posizione_note', 'operatore', 'operatore_sigla', 'note', 'anomalia', 'origine', 'stato_vlt'],
+    'id_ricezione', 'id_spedizione', 'riparatore', 'ubicazione_da', 'ubicazione_a', 'posizione_note', 'operatore', 'operatore_sigla', 'note', 'anomalia', 'origine', 'stato_vlt',
+    'vlt_open', 'vlt_fms', 'vlt_rv', 'vlt_frs', 'vlt_rar', 'vlt_str', 'vlt_gmr', 'vlt_k6', 'data_creazione_rma'],   // date VLT salvate (TABLEAU / RMA_DATE)
   SEZ: { IN: 'Inbound', OUT: 'Outbound', INT: 'Interni (note, blocchi, variazioni)', ALL: 'Tutti' },
   colsSafe: async function (ss, sheet) {
     var h = ((await API.batchGet(ss, [API.q(sheet) + '!1:1']))[0][0] || []).map(L.s);
@@ -7053,7 +7054,7 @@ var Sto = {
       tipo: { k: 'tipo', label: 'Type', filter: 'select', html: function (r) { return r.tipo ? Pill.tipo(r.tipo) : ''; } },
       fr: { k: 'fr', label: 'FR', filter: 'text', cls: 'mono' },
       rma: { k: 'rma', label: sez === 'IN' ? 'RMA balancing' : 'RMA', filter: 'text', cls: 'mono' },
-      drma: { k: 'data_creazione_rma', label: 'Data creazione RMA', cls: 'mono nw', filter: 'date', get: function (r) { return RmaD.data(r.rma); } },
+      drma: { k: 'data_creazione_rma', label: 'Data creazione RMA', cls: 'mono nw', filter: 'date', get: function (r) { return RmaD.data(r.rma) || L.normDate(r.data_creazione_rma); } },
       data: { k: 'data_ora', label: sez === 'OUT' ? 'Data out' : (sez === 'IN' ? 'Data in hub' : 'Data'), cls: 'mono nw', filter: 'date', get: function (r) { return L.s(r.data_ora); }, html: function (r) { return esc(Sto.dataOra(r.data_ora)); } },
       vlt: { k: 'data_registrazione_vlt', label: 'Data received and verify (reg. VLT)', cls: 'mono', filter: 'date', get: function (r) { return L.normDate(r.data_registrazione_vlt); } },
       po: { k: 'po_mrn', label: sez === 'OUT' ? 'PO new / MRN' : 'PO/MRN', filter: 'text', cls: 'mono' },
@@ -7175,8 +7176,8 @@ var Sto = {
     if ($('stoImp')) $('stoImp').style.display = App.isAdmin ? '' : 'none';
     Sto.init(); Sto.tabs();
     try { await Sto.carica(false); Sto.render(true); } catch (e) { $('stoRows').innerHTML = '<tr><td class="empty">Errore: ' + esc(e.message) + '</td></tr>'; }
-    if (!Tab.map) Tab.load().then(function (m) { if (m && App.tab === 'storico') Sto.render(); });   // date VLT TABLEAU nelle colonne
-    if (!RmaD.map) RmaD.load().then(function (m) { if (m && App.tab === 'storico') Sto.render(); });   // data creazione RMA (VLT)
+    // date VLT (TABLEAU e data creazione RMA): si mostrano e si salvano nei movimenti
+    Promise.all([Tab.load(), RmaD.load()]).then(function () { if (App.tab === 'storico') Sto.render(); return Tab.salva(); });
   },
   tabs: function () {
     var R = Sto.dati[Sto.fonte] || [], q = L.up($('stoQ').value), n = { IN: 0, OUT: 0, INT: 0, ALL: 0 };
@@ -7917,7 +7918,64 @@ var Tab = {
       return Tab.map;
     })().catch(function (e) { Tab._p = null; Tab.map = Tab.map || null; Tab.err = e.message; return null; });
   },
-  di: function (fr) { return (Tab.map && fr && Tab.map[L.frKey(fr)]) || null; },
+  // date del file TABLEAU attuale; per i FR usciti dal file restano quelle già salvate nei movimenti (colonne vlt_*)
+  di: function (fr) {
+    var k = fr ? L.frKey(fr) : ''; if (!k) return null;
+    var live = Tab.map && Tab.map[k], mem = Tab.memo()[k];
+    return mem ? Object.assign({}, mem, live || {}) : (live || null);
+  },
+  memo: function () {
+    var R = Sto.dati.cur; if (!R) return {};
+    if (Tab._mR === R && Tab._mN === R.length) return Tab._m;
+    var m = {}; R.forEach(function (r) { var k = r.fr ? L.frKey(r.fr) : ''; if (!k) return; Tab.COL.forEach(function (x) { var v = L.s(r['vlt_' + x[0]]); if (v) (m[k] = m[k] || {})[x[0]] = v; }); });
+    Tab._mR = R; Tab._mN = R.length; Tab._m = m; return m;
+  },
+  // salva nei movimenti le date VLT (TABLEAU e data creazione RMA) nuove o cambiate: non cancella mai una data già salvata
+  salva: async function () {
+    var R = Sto.dati.cur; if (!R || Tab._salva || (!Tab.map && !RmaD.map)) return 0;
+    Tab._salva = true;
+    try {
+      var cols = Tab.COL.map(function (x) { return 'vlt_' + x[0]; }).concat(['data_creazione_rma']), nuovi = {}, n = 0;
+      R.forEach(function (r) {
+        if (!r.id_mov || Sto.annullato(r)) return;
+        var t = Tab.map && r.fr ? Tab.map[L.frKey(r.fr)] : null;
+        if (t) Tab.COL.forEach(function (x) { var v = L.s(t[x[0]]); if (v && v !== L.s(r['vlt_' + x[0]])) { (nuovi['vlt_' + x[0]] = nuovi['vlt_' + x[0]] || {})[r.id_mov] = v; n++; } });
+        if (r.direzione === 'OUT' && r.rma && RmaD.map) { var k = RmaD.k(r.rma), v = k && RmaD.map[k]; if (v && v !== L.normDate(r.data_creazione_rma)) { (nuovi.data_creazione_rma = nuovi.data_creazione_rma || {})[r.id_mov] = v; n++; } }
+      });
+      if (!n) return 0;
+      var h = ((await API.batchGet(DB.id, [API.q('MOVIMENTI') + '!1:1']))[0][0] || []).map(L.s), manc = cols.filter(function (c) { return h.indexOf(c) < 0; });
+      if (manc.length) {
+        await DB.allargaCol('MOVIMENTI', h.length + manc.length);
+        await API.batchUpdate(DB.id, [{ range: API.q('MOVIMENTI') + '!' + L.colLetter(h.length) + '1:' + L.colLetter(h.length + manc.length - 1) + '1', values: [manc] }]);
+        h = h.concat(manc);
+      }
+      // righe lette adesso dal foglio (per id movimento): sicuro anche se nel frattempo il foglio è cambiato
+      var ids = (await API.batchGet(DB.id, [API.q('MOVIMENTI') + '!' + L.colLetter(h.indexOf('id_mov')) + '2:' + L.colLetter(h.indexOf('id_mov'))]))[0] || [], riga = {};
+      ids.forEach(function (x, i) { var v = L.s(x && x[0]); if (v && !riga[v]) riga[v] = i + 2; });
+      Object.keys(nuovi).forEach(function (c) { var m = {}; Object.keys(nuovi[c]).forEach(function (id) { if (riga[id]) m[riga[id]] = nuovi[c][id]; }); nuovi[c] = m; if (!Object.keys(m).length) delete nuovi[c]; });
+      if (!Object.keys(nuovi).length) return 0;
+      // una colonna per volta, dalla riga 2 all'ultima cambiata: null = cella lasciata com'è
+      // a pezzi da 5000 righe, massimo ~40.000 celle per chiamata (la prima volta sono tante)
+      var upd = [];
+      Object.keys(nuovi).forEach(function (c) {
+        var m = nuovi[c], rr = Object.keys(m).map(Number).sort(function (a, b) { return a - b; }), L0 = L.colLetter(h.indexOf(c));
+        for (var a = 0; a < rr.length;) {
+          var da = rr[a], fino = da; while (a < rr.length && rr[a] < da + 5000) { fino = rr[a]; a++; }
+          var vals = []; for (var i = da; i <= fino; i++) vals.push([m[i] !== undefined ? m[i] : null]);
+          upd.push({ range: API.q('MOVIMENTI') + '!' + L0 + da + ':' + L0 + fino, values: vals });
+        }
+      });
+      for (var j = 0, blocco = [], celle = 0; j <= upd.length; j++) {
+        if (j === upd.length || (celle + upd[j].values.length > 40000 && blocco.length)) { if (blocco.length) await API.batchUpdate(DB.id, blocco); blocco = []; celle = 0; }
+        if (j < upd.length) { blocco.push(upd[j]); celle += upd[j].values.length; }
+      }
+      R.forEach(function (r) { var rr = riga[r.id_mov]; if (rr) cols.forEach(function (c) { if (nuovi[c] && nuovi[c][rr] !== undefined) r[c] = nuovi[c][rr]; }); });
+      Tab._mN = -1;
+      API.append(DB.id, 'LOG', [App.log('DATE_VLT_SALVATE', 'MOVIMENTI', '', { celle: n, colonne: Object.keys(nuovi), tableau: Tab.estratto })]).catch(function () { });
+      return n;
+    } catch (e) { console.warn('date VLT non salvate', e); return 0; }
+    finally { Tab._salva = false; }
+  },
   data: function (fr, k) { var t = Tab.di(fr); return t && t[k] ? t[k] : ''; },
   info: function () { return Tab.map ? 'VLT TABLEAU: ' + Object.keys(Tab.map).length + ' FR' + (Tab.estratto ? ' · file del ' + L.s(Tab.estratto).slice(0, 16) : '') : (Tab.err ? 'VLT TABLEAU non letto: ' + Tab.err : 'VLT TABLEAU non ancora caricato'); }
 };
@@ -8021,6 +8079,7 @@ var Kpi = {
       Kpi._archY = y;
     })());
     await Promise.all(job);
+    RmaD.load().then(function () { return Tab.salva(); });   // le date VLT nuove restano salvate nei movimenti
     // base del KPI₆: valori della presentazione BPR, scritti una volta in KPI_STORICO (modificabili da Admin)
     if (App.isAdmin && DB.t.KPI_STORICO && !DB.t.KPI_STORICO._ok && !DB.t.KPI_STORICO.rows.length) {
       try { var tk = await Chi.foglio('KPI_STORICO'); var rs = Chi.SEME.map(function (x) { return { kpi: x[0], mese: x[1], perc_1: x[2], perc_2: x[3], fonte: 'BPR luglio-agosto 2026' }; });
