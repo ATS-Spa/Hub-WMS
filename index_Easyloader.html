@@ -783,6 +783,13 @@ L.normDate = function (d) {
   m = /^(\d{1,2})[\/.\-](\d{1,2})[\/.\-](\d{4})/.exec(d); if (m) return m[3] + '-' + L.pad(m[2], 2) + '-' + L.pad(m[1], 2);
   return d;
 };
+// a video: 2026-10-12 / 2026-10-12 14:30:05 / 12.10.2026 → 12/10/2026 (l'ora resta com'è); il resto invariato
+L.vedi = function (v) {
+  var t = L.s(v), m = /^(\d{4})-(\d{2})-(\d{2})(?:[ T](\d{2}:\d{2}(?::\d{2})?))?$/.exec(t);
+  if (m) return m[3] + '/' + m[2] + '/' + m[1] + (m[4] ? ' ' + m[4] : '');
+  m = /^(\d{2})\.(\d{2})\.(\d{4})(?:\s+(\d{2}:\d{2}(?::\d{2})?))?$/.exec(t);
+  return m ? m[1] + '/' + m[2] + '/' + m[3] + (m[4] ? ' ' + m[4] : '') : t;
+};
 L.itDate = function (d) { d = L.normDate(d); var m = /^(\d{4})-(\d{2})-(\d{2})$/.exec(d); return m ? m[3] + '/' + m[2] + '/' + m[1] : d; };
 // numero DDT dal formato in PARAMETRI: {N} | {N:05}_{ANNO} SPARE
 L.fmtDdt = function (f, n, anno) {
@@ -1051,7 +1058,7 @@ var Sync = {
 // ───────────────────────── Google API (con ritentativi) ─────────────────────────
 var API = {
   call: function (url, opt, attempt) {
-    var w = opt && opt.method && opt.method !== 'GET' && !attempt;
+    var w = opt && opt.method && opt.method !== 'GET' && !attempt && !opt.quiet;   // quiet: scrittura in sottofondo, senza la rotellina che blocca
     return w ? Busy.wrap(API._call(url, opt, attempt)) : API._call(url, opt, attempt);
   },
   _call: async function (url, opt, attempt) {
@@ -1080,14 +1087,14 @@ var API = {
     var u = API.S + ss + '/values:batchGet?valueRenderOption=UNFORMATTED_VALUE&dateTimeRenderOption=FORMATTED_STRING&' + ranges.map(function (r) { return 'ranges=' + encodeURIComponent(r); }).join('&');
     var js = await API.call(u); return (js.valueRanges || []).map(function (v) { return v.values || []; });
   },
-  append: async function (ss, sheet, rows) {
+  append: async function (ss, sheet, rows, quiet) {
     var u = API.S + ss + '/values/' + encodeURIComponent(API.q(sheet) + '!A1') + ':append?valueInputOption=RAW&insertDataOption=OVERWRITE';
-    var js = await API.call(u, { method: 'POST', body: JSON.stringify({ values: rows }) });
+    var js = await API.call(u, { method: 'POST', body: JSON.stringify({ values: rows }), quiet: !!quiet });
     return L.rowFromRange(js.updates && js.updates.updatedRange);
   },
-  batchUpdate: async function (ss, data) {
+  batchUpdate: async function (ss, data, quiet) {
     if (!data.length) return;
-    await API.call(API.S + ss + '/values:batchUpdate', { method: 'POST', body: JSON.stringify({ valueInputOption: 'RAW', data: data }) });
+    await API.call(API.S + ss + '/values:batchUpdate', { method: 'POST', body: JSON.stringify({ valueInputOption: 'RAW', data: data }), quiet: !!quiet });
   },
   findInFolder: async function (folder, name) {
     var q = "'" + folder + "' in parents and name='" + name + "' and mimeType='application/vnd.google-apps.spreadsheet' and trashed=false";
@@ -2086,7 +2093,7 @@ var Ingresso = {
     $('pendRows').innerHTML = P.map(function (u) {
       var v = Ingresso.proponi(u), gg = Math.round((oggi - new Date(L.normDate(u.data_in) + 'T00:00:00')) / 864e5);
       return '<tr><td class="mono">' + esc(u.id_unita) + '</td><td>' + esc(u.tipo) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(L.itDate(u.data_in)) + '</td><td' + (gg > 3 ? ' style="color:var(--red);font-weight:700"' : '') + '>' + gg + '</td><td style="font-size:12px">' + esc(u.pending_fr) + '</td>' +
-        '<td>' + (v ? '<span class="mono"><b>' + esc(v.fr_id) + '</b></span> <span class="hint">' + esc(v.stato) + ' · ' + esc(L.s(v.data_apertura).slice(0, 10)) + '</span> <button class="btn sm green" onclick="Ingresso.assegna(\'' + u.id_unita + '\',\'' + esc(v.fr_id) + '\')">Conferma</button>' : '<span class="hint">nessuno</span>') + '</td>' +
+        '<td>' + (v ? '<span class="mono"><b>' + esc(v.fr_id) + '</b></span> <span class="hint">' + esc(v.stato) + ' · ' + esc(L.vedi(L.s(v.data_apertura).slice(0, 10))) + '</span> <button class="btn sm green" onclick="Ingresso.assegna(\'' + u.id_unita + '\',\'' + esc(v.fr_id) + '\')">Conferma</button>' : '<span class="hint">nessuno</span>') + '</td>' +
         '<td class="nw"><input class="fc mono" id="pf_' + u.id_unita + '" style="width:100px;padding:4px 6px" placeholder="FR"> <button class="btn ghost sm" onclick="Ingresso.assegna(\'' + u.id_unita + '\',$(\'pf_' + u.id_unita + '\').value)">Assegna</button></td></tr>';
     }).join('');
   },
@@ -2526,7 +2533,7 @@ var Rial = {
       (A.length ? '<div class="tbl-wrap modal-scroll" style="max-height:26vh"><table><thead><tr><th><input type="checkbox" id="rlTutti"></th><th>Mov. IN</th><th>Data</th><th>Tipo</th><th>FR</th><th>Seriale</th><th>P/N</th><th>Mittente</th><th>Ubicazione</th><th>Origine</th><th style="min-width:280px">Avvisi</th></tr></thead><tbody>' + rA + '</tbody></table></div>' : '<div class="empty">Nessun pezzo da riallineare in questo periodo</div>') +
       (C.length ? '<div style="font-size:13px;margin:10px 0 6px"><b>C) ' + C.length + '</b> schede <b>già create dal riallineamento</b> e ancora in giacenza: se una non doveva entrare, spuntala e premi <b>↩ Togli le schede C spuntate</b> (torna fuori giacenza, il movimento resta com\'era). <button class="btn ghost sm" id="rlCMig" title="Spunta le schede nate da ingressi della migrazione: allora il pezzo non era in inventario">Spunta quelle della migrazione (' + C.filter(function (u) { return /\(MIGRAZIONE_/.test(L.s(u.note)); }).length + ')</button></div>' +
         '<div class="tbl-wrap modal-scroll" style="max-height:22vh"><table><thead><tr><th><input type="checkbox" id="rlCTutti"></th><th>Scheda</th><th>Creata il</th><th>Tipo</th><th>FR</th><th>Seriale</th><th>P/N</th><th>MNFT</th><th>Mov. IN</th></tr></thead><tbody>' +
-        C.map(function (u, i) { return '<tr><td><input type="checkbox" class="rlCSel" data-i="' + i + '"></td><td class="mono">' + esc(u.id_unita) + '</td><td>' + esc(L.s(u.creato_il).slice(0, 16)) + '</td><td>' + esc(u.tipo) + '</td><td class="mono">' + esc(u.fr) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.mnft) + '</td><td class="mono">' + esc(u.id_mov_in) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '') +
+        C.map(function (u, i) { return '<tr><td><input type="checkbox" class="rlCSel" data-i="' + i + '"></td><td class="mono">' + esc(u.id_unita) + '</td><td>' + esc(L.vedi(L.s(u.creato_il).slice(0, 16))) + '</td><td>' + esc(u.tipo) + '</td><td class="mono">' + esc(u.fr) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.mnft) + '</td><td class="mono">' + esc(u.id_mov_in) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '') +
       '<div style="font-size:13px;margin:10px 0 6px"><b>B) ' + B.length + '</b> schede <b>in giacenza</b> che hanno già un\'<b>uscita</b> dopo l\'ingresso: solo da verificare (non cambio niente).</div>' +
       (B.length ? '<div class="tbl-wrap modal-scroll" style="max-height:22vh"><table><thead><tr><th>Scheda</th><th>Tipo</th><th>Seriale</th><th>FR</th><th>Entrata</th><th>Mov. OUT</th><th>Uscita</th><th>Destino</th></tr></thead><tbody>' + rB + '</tbody></table></div>' : ''),
       [{ label: 'Chiudi', cls: 'ghost' }].concat(C.length ? [{ label: '↩ Togli le schede C spuntate', cls: 'red', keep: true, fn: function () {
@@ -3944,7 +3951,7 @@ Grid.prototype.render = function (rifaiTesta) {
   o.cols.forEach(function (c) { if (c.filter === 'text') { var e = $('gf_' + self.name + '_' + c.k); if (e) e.classList.toggle('g-on', !!self.f[c.k]); } });
   var vis = this.vc();
   tb.innerHTML = list.length ? list.slice(0, this.limit).map(function (r) {
-    return '<tr' + (o.rowAttr ? ' ' + o.rowAttr(r) : '') + '>' + vis.map(function (c) { return '<td' + (c.cls ? ' class="' + c.cls + '"' : '') + Grid.stile(self.w[c.k]) + '>' + (c.html ? c.html(r) : esc(self.val(c, r))) + '</td>'; }).join('') + '</tr>';
+    return '<tr' + (o.rowAttr ? ' ' + o.rowAttr(r) : '') + '>' + vis.map(function (c) { return '<td' + (c.cls ? ' class="' + c.cls + '"' : '') + Grid.stile(self.w[c.k]) + '>' + (c.html ? c.html(r) : esc(L.vedi(self.val(c, r)))) + '</td>'; }).join('') + '</tr>';
   }).join('') : '<tr><td colspan="' + vis.length + '" class="empty">' + esc(o.empty || 'Nessuna riga') + '</td></tr>';
   var nf = Object.keys(this.f).length;
   if (o.foot && $(o.foot)) $(o.foot).innerHTML = list.length + ' righe' + (list.length !== all.length ? ' su ' + all.length : '') +
@@ -3983,13 +3990,13 @@ DB.ensureSheet = async function (name, header) {
   DB.t[name] = new Table(name, header, []); return DB.t[name];
 };
 // il foglio deve avere almeno n colonne: se la griglia è più stretta la allarga (altrimenti "exceeds grid limits")
-DB.allargaCol = async function (name, n) {
+DB.allargaCol = async function (name, n, quiet) {
   var js; try { js = await API.call(API.S + DB.id + '?fields=' + encodeURIComponent('sheets(properties(sheetId,title,gridProperties(columnCount)))')); } catch (e) { return; }   // se non riesco a leggere, ci prova la scrittura
   var sh = (js.sheets || []).map(function (x) { return x.properties; }).find(function (p) { return p.title === name; });
   if (!sh) return;
   var c = (sh.gridProperties || {}).columnCount || 0;
   if (c >= n) return;
-  await API.call(API.S + DB.id + ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: [{ appendDimension: { sheetId: sh.sheetId, dimension: 'COLUMNS', length: n - c } }] }) });
+  await API.call(API.S + DB.id + ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: [{ appendDimension: { sheetId: sh.sheetId, dimension: 'COLUMNS', length: n - c } }] }), quiet: !!quiet });
 };
 // colonne nuove su un foglio esistente (in coda all'intestazione), poi ricarica il foglio
 DB.ensureCols = async function (name, cols) {
@@ -4295,7 +4302,7 @@ var Ack = {
       '<div class="tbl-wrap modal-scroll"><table><thead><tr><th>Data</th><th>FR</th><th>Seriale</th><th>P/N</th><th>Motivo</th><th>Stato</th><th>Tolto da</th><th>ACK</th><th>Chiusura</th></tr></thead><tbody>' +
       (L0.length ? L0.map(function (p) {
         var op = DB.t.OPERATORI.rows.find(function (o) { return L.s(o.email).toLowerCase() === p.rimosso_da; });
-        return '<tr><td class="mono" style="font-size:11px">' + esc(L.s(p.data).slice(0, 16)) + '</td><td class="mono">' + esc(p.fr) + '</td><td class="mono">' + esc(p.seriale) + '</td><td class="mono">' + esc(p.pn) + '</td><td style="min-width:200px">' + esc(p.motivo) + '</td>' +
+        return '<tr><td class="mono" style="font-size:11px">' + esc(L.vedi(L.s(p.data).slice(0, 16))) + '</td><td class="mono">' + esc(p.fr) + '</td><td class="mono">' + esc(p.seriale) + '</td><td class="mono">' + esc(p.pn) + '</td><td style="min-width:200px">' + esc(p.motivo) + '</td>' +
           '<td><span class="pill ' + (ST[p.stato] || '') + '">' + esc(p.stato) + '</span></td><td class="nw" style="font-size:11.5px" title="' + esc(p.rimosso_da) + '">' + esc(op ? (op.sigla || op.nome) : L.s(p.rimosso_da).split('@')[0]) + '</td><td class="mono" style="font-size:11px">' + esc(p.id_spedizione) + '</td>' +
           '<td class="nw" style="font-size:11px">' + (p.stato === 'APERTO' ? '<button class="btn ghost sm" onclick="Ack.risolviPending(\'' + p.id_pending + '\',\'' + esc(cod) + '\')">Segna risolto</button>' : esc([p.risolto_il, p.id_spedizione_uscita, p.nota_risoluzione].filter(Boolean).join(' · '))) + '</td></tr>';
       }).join('') : '<tr><td colspan="9" class="empty">Nessun FR ' + (tutti ? '' : 'in sospeso ') + 'per ' + esc(cod) + '</td></tr>') + '</tbody></table></div>';
@@ -4713,11 +4720,11 @@ var Ack = {
       if (!(await Modal.confirm(manc.length + ' FR mancanti', lista + '\n\nProcedo comunque? I mancanti restano in giacenza.'))) return;
     }
     var sp = R.filter(function (r) { return r.esito === 'SPUNTATO'; });
+    if (!sp.length && s.n_ddt) { Modal.open('DDT ' + s.n_ddt + ' riaperto', 'Il DDT ' + s.n_ddt + ' è già numerato: serve almeno un pezzo spuntato per rigenerarlo.\nSe va annullato del tutto, chiedi all\'amministratore (il numero resta nel registro DDT).'); return; }
     if (!sp.length) return Ack.chiudiVuota(s, R);
     // righe collo lasciate vuote (misura e peso cancellati) = collo tolto
-    var col = (Ack.colli[s.id_spedizione] || []).filter(function (x) { return L.s(x.misura) || L.s(x.peso); }), err = col.length ? Ack.validaColli(col) : [];
+    var col = (Ack.colli[s.id_spedizione] || []).filter(function (x) { return L.s(x.misura) || L.s(x.peso); }), err = Ack.validaColli(col);
     if (err.length) { Modal.open('Colli e peso', err.join('\n')); return; }
-    if (!col.length && !(await Modal.confirm('Nessun collo', 'Non hai inserito colli né peso.\nChiudo la spunta senza colli? Il DDT uscirà senza colli e peso.'))) return;
     var peso = col.reduce(function (a, x) { return a + parseFloat(String(x.peso).replace(',', '.')); }, 0);
     var sf = Ack.spareFalse(s.id_spedizione).length;
     if (App.condiviso()) {
@@ -4765,8 +4772,110 @@ var Ack = {
       Modal.close(); Ack.render(); toast('Spunta ' + s.destinatario + ' chiusa: niente da spedire', 'ok');
     } catch (e) { Modal.open('Errore chiusura', e.message); }
   },
+  // ─ DDT già emesso: riapertura (solo admin) per aggiungere/togliere pezzi, poi Rigenera DDT con lo stesso numero
+  riapriDdt: function (id) {
+    if (!App.isAdmin) { toast('Solo un admin può riaprire un DDT', 'ko'); return; }
+    var s = Ack.byId(id); if (!s || s.stato !== 'SPEDITA' || !s.n_ddt) return;
+    var c = Ack.cfg(), R = Ack.righe(id).filter(function (r) { return r.esito === 'SPUNTATO'; });
+    var avanti = R.filter(function (r) { var v = DB.vltMap[r.fr]; return v && v.stato !== c.statoAck && v.stato !== c.statoAs; });
+    var oggi = L.normDate(s.data_ddt) === L.isoToday();
+    Modal.html('↺ Riapri DDT ' + s.n_ddt + ' · ' + s.destinatario,
+      '<div class="fb err" style="margin-bottom:8px;white-space:pre-line">⚠ Il DDT ' + esc(s.n_ddt) + ' del ' + esc(L.itDate(s.data_ddt)) + ' (' + R.length + ' pezzi' + (L.s(s.awb) ? ', AWB ' + esc(s.awb) : '') + ') è già emesso: potrebbe essere già stato stampato, consegnato al vettore o mandato alla bollettazione.' +
+        (oggi ? '' : '\n⚠ Il DDT non è di oggi: se la merce è già partita, correggere il DDT non cambia quello che c\'è sul camion.') +
+        (avanti.length ? '\n⚠ ' + avanti.length + ' FR non sono più in "' + esc(c.statoAck) + '" su VLT (es. già chiusi con lo script): ' + avanti.slice(0, 8).map(function (r) { return r.fr + ' (' + esc(DB.vltMap[r.fr].stato) + ')'; }).join(', ') + (avanti.length > 8 ? '…' : '') + '. Se li togli dal DDT vanno sistemati a mano su VLT.' : '') + '</div>' +
+        '<div class="hint" style="margin-bottom:8px">La spunta si riapre e i pezzi tornano in giacenza finché non rigeneri il DDT: puoi spuntare altri FR (anche con <b>Aggiorna lista da VLT</b>), togliere pezzi, cambiare colli e peso. Poi <b>Chiudi spunta</b> e <b>Rigenera DDT</b>: <b>stesso numero</b>, movimenti aggiornati (i pezzi tolti vengono stornati, non cancellati), PDF su Drive sostituito, export FR da chiudere aggiornato. Dopo, <b>rimanda la mail</b> alla bollettazione. Rigeneralo in giornata.</div>' +
+        '<div class="fg"><span class="fl">Motivo (obbligatorio, va nel LOG)</span><input class="fc" id="ackRiapM" placeholder="es. pezzo dimenticato FR ..."></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Riapri DDT', cls: 'red', keep: true, fn: function () { var m = L.s($('ackRiapM').value); if (!m) { $('ackRiapM').classList.add('err'); return; } Modal.close(); Ack._riapriDdt(id, m); } }]);
+  },
+  _riapriDdt: async function (id, motivo) {
+    Modal.open('Riapertura DDT', 'Non chiudere la pagina.', []);
+    try {
+      await Ack.flush();
+      await DB.loadTables(['UNITA', 'SPEDIZIONI', 'SPEDIZIONI_RIGHE', 'SPEDIZIONI_COLLI']);
+      var s = Ack.byId(id); if (!s || s.stato !== 'SPEDITA' || !s.n_ddt) throw new Error('spedizione non più in stato SPEDITA');
+      var R = Ack.righe(id).filter(function (r) { return r.esito === 'SPUNTATO'; }), tU = DB.t.UNITA, U = {}, now = L.nowStamp(), me = Auth.email, upd = [];
+      tU.rows.forEach(function (u) { U[u.id_unita] = u; });
+      var fuori = R.filter(function (r) { var u = U[r.id_unita]; return !u || u.stato !== 'USCITO' || u.id_spedizione !== id; });
+      if (fuori.length) throw new Error('Questi pezzi non risultano più usciti con questo DDT (rientrati o modificati): ' + fuori.map(function (r) { return r.seriale; }).join(', '));
+      R.forEach(function (r) {
+        var u = U[r.id_unita], ch = { stato: 'IN_GIACENZA', data_out: '', modificato_il: now, modificato_da: me, rev: (parseInt(u.rev, 10) || 1) + 1 };
+        Object.keys(ch).forEach(function (h) { if (h in tU.idx) { u[h] = String(ch[h]); upd.push({ range: tU.cell(h, u._r), values: [[u[h]]] }); } });
+      });
+      // colli: tornano a video (modificabili), si risalvano alla chiusura
+      var cl = Ack.colliDb(id), tC = DB.t.SPEDIZIONI_COLLI;
+      Ack.colli[id] = cl.map(function (c) { return { tipo: c.tipo_collo, misura: [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X'), peso: c.peso_kg }; }); lsS('colli_' + id, Ack.colli[id]);
+      if (cl.length) await API.call(API.S + DB.id + '/values:batchClear', { method: 'POST', body: JSON.stringify({ ranges: cl.map(function (c) { return API.q('SPEDIZIONI_COLLI') + '!A' + c._r + ':' + L.colLetter(tC.header.length - 1) + c._r; }) }) });
+      tC.rows = tC.rows.filter(function (c) { return c.id_spedizione !== id; });
+      upd = upd.concat(Ack.setS(s, { stato: 'IN_SPUNTA', n_colli: '', peso_tot_kg: '', note: [L.s(s.note), 'DDT riaperto il ' + L.itDate(L.isoToday()) + ' da ' + (App.me.sigla || me) + ': ' + motivo].filter(Boolean).join(' | '), rev: (parseInt(s.rev, 10) || 1) + 1 }));
+      await API.batchUpdate(DB.id, upd);
+      await API.append(DB.id, 'LOG', [App.log('ACK_DDT_RIAPERTO', 'SPEDIZIONI', id, { ddt: s.n_ddt, riparatore: s.destinatario, motivo: motivo, pezzi: R.map(function (r) { return { fr: r.fr, seriale: r.seriale }; }), awb: s.awb })]);
+      Modal.close(); Ack.cur = id; Ack.render();
+      toast('DDT ' + s.n_ddt + ' riaperto: completa la spunta, chiudi e premi "Rigenera DDT"', 'ok');
+    } catch (e) { Modal.open('Riapertura non riuscita', e.message); }
+  },
+  // stesso numero DDT: movimenti OUT aggiornati/aggiunti, pezzi tolti stornati, PDF sostituito
+  riemetti: async function (s) {
+    var id = s.id_spedizione, nDdt = s.n_ddt, dDdt = L.normDate(s.data_ddt) || L.isoToday(), now = L.nowStamp(), chiE = App.chi(), me = L.s(s.operatore_email) || chiE.email, sigla = L.s(s.operatore_sigla) || chiE.sigla;
+    Modal.progress('1/5 movimenti');
+    await DB.loadTables(['UNITA', 'DDT_REGISTRO']);
+    var R = Ack.righe(id).filter(function (r) { return r.esito === 'SPUNTATO'; });
+    var sh = API.q('MOVIMENTI'), tM = new Table('MOVIMENTI', (await API.batchGet(DB.id, [sh + '!1:1']))[0][0] || []);
+    var v = await API.batchGet(DB.id, ['id_spedizione', 'id_unita', 'direzione'].map(function (h) { return sh + '!' + tM.col(h) + ':' + tM.col(h); })), movDi = {};
+    for (var i = 1; i < (v[0] || []).length; i++) if (L.s(v[0][i] && v[0][i][0]) === id && L.up(v[2][i] && v[2][i][0]) === 'OUT') movDi[L.s(v[1][i] && v[1][i][0])] = i + 1;
+    var ix = Ack.idxU(), rp = Ack.rip(s.destinatario), mnft = rp.mnft_default || rp.codice || s.destinatario, tU = DB.t.UNITA, upd = [], nuoviM = [], inR = {}, agg = [], tolti = [];
+    var setCells = function (row, o) { Object.keys(o).forEach(function (h) { if (h in tM.idx) upd.push({ range: tM.cell(h, row), values: [[L.s(o[h])]] }); }); };
+    R.forEach(function (r) {
+      inR[r.id_unita] = 1;
+      var nota = [r.flag_vlt, r.nota_ddt].map(L.s).filter(Boolean).join(' · ');
+      if (movDi[r.id_unita]) { setCells(movDi[r.id_unita], { awb: s.awb, vettore: s.vettore, ddt: nDdt, note: nota }); return; }
+      var u = ix.id[r.id_unita] || null, vv = DB.vltMap[r.fr];
+      nuoviM.push({ data_ora: dDdt + ' ' + now.slice(11), direzione: 'OUT', causale: 'ACK', id_unita: r.id_unita, seriale: r.seriale, pn: r.pn, mnft: mnft, tipo: 'FAULTY', fr: r.fr, rma: r.rma, controparte: s.destinatario,
+        awb: s.awb, vettore: s.vettore, ddt: nDdt, id_spedizione: id, riparatore: vv ? vv.riparatore : (u ? u.riparatore : ''), ubicazione_da: u ? u.ubicazione : '', operatore: me, operatore_sigla: sigla, note: nota, origine: 'APP' });
+      agg.push(r);
+    });
+    // pezzi che erano nel DDT e ora non ci sono più: movimento stornato (fuori dall'export Easyloader), restano in giacenza
+    Object.keys(movDi).forEach(function (k) {
+      if (inR[k]) return; var u = tU.rows.find(function (x) { return x.id_unita === k; }), txt = 'tolto dal DDT ' + nDdt + ' alla riapertura del ' + L.itDate(L.isoToday());
+      setCells(movDi[k], { direzione: 'INT', causale: 'STORNO_DDT', note: 'STORNO: ' + txt });
+      if (u && 'id_spedizione' in tU.idx && u.id_spedizione === id) { u.id_spedizione = ''; upd.push({ range: tU.cell('id_spedizione', u._r), values: [['']] }); }
+      tolti.push(u ? u.seriale : k);
+    });
+    if (nuoviM.length) {
+      var rM = await API.append(DB.id, 'MOVIMENTI', nuoviM.map(function (o) { return tM.toRow(o); })), oBase = parseInt(DB.param('mov_out_id_base', ''), 10) || 0;
+      nuoviM.forEach(function (o, j) { o.id_mov = 'OUT' + (oBase + rM + j); });
+      upd.push({ range: tM.cell('id_mov', rM) + ':' + tM.col('id_mov') + (rM + nuoviM.length - 1), values: nuoviM.map(function (o) { return [o.id_mov]; }) });
+    }
+    Modal.progress('2/5 giacenza');
+    R.forEach(function (r) {
+      var u = ix.id[r.id_unita]; if (!u || !u._r) return;
+      var ch = { stato: 'USCITO', id_spedizione: id, data_out: dDdt, modificato_il: now, modificato_da: me, rev: (parseInt(u.rev, 10) || 1) + 1 };
+      Object.keys(ch).forEach(function (h) { if (h in tU.idx) { u[h] = String(ch[h]); upd.push({ range: tU.cell(h, u._r), values: [[u[h]]] }); } });
+    });
+    var frN = {}; agg.forEach(function (r) { frN[r.fr] = 1; });
+    if (DB.t.ACK_PENDING) DB.t.ACK_PENDING.rows.forEach(function (p) { if (p.stato === 'APERTO' && frN[p.fr]) upd = upd.concat(Ack.setP(p, { stato: 'RISOLTO', risolto_il: now, risolto_da: me, id_spedizione_uscita: id, nota_risoluzione: 'aggiunto al DDT ' + nDdt + ' riaperto' })); });
+    upd = upd.concat(Ack.setS(s, { stato: 'SPEDITA', n_pezzi: R.length, rev: (parseInt(s.rev, 10) || 1) + 1 }));
+    var tD = DB.t.DDT_REGISTRO, rg = tD && tD.rows.find(function (x) { return x.id_spedizione === id && x.n_ddt === nDdt; });
+    if (rg && 'n_righe' in tD.idx) upd.push({ range: tD.cell('n_righe', rg._r), values: [[String(R.length)]] });
+    await API.batchUpdate(DB.id, upd);
+    Modal.progress('3/5 PDF DDT');
+    var pdfMsg = '';
+    try {
+      await Ack.loghi(); var blob = Ack.pdf(id).output('blob'), fid = Drive.idDa(s.link_pdf);
+      if (fid) await Drive.sostituisci(fid, blob);
+      else { var link = await Drive.upload('DDT ACK ' + nDdt + ' ' + s.destinatario + ' ' + dDdt + '.pdf', blob); await API.batchUpdate(DB.id, Ack.setS(s, { link_pdf: link }).concat(rg && 'link_pdf' in tD.idx ? [{ range: tD.cell('link_pdf', rg._r), values: [[link]] }] : [])); }
+    } catch (e) { pdfMsg = '\nPDF non aggiornato su Drive (' + e.message + '): usa "Stampa DDT".'; }
+    Modal.progress('4/5 export FR da chiudere');
+    try { await Export.scrivi(); } catch (e) { toast('Export FR da chiudere non aggiornato: ' + e.message, 'ko'); }
+    Modal.progress('5/5 log');
+    await API.append(DB.id, 'LOG', [App.log('ACK_DDT_RIEMESSO', 'SPEDIZIONI', id, { ddt: nDdt, riparatore: s.destinatario, pezzi: R.length, aggiunti: agg.map(function (r) { return r.seriale; }), tolti: tolti, awb: s.awb })]);
+    if (agg.length) { try { await Jun.dopoAck(s, agg, nDdt, dDdt); } catch (e) { } }
+    Sto.dati.cur = null; DB.t.DDT_REGISTRO = null; Ack.loaded = false; await Ack.load();
+    Modal.open('DDT ' + nDdt + ' rigenerato', s.destinatario + ' · ' + R.length + ' pezzi' + (agg.length ? '\nAggiunti: ' + agg.map(function (r) { return r.seriale; }).join(', ') : '') + (tolti.length ? '\nTolti (stornati, in giacenza): ' + tolti.join(', ') : '') + pdfMsg + '\n\nRimanda la mail alla bollettazione con il DDT aggiornato.',
+      [{ label: 'Chiudi', cls: 'ghost' }, { label: 'Stampa DDT', fn: function () { Ack.stampa(id); } }]);
+    App.syncInfo(); Ack.render();
+  },
   riapri: async function () {
-    var s = Ack.byId(Ack.cur); if (!s || (s.stato !== 'PRONTA' && s.stato !== 'CHIUSA') || s.n_ddt) return;
+    var s = Ack.byId(Ack.cur); if (!s || (s.stato !== 'PRONTA' && s.stato !== 'CHIUSA') || (s.n_ddt && s.stato !== 'PRONTA')) return;
     if (!(await Modal.confirm('Riapri spunta', 'La spedizione torna in spunta; colli e peso andranno reinseriti/confermati.'))) return;
     try {
       var cl = Ack.colliDb(s.id_spedizione), tC = DB.t.SPEDIZIONI_COLLI;
@@ -4796,7 +4905,7 @@ var Ack = {
   // "Genera DDT" dalla card: senza AWB chiede conferma (DDT per la bollettazione, l'AWB si aggiunge dopo)
   genera: async function (id) {
     var s = Ack.byId(id); if (!s) return;
-    if (!L.s(s.awb) && !(await Modal.confirm('Genera DDT senza AWB', 'Il DDT prende il numero e i pezzi escono dalla giacenza adesso (AWB "DA ASSEGNARE" sul PDF).\nQuando la bollettazione comunica l\'AWB inseriscilo nella card e premi Salva: si aggiornano movimenti, spedizione e il PDF su Drive viene sostituito.'))) return;
+    if (!s.n_ddt && !L.s(s.awb) && !(await Modal.confirm('Genera DDT senza AWB', 'Il DDT prende il numero e i pezzi escono dalla giacenza adesso (AWB "DA ASSEGNARE" sul PDF).\nQuando la bollettazione comunica l\'AWB inseriscilo nella card e premi Salva: si aggiornano movimenti, spedizione e il PDF su Drive viene sostituito.'))) return;
     await Ack.emetti(id);
   },
   // AWB inserito dopo il DDT: SPEDIZIONI + MOVIMENTI OUT della spedizione + PDF rigenerato e sostituito su Drive
@@ -4846,6 +4955,7 @@ var Ack = {
       await DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_RIGHE', 'SPEDIZIONI_COLLI', 'PARAMETRI', 'ACK_PENDING']);
       var s = Ack.byId(id);
       if (!s) throw new Error('Spedizione ' + id + ' non trovata');
+      if (s.n_ddt && s.stato === 'PRONTA') { await Ack.riemetti(s); return; }   // DDT riaperto: stesso numero
       if (s.n_ddt) throw new Error('DDT già emesso (' + s.n_ddt + ')');
       if (s.stato !== 'PRONTA') throw new Error('La spunta non è chiusa (stato ' + s.stato + ')');
       var R = Ack.righe(id).filter(function (r) { return r.esito === 'SPUNTATO'; });
@@ -4999,7 +5109,8 @@ var Ack = {
       var chc = Chi.ditta(cod, d);
       if (!s || s.stato === 'BOZZA') btn = chc ? '<button class="btn sm" disabled title="' + esc(Chi.testo(chc)) + '">Avvia spunta</button>' : '<button class="btn sm" onclick="Ack.avvia(\'' + esc(cod) + '\')">Avvia spunta</button>';
       else btn = '<button class="btn sm ' + (s.stato === 'IN_SPUNTA' ? '' : 'ghost') + '" onclick="Ack.apri(\'' + s.id_spedizione + '\')">' + (s.stato === 'IN_SPUNTA' ? 'Apri spunta' : 'Dettaglio') + '</button>';
-      if (s && s.stato === 'PRONTA') btn += ' <button class="btn sm green"' + (L.s(s.awb) ? '' : ' title="Senza AWB: DDT per la bollettazione, l\'AWB si inserisce dopo e il PDF si aggiorna"') + ' onclick="Ack.genera(\'' + s.id_spedizione + '\')">Genera DDT' + (L.s(s.awb) ? '' : ' (senza AWB)') + '</button>';
+      if (s && s.stato === 'PRONTA') btn += ' <button class="btn sm green"' + (L.s(s.awb) ? '' : ' title="Senza AWB: DDT per la bollettazione, l\'AWB si inserisce dopo e il PDF si aggiorna"') + ' onclick="Ack.genera(\'' + s.id_spedizione + '\')">' + (s.n_ddt ? 'Rigenera DDT ' + esc(s.n_ddt) : 'Genera DDT' + (L.s(s.awb) ? '' : ' (senza AWB)')) + '</button>';
+      if (s && s.n_ddt && s.stato !== 'SPEDITA') btn += ' <span class="pill p-amber" title="DDT riaperto: completa la spunta e premi Rigenera DDT">DDT ' + esc(s.n_ddt) + ' riaperto</span>';
       if (s && s.n_ddt) btn += ' <button class="btn sm" onclick="Ack.stampa(\'' + s.id_spedizione + '\')">Stampa DDT</button>' + (s.link_pdf ? ' <a class="mail" target="_blank" href="' + esc(s.link_pdf) + '">PDF su Drive</a>' : '');
       if (s && s.stato !== 'BOZZA' && s.stato !== 'CHIUSA') btn += ' <a class="mail" href="#" onclick="Ack.inviaMail([\'' + s.id_spedizione + '\']);return false" title="Mail a Service Desk e bollettazione: destinatario, indirizzo, DDT, AWB, colli, misure e peso">✉ mail</a>';
       if (s && (s.stato === 'PRONTA' || s.stato === 'SPEDITA')) btn += ' <button class="btn ghost sm" onclick="Ack.cedolini(\'' + s.id_spedizione + '\')" title="Un foglio per collo/pallet con destinazione, DDT e AWB">Cedolini</button>';
@@ -5028,7 +5139,9 @@ var Ack = {
     var RR = R.slice().sort(function (a, b) { return (ORD[a.esito] - ORD[b.esito]) || ((parseInt(a.fr, 10) || 0) - (parseInt(b.fr, 10) || 0)); });
     var html = '<div class="card"><div class="card-h"><div class="card-t">' + (edit ? 'Spunta ' : 'ACK ') + esc(s.destinatario) + ' · ' + esc(L.itDate(s.data)) + '</div><span class="hint">' + esc(s.id_spedizione) + '</span><div class="spacer"></div>' +
       (edit ? '<span class="hint" id="ackSave"></span><button class="btn ghost sm" onclick="Ack.aggiornaVista()" title="Rilegge le spunte fatte dagli altri dispositivi (si aggiorna anche da solo ogni 30 secondi)">↻ Spunte</button><button class="btn ghost sm" onclick="Ack.pendTutti()" title="Mette in pending tutte le schede della lista non ancora spuntate (non barcodate): scegli il motivo per tutte o per qualcuna">⏸ Pending non spuntate</button><button class="btn ghost sm" onclick="Ack.aggiornaLista()">Aggiorna lista da VLT</button><button class="btn green" onclick="Ack.chiudi()">Chiudi spunta</button>' : '') +
-      ((s.stato === 'PRONTA' || s.stato === 'CHIUSA') && !s.n_ddt ? '<button class="btn ghost sm" onclick="Ack.riapri()">Riapri spunta</button>' : '') +
+      ((s.stato === 'PRONTA' || s.stato === 'CHIUSA') ? '<button class="btn ghost sm" onclick="Ack.riapri()">Riapri spunta</button>' : '') +
+      (s.stato === 'SPEDITA' && s.n_ddt && App.isAdmin ? '<button class="btn ghost sm" onclick="Ack.riapriDdt(\'' + s.id_spedizione + '\')" title="Riapre la spunta per aggiungere o togliere pezzi: poi Rigenera DDT (stesso numero). Solo admin, tracciato nel LOG.">↺ Riapri DDT</button>' +
+        '<button class="btn ghost sm" style="color:var(--red)" onclick="Storno.apri(\'' + s.id_spedizione + '\')" title="Annulla il DDT: tutti i pezzi rientrano in magazzino, il numero resta annullato. Solo admin, con password.">🗑 Storna DDT</button>' : '') +
       '<button class="btn ghost sm" onclick="Ack.excel(\'' + s.id_spedizione + '\')">⬇ Excel</button> <button class="btn ghost sm" onclick="Ack.cur=null;Ack.render()">Chiudi pannello</button></div>';
     var opS = App.condiviso() && edit ? Ack._op[s.id_spedizione] : null;
     if (opS) html += '<div class="row" style="align-items:center;margin:4px 0 8px"><span class="pill p-violet">👤 ' + esc(opS.sigla) + ' · ' + esc(opS.nome) + '</span><button class="btn ghost sm" onclick="Ack.cambiaOp()">Cambia operatore</button></div>';
@@ -5968,7 +6081,7 @@ var Rma = {
       col = done ? col : Rma.colli[k];
       var peso = col.reduce(function (a, c) { return a + (parseFloat(String(c.peso).replace(',', '.')) || 0); }, 0);
       var bt = done ? '<button class="btn sm" onclick="Rma.stampa(\'' + s.id_spedizione + '\')">Stampa DDT</button> <button class="btn ghost sm" onclick="Rma.cedolini(\'' + s.id_spedizione + '\')">Cedolini</button>' + (s.link_pdf ? ' <a class="mail" target="_blank" href="' + esc(s.link_pdf) + '">PDF su Drive</a>' : '') +
-          (App.isAdmin ? ' <button class="btn ghost sm" title="Riapre la scheda per correggere pezzi, colli, peso o AWB: poi Rigenera DDT (stesso numero, il PDF viene sostituito). Tutto tracciato nel LOG." onclick="Rma.riapriDdt(\'' + s.id_spedizione + '\')">↺ Riapri DDT</button>' : '')
+          (App.isAdmin ? ' <button class="btn ghost sm" title="Riapre la scheda per correggere pezzi, colli, peso o AWB: poi Rigenera DDT (stesso numero, il PDF viene sostituito). Tutto tracciato nel LOG." onclick="Rma.riapriDdt(\'' + s.id_spedizione + '\')">↺ Riapri DDT</button> <button class="btn ghost sm" style="color:var(--red)" title="Annulla il DDT: tutti i pezzi rientrano in magazzino, il numero resta annullato. Solo admin, con password." onclick="Storno.apri(\'' + s.id_spedizione + '\')">🗑 Storna DDT</button>' : '')
         : (s && s.n_ddt ? '<span class="pill p-amber" title="DDT riaperto: correggi e rigenera">DDT ' + esc(s.n_ddt) + ' riaperto</span> ' : '') + '<button class="btn sm green"' + (g.pronta ? '' : ' disabled title="Servono colli/peso salvati e almeno un pezzo"') + ' onclick="Rma.emettiUno(\'' + esc(g.dest) + '\')">' + (s && s.n_ddt ? 'Rigenera DDT' : 'Genera DDT') + (s && !L.s(s.awb) ? ' (senza AWB)' : '') + '</button> <button class="btn ghost sm" onclick="Rma.cedolini(null,\'' + esc(g.dest) + '\')">Cedolini</button>';
       var lista = (done ? Ack.righe(s.id_spedizione).filter(function (r) { return r.esito !== 'RIMOSSO'; }).map(function (r) { return { u: { id_unita: r.id_unita, seriale: r.seriale, pn: r.pn, tipo: '' }, rma: r.rma, fonte: r.note }; }) : g.pezzi);
       return '<div class="ack-card">' +
@@ -7945,8 +8058,8 @@ var Tab = {
       if (!n) return 0;
       var h = ((await API.batchGet(DB.id, [API.q('MOVIMENTI') + '!1:1']))[0][0] || []).map(L.s), manc = cols.filter(function (c) { return h.indexOf(c) < 0; });
       if (manc.length) {
-        await DB.allargaCol('MOVIMENTI', h.length + manc.length);
-        await API.batchUpdate(DB.id, [{ range: API.q('MOVIMENTI') + '!' + L.colLetter(h.length) + '1:' + L.colLetter(h.length + manc.length - 1) + '1', values: [manc] }]);
+        await DB.allargaCol('MOVIMENTI', h.length + manc.length, true);
+        await API.batchUpdate(DB.id, [{ range: API.q('MOVIMENTI') + '!' + L.colLetter(h.length) + '1:' + L.colLetter(h.length + manc.length - 1) + '1', values: [manc] }], true);
         h = h.concat(manc);
       }
       // righe lette adesso dal foglio (per id movimento): sicuro anche se nel frattempo il foglio è cambiato
@@ -7966,18 +8079,105 @@ var Tab = {
         }
       });
       for (var j = 0, blocco = [], celle = 0; j <= upd.length; j++) {
-        if (j === upd.length || (celle + upd[j].values.length > 40000 && blocco.length)) { if (blocco.length) await API.batchUpdate(DB.id, blocco); blocco = []; celle = 0; }
+        if (j === upd.length || (celle + upd[j].values.length > 40000 && blocco.length)) { if (blocco.length) await API.batchUpdate(DB.id, blocco, true); blocco = []; celle = 0; }
         if (j < upd.length) { blocco.push(upd[j]); celle += upd[j].values.length; }
       }
       R.forEach(function (r) { var rr = riga[r.id_mov]; if (rr) cols.forEach(function (c) { if (nuovi[c] && nuovi[c][rr] !== undefined) r[c] = nuovi[c][rr]; }); });
       Tab._mN = -1;
-      API.append(DB.id, 'LOG', [App.log('DATE_VLT_SALVATE', 'MOVIMENTI', '', { celle: n, colonne: Object.keys(nuovi), tableau: Tab.estratto })]).catch(function () { });
+      API.append(DB.id, 'LOG', [App.log('DATE_VLT_SALVATE', 'MOVIMENTI', '', { celle: n, colonne: Object.keys(nuovi), tableau: Tab.estratto })], true).catch(function () { });
       return n;
     } catch (e) { console.warn('date VLT non salvate', e); return 0; }
     finally { Tab._salva = false; }
   },
   data: function (fr, k) { var t = Tab.di(fr); return t && t[k] ? t[k] : ''; },
   info: function () { return Tab.map ? 'VLT TABLEAU: ' + Object.keys(Tab.map).length + ' FR' + (Tab.estratto ? ' · file del ' + L.s(Tab.estratto).slice(0, 16) : '') : (Tab.err ? 'VLT TABLEAU non letto: ' + Tab.err : 'VLT TABLEAU non ancora caricato'); }
+};
+
+// ─ storno di un DDT già emesso (ACK o RMA): tutti i pezzi rientrano in magazzino, il numero DDT resta ANNULLATO (non si riusa)
+var Storno = {
+  apri: function (id) {
+    if (!App.isAdmin) { toast('Solo un admin può stornare un DDT', 'ko'); return; }
+    var s = DB.t.SPEDIZIONI.rows.find(function (x) { return x.id_spedizione === id; }); if (!s || s.stato !== 'SPEDITA' || !s.n_ddt) return;
+    var ack = s.tipo === 'ACK', R = Ack.righe(id).filter(function (r) { return r.esito === 'SPUNTATO'; }), c = Ack.cfg(), av = [];
+    if (L.normDate(s.data_ddt) !== L.isoToday()) av.push('Il DDT non è di oggi (' + L.itDate(s.data_ddt) + '): se la merce è già partita o consegnata, lo storno cambia solo i dati dell\'app.');
+    av.push('Il DDT potrebbe essere già stato stampato, consegnato al vettore o mandato alla bollettazione: avvisali che è annullato.');
+    if (ack) {
+      var vlt = R.filter(function (r) { var v = DB.vltMap[r.fr]; return v && v.stato !== c.statoAck && v.stato !== c.statoAs; });
+      if (vlt.length) av.push(vlt.length + ' FR non sono più in "' + c.statoAck + '" su VLT (es. già chiusi con lo script): vanno riaperti/sistemati a mano su VLT: ' + vlt.slice(0, 10).map(function (r) { return r.fr; }).join(', ') + (vlt.length > 10 ? '…' : ''));
+    }
+    var J = DB.t.JUNIPER ? DB.t.JUNIPER.rows : [], fr = {}, ser = {}; R.forEach(function (r) { if (r.fr) fr[r.fr] = 1; ser[L.up(r.seriale)] = 1; });
+    var jun = J.filter(function (j) { return j.stato !== 'ANNULLATA' && ((j.fr && fr[L.s(j.fr)] && j.stato === 'FAULTY_SPEDITA') || (j.good_seriale && ser[L.up(j.good_seriale)] && j.stato === 'GOOD_SPEDITA')); });
+    if (jun.length) av.push(jun.length + ' pratiche Juniper collegate risultano spedite: sistemale a mano in Juniper.');
+    Modal.html('🗑 Storna DDT ' + s.n_ddt + ' · ' + s.destinatario,
+      '<div class="hint" style="margin-bottom:8px">Tutti i <b>' + R.length + ' pezzi</b> usciti con questo DDT rientrano in magazzino (giacenza, stessa ubicazione' + (ack ? '' : '; carichi NEW/REUSE di nuovo da spedire, RMA di ritorno di nuovo assegnati') + '). I movimenti di uscita restano nello storico come <b>STORNO_DDT</b> (fuori da KPI ed export Easyloader). La spedizione diventa <b>ANNULLATA</b> e il numero <b>' + esc(s.n_ddt) + '</b> resta nel registro come annullato, <b>non si riusa</b>. Il PDF su Drive viene rinominato "ANNULLATO".' +
+        (ack ? ' La card di ' + esc(s.destinatario) + ' torna da avviare: puoi rifare la spunta con un DDT nuovo.' : ' I pezzi tornano tra quelli da spedire.') + '</div>' +
+        '<div class="fb err" style="margin-bottom:8px;white-space:pre-line">' + av.map(function (x) { return '⚠ ' + esc(x); }).join('\n') + '</div>' +
+        '<div class="fg"><span class="fl">Motivo (obbligatorio, va nel LOG)</span><input class="fc" id="stoMot" placeholder="es. DDT emesso per errore"></div>' +
+        '<div class="fg"><span class="fl">Password eliminazione</span><input class="fc" type="password" id="stoPwd" autocomplete="new-password"></div><div class="hint" id="stoErr"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: '🗑 Storna DDT', cls: 'red', keep: true, fn: function () { Storno.ok(id); } }]);
+  },
+  ok: async function (id) {
+    var err = function (t) { $('stoErr').textContent = t; $('stoErr').className = 'hint err'; };
+    var mot = L.s($('stoMot').value), pw = $('stoPwd').value; if (!mot) return err('Scrivi il motivo');
+    var par = L.s(DB.param('password_eliminazione', ''));
+    var ok = par ? (/^sha256:/i.test(par) ? (await Nr.sha(pw)) === par.slice(7).toLowerCase() : pw === par) : (await Nr.sha(pw)) === Nr.PWD;
+    if (!ok) return err('Password errata');
+    Modal.close(); await Storno.esegui(id, mot);
+  },
+  esegui: async function (id, motivo) {
+    Modal.open('Storno DDT', 'Non chiudere la pagina.', []);
+    try {
+      await Ack.flush();
+      await DB.loadTables(['UNITA', 'SPEDIZIONI', 'SPEDIZIONI_RIGHE', 'RMA_RITORNI', 'CARICHI_RMA', 'DDT_REGISTRO', 'ACK_PENDING', 'CALENDARIO_USCITE']);
+      var s = DB.t.SPEDIZIONI.rows.find(function (x) { return x.id_spedizione === id; });
+      if (!s || s.stato !== 'SPEDITA' || !s.n_ddt) throw new Error('spedizione non più in stato SPEDITA');
+      var ack = s.tipo === 'ACK', nDdt = s.n_ddt, now = L.nowStamp(), me = Auth.email, chi = App.chi(), upd = [];
+      var R = Ack.righe(id).filter(function (r) { return r.esito === 'SPUNTATO'; }), tU = DB.t.UNITA, U = {}; tU.rows.forEach(function (u) { U[u.id_unita] = u; });
+      var fuori = R.filter(function (r) { var u = U[r.id_unita]; return !u || u.stato !== 'USCITO' || u.id_spedizione !== id; });
+      if (fuori.length) throw new Error('Questi pezzi non risultano più usciti con questo DDT (rientrati o modificati): ' + fuori.map(function (r) { return r.seriale; }).join(', ') + '\nSistemali prima (Giacenze) e riprova.');
+      var txt = 'DDT ' + nDdt + ' stornato il ' + L.itDate(L.isoToday()) + ' da ' + (chi.sigla || me) + ': ' + motivo;
+      Modal.progress('1/5 movimenti');
+      var sh = API.q('MOVIMENTI'), tM = new Table('MOVIMENTI', (await API.batchGet(DB.id, [sh + '!1:1']))[0][0] || []);
+      var v = await API.batchGet(DB.id, ['id_spedizione', 'direzione'].map(function (h) { return sh + '!' + tM.col(h) + ':' + tM.col(h); })), nMov = 0;
+      for (var i = 1; i < (v[0] || []).length; i++) if (L.s(v[0][i] && v[0][i][0]) === id && L.up(v[1][i] && v[1][i][0]) === 'OUT') {
+        [['direzione', 'INT'], ['causale', 'STORNO_DDT'], ['note', 'STORNO: ' + txt]].forEach(function (x) { if (x[0] in tM.idx) upd.push({ range: tM.cell(x[0], i + 1), values: [[x[1]]] }); }); nMov++;
+      }
+      Modal.progress('2/5 giacenza');
+      var tC = DB.t.CARICHI_RMA, tRR = DB.t.RMA_RITORNI, pezzi = [];
+      R.forEach(function (r) {
+        var u = U[r.id_unita], car = tC ? tC.rows.find(function (c) { return c.id_unita === u.id_unita && c.id_spedizione === id; }) : null;
+        var ch = { stato: car ? 'IN_LAVORAZIONE' : 'IN_GIACENZA', data_out: '', id_spedizione: '', modificato_il: now, modificato_da: me, rev: (parseInt(u.rev, 10) || 1) + 1 };
+        Object.keys(ch).forEach(function (h) { if (h in tU.idx) { u[h] = String(ch[h]); upd.push({ range: tU.cell(h, u._r), values: [[u[h]]] }); } });
+        if (car) [['stato', 'APERTO'], ['id_spedizione', '']].forEach(function (x) { car[x[0]] = x[1]; upd.push({ range: tC.cell(x[0], car._r), values: [[x[1]]] }); });
+        pezzi.push({ id_unita: u.id_unita, seriale: u.seriale, fr: r.fr, rma: r.rma });
+      });
+      if (tRR) tRR.rows.forEach(function (rt) { if (rt.id_spedizione === id && rt.stato === 'EVASA') [['stato', 'ASSEGNATA'], ['id_spedizione', '']].forEach(function (x) { rt[x[0]] = x[1]; upd.push({ range: tRR.cell(x[0], rt._r), values: [[x[1]]] }); }); });
+      // FR in pending risolti da questo DDT: tornano aperti (i pezzi sono di nuovo in giacenza)
+      if (DB.t.ACK_PENDING) DB.t.ACK_PENDING.rows.forEach(function (p) { if (p.stato === 'RISOLTO' && p.id_spedizione_uscita === id) upd = upd.concat(Ack.setP(p, { stato: 'APERTO', risolto_il: '', risolto_da: '', id_spedizione_uscita: '', nota_risoluzione: txt })); });
+      var tc = DB.t.CALENDARIO_USCITE; if (ack && tc) tc.rows.forEach(function (c) { if (c.id_spedizione === id) { c.stato = 'PIANIFICATA'; c.id_spedizione = ''; upd.push({ range: tc.cell('stato', c._r), values: [['PIANIFICATA']] }, { range: tc.cell('id_spedizione', c._r), values: [['']] }); } });
+      var tD = DB.t.DDT_REGISTRO, rg = tD && tD.rows.find(function (x) { return x.id_spedizione === id && x.n_ddt === nDdt; });
+      if (rg && 'stato' in tD.idx) upd.push({ range: tD.cell('stato', rg._r), values: [['ANNULLATO']] });
+      upd = upd.concat(Ack.setS(s, { stato: 'ANNULLATA', note: [L.s(s.note), txt].filter(Boolean).join(' | '), rev: (parseInt(s.rev, 10) || 1) + 1 }));
+      await API.batchUpdate(DB.id, upd);
+      try {   // pratiche NEW/REUSE chiuse come SPEDITA tornano IN_USCITA
+        if (!Nr.loaded) await Nr.load();
+        var ric = {}; R.forEach(function (r) { var u = U[r.id_unita]; if (u && u.id_ricezione) ric[u.id_ricezione] = 1; });
+        var np = Nr.t().rows.filter(function (p) { return p.stato === 'SPEDITA' && ric[p.id_ricezione]; });
+        for (var k = 0; k < np.length; k++) await Nr.set(np[k], { stato: 'IN_USCITA' }, 'NR_RIAPERTA');
+      } catch (e) { }
+      Modal.progress('3/5 PDF su Drive');
+      var fid = Drive.idDa(s.link_pdf), pdfMsg = '';
+      if (fid) { try { await API.call('https://www.googleapis.com/drive/v3/files/' + fid + '?supportsAllDrives=true&fields=id', { method: 'PATCH', body: JSON.stringify({ name: 'ANNULLATO - DDT ' + s.tipo + ' ' + nDdt + ' ' + s.destinatario + '.pdf' }) }); } catch (e) { pdfMsg = '\nPDF su Drive non rinominato (' + e.message + ').'; } }
+      Modal.progress('4/5 export FR da chiudere');
+      try { await Export.scrivi(); } catch (e) { toast('Export FR da chiudere non aggiornato: ' + e.message, 'ko'); }
+      Modal.progress('5/5 log');
+      await API.append(DB.id, 'LOG', [App.log('DDT_STORNATO', 'SPEDIZIONI', id, { tipo: s.tipo, ddt: nDdt, destinatario: s.destinatario, motivo: motivo, movimenti: nMov, pezzi: pezzi })]);
+      Sto.dati.cur = null;
+      if (ack) { Ack.loaded = false; await Ack.load(); Ack.cur = null; Ack.render(); } else { Rma.calcola(); Rma.render(); }
+      Modal.open('DDT ' + nDdt + ' stornato', s.destinatario + ' · ' + R.length + ' pezzi rientrati in magazzino · ' + nMov + ' movimenti stornati.' + pdfMsg + '\nAvvisa bollettazione e vettore che il DDT è annullato.' + (ack ? '\nLa card di ' + s.destinatario + ' torna da avviare.' : ''));
+      App.syncInfo();
+    } catch (e) { Modal.open('Storno non riuscito', e.message); }
+  }
 };
 
 // date di apertura degli RMA (foglio RMA_DATE del file VLT, scritto dal backend fr_rma da rma.csv: tutti gli stati, ultimi 13 mesi)
