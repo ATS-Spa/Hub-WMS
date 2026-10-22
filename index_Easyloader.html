@@ -1385,6 +1385,7 @@ var App = {
     if (!App.isAdmin || !DB.t.PARAMETRI) return;
     var P = [['chat_giorni', '90', 'Chat: i messaggi più vecchi di questi giorni si cancellano (pulizia una volta al giorno)'],
       ['chat_palmarino', 'NO', 'Chat sul palmarino (account condiviso): SI per attivarla'],
+      ['ack_motivi_pending', Ack.MOTIVI_BASE, 'ACK: motivi per togliere una scheda / metterla in pending (separati da ;). Dopo | scrivi SI se il pezzo è a scaffale, NO se non c\'è: il confronto della giacenza faulty usa questo'],
       ['chat_modifica_min', '5', 'Chat: minuti entro cui si può modificare o eliminare un proprio messaggio'],
       ['rma_ritorni_giorni', '3', 'Ritorni in giacenza più vecchi di questi giorni lavorativi: non si vedono e non si propongono'],
       ['carichi_dest_in_giacenza', 'MADDALONI', 'Carichi NEW/REUSE con queste destinazioni (separate da ;) restano in giacenza (HUB_MAGAZZINO)']];
@@ -4333,6 +4334,17 @@ var Ack = {
   // ─ ACK PENDING: FR tolti da un ACK, con il motivo (foglio ACK_PENDING, creato dall'app se non c'è)
   PEND_H: ['id_pending', 'data', 'riparatore', 'fr', 'seriale', 'pn', 'id_unita', 'id_spedizione', 'motivo', 'stato', 'rimosso_da', 'risolto_il', 'risolto_da', 'id_spedizione_uscita', 'nota_risoluzione'],
   MOTIVI: ['Pezzo non trovato a scaffale', 'Pezzo danneggiato / da verificare', 'Seriale o TPN non corrispondente', 'Bloccato dal Service Desk', 'In attesa di autorizzazione'],
+  // motivi di pending/rimozione: elenco fisso dal parametro ack_motivi_pending ("Motivo|SI;Motivo|NO", SI = il pezzo è a scaffale)
+  MOTIVI_BASE: 'Pezzo non trovato a scaffale|NO;In attesa di autorizzazione per esubero pezzi|SI;In attesa di autorizzazione|SI;Pezzo danneggiato / da verificare|SI;Seriale o TPN non corrispondente|SI;Bloccato dal Service Desk|SI;FR in stato diverso su VLT|SI',
+  motivi: function () {
+    return L.s(DB.param('ack_motivi_pending', Ack.MOTIVI_BASE)).split(';').map(function (x) { var p = x.split('|'); return { t: L.s(p[0]), si: L.up(p[1] || 'SI') !== 'NO' }; }).filter(function (m) { return m.t; });
+  },
+  aScaffale: function (mot) {
+    var m = L.s(mot); if (!m) return false;
+    var f = Ack.motivi().find(function (x) { return L.up(x.t) === L.up(m); }); if (f) return f.si;
+    return !/non trovat|mancant|assente|non presente|smarrit|non c.?[eè]/i.test(m);   // motivi scritti a mano (prima dell'elenco fisso)
+  },
+  opzMotivi: function (vuota) { return (vuota ? '<option value="">' + esc(vuota) + '</option>' : '<option value="">— scegli il motivo —</option>') + Ack.motivi().map(function (m) { return '<option value="' + esc(m.t) + '">' + esc(m.t) + (m.si ? '' : ' (non a scaffale)') + '</option>'; }).join(''); },
   ensurePending: async function () {
     try { await DB.loadTables(['ACK_PENDING']); if (DB.t.ACK_PENDING.header.length) return; }
     catch (e) {
@@ -4357,7 +4369,7 @@ var Ack = {
       function ok() { var v = L.s($('mMotivo').value); if (!v) { $('mMotivo').classList.add('err'); $('mMotivo').focus(); return; } Modal.close(); res(v); }
       Modal.html('Rimuovi FR ' + r.fr + ' dall\'ACK',
         '<div style="font-size:13px;color:var(--subtle);margin-bottom:10px">' + esc(r.seriale) + ' · ' + esc(r.pn) + '<br>Resta in giacenza e riparte con l\'ACK successivo. Il motivo resta tracciato in ACK Pending del riparatore.</div>' +
-        '<div class="fg"><span class="fl">Motivo *</span><input class="fc" id="mMotivo" list="dlMotivi" autocomplete="off" placeholder="scegli o scrivi il motivo"></div>',
+        '<div class="fg"><span class="fl">Motivo *</span><select class="fc" id="mMotivo">' + Ack.opzMotivi() + '</select></div><div class="hint" style="margin-top:4px">Elenco fisso (Admin → Parametri → ack_motivi_pending): serve a sapere se il pezzo è a scaffale.</div>',
         [{ label: 'Annulla', cls: 'ghost', fn: function () { res(''); } }, { label: 'Rimuovi', cls: 'red', keep: true, fn: ok }]);
       setTimeout(function () { var e = $('mMotivo'); e.focus(); e.onkeydown = function (ev) { if (ev.key === 'Enter') { ev.preventDefault(); ok(); } }; }, 50);
     });
@@ -4466,32 +4478,34 @@ var Ack = {
     };
     var G = {}; U.forEach(function (u) { var k = cat(u); (G[k] = G[k] || []).push(u); });
     var K = Object.keys(G).sort(function (a, b) { return G[b].length - G[a].length; });
-    // confronto con quello che è stato barcodato in questa spunta (spuntati + spare false): il resto è "in più" a sistema
+    // confronto con la spunta di oggi: presenti = spuntati + rimossi con un motivo "a scaffale" + spare false (per FR e seriale, i doppi una volta).
+    // Tutto il resto a magazzino di questo riparatore è "da togliere"; i presenti senza scheda si rimettono / creano.
     var nb = [], sc = s && s.stato !== 'IN_SPUNTA' && s.stato !== 'BOZZA';
+    var mc = [], altrove = [], qd = { sp: 0, spUsc: 0, rimP: 0, rimA: 0, sf: 0, dup: 0, conScheda: 0 }, rimAss = [];
+    var inU = {}; U.forEach(function (u) { inU[u.id_unita] = 1; });
+    var inMag = {}; DB.t.UNITA.rows.forEach(function (u) { if (Giacenze.A_MAG.indexOf(u.stato) >= 0) { inMag['U' + u.id_unita] = u; if (u.fr) inMag['F' + u.fr] = u; inMag['S' + L.up(u.seriale)] = u; } });
+    var pres = [], visti = {}, spedita = !!(s && s.n_ddt && s.stato === 'SPEDITA');
+    var addP = function (x) { var kf = x.fr ? 'F' + x.fr : '', ks = x.seriale ? 'S' + L.up(x.seriale) : ''; if ((kf && visti[kf]) || (ks && visti[ks])) { qd.dup++; return false; } if (kf) visti[kf] = 1; if (ks) visti[ks] = 1; pres.push(x); return true; };
     if (s) {
-      var lette = {}; Ack.righe(s.id_spedizione).forEach(function (r) { if (r.esito === 'SPUNTATO') { lette[r.id_unita] = 1; lette['S' + L.up(r.seriale)] = 1; } });
-      Ack.spareFalse(s.id_spedizione).forEach(function (a) { lette['S' + L.up(a.seriale)] = 1; if (a.fr) lette['F' + a.fr] = 1; });
-      // in ACK pending (di questa spunta o di un ACK precedente): il pezzo è a scaffale, solo non spedito
-      var inPend = function (u) { return !!(u.fr && pend[u.fr]); };
-      var nPend = U.filter(function (u) { return inPend(u) && !lette[u.id_unita] && !lette['S' + L.up(u.seriale)]; }).length;
-      nb = U.filter(function (u) { return !lette[u.id_unita] && !lette['S' + L.up(u.seriale)] && !(u.fr && lette['F' + u.fr]) && !inPend(u); });
+      Ack.righe(s.id_spedizione).forEach(function (r) {
+        if (r.esito === 'SPUNTATO') { if (addP({ fonte: 'spuntato', fr: L.s(r.fr), seriale: L.s(r.seriale), pn: L.s(r.pn), id: r.id_unita, uscito: spedita })) { qd.sp++; if (spedita) qd.spUsc++; } return; }
+        if (r.esito === 'RIMOSSO') {
+          var pp = Ack.pendingDi(r), mot = pp ? L.s(pp.motivo) : '';
+          if (Ack.aScaffale(mot)) { if (addP({ fonte: 'rimosso: ' + mot, fr: L.s(r.fr), seriale: L.s(r.seriale), pn: L.s(r.pn), id: r.id_unita })) qd.rimP++; }
+          else { qd.rimA++; rimAss.push(r); }
+        }
+      });
+      Ack.spareFalse(s.id_spedizione).forEach(function (a) { if (addP({ fonte: 'spare false', fr: L.s(a.fr), seriale: L.s(a.seriale), pn: '' })) qd.sf++; });
+      var isP = {}; pres.forEach(function (x) { if (x.id) isP['U' + x.id] = 1; if (x.fr) isP['F' + x.fr] = 1; if (x.seriale) isP['S' + L.up(x.seriale)] = 1; });
+      nb = U.filter(function (u) { return !isP['U' + u.id_unita] && !(u.fr && isP['F' + u.fr]) && !isP['S' + L.up(u.seriale)]; });
     }
     Ack._nb = nb; Ack._nbS = s;
-    // pezzi presenti (ACK pending aperti del riparatore + spare false di questa spunta) che NON hanno la scheda in giacenza
-    var mc = [], visti = {}, inMag = {}, mag = {}, altrove = [], qd = { pend: 0, pendDup: 0, sf: 0, comuni: 0, conScheda: 0 };
-    var inU = {}; U.forEach(function (u) { inU[u.id_unita] = 1; });
-    DB.t.UNITA.rows.forEach(function (u) { if (Giacenze.A_MAG.indexOf(u.stato) >= 0) { if (u.fr) inMag['F' + u.fr] = u; inMag['S' + L.up(u.seriale)] = u; } });
-    var pres = Ack.pending(cod).map(function (p) { return { fonte: 'ACK pending', fr: L.s(p.fr), seriale: L.s(p.seriale), pn: L.s(p.pn), nota: L.s(p.motivo) }; })
-      .concat(s ? Ack.spareFalse(s.id_spedizione).map(function (a) { return { fonte: 'spare false', fr: L.s(a.fr), seriale: L.s(a.seriale), pn: '', nota: L.s(a.descrizione) }; }) : []);
     pres.forEach(function (x) {
-      var k = x.fr ? 'F' + x.fr : 'S' + L.up(x.seriale);
-      if (visti[k]) { if (visti[k] === x.fonte) qd.pendDup++; else qd.comuni++; return; } visti[k] = x.fonte;
-      if (x.fonte === 'ACK pending') qd.pend++; else qd.sf++;
-      var su = (x.fr && inMag['F' + x.fr]) || (x.seriale && inMag['S' + L.up(x.seriale)]);
+      if (x.uscito) return;   // spuntati già spediti con il DDT: sono usciti
+      var su = (x.id && inMag['U' + x.id]) || (x.fr && inMag['F' + x.fr]) || (x.seriale && inMag['S' + L.up(x.seriale)]);
       if (su) {
         if (inU[su.id_unita]) { qd.conScheda++; return; }
-        // c'è la scheda a magazzino ma non è contata qui: riparatore (da VLT) o tipo diversi
-        var v2 = su.fr && DB.vltMap[su.fr]; altrove.push({ x: x, u: su, rip: v2 && L.s(v2.riparatore) ? v2.riparatore : su.riparatore });
+        var v2 = su.fr && DB.vltMap[su.fr]; altrove.push({ x: x, u: su, rip: v2 && L.s(v2.riparatore) ? v2.riparatore : su.riparatore });   // a magazzino ma su un altro riparatore (VLT) o tipo
         return;
       }
       var stessa = function (o) { return (x.fr && L.s(o.fr) === x.fr) || (x.seriale && L.up(o.seriale) === L.up(x.seriale)); };
@@ -4508,17 +4522,18 @@ var Ack = {
     Ack._gd = U.map(function (u) { var v = u.fr && DB.vltMap[u.fr]; return [u.id_unita, u.seriale, u.fr, u.pn, u.stato, v ? v.stato : '', cat(u), u.ubicazione, L.itDate(u.data_in), pend[u.fr] ? pend[u.fr].motivo : '']; });
     Modal.html('Giacenza FAULTY · ' + cod + ' (' + U.length + ')',
       '<div class="hint" style="margin-bottom:8px">Sono tutte le FAULTY a magazzino per questo riparatore (stato scheda In giacenza, Bloccata, In lavorazione o In attesa), <b>qualunque sia lo stato su VLT</b>. La spunta ACK invece mostra solo gli FR in "' + esc(c.statoAck) + '": per questo il numero è più alto dei pezzi barcodati.</div>' +
-      (s ? '<div class="card" style="padding:10px 12px;margin-bottom:10px"><div style="font-size:13px;margin-bottom:6px"><b>Confronto con il barcodato</b> della spunta del ' + esc(L.itDate(s.data)) + ': a sistema <b>' + U.length + '</b> · barcodate e ancora qui (spare false) <b>' + (U.length - nb.length - nPend) + '</b> · in ACK pending (a scaffale) <b>' + nPend + '</b> · <b style="color:var(--red)">non barcodate ' + nb.length + '</b>.' +
+      (s ? '<div class="card" style="padding:10px 12px;margin-bottom:10px"><div style="font-size:13px;margin-bottom:6px"><b>Confronto con il barcodato</b> della spunta del ' + esc(L.itDate(s.data)) + ': a sistema <b>' + U.length + '</b> · presenti oggi con scheda <b>' + qd.conScheda + '</b> · <b style="color:var(--red)">non presenti oggi ' + nb.length + '</b> (non spuntate, non spare false, oppure rimosse con un motivo come \'non trovato\').' +
         (sc ? ' Se il barcodato è giusto, queste non sono a scaffale: spunta e togli con <b>rettifica</b> (escono dalla giacenza come RETTIFICATO, movimento interno e Log; non è un\'uscita). Vale <b>solo se avete barcodato tutte le FAULTY di questo riparatore</b> presenti a scaffale (quelle fuori lista diventano spare false); controlla le date di entrata: un pezzo entrato dopo la spunta non poteva essere barcodato.' : ' <span style="color:var(--amber)">La spunta è ancora aperta: chiudila prima di confrontare.</span>') + '</div>' +
         (nb.length ? '<div class="tbl-wrap" style="max-height:26vh"><table><thead><tr><th><input type="checkbox" id="nbTutti"></th><th>ID</th><th>Seriale</th><th>FR</th><th>Stato scheda</th><th>Stato VLT</th><th>Ubicazione</th><th>Entrata</th><th>Note</th></tr></thead><tbody>' +
           nb.map(function (u, i) { var v = u.fr && DB.vltMap[u.fr], pre = L.normDate(u.data_in) < L.normDate(s.data); return '<tr><td><input type="checkbox" class="nbSel" data-i="' + i + '"' + (sc ? '' : ' disabled') + '></td><td class="mono">' + esc(u.id_unita) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.fr) + '</td><td>' + esc(u.stato) + '</td><td>' + esc(v ? v.stato : '') + '</td><td>' + esc(u.ubicazione) + '</td><td>' + esc(L.itDate(u.data_in)) + '</td><td style="font-size:11px">' + esc(L.s(u.note).slice(0, 80)) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '') +
         (nb.length && sc && App.isAdmin ? '<div class="row" style="gap:8px;margin-top:8px;align-items:flex-end"><div class="fg" style="flex:1"><span class="fl">Motivo</span><input class="fc" id="nbMot" value="non barcodato alla spunta ACK ' + esc(s.destinatario) + ' del ' + esc(L.itDate(s.data)) + '"></div><button class="btn red sm" onclick="Ack.rettNb()">🗑 Rettifica: togli le spuntate dalla giacenza</button></div>' : (nb.length && sc ? '<div class="hint" style="margin-top:6px">La rettifica la fa un admin.</div>' : '')) +
-        '<div class="card" style="padding:8px 12px;margin:12px 0 6px;font-size:12.5px;line-height:1.7"><b>Quadratura</b> · presenti a scaffale = ACK pending aperti <b>' + qd.pend + '</b>' + (qd.pendDup ? ' (+' + qd.pendDup + ' pending doppi sullo stesso FR, contati una volta)' : '') + ' + spare false <b>' + qd.sf + '</b>' + (qd.comuni ? ' (' + qd.comuni + ' erano anche in pending, contati una volta)' : '') + ' = <b>' + (qd.pend + qd.sf) + '</b>.<br>' +
+        '<div class="card" style="padding:8px 12px;margin:12px 0 6px;font-size:12.5px;line-height:1.7"><b>Quadratura della spunta di oggi</b> · spuntati <b>' + qd.sp + '</b>' + (qd.spUsc ? ' (usciti con il DDT: non restano in giacenza)' : '') + ' · rimossi a scaffale <b>' + qd.rimP + '</b> · spare false <b>' + qd.sf + '</b>' + (qd.dup ? ' · ' + qd.dup + ' doppi (stesso FR o seriale) contati una volta' : '') + (qd.rimA ? ' · rimossi con motivo &quot;non a scaffale&quot; esclusi <b>' + qd.rimA + '</b>' : '') + '.<br>' +
+          'Devono restare in giacenza: <b>' + (qd.sp - qd.spUsc + qd.rimP + qd.sf) + '</b>. ' +
           'Di questi: con scheda contata qui <b>' + qd.conScheda + '</b> · con scheda a magazzino ma <b>contata su un altro riparatore o tipo</b> <b style="color:var(--amber)">' + altrove.length + '</b> · senza scheda <b style="color:var(--amber)">' + mc.length + '</b>.<br>' +
-          'Giacenza qui ' + U.length + ' = presenti con scheda ' + qd.conScheda + ' + non barcodate ' + nb.length + '.' +
+          'Giacenza qui ' + U.length + ' = presenti con scheda ' + qd.conScheda + ' + non presenti oggi ' + nb.length + '. Dopo l\'allineamento: ' + (qd.conScheda + mc.length) + (altrove.length ? ' (+' + altrove.length + ' che VLT attribuisce a un altro riparatore: si sistemano dalla 🔔)' : '') + '.' +
           (altrove.length ? '<details style="margin-top:4px"><summary style="cursor:pointer">Vedi i ' + altrove.length + ' contati altrove</summary><div class="tbl-wrap" style="max-height:20vh;margin-top:4px"><table><thead><tr><th>Fonte</th><th>FR</th><th>Seriale</th><th>Scheda</th><th>Tipo</th><th>Riparatore (VLT/scheda)</th></tr></thead><tbody>' +
             altrove.map(function (a) { return '<tr><td>' + esc(a.x.fonte) + '</td><td class="mono">' + esc(a.x.fr) + '</td><td class="mono">' + esc(a.x.seriale) + '</td><td class="mono">' + esc(a.u.id_unita) + '</td><td>' + esc(a.u.tipo) + '</td><td>' + esc(a.rip) + '</td></tr>'; }).join('') + '</tbody></table></div></details>' : '') + '</div>' +
-        '<div style="font-size:13px;margin:14px 0 6px"><b style="color:var(--amber)">Presenti ma senza scheda in giacenza: ' + mc.length + '</b> (ACK pending aperti di ' + esc(s.destinatario) + ' e spare false di questa spunta). Per ognuno: <b>rimetto</b> la scheda tolta (annullata/rettificata), oppure <b>creo</b> la scheda collegata al suo movimento di ingresso, oppure, se non c\'è nessun ingresso, la aggiungo con <b>rettifica</b> (dati da VLT). Le righe con avvisi partono senza spunta.</div>' +
+        '<div style="font-size:13px;margin:14px 0 6px"><b style="color:var(--amber)">Presenti ma senza scheda in giacenza: ' + mc.length + '</b> (spuntati non ancora spediti, rimossi a scaffale e spare false della spunta di oggi). Per ognuno: <b>rimetto</b> la scheda tolta (annullata/rettificata), oppure <b>creo</b> la scheda collegata al suo movimento di ingresso, oppure, se non c\'è nessun ingresso, la aggiungo con <b>rettifica</b> (dati da VLT). Le righe con avvisi partono senza spunta.</div>' +
         (mc.length ? '<div class="tbl-wrap" style="max-height:26vh"><table><thead><tr><th><input type="checkbox" id="mcTutti"></th><th>Fonte</th><th>FR</th><th>Seriale</th><th>Stato VLT</th><th>Cosa faccio</th><th>Avvisi</th></tr></thead><tbody>' +
           mc.map(function (o, i) { var az = o.azione === 'RIATTIVA' ? 'rimetto la scheda ' + o.u.id_unita + ' (' + o.u.stato + ')' : (o.azione === 'CREA' ? 'creo la scheda dal movimento ' + o.m.id_mov + ' del ' + L.itDate(o.m.data_ora) : 'aggiungo con rettifica (nessun ingresso)');
             return '<tr' + (o.avv.length ? ' class="r-warn"' : '') + '><td><input type="checkbox" class="mcSel" data-i="' + i + '"' + (o.avv.length || !sc ? '' : ' checked') + (sc ? '' : ' disabled') + '></td><td>' + esc(o.x.fonte) + '</td><td class="mono">' + esc(o.x.fr) + '</td><td class="mono">' + esc(o.x.seriale) + '</td><td>' + esc(o.v ? o.v.stato : '') + '</td><td>' + esc(az) + '</td><td style="font-size:11.5px;color:var(--amber)">' + esc(o.avv.join(' · ')) + '</td></tr>'; }).join('') + '</tbody></table></div>' +
@@ -4540,10 +4555,10 @@ var Ack = {
       $('dlMotivi').innerHTML = Ack.MOTIVI.concat(usati.filter(function (m) { return Ack.MOTIVI.indexOf(m) < 0; }).slice(0, 30)).map(function (m) { return '<option value="' + esc(m) + '">'; }).join(''); })();
     Modal.html('⏸ Pending delle schede non spuntate · ' + esc(s.destinatario),
       '<div class="hint" style="margin-bottom:8px">Le schede spuntate qui sotto escono dall\'ACK, restano in giacenza e ripartono con l\'ACK successivo (ACK Pending). Scrivi un motivo per tutte; se per qualcuna serve un motivo diverso, scrivilo sulla sua riga.</div>' +
-      '<div class="row" style="gap:8px;align-items:flex-end;justify-content:flex-start;margin-bottom:8px"><div class="fg" style="flex:1;min-width:280px"><span class="fl">Motivo per tutte *</span><input class="fc" id="ptMot" list="dlMotivi" autocomplete="off" placeholder="scegli o scrivi il motivo"></div></div>' +
+      '<div class="row" style="gap:8px;align-items:flex-end;justify-content:flex-start;margin-bottom:8px"><div class="fg" style="flex:1;min-width:280px"><span class="fl">Motivo per tutte *</span><select class="fc" id="ptMot">' + Ack.opzMotivi() + '</select></div></div>' +
       '<div class="tbl-wrap modal-scroll" style="max-height:48vh"><table><thead><tr><th><input type="checkbox" id="ptTutti" checked></th><th>FR</th><th>Seriale</th><th>P/N</th><th>Esito</th><th>Motivo diverso (facoltativo)</th></tr></thead><tbody>' +
       L0.map(function (r, i) { var g = gia[r.fr]; return '<tr><td><input type="checkbox" class="ptSel" data-i="' + i + '" checked></td><td class="mono">' + esc(r.fr) + '</td><td class="mono">' + esc(r.seriale) + '</td><td class="mono">' + esc(r.pn) + '</td><td>' + esc(r.esito === 'MANCANTE' ? 'mancante' : 'da spuntare') + '</td><td>' +
-        (g ? '<span class="hint" style="color:var(--amber)">già in pending dal ' + esc(L.itDate(L.s(g.data).slice(0, 10))) + ': ' + esc(g.motivo) + ' (resta quello)</span>' : '<input class="fc ptMotR" data-i="' + i + '" list="dlMotivi" autocomplete="off" style="padding:4px 8px" placeholder="come tutte">') + '</td></tr>'; }).join('') + '</tbody></table></div><div class="hint" id="ptErr" style="margin-top:6px"></div>',
+        (g ? '<span class="hint" style="color:var(--amber)">già in pending dal ' + esc(L.itDate(L.s(g.data).slice(0, 10))) + ': ' + esc(g.motivo) + ' (resta quello)</span>' : '<select class="fc ptMotR" data-i="' + i + '" style="padding:4px 8px">' + Ack.opzMotivi('come tutte') + '</select>') + '</td></tr>'; }).join('') + '</tbody></table></div><div class="hint" id="ptErr" style="margin-top:6px"></div>',
       [{ label: 'Annulla', cls: 'ghost' }, { label: '⏸ Metti in pending', cls: 'red', keep: true, fn: function () { Ack.pendTuttiSalva(L0, gia); } }], true);
     $('ptTutti').onchange = function () { document.querySelectorAll('#mBody .ptSel').forEach(function (c) { c.checked = $('ptTutti').checked; }); };
     setTimeout(function () { $('ptMot').focus(); }, 50);
