@@ -4373,6 +4373,32 @@ var Ack = {
     });
   },
   giacRip: function (cod) { return Ack.giacLista(cod).length; },
+  // rettifica in blocco delle FAULTY a sistema ma non barcodate nella spunta (solo admin)
+  rettNb: async function () {
+    if (!App.isAdmin) return;
+    var sel = [].slice.call(document.querySelectorAll('#mBody .nbSel')).filter(function (c) { return c.checked; }).map(function (c) { return Ack._nb[+c.getAttribute('data-i')]; });
+    var mot = L.s($('nbMot') && $('nbMot').value) || 'non barcodato alla spunta ACK';
+    if (!sel.length) { toast('Spunta almeno una scheda', 'ko'); return; }
+    var cod = Ack._nbS ? Ack._nbS.destinatario : '';
+    if (!(await Modal.confirm('Rettifica ' + sel.length + ' schede', sel.length + ' FAULTY escono dalla giacenza come RETTIFICATO (non è un\'uscita: niente DDT né fatturazione), con movimento interno e Log.\nMotivo: ' + mot))) { Ack.giacDett(cod); return; }
+    Modal.open('Rettifica', 'Tolgo ' + sel.length + ' schede…', []);
+    try {
+      await DB.loadTables(['UNITA']);
+      var tU = DB.t.UNITA, H = await Ingresso.heads(), now = L.nowStamp(), fatte = 0, salt = [];
+      for (var i = 0; i < sel.length; i++) {
+        var u = tU.rows.find(function (x) { return x.id_unita === sel[i].id_unita; });
+        if (!u || Giacenze.A_MAG.indexOf(u.stato) < 0 || u.stato === 'IN_LAVORAZIONE') { salt.push(sel[i].id_unita); continue; }
+        var prima = u.stato, ch = { stato: 'RETTIFICATO', data_out: L.isoToday(), note: [L.s(u.note).split(' | fonte:')[0], 'RETTIFICA (tolto): ' + mot].filter(Boolean).join(' | '), modificato_il: now, modificato_da: App.chi().email, rev: (parseInt(u.rev, 10) || 1) + 1 };
+        await API.batchUpdate(DB.id, Object.keys(ch).filter(function (h) { return h in tU.idx; }).map(function (h) { return { range: tU.cell(h, u._r), values: [[String(ch[h])]] }; }));
+        Object.keys(ch).forEach(function (h) { u[h] = String(ch[h]); });
+        await Spec.traccia(H, u, 'RETTIFICA INVENTARIO · tolto dalla giacenza: ' + mot, { seriale: u.seriale, fr: u.fr, tipo: u.tipo, stato_prima: prima, motivo: mot }, 'RETTIFICA_TOLTO', 'UNITA', u.id_unita, 'RETTIFICA_OUT');
+        fatte++; Modal.progress(fatte + ' / ' + sel.length);
+      }
+      Export.scrivi().catch(function () { });
+      Modal.close(); toast(fatte + ' schede tolte con rettifica' + (salt.length ? ' · saltate ' + salt.join(', ') : ''), salt.length ? 'ko' : 'ok');
+      App.syncInfo(); Ack.renderDet(); Ack.giacDett(cod);
+    } catch (e) { Modal.open('Errore', e.message); }
+  },
   giacDett: function (cod) {
     var U = Ack.giacLista(cod), c = Ack.cfg(), pend = {}, sp = {}, oggi = {};
     (DB.t.ACK_PENDING ? DB.t.ACK_PENDING.rows : []).forEach(function (p) { if (p.stato === 'APERTO') pend[p.fr] = p; });
@@ -4390,14 +4416,28 @@ var Ack = {
     };
     var G = {}; U.forEach(function (u) { var k = cat(u); (G[k] = G[k] || []).push(u); });
     var K = Object.keys(G).sort(function (a, b) { return G[b].length - G[a].length; });
+    // confronto con quello che è stato barcodato in questa spunta (spuntati + spare false): il resto è "in più" a sistema
+    var nb = [], sc = s && s.stato !== 'IN_SPUNTA' && s.stato !== 'BOZZA';
+    if (s) {
+      var lette = {}; Ack.righe(s.id_spedizione).forEach(function (r) { if (r.esito === 'SPUNTATO') { lette[r.id_unita] = 1; lette['S' + L.up(r.seriale)] = 1; } });
+      Ack.spareFalse(s.id_spedizione).forEach(function (a) { lette['S' + L.up(a.seriale)] = 1; if (a.fr) lette['F' + a.fr] = 1; });
+      nb = U.filter(function (u) { return !lette[u.id_unita] && !lette['S' + L.up(u.seriale)] && !(u.fr && lette['F' + u.fr]); });
+    }
+    Ack._nb = nb; Ack._nbS = s;
     Ack._gd = U.map(function (u) { var v = u.fr && DB.vltMap[u.fr]; return [u.id_unita, u.seriale, u.fr, u.pn, u.stato, v ? v.stato : '', cat(u), u.ubicazione, L.itDate(u.data_in), pend[u.fr] ? pend[u.fr].motivo : '']; });
     Modal.html('Giacenza FAULTY · ' + esc(cod) + ' (' + U.length + ')',
       '<div class="hint" style="margin-bottom:8px">Sono tutte le FAULTY a magazzino per questo riparatore (stato scheda In giacenza, Bloccata, In lavorazione o In attesa), <b>qualunque sia lo stato su VLT</b>. La spunta ACK invece mostra solo gli FR in "' + esc(c.statoAck) + '": per questo il numero è più alto dei pezzi barcodati.</div>' +
+      (s ? '<div class="card" style="padding:10px 12px;margin-bottom:10px"><div style="font-size:13px;margin-bottom:6px"><b>Confronto con il barcodato</b> della spunta del ' + esc(L.itDate(s.data)) + ': a sistema <b>' + U.length + '</b>, barcodate e ancora qui (spare false) <b>' + (U.length - nb.length) + '</b>, <b style="color:var(--red)">non barcodate ' + nb.length + '</b>.' +
+        (sc ? ' Se il barcodato è giusto, queste non sono a scaffale: spunta e togli con <b>rettifica</b> (escono dalla giacenza come RETTIFICATO, movimento interno e Log; non è un\'uscita). Vale <b>solo se avete barcodato tutte le FAULTY di questo riparatore</b> presenti a scaffale (quelle fuori lista diventano spare false); controlla le date di entrata: un pezzo entrato dopo la spunta non poteva essere barcodato.' : ' <span style="color:var(--amber)">La spunta è ancora aperta: chiudila prima di confrontare.</span>') + '</div>' +
+        (nb.length ? '<div class="tbl-wrap" style="max-height:26vh"><table><thead><tr><th><input type="checkbox" id="nbTutti"></th><th>ID</th><th>Seriale</th><th>FR</th><th>Stato scheda</th><th>Stato VLT</th><th>Ubicazione</th><th>Entrata</th><th>Note</th></tr></thead><tbody>' +
+          nb.map(function (u, i) { var v = u.fr && DB.vltMap[u.fr], pre = L.normDate(u.data_in) < L.normDate(s.data); return '<tr><td><input type="checkbox" class="nbSel" data-i="' + i + '"' + (sc ? '' : ' disabled') + '></td><td class="mono">' + esc(u.id_unita) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.fr) + '</td><td>' + esc(u.stato) + '</td><td>' + esc(v ? v.stato : '') + '</td><td>' + esc(u.ubicazione) + '</td><td>' + esc(L.itDate(u.data_in)) + '</td><td style="font-size:11px">' + esc(L.s(u.note).slice(0, 80)) + '</td></tr>'; }).join('') + '</tbody></table></div>' : '') +
+        (nb.length && sc && App.isAdmin ? '<div class="row" style="gap:8px;margin-top:8px;align-items:flex-end"><div class="fg" style="flex:1"><span class="fl">Motivo</span><input class="fc" id="nbMot" value="non barcodato alla spunta ACK ' + esc(s.destinatario) + ' del ' + esc(L.itDate(s.data)) + '"></div><button class="btn red sm" onclick="Ack.rettNb()">🗑 Rettifica: togli le spuntate dalla giacenza</button></div>' : (nb.length && sc ? '<div class="hint" style="margin-top:6px">La rettifica la fa un admin.</div>' : '')) + '</div>' : '') +
       '<div class="tbl-wrap" style="max-height:24vh;margin-bottom:10px"><table><thead><tr><th>Gruppo</th><th>Pezzi</th></tr></thead><tbody>' + K.map(function (k) { return '<tr><td>' + esc(k) + '</td><td class="mono"><b>' + G[k].length + '</b></td></tr>'; }).join('') + '</tbody></table></div>' +
       '<div class="tbl-wrap" style="max-height:40vh"><table><thead><tr><th>ID</th><th>Seriale</th><th>FR</th><th>P/N</th><th>Stato scheda</th><th>Stato VLT</th><th>Gruppo</th><th>Ubicazione</th><th>Entrata</th><th>Motivo pending</th></tr></thead><tbody>' +
       Ack._gd.map(function (r) { return '<tr>' + r.map(function (x, i) { return '<td' + (i < 3 ? ' class="mono"' : '') + '>' + esc(x) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>',
       [{ label: 'Chiudi', cls: 'ghost' }, { label: '⬇ Excel', cls: 'ghost', keep: true, fn: function () { Xls.scarica('Giacenza_faulty_' + cod, [{ nome: 'Giacenza faulty', headers: ['ID', 'Seriale', 'FR', 'P/N', 'Stato scheda', 'Stato VLT', 'Gruppo', 'Ubicazione', 'Entrata', 'Motivo pending'], rows: Ack._gd }]); } },
         { label: '🏷 Etichette', cls: 'ghost', keep: true, fn: function () { Etichette.pezzi(U.map(Etichette.daUnita), 'Giacenza faulty'); } }], true);
+    if ($('nbTutti')) $('nbTutti').onchange = function () { document.querySelectorAll('#mBody .nbSel:not([disabled])').forEach(function (c) { c.checked = $('nbTutti').checked; }); };
   },
   pendTutti: function () {
     var s = Ack.byId(Ack.cur); if (!s || s.stato !== 'IN_SPUNTA') return;
