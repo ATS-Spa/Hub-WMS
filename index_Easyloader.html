@@ -857,7 +857,8 @@ L.misura = function (m) { var x = /^\s*(\d+(?:[.,]\d+)?)\s*[xX*]\s*(\d+(?:[.,]\d
 // CERCA BAN del file ACK: note che iniziano con BAN o RMA
 L.isBan = function (note) { var n = L.up(note); return n.indexOf('BAN') === 0 || n.indexOf('RMA') === 0; };
 // FR digitato/sparato → numero pulito
-L.frKey = function (x) { return L.s(x).replace(/^FR\s*/i, '').replace(/^0+(?=\d)/, ''); };
+// FR000129686 / *FR 0129686* / 000129686 → 129686 (via simboli ai lati, prefisso FR e zeri iniziali)
+L.frKey = function (x) { return L.s(x).replace(/^[^0-9A-Za-z]+|[^0-9A-Za-z]+$/g, '').replace(/^FR[\s\-_:\/]*/i, '').replace(/^0+(?=\d)/, ''); };
 // CSV di VLT: separatore riconosciuto dalla prima riga (; , | tab), campi tra virgolette
 L.parseCsv = function (txt) {
   txt = String(txt || '').replace(/^﻿/, '');
@@ -1424,9 +1425,11 @@ var Ingresso = {
     var tA, tB;
     bc.addEventListener('input', function () { clearTimeout(tA); tA = setTimeout(function () { Ingresso.anteprima('bc'); }, 120); });
     fr.addEventListener('input', function () { clearTimeout(tB); tB = setTimeout(function () { Ingresso.anteprima('fr'); }, 120); });
-    bc.addEventListener('keydown', function (e) { if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) { if (!L.s(bc.value) && !L.s(fr.value)) return; e.preventDefault(); clearTimeout(tA); Ingresso.anteprima('bc'); avanti(); } });
+    bc.addEventListener('keydown', function (e) { if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) { if (!L.s(bc.value) && !L.s(fr.value)) return; e.preventDefault(); clearTimeout(tA); Ingresso.anteprima('bc');
+      if (Ingresso.chiediFr()) { fr.focus(); fr.select(); $('hFr').textContent = 'FR non trovato dal seriale: spara o scrivi l\'FR, poi Invio (Invio a vuoto = aggiungi senza FR)'; $('hFr').className = 'hint warn'; return; }
+      avanti(); } });
     fr.addEventListener('keydown', function (e) {
-      if (e.key === 'Enter') { e.preventDefault(); clearTimeout(tB); Ingresso.anteprima('fr'); if (L.s(bc.value)) avanti(); else bc.focus(); }
+      if (e.key === 'Enter') { e.preventDefault(); clearTimeout(tB); if (/^\W*FR|^0/i.test(L.s(fr.value))) fr.value = L.frKey(fr.value); Ingresso.anteprima('fr'); if (L.s(bc.value)) avanti(); else bc.focus(); }
       else if (e.key === 'Tab' && !e.shiftKey) { e.preventDefault(); clearTimeout(tB); Ingresso.anteprima('fr'); bc.focus(); bc.select(); }
     });
     ub.addEventListener('keydown', function (e) { nextOn(e, function () { Ingresso.aggiungi(); }); });
@@ -1567,11 +1570,18 @@ var Ingresso = {
     return ok;
   },
   onTestata: function () { $('lblPo').textContent = Ingresso.needUbi() ? 'PO / MRN *' : 'PO / MRN'; ['inMittente', 'inAwb', 'inVettore', 'inDdt', 'inPo', 'inData'].forEach(function (id) { if (L.s($(id).value)) $(id).classList.remove('err'); }); var prima = $('scBc').disabled; Ingresso.lockScan(); if (prima && !$('scBc').disabled) setTimeout(function () { $('scBc').focus(); }, 30); $('wrapUbi').style.visibility = Ingresso.needUbi() ? 'visible' : 'hidden'; $('lblFr').textContent = $('inBal').checked ? 'FR / RMA balancing' : 'FR'; Ingresso.ricalcola(); },
+  // GOOD e SCRAP: se dal seriale non esce l'FR (né da VLT né dalla pratica Juniper) si chiede l'FR prima di aggiungere
+  chiediFr: function () {
+    var t = $('inTipo').value; if (t !== 'GOOD' && t !== 'SCRAP') return false;
+    if (L.s($('scFr').value) || !L.s($('scBc').value)) return false;
+    if (t === 'GOOD') { var jg = Jun.perGood(Ingresso.pulisci($('scBc').value, '').ser || $('scBc').value); if (jg) return false; }
+    return true;
+  },
   onAwb: function () { var v = L.vettoreDaAwb($('inAwb').value, DB.t.VETTORI.rows); if (v) $('inVettore').value = v; Ingresso.ricalcola(); },
   aggiungi: function () {
     if (!$('inTipo').value) { toast('Seleziona prima il Tipo', 'ko'); Ingresso.lockScan(); $('inTipo').focus(); return; }
     var frAuto = $('scFr').dataset.auto === '1', bcAuto = $('scBc').dataset.auto === '1';
-    var fr = frAuto ? '' : L.s($('scFr').value).replace(/^FR/i, '').replace(/^0+(?=\d)/, ''), bc = bcAuto ? '' : L.s($('scBc').value), ub = L.s($('scUbi').value);
+    var fr = frAuto ? '' : L.frKey($('scFr').value), bc = bcAuto ? '' : L.s($('scBc').value), ub = L.s($('scUbi').value);
     if (frAuto && bcAuto) { fr = L.s($('scFr').value); }
     if (!bc && !fr) { toast('Spara il seriale (oppure scrivi l\'FR)', 'ko'); $('scBc').focus(); return; }
     if (fr && !/^\d+$/.test(fr)) { toast('FR/RMA deve essere un numero', 'ko'); $('scFr').focus(); return; }
@@ -1637,7 +1647,7 @@ var Ingresso = {
     $('ubTutti').onchange = function () { document.querySelectorAll('#mBody .ubSel').forEach(function (cb) { cb.checked = $('ubTutti').checked; }); };
     setTimeout(function () { $('ubVal').focus(); }, 50);
   },
-  edit: function (i, f, v) { var r = Ingresso.rows[i]; r.man[f] = L.s(v); Ingresso.ricalcola(); Ingresso.save(); },
+  edit: function (i, f, v) { var r = Ingresso.rows[i]; r.man[f] = f === 'pn' ? L.up(v).replace(/\s+/g, '') : L.s(v); if (f === 'pn') { delete r.man.mnft; if (!r.man.pn) delete r.man.pn; } Ingresso.ricalcola(); Ingresso.save(); },
   NR_SCHEDA: 'N.SCHEDA',
   editUbi: function (i, v) { Ingresso.rows[i].ubi = L.up(v); Ingresso.ricalcola(); Ingresso.save(); },
   // FR corretto a mano sul pezzo letto: tutto il resto (P/N, produttore, riparatore, stato VLT, destinazione) si ricalcola da VLT; resta il seriale letto
@@ -1700,7 +1710,7 @@ var Ingresso = {
     } else {
       fr.dataset.auto = '0'; $('hFr').textContent = ''; $('hFr').className = 'hint';
       if (bc.dataset.auto === '1' || !L.s(bc.value)) {
-        var k = L.s(fr.value).replace(/^FR/i, '').replace(/^0+(?=\d)/, ''), vv = DB.vltMap[k];
+        var k = L.frKey(fr.value), vv = DB.vltMap[k];
         bc.value = vv ? L.s(vv.f_mat_serial_no) : ''; bc.dataset.auto = vv ? '1' : '0';
         $('hBc').textContent = vv ? 'da VLT · ' + vv.stato : (k ? 'FR non in VLT' : '');
         $('hBc').className = 'hint' + (k && !vv ? ' warn' : '');
@@ -1718,7 +1728,7 @@ var Ingresso = {
     h.innerHTML = 'Seriale: <b class="mono">' + esc(ser) + '</b>' + (ser !== b ? ' <span style="opacity:.7">(pulito)</span>' : '') +
       ' · P/N: <b class="mono">' + esc(pn || 'verificare fisicamente') + '</b> <span style="opacity:.7">' + esc(da) + '</span>' + (pn ? (ok ? ' <span style="color:var(--green)">✓ in anagrafica</span>' : ' <span style="color:var(--amber)">✗ non in anagrafica' + (sim ? ' (simile ' + esc(sim) + ')' : '') + '</span>') : '');
     h.className = 'hint';
-    Ingresso.pnR(!pn && !Ingresso.needUbi());
+    var tp = $('inTipo').value; Ingresso.pnR(!pn && !Ingresso.needUbi() && tp !== 'GOOD' && tp !== 'SCRAP');   // GOOD e SCRAP: il P/N si corregge sulla riga dei pezzi letti
   },
   // campo P/N accanto al seriale, solo quando dal barcode (regole, seriali noti, VLT) il P/N non si ricava
   pnR: function (on) {
@@ -1765,6 +1775,11 @@ var Ingresso = {
       o.msgs.push(['warn', 'P/N assente su VLT' + (o.pn ? (o.tipo === 'FAULTY' ? ': nota pending "INSERIRE TPN CORRETTO"' : '') : (L.s(v.f_mat_material) ? ' e material ' + L.mat(v.f_mat_material) + ' non in anagrafica' : ''))]); o.warn = true;
     }
     if (!r.man.pn && scP.pn && scP.fonte && !o.pnDaMat) o.msgs.push(['info', 'P/N da ' + scP.fonte + (scP.scartati && scP.scartati.length ? ' (scartati: ' + scP.scartati.join(', ') + ')' : '')]);
+    if ((o.tipo === 'GOOD' || o.tipo === 'SCRAP') && o.pn) {   // P/N (anche corretto a mano) confrontato con il TPN di VLT (l'anagrafica la controlla già il blocco sotto)
+      var tpn = v ? L.up(v.f_mat_tmpn).replace(/\s+/g, '') : '', pnU = L.up(o.pn).replace(/\s+/g, '');
+      if (tpn && pnU !== tpn) { o.msgs.push(['warn', 'P/N ' + o.pn + ' diverso dal TPN su VLT (' + v.f_mat_tmpn + ')' + (r.man.pn ? ': verifica il pezzo' : '')]); o.warn = true; }
+      else if (tpn && r.man.pn) o.msgs.push(['info', 'P/N corretto a mano: corrisponde al TPN di VLT']);
+    }
     if (!r.man.ser && scP.sospettoS) o.msgs.push(['info', 'Barcode con prefisso S: senza S sarebbe ' + scP.sospettoS]);   // senza barcode le regole si applicano al seriale VLT
     var rp = DB.t.RIPARATORI.rows.find(function (x) { return L.up(x.codice) === L.up(App.aliasRip(o.rip)); });
     o.mnft = r.man.mnft || App.normMnft(DB.artPn[L.up(o.pn)] || (sn && sn.mnft) || (rp && rp.mnft_default) || '');
