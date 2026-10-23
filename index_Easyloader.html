@@ -1419,6 +1419,7 @@ var App = {
     if (!App.isAdmin || !DB.t.PARAMETRI) return;
     var P = [['chat_giorni', '90', 'Chat: i messaggi più vecchi di questi giorni si cancellano (pulizia una volta al giorno)'],
       ['chat_palmarino', 'NO', 'Chat sul palmarino (account condiviso): SI per attivarla'],
+      ['mail_bonifiche_auto', 'SI', 'SI = a ogni bonifica in blocco (proposte VLT confermate, bonifica da Excel / schede filtrate, bonifica movimenti, sblocco filtrate) parte dal server una mail al Service Desk con l\'elenco e l\'Excel allegato (destinatari in Admin → ✉ Mail → Bonifiche); NO = spenta'],
       ['awb_foglio', 'SI', 'Mail bollettazione ACK/RMA: SI = crea il foglio AWB del giorno (Google Sheet nella cartella AWB BOLLETTAZIONE), lo condivide con i destinatari e mette il link nella mail; NO = mail senza foglio'],
       ['ack_motivi_pending', Ack.MOTIVI_BASE, 'ACK: motivi per togliere una scheda / metterla in pending (separati da ;). Dopo | scrivi SI se il pezzo è a scaffale, NO se non c\'è: il confronto della giacenza faulty usa questo'],
       ['chat_modifica_min', '5', 'Chat: minuti entro cui si può modificare o eliminare un proprio messaggio'],
@@ -2565,9 +2566,11 @@ var Giacenze = {
       var r0 = await API.append(DB.id, 'MOVIMENTI', movs.map(function (m) { return tM.toRow(m); })), base = parseInt(DB.param('mov_id_base', ''), 10) || 0;
       if (r0) { movs.forEach(function (m, k) { m.id_mov = 'MV' + (base + r0 + k); }); await API.batchUpdate(DB.id, [{ range: tM.cell('id_mov', r0) + ':' + tM.col('id_mov') + (r0 + movs.length - 1), values: movs.map(function (m) { return [m.id_mov]; }) }]).catch(function () { }); }
       await API.append(DB.id, 'LOG', logs);
+      var mailR = fatti.map(function (x) { var u = x[0]; return { id: u.id_unita, tipo: u.tipo, seriale: u.seriale, pn: u.pn, fr: u.fr, rip: u.riparatore, prima: u.stato, st: (DB.vltMap[u.fr] || {}).stato || '', nota: Spec.pulita(x[1].note) }; });
       fatti.forEach(function (x) { Object.keys(x[1]).forEach(function (h) { x[0][h] = String(x[1][h]); }); });
       if (Sto.dati.cur) movs.forEach(function (m) { Sto.COLS.forEach(function (c) { if (!(c in m)) m[c] = ''; }); Sto.dati.cur.push(m); });
       Export.scrivi().catch(function () { });
+      BonMail.invia('Sblocco schede (disponibili)', [['id', 'Scheda'], ['tipo', 'Tipo'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['fr', 'FR'], ['rip', 'Riparatore'], ['prima', 'Stato prima'], ['st', 'Stato VLT'], ['nota', 'Nota']], mailR, mot);
       Modal.close(); Giacenze.render(); Ingresso.renderPend(); App.syncInfo();
       if (salt.length) Modal.open('Sblocco: ' + fatti.length + ' schede disponibili', 'Saltate (premi Aggiorna e riprova):\n• ' + salt.join('\n• ')); else toast(fatti.length + ' schede di nuovo disponibili', 'ok');
     } catch (e) { Modal.close(); Modal.open('Errore durante lo sblocco', e.message); }
@@ -3166,10 +3169,13 @@ var Bon = {
       if (r0) { movs.forEach(function (m, k) { m.id_mov = 'MV' + (base + r0 + k); }); await API.batchUpdate(DB.id, [{ range: tM.cell('id_mov', r0) + ':' + tM.col('id_mov') + (r0 + movs.length - 1), values: movs.map(function (m) { return [m.id_mov]; }) }]).catch(function () { }); }
       logs.push(App.log(Bon._massiva ? 'BONIFICA_FILTRATE_RIEPILOGO' : 'BONIFICA_EXCEL_FILE', 'UNITA', Bon._file, { schede: fatti.length, con_fr_assegnato: sel.filter(function (x) { return x.pend; }).length, saltate: saltati }));
       await API.append(DB.id, 'LOG', logs);
+      var mailR = fatti.map(function (x) { var u = x[0], a = x[1], it = sel.find(function (y) { return y.id === u.id_unita; }) || { ch: {} }; return { id: u.id_unita, tipo: a.tipo || u.tipo, seriale: a.seriale || u.seriale, pn: a.pn || u.pn, fr: a.fr !== undefined ? a.fr : u.fr, rip: a.riparatore !== undefined ? a.riparatore : u.riparatore, st: (DB.vltMap[a.fr || u.fr] || {}).stato || '', cambi: Object.keys(it.ch).map(function (k) { return (Bon.NOMI[k] || k) + ': ' + ((k === 'note' ? Spec.pulita(u.note) : L.s(u[k])) || '—') + ' → ' + (L.s(it.ch[k]) || '—'); }).join(' · ') }; });
+      var mailOp = Bon._massiva ? 'Bonifica schede filtrate' : 'Bonifica giacenze da Excel', mailMot = Bon._massiva ? Bon._massiva.motivo : 'file ' + Bon._file;
       fatti.forEach(function (x) { Object.keys(x[1]).forEach(function (h) { x[0][h] = String(x[1][h]); }); });
       Spec.applica(loc);
       if (Sto.dati.cur) movs.forEach(function (m) { Sto.COLS.forEach(function (c) { if (!(c in m)) m[c] = ''; }); Sto.dati.cur.push(m); });
       Export.scrivi().catch(function () { });
+      BonMail.invia(mailOp, [['id', 'Scheda'], ['tipo', 'Tipo'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['fr', 'FR'], ['rip', 'Riparatore'], ['st', 'Stato VLT'], ['cambi', 'Cambi (prima → dopo)']], mailR, mailMot);
       Modal.close(); Bon.L = null; Bon._pm = null; Bon._massiva = null;
       Giacenze.render(); Ingresso.renderPend(); App.syncInfo();
       if (saltati.length) Modal.open('Bonifica: ' + fatti.length + ' schede salvate', 'Saltate (scaricale di nuovo e riprova):\n• ' + saltati.join('\n• '));
@@ -3548,7 +3554,7 @@ var MovBon = {
         var x = Object.assign({}, u || m, uCh), desc = Object.keys(ch).map(function (k) { return MovBon.nome(k) + ': ' + (L.s(prima[k]) || '—') + ' → ' + (ch[k] || '—'); }).join(' · ');
         movs.push({ data_ora: now, direzione: 'INT', causale: 'VARIAZIONE', id_unita: u ? u.id_unita : '', seriale: x.seriale || m.seriale, pn: x.pn || m.pn, mnft: x.mnft || m.mnft, tipo: x.tipo || m.tipo, fr: x.fr || '', rma: x.rma || '', riparatore: x.riparatore || '', operatore: me, operatore_sigla: sg, note: 'Bonifica movimenti filtrati (' + MovBon.mot + ') · mov ' + m.id_mov + ' · ' + desc, origine: 'APP' });
         logs.push(App.log('BONIFICA_MOVIMENTI', 'MOVIMENTI', m.id_mov, { motivo: MovBon.mot, prima: prima, dopo: ch, scheda: u ? u.id_unita : '', scheda_dopo: uCh }));
-        fatti.push([u, uCh]);
+        fatti.push([u, uCh]); it._ok = true;
       });
       if (!fatti.length) { Modal.close(); Modal.open('Nessun movimento salvato', salt.join('\n')); return; }
       for (var i = 0; i < upd.length; i += 400) await API.batchUpdate(DB.id, upd.slice(i, i + 400));
@@ -3556,7 +3562,9 @@ var MovBon = {
       if (r0) { movs.forEach(function (mv, k) { mv.id_mov = 'MV' + (base + r0 + k); }); await API.batchUpdate(DB.id, [{ range: tM.cell('id_mov', r0) + ':' + tM.col('id_mov') + (r0 + movs.length - 1), values: movs.map(function (mv) { return [mv.id_mov]; }) }]).catch(function () { }); }
       logs.push(App.log('BONIFICA_MOVIMENTI_RIEPILOGO', 'MOVIMENTI', '', { motivo: MovBon.mot, movimenti: fatti.length, saltati: salt }));
       await API.append(DB.id, 'LOG', logs);
+      var mailR = sel.filter(function (it) { return it._ok; }).map(function (it) { var m = it.m; return { mov: m.id_mov, dir: m.direzione + ' ' + L.itDate(L.s(m.data_ora).slice(0, 10)), seriale: m.seriale, pn: it.ch.pn || m.pn, fr: it.ch.fr !== undefined ? it.ch.fr : m.fr, scheda: it.u ? it.u.id_unita : '', cambi: Object.keys(it.ch).map(function (k) { return MovBon.nome(k) + ': ' + (L.s(m[k]) || '—') + ' → ' + (it.ch[k] || '—'); }).join(' · ') }; });
       Spec.applica(loc); fatti.forEach(function (f) { if (f[0]) Object.keys(f[1]).forEach(function (h) { f[0][h] = String(f[1][h]); }); });
+      BonMail.invia('Bonifica movimenti', [['mov', 'Movimento'], ['dir', 'Direzione e data'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['fr', 'FR'], ['scheda', 'Scheda'], ['cambi', 'Cambi (prima → dopo)']], mailR, MovBon.mot);
       if (Sto.dati.cur) movs.forEach(function (mv) { Sto.COLS.forEach(function (c) { if (!(c in mv)) mv[c] = ''; }); Sto.dati.cur.push(mv); });
       Export.scrivi().catch(function () { });
       Modal.close(); MovBon.L = null; Sto.render(); App.syncInfo();
@@ -3929,7 +3937,8 @@ var Chv = {
     var add = function (it) { if (visti[it.k]) return; visti[it.k] = 1; items.push(it); };
     if (proc === 'INGRESSI') {
       DB.t.UNITA.rows.forEach(function (u) {
-        if ((L.s(u.creato_il).slice(0, 10) !== giorno && L.s(u.fr_assegnato_il).slice(0, 10) !== giorno) || u.creato_da === 'MIGRAZIONE' || u.stato === 'ANNULLATO' || Ingresso.nonIngresso(u)) return;
+        var ricoda = L.s(u.vlt_ricoda).slice(0, 10) === giorno && u.stato !== 'ANNULLATO';   // GOOD rimesse in coda dal controllo Good Material Received
+        if (!ricoda && ((L.s(u.creato_il).slice(0, 10) !== giorno && L.s(u.fr_assegnato_il).slice(0, 10) !== giorno) || u.creato_da === 'MIGRAZIONE' || u.stato === 'ANNULLATO' || Ingresso.nonIngresso(u))) return;
         if (!L.s(u.fr) || ['NEW', 'REUSE', 'BALANCING'].indexOf(u.tipo) >= 0) return;
         var v = DB.vltMap[u.fr];
         add({ k: 'IN:' + u.fr, fr: u.fr, tipo: u.tipo, note: Chv.nota(u.note), stato_file: v ? v.stato : '', conf_serial: u.seriale, conf_tmpn: u.pn, seriale: u.seriale });
@@ -4181,6 +4190,7 @@ var Mail = {
     rma: { nome: 'RMA · uscite e DDT', a: function () { return [DB.param('mail_sd', ''), DB.param('mail_bollettazione', '')]; } },
     nr: { nome: 'Carichi NEW/REUSE', a: function () { return [DB.param('mail_new_reuse', '') || DB.param('mail_sd', '')]; } },
     chv: { nome: 'Chiusure VLT · FR in OPEN e salvataggi rifiutati (Spare ferme in HUB)', a: function () { return [DB.param('mail_sd', 'servicedesk@atsgruppo.eu')]; } },
+    bonifiche: { nome: 'Bonifiche database ATS · mail automatica dal server a ogni bonifica (con Excel)', a: function () { return [DB.param('mail_sd', 'servicedesk@atsgruppo.eu')]; } },
     // la manda il servizio sul PC server ogni mattina (ex RIEPILOGO MATERIALE FAULTY A MAGAZZINO); qui solo i destinatari
     riepilogo: { nome: 'Riepilogo FAULTY a magazzino · mail automatica del mattino dal server', a: function () { return ['servicedesk@atsgruppo.eu', 'spare&repair@atsgruppo.eu', 'resposito@atsgruppo.eu']; } }
   },
@@ -4502,6 +4512,55 @@ var AwbF = {
     }
     if (tipo === 'RMA') Rma.render(); else Ack.render();
     Modal.open('AWB dal foglio', 'Salvati: ' + fatti.length + (fatti.length ? '\n' + fatti.join('\n') : '') + (err.length ? '\n\nNon salvati: ' + err.length + '\n' + err.join('\n') : '') + (tipo === 'ACK' && S.some(function (o) { return !o.s.n_ddt; }) ? '\n\nACK senza DDT: l\'AWB è salvato, il DDT si genera dalla card come sempre.' : ''));
+  }
+};
+
+
+// ───────────────────────── MAIL AUTOMATICA DELLE BONIFICHE ─────────────────────────
+// A ogni bonifica in blocco (🔔 proposte confermate, bonifica da Excel / schede filtrate, bonifica movimenti, sblocco filtrate) parte dal server
+// una mail al Service Desk con l'elenco e l'Excel allegato (salvato su Drive, cartella BONIFICHE). Parametro mail_bonifiche_auto = NO per spegnerla.
+var BonMail = {
+  _cart: null,
+  cartella: async function () {
+    if (BonMail._cart) return BonMail._cart;
+    var q = "'" + CFG.FOLDER_ID + "' in parents and name='BONIFICHE' and mimeType='application/vnd.google-apps.folder' and trashed=false";
+    var js = await API.call('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id)&q=' + encodeURIComponent(q));
+    var f = (js.files || [])[0];
+    if (!f) f = await API.call('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id', { method: 'POST', body: JSON.stringify({ name: 'BONIFICHE', mimeType: 'application/vnd.google-apps.folder', parents: [CFG.FOLDER_ID] }), quiet: true });
+    BonMail._cart = f.id; return f.id;
+  },
+  carica: async function (nome, blob) {
+    var folder = await BonMail.cartella(), fd = new FormData();
+    fd.append('metadata', new Blob([JSON.stringify({ name: nome, parents: [folder] })], { type: 'application/json' })); fd.append('file', blob);
+    var go = function () { return fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id', { method: 'POST', headers: { Authorization: 'Bearer ' + Auth.token }, body: fd }); };
+    var res = await go(); if (res.status === 401) { await Auth.refresh(); res = await go(); }
+    var js = await res.json(); if (!res.ok) throw new Error((js.error && js.error.message) || ('HTTP ' + res.status)); return js.id;
+  },
+  // op: titolo dell'operazione; H: [[chiave, intestazione]]; R: righe (oggetti); motivo: testo libero
+  invia: async function (op, H, R, motivo) {
+    if (!R || !R.length || L.up(DB.param('mail_bonifiche_auto', 'SI')) === 'NO') return;
+    var to = Mail.a('bonifiche'), cc = Mail.cc('bonifiche').filter(function (x) { return to.indexOf(x) < 0; });
+    if (!to.length) { toast('Mail bonifiche non inviata: nessun destinatario (Admin → ✉ Mail)', 'ko'); return; }
+    try {
+      var chi = App.chi(), now = L.nowStamp(), d = L.itDate(L.isoToday()), ora = now.slice(11, 16);
+      var hd = ['Operazione', 'Data e ora', 'Operatore'].concat(H.map(function (h) { return h[1]; })).concat(motivo ? ['Motivo'] : []);
+      var righe = R.map(function (r) { return [op, d + ' ' + ora, chi.sigla || chi.email].concat(H.map(function (h) { return r[h[0]] == null ? '' : String(r[h[0]]); })).concat(motivo ? [motivo] : []); });
+      await Lib.xlsx();
+      var wb = XLSX.utils.book_new(), ws = XLSX.utils.aoa_to_sheet([hd].concat(righe));
+      ws['!cols'] = hd.map(function (h, i) { var m = String(h).length; righe.slice(0, 200).forEach(function (r) { m = Math.max(m, String(r[i]).length); }); return { wch: Math.min(60, m + 2) }; });
+      XLSX.utils.book_append_sheet(wb, ws, 'BONIFICHE');
+      var nome = 'Bonifiche ATS ' + L.isoToday() + ' ' + ora.replace(':', '') + ' ' + op.replace(/[\\/:*?"<>|]/g, '_') + '.xlsx';
+      var buf = XLSX.write(wb, { type: 'array', bookType: 'xlsx' }), fid = await BonMail.carica(nome, new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' }));
+      var subj = 'Bonifiche database ATS del ' + d + ' - ' + op + ' (' + R.length + (R.length === 1 ? ' scheda' : ' schede') + ')';
+      var intro = 'Ciao ragazzi,\n\nvi informiamo che abbiamo provveduto a bonificare sul nostro database ATS le seguenti schede (' + op + (motivo ? ': ' + motivo : '') + '), riportate anche nel file Excel in allegato.';
+      var body = intro + '\n\n' + R.slice(0, 300).map(function (r) { return H.map(function (h) { return L.s(r[h[0]]); }).filter(Boolean).join(' | '); }).join('\n') + (R.length > 300 ? '\n… (tutte nel file allegato)' : '') + '\n\nGrazie';
+      var e = function (x) { return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
+      var th = 'style="background:#1f4e79;color:#fff;padding:5px 8px;border:1px solid #8ea9c1;text-align:left"', td = 'style="padding:5px 8px;border:1px solid #b7c7d6;vertical-align:top"';
+      var html = '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">' + e(intro).replace(/\n/g, '<br>') + '<br><br><table style="border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:10pt"><tr><th ' + th + '>#</th>' + H.map(function (h) { return '<th ' + th + '>' + e(h[1]) + '</th>'; }).join('') + '</tr>' +
+        R.slice(0, 200).map(function (r, i) { return '<tr' + (i % 2 ? ' style="background:#f2f6fa"' : '') + '><td ' + td + '>' + (i + 1) + '</td>' + H.map(function (h) { return '<td ' + td + '>' + e(r[h[0]]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>' +
+        (R.length > 200 ? '<br><i>… e altre ' + (R.length - 200) + ' righe nel file allegato</i>' : '') + '<br><br>Operatore: ' + e(chi.nome || chi.email) + ' · ' + e(d + ' ' + ora) + '<br><br>Grazie</div>';
+      await Mail.coda('bonifiche', to, cc, subj, body, html, { allegati: [{ id: fid, nome: nome }] });
+    } catch (x) { toast('Mail bonifiche non messa in coda: ' + x.message, 'ko'); }
   }
 };
 
@@ -6397,13 +6456,36 @@ var Rma = {
     if (rifai || Rma._last !== Rma.sez) { $('rmaHead').dataset.g = ''; Rma._last = Rma.sez; }
     g.render(); Rma.stats();
   },
+  // ─ controllo del giorno dopo: GOOD entrate prima di oggi devono essere "Good Material Received" su VLT
+  vltUrl: function (fr) { return 'https://logistictoolvf.net.vodafone.it/#/fail-rep/' + encodeURIComponent(L.s(fr)) + '/edit'; },
+  gmrOk: function (st) { return /^good material received$/i.test(L.s(st).trim()); },
+  gmrKo: function (u) { if (u.tipo !== 'GOOD' || !L.s(u.fr) || !(L.normDate(u.data_in) < L.isoToday())) return false; var v = DB.vltMap[u.fr]; return !v || !Rma.gmrOk(v.stato); },
+  gmrLista: function () { return Rma.inventario().filter(Rma.gmrKo); },
+  gmrFiltra: function () { Rma.soloGmr = !Rma.soloGmr; Rma.render(); },
+  // le rimette nella coda "Ingressi del giorno" di Chiusure VLT di oggi (lo script le porta a Good Material Received)
+  gmrRicoda: async function () {
+    var G = Rma.gmrLista().filter(function (u) { return L.s(u.vlt_ricoda).slice(0, 10) !== L.isoToday(); });
+    if (!G.length) { toast('Nessuna GOOD da rimettere in coda (sono già in coda oggi)', 'ok'); return; }
+    if (!(await Modal.confirm('Rimetti in coda Chiusure VLT', G.length + ' GOOD entrate prima di oggi non risultano "Good Material Received" su VLT.\nLe aggiungo alla coda "Ingressi del giorno" di oggi in Chiusure VLT: lo script VLT le porterà a Good Material Received.\n\n' + G.slice(0, 12).map(function (u) { return u.fr + ' · ' + u.seriale + ' · ' + ((DB.vltMap[u.fr] || {}).stato || 'non su VLT'); }).join('\n') + (G.length > 12 ? '\n…' : '')))) return;
+    try {
+      var tU = (await DB.ensureCols('UNITA', ['vlt_ricoda'])) || DB.t.UNITA, now = L.nowStamp(), ids = {}, upd = [];
+      G.forEach(function (u) { ids[u.id_unita] = 1; });
+      tU.rows.forEach(function (u) { if (ids[u.id_unita] && ('vlt_ricoda' in tU.idx)) { u.vlt_ricoda = now; upd.push({ range: tU.cell('vlt_ricoda', u._r), values: [[now]] }); } });
+      if (upd.length) await API.batchUpdate(DB.id, upd);
+      await API.append(DB.id, 'LOG', [App.log('GMR_IN_CODA_VLT', 'UNITA', '', { n: upd.length, fr: G.map(function (u) { return u.fr; }) })]);
+      Chv._cnt = null; toast(upd.length + ' GOOD in coda Chiusure VLT (Ingressi del giorno)', 'ok'); Rma.render();
+    } catch (e) { Modal.open('Non messe in coda', e.message); }
+  },
   stats: function () {
     var s = Rma.sez, abb = Rma.abb, oggi = L.isoToday(), h = '';
     if (s === 'inv') {
       var inv = Rma.inventario(), nG = inv.filter(function (u) { return u.tipo === 'GOOD'; }).length, nB = inv.length - nG;
       var nCre = inv.filter(function (u) { return u.tipo === 'GOOD' && L.s(Rma.dv(u, 'rma')); }).length, nAut = Object.keys(abb).length;
       var nVar = inv.filter(function (u) { return Rma.varia(u); }).length;
-      h = '<div class="stat"><b>' + inv.length + '</b><span>in inventario</span></div><div class="stat"><b>' + nG + '</b><span>good</span></div><div class="stat"><b>' + nB + '</b><span>balancing</span></div>' +
+      var nGmr = Rma.gmrLista().length;
+      h = (nGmr || Rma.soloGmr ? '<div class="stat" style="cursor:pointer;border-color:var(--red)' + (Rma.soloGmr ? ';background:var(--card)' : '') + '" title="GOOD entrate prima di oggi che su VLT non sono Good Material Received: clic per ' + (Rma.soloGmr ? 'vederle tutte' : 'vedere solo queste') + '" onclick="Rma.gmrFiltra()"><b style="color:var(--red)">⚠ ' + nGmr + '</b><span>non good material received' + (Rma.soloGmr ? ' · filtro attivo' : '') + '</span></div>' +
+        (nGmr ? '<div class="stat" style="cursor:pointer" title="Rimette queste GOOD nella coda Ingressi del giorno di Chiusure VLT" onclick="Rma.gmrRicoda()"><b>↻</b><span>rimetti in coda vlt</span></div>' : '') : '') +
+        '<div class="stat"><b>' + inv.length + '</b><span>in inventario</span></div><div class="stat"><b>' + nG + '</b><span>good</span></div><div class="stat"><b>' + nB + '</b><span>balancing</span></div>' +
         '<div class="stat"><b style="color:var(--green)">' + nAut + '</b><span>rma giacenza</span></div><div class="stat"><b style="color:var(--blue)">' + nCre + '</b><span>rma creato</span></div>' +
         '<div class="stat"><b style="color:var(--amber)">' + (nG - nAut - nCre) + '</b><span>senza rma</span></div>' + (Rma.junFerme().length ? '<div class="stat" style="cursor:pointer" title="GOOD Juniper in giacenza: entrano in inventario/uscita solo dalla pratica (tab Juniper → 📦 Metti GOOD in uscita RMA)" onclick="App.go && App.go(\'juniper\')"><b>' + Rma.junFerme().length + '</b><span>juniper (da pratica)</span></div>' : '') + (nVar || Rma.soloVar ? '<div class="stat' + (Rma.soloVar ? ' stat-on' : '') + '" style="cursor:pointer" title="Clicca per vedere solo le schede con variazione di destino" onclick="Rma.soloVar=!Rma.soloVar;Rma.render()"><b style="color:var(--violet)">' + nVar + '</b><span>variaz. destino' + (Rma.soloVar ? ' ✓' : '') + '</span></div>' : '');
     } else if (s === 'rit') {
@@ -6425,7 +6507,7 @@ var Rma = {
     var base = { thead: 'rmaHead', tbody: 'rmaRows', foot: 'rmaFoot' };
     if (s === 'inv') Rma.grids.inv = new Grid('rmaInv', Object.assign({}, base, {
       empty: 'Nessun pezzo GOOD/BALANCING in giacenza',
-      rows: function () { return Rma.inventario().filter(function (u) { return !Rma.soloVar || Rma.varia(u); }).sort(function (a, b) { return ((a.tipo === 'GOOD' ? '0' : '1') + a.data_in).localeCompare((b.tipo === 'GOOD' ? '0' : '1') + b.data_in); }); },
+      rows: function () { return Rma.inventario().filter(function (u) { return (!Rma.soloVar || Rma.varia(u)) && (!Rma.soloGmr || Rma.gmrKo(u)); }).sort(function (a, b) { return ((a.tipo === 'GOOD' ? '0' : '1') + a.data_in).localeCompare((b.tipo === 'GOOD' ? '0' : '1') + b.data_in); }); },
       rowAttr: function (u) { return Rma.varia(u) ? 'class="r-var"' : ''; },
       cols: [
         { k: 'tipo', label: 'Tipo', filter: 'select', html: function (u) { return Pill.tipo(u.tipo); } },
@@ -6452,6 +6534,12 @@ var Rma = {
         { k: 'open', label: 'Data open', cls: 'mono', get: function (u) { var a = Rma.ritDi(u); return a ? a.rma.data_apertura.slice(0, 10) : ''; } },
         { k: 'scad', label: 'Scadenza', cls: 'mono', get: function (u) { var a = Rma.ritDi(u); return a ? a.rma.data_scadenza : ''; }, html: function (u) { var a = Rma.ritDi(u), sc = a ? a.rma.data_scadenza : ''; return '<span' + (sc && sc < oggi() ? ' style="color:var(--red)"' : '') + '>' + esc(sc) + '</span>'; } },
         { k: 'nsd', label: 'Note SD', filter: 'text', get: function (u) { var a = Rma.ritDi(u); return a && a.rma.failure_report ? 'RITORNO GIACENZA FR ' + a.rma.failure_report : ''; } },
+        { k: 'stvlt', label: 'Stato VLT', filter: 'select', get: function (u) { var v = u.fr && DB.vltMap[u.fr]; return v ? L.s(v.stato) : (u.fr ? '(FR non su VLT)' : ''); },
+          html: function (u) {
+            if (!u.fr) return '';
+            var v = DB.vltMap[u.fr], st = v ? L.s(v.stato) : 'FR non su VLT', ko = Rma.gmrKo(u), qd = L.s(u.vlt_ricoda).slice(0, 10) === L.isoToday();
+            return '<a class="mail nw" target="_blank" rel="noopener" href="' + esc(Rma.vltUrl(u.fr)) + '" title="Apri la scheda ' + esc(u.fr) + ' su VLT (modifica)" style="' + (ko ? 'color:var(--red);font-weight:700' : (Rma.gmrOk(st) ? 'color:var(--green)' : '')) + '">' + (ko ? '⚠ ' : '') + esc(st) + ' ↗</a>' + (qd ? '<div class="hint" style="margin:0">in coda Chiusure VLT di oggi</div>' : '');
+          } },
         { k: 'pend', label: 'Pending', filter: 'text', noXls: false, get: function (u) { var p = Rma.pend(u.id_unita); return p ? p.motivo : ''; }, html: function (u) { return Rma.pendCella(u); } }
       ]
     }));
@@ -9662,7 +9750,7 @@ var Prop = {
             var chR = { riparatore: o.ripNew, note: [L.s(u.note), nota].filter(Boolean).join(' · '), modificato_il: now, modificato_da: 'AUTO VLT', rev: (parseInt(u.rev, 10) || 1) + 1 };
             Object.keys(chR).forEach(function (h) { if (h in tU.idx) { u[h] = String(chR[h]); upd.push({ range: tU.cell(h, u._r), values: [[u[h]]] }); } });
             if (u.id_mov_in && mr[u.id_mov_in]) { setM(mr[u.id_mov_in], { riparatore: o.ripNew }); if (movDi[u.id_mov_in]) movDi[u.id_mov_in].riparatore = o.ripNew; }
-            fatti.push({ tipo: 'RIP', dove: 'SCHEDA', id: o.id, seriale: o.seriale, rip_prima: o.ripOld, rip_dopo: o.ripNew });
+            fatti.push({ tipo: 'RIP', dove: 'SCHEDA', id: o.id, seriale: o.seriale, rip_prima: o.ripOld, rip_dopo: o.ripNew, _o: o });
             return;
           }
           var ch = { fr: o.frNew, riparatore: v.riparatore || u.riparatore, note: [L.s(u.note).replace(o.tipo === 'PEND' ? /PENDING FR: [^·|]*/ : /$^/, '').replace(/^\s*[·|]\s*/, '').trim(), nota].filter(Boolean).join(' · '), modificato_il: now, modificato_da: 'AUTO VLT', rev: (parseInt(u.rev, 10) || 1) + 1 };
@@ -9675,7 +9763,7 @@ var Prop = {
           var m = movDi[o.id], row = mr[o.id]; if (!m || !row || L.s(m.fr) !== L.s(o.frOld)) { saltati.push(o.id + ' (movimento cambiato o non trovato)'); return; }
           var nm = [L.s(m.note), nota].filter(Boolean).join(' · '); setM(row, { fr: o.frNew, note: nm }); m.fr = o.frNew; m.note = nm;
         }
-        fatti.push({ tipo: o.tipo, dove: o.dove, id: o.id, seriale: o.seriale, fr_prima: o.frOld, fr_dopo: o.frNew });
+        fatti.push({ tipo: o.tipo, dove: o.dove, id: o.id, seriale: o.seriale, fr_prima: o.frOld, fr_dopo: o.frNew, _o: o });
       });
       if (upd.length) await API.batchUpdate(DB.id, upd);
       // anomalie FR mancante chiuse per le schede che hanno preso l'FR
@@ -9683,7 +9771,9 @@ var Prop = {
         var ids = {}; fatti.forEach(function (f) { if (f.dove === 'SCHEDA' && f.tipo !== 'ABORT') ids[f.id] = f.fr_dopo; });
         if (Object.keys(ids).length) { await DB.loadTables(['ANOMALIE']); var tA = DB.t.ANOMALIE, ua = []; tA.rows.forEach(function (a) { if (ids[a.id_unita] && a.tipo === 'FR_MANCANTE' && a.stato === 'APERTA') [['stato', 'RISOLTA'], ['risolta_il', now], ['risolta_da', 'AUTO VLT'], ['nota_risoluzione', 'FR ' + ids[a.id_unita] + ' associato da VLT'], ['fr', ids[a.id_unita]]].forEach(function (x) { if (x[0] in tA.idx) ua.push({ range: tA.cell(x[0], a._r), values: [[x[1]]] }); }); }); if (ua.length) await API.batchUpdate(DB.id, ua); }
       } catch (e) { }
-      if (fatti.length) await API.append(DB.id, 'LOG', [App.log('PROPOSTE_FR_CONFERMATE', 'UNITA/MOVIMENTI', '', { n: fatti.length, righe: fatti })]);
+      if (fatti.length) await API.append(DB.id, 'LOG', [App.log('PROPOSTE_FR_CONFERMATE', 'UNITA/MOVIMENTI', '', { n: fatti.length, righe: fatti.map(function (f) { var c = Object.assign({}, f); delete c._o; return c; }) })]);
+      if (fatti.length) BonMail.invia('Proposte VLT confermate', [['prop', 'Proposta'], ['dove', 'Dove'], ['id', 'Scheda / movimento'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['tipo', 'Tipo'], ['rip', 'Riparatore'], ['frp', 'FR prima'], ['frd', 'FR dopo'], ['ripd', 'Riparatore dopo'], ['st', 'Stato VLT'], ['nota', 'Nota']],
+        fatti.map(function (f) { var o = f._o || {}; return { prop: (Prop.TIPI[f.tipo] || f.tipo).replace(/^\S+\s/, ''), dove: f.dove === 'SCHEDA' ? 'Scheda' : 'Movimento ' + f.dove, id: f.id, seriale: f.seriale, pn: o.pn, tipo: o.tip, rip: o.ripOld, frp: o.frOld, frd: f.tipo === 'RIP' ? o.frOld : o.frNew, ripd: f.tipo === 'RIP' ? o.ripNew : '', st: o.statoNew, nota: Prop.nota(o) }; }), '');
       Export.scrivi().catch(function () { });
       Modal.close(); toast(fatti.length + ' righe aggiornate' + (saltati.length ? ' · ' + saltati.length + ' saltate' : ''), saltati.length ? 'ko' : 'ok');
       if (saltati.length) Modal.open('Righe saltate', saltati.join('\n'));
