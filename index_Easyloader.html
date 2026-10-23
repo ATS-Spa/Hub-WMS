@@ -1292,7 +1292,7 @@ var DB = {
 var TABS = [
   { k: 'ingresso', label: 'Ingresso' },
   { k: 'ack', label: 'ACK' }, { k: 'rma', label: 'RMA' }, { k: 'balancing', label: 'Balancing' },
-  { k: 'newreuse', label: 'Carichi NEW/REUSE' }, { k: 'juniper', label: 'Juniper' }, { k: 'giacenze', label: 'Giacenze' }, { k: 'vlt', label: 'VLT' }, { k: 'chiusure', label: 'Chiusure VLT' },
+  { k: 'newreuse', label: 'Pratiche Carichi NEW/REUSE' }, { k: 'juniper', label: 'Juniper' }, { k: 'giacenze', label: 'Giacenze' }, { k: 'vlt', label: 'VLT' }, { k: 'chiusure', label: 'Chiusure VLT' },
   { k: 'storico', label: 'Movimenti' }, { k: 'dashboard', label: 'Dashboard', admin: true }, { k: 'kpi', label: 'KPI', admin: true }, { k: 'log', label: 'Log', admin: true }, { k: 'anagrafiche', label: 'Anagrafiche' }, { k: 'admin', label: 'Admin', admin: true }
 ];
 var App = {
@@ -4188,7 +4188,7 @@ var Mail = {
     ingresso: { nome: 'Ingresso · balancing e FR in OPEN', a: function () { return [DB.param('mail_sd', 'servicedesk@atsgruppo.eu')]; } },
     ack: { nome: 'ACK · uscite ai riparatori', a: function () { return [DB.param('mail_sd', ''), DB.param('mail_bollettazione', '')]; } },
     rma: { nome: 'RMA · uscite e DDT', a: function () { return [DB.param('mail_sd', ''), DB.param('mail_bollettazione', '')]; } },
-    nr: { nome: 'Carichi NEW/REUSE', a: function () { return [DB.param('mail_new_reuse', '') || DB.param('mail_sd', '')]; } },
+    nr: { nome: 'Pratiche Carichi NEW/REUSE', a: function () { return [DB.param('mail_new_reuse', '') || DB.param('mail_sd', '')]; } },
     chv: { nome: 'Chiusure VLT · FR in OPEN e salvataggi rifiutati (Spare ferme in HUB)', a: function () { return [DB.param('mail_sd', 'servicedesk@atsgruppo.eu')]; } },
     bonifiche: { nome: 'Bonifiche database ATS · mail automatica dal server a ogni bonifica (con Excel)', a: function () { return [DB.param('mail_sd', 'servicedesk@atsgruppo.eu')]; } },
     // la manda il servizio sul PC server ogni mattina (ex RIEPILOGO MATERIALE FAULTY A MAGAZZINO); qui solo i destinatari
@@ -8112,7 +8112,7 @@ var Nr = {
       await API.batchUpdate(DB.id, [{ range: t.cell('id_pratica', r), values: [[p.id_pratica]] }]); Ack.pushRow(t, p, r);
       Modal.html('File ' + T.tipo + ' creato', '<div style="font-size:13px;line-height:1.6">Pratica <b>' + esc(p.id_pratica) + '</b> · ' + esc(p.file_nome) + '<br>Salvato nella cartella <b>CARICHI NEW REUSE</b>.</div>',
         [{ label: 'Chiudi', cls: 'ghost' }, { label: '✉ Mail al Service Desk', fn: function () { Nr.mail(p.id_pratica); } }]);
-    } catch (e) { toast('File ' + T.tipo + ' non creato: ' + e.message + ' — ricrealo dal tab Carichi NEW/REUSE', 'ko'); }
+    } catch (e) { toast('File ' + T.tipo + ' non creato: ' + e.message + ' — ricrealo dal tab Pratiche Carichi NEW/REUSE', 'ko'); }
   },
   // ricrea il file di una ricezione (se la creazione automatica non è riuscita)
   pezziRic: function (idR) { return DB.t.UNITA.rows.filter(function (u) { return u.id_ricezione === idR; }); },
