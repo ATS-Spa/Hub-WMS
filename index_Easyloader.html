@@ -1801,7 +1801,8 @@ var Ingresso = {
       o.mail = { tipo: 'bal' };
     } else if (o.tipo === 'GOOD') {
       o.destinazione = frIn === '98787' ? 'INGEGNERIA' : (o.depDest || '');
-      o.nota = (r.man.nota !== undefined) ? r.man.nota : (o.destinazione ? o.destinazione + ' / ' + Ingresso.NR_SCHEDA : '');   // il numero della scheda si scrive al salvataggio
+      o.idPrev = ctx.idPrev ? ctx.idPrev(ctx.n) : '';   // ID che avrà la scheda (al salvataggio si scrive quello vero)
+      o.nota = (r.man.nota !== undefined) ? r.man.nota : (o.destinazione ? o.destinazione + ' / ' + (o.idPrev || Ingresso.NR_SCHEDA) : '');
       if (!v && !(jg && !L.s(jg.fr))) { o.msgs.push(['warn', 'FR non trovato in VLT']); o.warn = true; }
       if (!o.destinazione && !(jg && !L.s(jg.fr))) { o.msgs.push(['warn', 'Destinazione non ricavata dal depot VLT']); o.warn = true; }
     } else {
@@ -1865,7 +1866,10 @@ var Ingresso = {
     var re = new RegExp('/ 0?(\\d+)' + lettera + '$');
     var base = 0; DB.t.UNITA.rows.forEach(function (u) { if (u.stato === 'IN_GIACENZA' && (u.tipo === 'GOOD' || u.tipo === 'BALANCING')) { var m = re.exec(L.s(u.note).split(' | ')[0]); if (m) base = Math.max(base, parseInt(m[1], 10)); } });
     var lab = base;
-    var ctx = { serSeen: {}, frSeen: {}, giac: giac, giacFr: giacFr, n: 0, nextLabel: function () { lab++; return '0' + lab + lettera; } };
+    var maxR = 0; DB.t.UNITA.rows.forEach(function (u) { if (u._r > maxR) maxR = u._r; });
+    var uB = parseInt(DB.param('unita_id_base', '0'), 10) || 0;
+    var ctx = { serSeen: {}, frSeen: {}, giac: giac, giacFr: giacFr, n: 0, nextLabel: function () { lab++; return '0' + lab + lettera; },
+      idPrev: function (n) { return maxR ? 'U' + L.pad(uB + maxR + n - 1, 7) : ''; } };
     Ingresso.computed = Ingresso.rows.map(function (r) { ctx.n++; return Ingresso.calc(r, T, ctx); });
     // proposte di testata dal primo FR
     var first = Ingresso.computed.find(function (c) { return c.fr && DB.vltMap[c.fr]; });
@@ -1929,6 +1933,7 @@ var Ingresso = {
     try {
       var esito = await Ingresso.scrivi(T, C);
       Modal.close(); toast(C.length + ' pezzi caricati', 'ok');
+      if (Ingresso._idDiversi) Modal.open('Etichette da ristampare', Ingresso._idDiversi + ' GOOD hanno preso un ID scheda diverso da quello previsto (un altro operatore ha caricato nello stesso momento): se avevi già stampato le etichette dai pezzi letti, ristampale da Ingressi di oggi.');
       if (esito && (T.tipo === 'NEW' || T.tipo === 'REUSE')) Nr.daIngresso(T, esito.pezzi, esito.idR);
       if (esito && esito.pezzi.some(function (p) { return p.tipo === 'FAULTY'; })) Jun.dopoIngresso(esito.pezzi, L.isoToday());
       var pz = esito ? esito.pezzi.filter(function (p) { return p.stato === 'IN_ATTESA' && p.pending_fr; }) : [];
@@ -1997,9 +2002,11 @@ var Ingresso = {
     function colRange(t, h, r) { return t.cell(h, r) + ':' + t.col(h) + (r + n - 1); }
     var upd = [{ range: tR.cell('id_ricezione', rR), values: [[idR]] }];
     // GOOD: nella nota "destinazione / N.SCHEDA" va il numero della scheda appena creata (es. TELEBIT MI - FASTWEB / 21213)
+    Ingresso._idDiversi = uObjs.filter(function (o, i) { return C[i] && C[i].idPrev && C[i].tipo === 'GOOD' && C[i].idPrev !== o.id_unita; }).length;   // un altro operatore ha caricato nello stesso momento
     uObjs.forEach(function (o, i) {
-      var t0 = ' / ' + Ingresso.NR_SCHEDA; if (L.s(o.note).indexOf(t0) < 0) return;
-      var nt = L.s(o.note).replace(t0, ' / ' + Etichette.idScheda(o)); o.note = nt; mObjs[i].note = nt;
+      var pr = C[i] && C[i].idPrev, t0 = L.s(o.note).indexOf(' / ' + Ingresso.NR_SCHEDA) >= 0 ? ' / ' + Ingresso.NR_SCHEDA : (pr && L.s(o.note).indexOf(' / ' + pr) >= 0 ? ' / ' + pr : '');
+      if (!t0 || t0 === ' / ' + o.id_unita) return;
+      var nt = L.s(o.note).replace(t0, ' / ' + o.id_unita); o.note = nt; mObjs[i].note = nt;
       if ('note' in tU.idx) upd.push({ range: tU.cell('note', rU + i), values: [[nt]] });
       if ('note' in tM.idx) upd.push({ range: tM.cell('note', rM + i), values: [[nt]] });
     });
@@ -2073,7 +2080,8 @@ var Ingresso = {
   // ─ modifica di una riga di "Ingressi di oggi" (solo le proprie, solo se ancora in giacenza)
   EDIT_F: [['tipo', 'Tipo'], ['fr', 'FR'], ['rma', 'RMA'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['mnft', 'MNFT'], ['riparatore', 'Riparatore'], ['ubicazione', 'Ubicazione'], ['destinazione_prevista', 'Destinazione'], ['note', 'Nota']],
   MOV_DI: { tipo: 'tipo', fr: 'fr', rma: 'rma', seriale: 'seriale', pn: 'pn', mnft: 'mnft', riparatore: 'riparatore', ubicazione: 'ubicazione_a', note: 'note' },
-  puoModificare: function (u) { return u && u.creato_da === Auth.email && u.stato === 'IN_GIACENZA' && L.s(u.creato_il).slice(0, 10) === L.isoToday(); },
+  // le proprie righe di oggi ancora in giacenza; il super admin anche quelle degli altri operatori (nel LOG resta chi ha modificato)
+  puoModificare: function (u) { return u && (u.creato_da === Auth.email || App.isOwner) && u.stato === 'IN_GIACENZA' && L.s(u.creato_il).slice(0, 10) === L.isoToday(); },
   apriModifica: function (id) {
     var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; });
     if (!Ingresso.puoModificare(u)) { toast(u && u.creato_da !== Auth.email ? 'Puoi modificare solo le tue righe' : 'Riga non modificabile (non più in giacenza)', 'ko'); return; }
@@ -2116,7 +2124,7 @@ var Ingresso = {
           if ('ubicazione' in ch && ('posizione_note' in tM.idx)) upd.push({ range: tM.cell('posizione_note', rM), values: [[ch.ubicazione]] });
         } else rM = null;
       } else rM = null;
-      await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', [H.LOG.toRow({ data_ora: now, utente: Auth.email, azione: 'MODIFICA', foglio: 'UNITA', id_record: u.id_unita, dettaglio: JSON.stringify({ prima: prima, dopo: ch, movimento: rM ? u.id_mov_in : 'non trovato' }) })])]);
+      await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', [H.LOG.toRow({ data_ora: now, utente: Auth.email, azione: 'MODIFICA', foglio: 'UNITA', id_record: u.id_unita, dettaglio: JSON.stringify({ operatore_riga: u.creato_da !== Auth.email ? u.creato_da : undefined, prima: prima, dopo: ch, movimento: rM ? u.id_mov_in : 'non trovato' }) })])]);
       Object.keys(all).forEach(function (h) { u[h] = String(all[h]); });
       Modal.close(); toast('Riga ' + u.id_unita + ' aggiornata' + (rM ? '' : ' (movimento non aggiornato: controlla lo storico)'), rM ? 'ok' : 'ko');
       Ingresso.renderOggi(); Ingresso.ricalcola();
@@ -2127,7 +2135,7 @@ var Ingresso = {
     Xls.scarica('Pezzi_letti_' + (T.tipo || ''), [{ nome: 'Pezzi letti', headers: ['#', 'Tipo', 'FR', 'RMA', 'Seriale', 'P/N', 'P/N in anagrafica', 'MNFT', 'Riparatore', 'Stato VLT', 'Nota', 'Destinazione / Ubicazione', 'Controlli', 'Mittente', 'AWB', 'DDT mittente', 'Data ingresso'],
       rows: Ingresso.computed.map(function (c, i) { return [i + 1, c.tipo, c.fr, c.rma, c.ser, c.pn, c.pnAnag === undefined ? '' : (c.pnAnag ? 'SI' : 'NO'), c.mnft, c.rip, c.statoVlt, c.nota, c.tipo === 'NEW' || c.tipo === 'REUSE' ? c.ubicazione : [c.destinazione, c.ubicazione].filter(Boolean).join(' · '), c.msgs.map(function (m) { return m[1]; }).join(' / '), T.mittente, T.awb, T.ddt, T.data]; }) }]);
   },
-  etichetteLetti: function () { var T = Ingresso.T(); Etichette.pezzi(Ingresso.computed.map(function (c) { return Etichette.ingresso({ tipo: c.tipo, dest: c.destinazione, fr: c.fr, po: T.po, seriale: c.ser, pn: c.pn, riparatore: c.rip, ubicazione: c.ubicazione, mittente: T.mittente }); })); },
+  etichetteLetti: function () { var T = Ingresso.T(); Etichette.pezzi(Ingresso.computed.map(function (c) { return Etichette.ingresso({ tipo: c.tipo, id: c.idPrev, dest: c.destinazione, fr: c.fr, po: T.po, seriale: c.ser, pn: c.pn, riparatore: c.rip, ubicazione: c.ubicazione, mittente: T.mittente }); })); },
   excelOggi: function () {
     var U = Ingresso._oggi || [];
     Xls.scarica('Ingressi_di_oggi', [Object.assign({ nome: 'Ingressi di oggi' }, Xls.oggetti(U, [['id_unita', 'ID'], ['tipo', 'Tipo'], ['fr', 'FR'], ['rma', 'RMA'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['mnft', 'MNFT'], ['riparatore', 'Riparatore'], ['destinazione_prevista', 'Destinazione'], ['ubicazione', 'Ubicazione'], ['note', 'Nota'], ['data_in', 'Data ingresso'], ['id_mov_in', 'Movimento'], ['creato_da', 'Operatore'], ['creato_il', 'Registrato il']]))]);
@@ -4339,7 +4347,14 @@ Grid.alta = function (wr) {
   var main = wr.closest('.main'); if (!main) return;
   var top = wr.getBoundingClientRect().top - main.getBoundingClientRect().top + main.scrollTop;
   var foot = wr.nextElementSibling && wr.nextElementSibling.classList.contains('hint') ? 30 : 8;
-  wr.style.maxHeight = Math.max(260, main.clientHeight - top - foot - 18) + 'px'; wr._fissa = false;
+  var mx = Math.max(260, main.clientHeight - top - foot - 18);
+  wr.style.maxHeight = mx + 'px'; wr._fissa = false;
+  // poche righe: il riquadro si allunga fino in fondo allo schermo (barra di scorrimento orizzontale in basso), solo se la pagina non scorre già
+  wr.style.minHeight = '';
+  var mt = main.getBoundingClientRect().top, fondo = 0;
+  Array.prototype.forEach.call(main.children, function (c) { if (c.offsetParent) fondo = Math.max(fondo, c.getBoundingClientRect().bottom - mt + main.scrollTop); });
+  var gap = main.clientHeight - fondo - 18;
+  if (gap > 4) wr.style.minHeight = Math.min(mx, wr.offsetHeight + gap - 4) + 'px';
 };
 window.addEventListener('resize', function () { clearTimeout(Grid._rz); Grid._rz = setTimeout(function () { document.querySelectorAll('.main .tbl-wrap').forEach(function (w) { if (w._fissa === false) Grid.alta(w); }); }, 150); });
 Grid.prototype.render = function (rifaiTesta) {
@@ -8345,7 +8360,7 @@ var Etichette = {
     var nr = x.tipo === 'NEW' || x.tipo === 'REUSE';
     // GOOD: numero della scheda al posto dell'FR, in basso l'FR al posto del riparatore, in alto a destra l'ubicazione (o la destinazione se non c'è)
     if (x.tipo === 'GOOD') {
-      var idS = x.id ? Etichette.idScheda({ id_unita: x.id }) : '';
+      var idS = L.s(x.id);   // ID scheda per esteso (U0021213)
       return { lab: idS ? 'SCHEDA' : 'FR', fr: idS || L.s(x.fr), seriale: x.seriale, pn: x.pn, tipo: x.tipo, ubi: L.up(x.ubicazione) || L.up(x.dest), sotto: [idS && L.s(x.fr) ? 'FR ' + L.s(x.fr) : '', x.data].map(L.s).filter(Boolean).join(' · ') };
     }
     return { lab: nr ? 'PO/MRN' : 'FR', fr: nr ? L.s(x.po) : L.s(x.fr), seriale: x.seriale, pn: x.pn, tipo: x.tipo, ubi: L.up(x.ubicazione), sotto: [x.riparatore, x.mittente, x.data].map(L.s).filter(Boolean).join(' · ') };
