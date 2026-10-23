@@ -2912,6 +2912,19 @@ var Rial = {
 var Pwd = {
   ok: async function (pw) { var par = L.s(DB.param('password_eliminazione', '')); return par ? (/^sha256:/i.test(par) ? (await Nr.sha(pw)) === par.slice(7).toLowerCase() : pw === par) : (await Nr.sha(pw)) === Nr.PWD; }
 };
+// valori della bonifica in blocco: uno solo = uguale per tutte le righe; più valori (separati da ; o a capo, o da spazi per i codici)
+// = uno per riga, nello stesso ordine in cui le righe sono in tabella
+var Lista = {
+  CODICI: /^(fr|rma|seriale|pn|awb|ddt|po_mrn|ubicazione|tipo|mnft|material)$/,
+  leggi: function (campo, v, n, nome) {
+    v = L.s(v); if (!v) return { vals: null };
+    var t = v.split(/\s*[;\r\n\t]+\s*/).map(function (x) { return x.trim(); }).filter(Boolean);
+    if (t.length === 1 && Lista.CODICI.test(campo) && /\s/.test(t[0])) t = t[0].split(/\s+/);
+    if (t.length <= 1) return { vals: null };
+    if (t.length !== n) return { err: (nome || campo) + ': hai scritto ' + t.length + ' valori ma le righe sono ' + n + ' (uno per riga, nello stesso ordine della tabella; oppure un valore solo per tutte)' };
+    return { vals: t };
+  }
+};
 var Bon = {
   // intestazione dell'Excel di Giacenze → campo della scheda
   COL: { 'ID': 'id_unita', 'SERIALE': 'seriale', 'TIPO': 'tipo', 'FR': 'fr', 'RMA': 'rma', 'P/N': 'pn', 'MATERIAL': 'material', 'MNFT': 'mnft', 'RIPARATORE': 'riparatore', 'UBICAZIONE': 'ubicazione', 'DESTINAZIONE': 'destinazione_prevista', 'NOTA': 'note' },
@@ -2940,7 +2953,7 @@ var Bon = {
     var riga = function (i) { return '<div class="row" style="gap:8px;margin-top:6px;flex-wrap:nowrap"><select class="fc bmF" style="width:170px">' + opz + '</select><input class="fc bmV" style="flex:1" autocomplete="off" placeholder="nuovo valore (vuoto = svuota il campo)"></div>'; };
     Modal.html('🧹 Bonifica delle ' + U.length + ' schede filtrate',
       '<div class="hint" style="margin-bottom:8px">Cambia gli stessi campi su <b>tutte le ' + U.length + ' schede</b> che vedi con i filtri di Giacenze. Stessa procedura della Bonifica da Excel: controlli (FR su VLT, seriali doppi…), dati completati in automatico, <b>anteprima</b> prima di salvare, movimento VARIAZIONE e LOG.</div>' +
-      '<div class="fg"><span class="fl">Campi da cambiare</span>' + [0, 1, 2].map(riga).join('') + '</div>' +
+      '<div class="fg"><span class="fl">Campi da cambiare</span>' + [0, 1, 2].map(riga).join('') + '<div class="hint" style="margin-top:4px">Un valore = uguale per tutte. <b>Più valori</b> separati da <b>;</b> (o incollati da una colonna Excel) = <b>uno per scheda, nell\'ordine della tabella</b> (come nell\'Excel scaricato): devono essere tanti quante le schede (' + U.length + ').</div></div>' +
       '<label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:13px"><input type="checkbox" id="bmCoda" checked> Nota: aggiungi in coda alla nota di ogni scheda (non sostituirla)</label>' +
       '<div class="fg" style="margin-top:8px"><span class="fl">Motivo *</span><input class="fc" id="bmMot" autocomplete="off" placeholder="es. riparatore corretto su richiesta SD"></div>' +
       '<div class="fg" style="margin-top:8px"><span class="fl">Password *</span><input class="fc" type="password" id="bmPwd" autocomplete="new-password"></div><div class="hint" id="bmErr" style="margin-top:6px"></div>',
@@ -2955,10 +2968,11 @@ var Bon = {
         var vuoti = ch.filter(function (c) { return !c[1]; }).map(function (c) { return Bon.NOMI[c[0]] || c[0]; });
         if (vuoti.some(function (n) { return n === 'Seriale' || n === 'Tipo'; })) return err('Seriale e Tipo non si possono svuotare');
         var coda = $('bmCoda').checked, inv = {}; Object.keys(Bon.COL).forEach(function (k) { inv[Bon.COL[k]] = k; });
+        for (var q = 0; q < ch.length; q++) { var li = Lista.leggi(ch[q][0], ch[q][1], U.length, Bon.NOMI[ch[q][0]]); if (li.err) return err(li.err); ch[q][2] = li.vals; }
         // stesse righe dell'Excel di Giacenze (ID + colonne); un valore vuoto qui vuol dire "svuota": si gestisce dopo il calcolo
         var R = U.map(function (u) {
           var o = { 'ID': u.id_unita };
-          ch.forEach(function (c) { var v = c[1]; if (c[0] === 'note' && coda && v) { var n0 = Spec.pulita(u.note); v = n0 ? n0 + ' · ' + v : v; } o[inv[c[0]]] = v || '\u0000'; });
+          ch.forEach(function (c) { var v = c[2] ? c[2][U.indexOf(u)] : c[1]; if (c[0] === 'note' && coda && v) { var n0 = Spec.pulita(u.note); v = n0 ? n0 + ' · ' + v : v; } o[inv[c[0]]] = v || '\u0000'; });
           return o;
         });
         var col = ch.map(function (c) { return [inv[c[0]], c[0]]; });
@@ -3403,7 +3417,7 @@ var MovBon = {
     var riga = function () { return '<div class="row" style="gap:8px;margin-top:6px;flex-wrap:nowrap"><select class="fc mbF" style="width:220px">' + opz + '</select><input class="fc mbV" style="flex:1" autocomplete="off" placeholder="nuovo valore (vuoto = svuota il campo)"></div>'; };
     Modal.html('🧹 Bonifica dei ' + M.length + ' movimenti filtrati',
       '<div class="hint" style="margin-bottom:8px">Cambia gli stessi campi su <b>tutti i ' + M.length + ' movimenti IN/OUT</b> che vedi con i filtri (gli annullati e gli interni restano fuori). Come con il ✎ di un movimento: seriale, P/N, MNFT, tipo, FR, RMA e riparatore si aggiornano anche sulla scheda, sugli altri suoi movimenti e sulle righe di spedizione (solo dove c\'è il valore vecchio); la nota dell\'ingresso anche sulla scheda. Prima vedi l\'anteprima.</div>' +
-      '<div class="fg"><span class="fl">Campi da cambiare</span>' + [0, 1, 2].map(riga).join('') + '</div>' +
+      '<div class="fg"><span class="fl">Campi da cambiare</span>' + [0, 1, 2].map(riga).join('') + '<div class="hint" style="margin-top:4px">Un valore = uguale per tutti. <b>Più valori</b> separati da <b>;</b> (o incollati da una colonna Excel) = <b>uno per movimento, nell\'ordine della tabella</b> (come in ⬇ Excel vista): devono essere tanti quanti i movimenti (' + M.length + ').</div></div>' +
       '<label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:13px"><input type="checkbox" id="mbCoda" checked> Note: aggiungi in coda alla nota di ogni movimento (non sostituirla)</label>' +
       '<div class="fg" style="margin-top:8px"><span class="fl">Motivo *</span><input class="fc" id="mbMot" autocomplete="off" placeholder="es. DDT del mittente corretto"></div>' +
       '<div class="fg" style="margin-top:8px"><span class="fl">Password *</span><input class="fc" type="password" id="mbPwd" autocomplete="new-password"></div><div class="hint" id="mbErr" style="margin-top:6px"></div>',
@@ -3415,6 +3429,7 @@ var MovBon = {
         if (!C.length) return err('Scegli almeno un campo');
         if (C.some(function (c) { return (c[0] === 'seriale' || c[0] === 'tipo') && !c[1]; })) return err('Seriale e Tipo non si possono svuotare');
         if (!mot) { $('mbMot').focus(); return err('Scrivi il motivo'); }
+        for (var q = 0; q < C.length; q++) { var li = Lista.leggi(C[q][0], C[q][1], MovBon.M.length, MovBon.nome(C[q][0])); if (li.err) return err(li.err); C[q][2] = li.vals; }
         if (!(await Pwd.ok($('mbPwd').value))) return err('Password errata');
         MovBon.calcola(C, $('mbCoda').checked, mot); MovBon.anteprima();
       } }], true);
@@ -3422,11 +3437,11 @@ var MovBon = {
   calcola: function (C, coda, mot) {
     var U = {}; DB.t.UNITA.rows.forEach(function (u) { U[u.id_unita] = u; });
     MovBon.mot = mot;
-    MovBon.L = MovBon.M.map(function (m) {
+    MovBon.L = MovBon.M.map(function (m, iM) {
       var it = { m: m, u: m.id_unita ? U[m.id_unita] || null : null, ch: {}, avv: [], err: '' };
       if (it.u) it.rev = L.s(it.u.rev);
       C.forEach(function (c) {
-        var k = c[0], v = c[1];
+        var k = c[0], v = c[2] ? c[2][iM] : c[1];
         if ((k === 'posizione_note' || k === 'anomalia') && m.direzione !== 'IN') return;
         if (/^(seriale|pn|tipo|mnft|awb|ddt)$/.test(k)) v = L.up(v);
         if (k === 'fr' && v) v = L.frKey(v);
