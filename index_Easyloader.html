@@ -2118,9 +2118,11 @@ var Ingresso = {
     var ric = {}; ((DB.t.RICEZIONI || {}).rows || []).forEach(function (r) { ric[r.id_ricezione] = r; });
     Etichette.pezzi((Ingresso._oggi || []).map(function (u) { var r = ric[u.id_ricezione] || {}; return Etichette.ingresso({ tipo: u.tipo, fr: u.fr, po: r.po_mrn, seriale: u.seriale, pn: u.pn, riparatore: u.riparatore, ubicazione: u.ubicazione, mittente: r.mittente, data: L.itDate(u.data_in) }); }));
   },
+  // schede create da riallineamento / rettifica / rimesse in giacenza: non sono ingressi fisici del giorno
+  nonIngresso: function (u) { return /riallineata da movimento|RETTIFICA \(aggiunto\)|rimessa in giacenza/i.test(L.s(u.note)); },
   renderOggi: function () {
     var tutti = $('oggiTutti').checked, oggi = L.isoToday();
-    var list = Ingresso._oggi = DB.t.UNITA.rows.filter(function (u) { return L.s(u.creato_il).slice(0, 10) === oggi && u.creato_da !== 'MIGRAZIONE' && u.stato !== 'ANNULLATO' && (tutti || u.creato_da === Auth.email); }).reverse();
+    var list = Ingresso._oggi = DB.t.UNITA.rows.filter(function (u) { return L.s(u.creato_il).slice(0, 10) === oggi && u.creato_da !== 'MIGRAZIONE' && u.stato !== 'ANNULLATO' && !Ingresso.nonIngresso(u) && (tutti || u.creato_da === Auth.email); }).reverse();
     var by = {}; list.forEach(function (u) { by[u.tipo] = (by[u.tipo] || 0) + 1; });
     $('oggiStats').innerHTML = '<div class="stat"><b>' + list.length + '</b><span>totale</span></div>' + Object.keys(by).map(function (k) { return '<div class="stat"><b>' + by[k] + '</b><span>' + esc(k) + '</span></div>'; }).join('');
     $('oggiRows').innerHTML = list.length ? list.slice(0, 1000).map(function (u) {
@@ -3527,7 +3529,7 @@ var Chv = {
     var add = function (it) { if (visti[it.k]) return; visti[it.k] = 1; items.push(it); };
     if (proc === 'INGRESSI') {
       DB.t.UNITA.rows.forEach(function (u) {
-        if ((L.s(u.creato_il).slice(0, 10) !== giorno && L.s(u.fr_assegnato_il).slice(0, 10) !== giorno) || u.creato_da === 'MIGRAZIONE' || u.stato === 'ANNULLATO') return;
+        if ((L.s(u.creato_il).slice(0, 10) !== giorno && L.s(u.fr_assegnato_il).slice(0, 10) !== giorno) || u.creato_da === 'MIGRAZIONE' || u.stato === 'ANNULLATO' || Ingresso.nonIngresso(u)) return;
         if (!L.s(u.fr) || ['NEW', 'REUSE', 'BALANCING'].indexOf(u.tipo) >= 0) return;
         var v = DB.vltMap[u.fr];
         add({ k: 'IN:' + u.fr, fr: u.fr, tipo: u.tipo, note: Chv.nota(u.note), stato_file: v ? v.stato : '', conf_serial: u.seriale, conf_tmpn: u.pn, seriale: u.seriale });
@@ -3636,9 +3638,14 @@ var Chv = {
     var f = Chv.fatti(proc, Chv.giorno());
     Chv._vedi = { proc: proc, tutti: p.tutti };
     var rows = p.tutti.map(function (it, i) { var e = f[it.k]; return '<tr' + (Chv.FATTO[e] ? ' class="r-off"' : (e === 'ERRORE' ? ' class="r-err"' : '')) + '><td>' + (Chv.FATTO[e] ? '' : '<input type="checkbox" class="chvMan" data-i="' + i + '" data-e="' + esc(e || '') + '">') + '</td><td class="mono">' + esc(it.fr || it.rma) + '</td><td class="mono">' + esc(it.seriale || (it.serials || []).join(' ')) + '</td><td>' + esc(it.stato_file || it.dest || '') + '</td><td>' + esc(it.note || it.awb || '') + '</td><td>' + esc(e || 'da fare') + '</td></tr>'; }).join('');
-    Modal.html(Chv.PROC[proc] + ' · ' + L.itDate(Chv.giorno()), '<div class="hint" style="margin-bottom:6px">Schede chiuse davvero su VLT ma segnate "saltato" o "errore" (es. falso errore di salvataggio): spuntale e premi <b>✔ Segna come già chiuse</b>. In alternativa rimandale a VLT: lo script vede lo stato già finale e le segna "già a posto" da solo. <label style="margin-left:8px"><input type="checkbox" id="chvManSE"> seleziona saltate ed errori</label></div><div class="tbl-wrap modal-scroll"><table><thead><tr><th></th><th>' + (proc === 'RMA' ? 'RMA' : 'FR') + '</th><th>Seriale</th><th>' + (proc === 'ACK' || proc === 'RMA' ? 'Destinazione' : 'Stato VLT (file)') + '</th><th>' + (proc === 'ACK' || proc === 'RMA' ? 'AWB' : 'Nota') + '</th><th>Esito</th></tr></thead><tbody>' + (rows || '<tr><td colspan="6" class="empty">Nessuna scheda</td></tr>') + '</tbody></table></div>' +
+    Modal.html(Chv.PROC[proc] + ' · ' + L.itDate(Chv.giorno()), '<div class="hint" style="margin-bottom:6px">Schede chiuse davvero su VLT ma segnate "saltato" o "errore" (es. falso errore di salvataggio): spuntale e premi <b>✔ Segna come già chiuse</b>. In alternativa rimandale a VLT: lo script vede lo stato già finale e le segna "già a posto" da solo.</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px"><button class="btn ghost sm" id="chvSelSE" type="button">Seleziona saltate ed errori</button><button class="btn ghost sm" id="chvSelNo" type="button">Deseleziona</button><span class="hint" id="chvSelN" style="margin:0">0 selezionate</span></div><div class="tbl-wrap modal-scroll"><table><thead><tr><th><input type="checkbox" id="chvTutti" title="Seleziona tutte"></th><th>' + (proc === 'RMA' ? 'RMA' : 'FR') + '</th><th>Seriale</th><th>' + (proc === 'ACK' || proc === 'RMA' ? 'Destinazione' : 'Stato VLT (file)') + '</th><th>' + (proc === 'ACK' || proc === 'RMA' ? 'AWB' : 'Nota') + '</th><th>Esito</th></tr></thead><tbody>' + (rows || '<tr><td colspan="6" class="empty">Nessuna scheda</td></tr>') + '</tbody></table></div>' +
       (p.scarti.length ? '<div class="hint warn" style="margin-top:8px">Non inviabili: ' + p.scarti.map(function (s) { return esc(s.motivo); }).join(' · ') + '</div>' : ''), [{ label: 'Chiudi', cls: 'ghost' }, { label: '⬇ Excel', fn: function () { Chv.excel(proc); } }, { label: '✔ Segna come già chiuse', cls: 'green', keep: true, fn: function () { Chv.segnaMan(); } }], true);
-    var se = $('chvManSE'); if (se) se.onchange = function () { document.querySelectorAll('#mBody .chvMan').forEach(function (cb) { if (cb.getAttribute('data-e') === 'SALTATO' || cb.getAttribute('data-e') === 'ERRORE') cb.checked = se.checked; }); };
+    var cbs = function () { return Array.prototype.slice.call(document.querySelectorAll('#mBody .chvMan')); };
+    var conta = function () { var c = cbs(), n = c.filter(function (x) { return x.checked; }).length, t = $('chvTutti'), q = $('chvSelN'); if (q) q.textContent = n + ' selezionate'; if (t) { t.checked = c.length > 0 && n === c.length; t.indeterminate = n > 0 && n < c.length; } };
+    var tt = $('chvTutti'); if (tt) tt.onchange = function () { cbs().forEach(function (cb) { cb.checked = tt.checked; }); conta(); };
+    var se = $('chvSelSE'); if (se) se.onclick = function () { cbs().forEach(function (cb) { var e = cb.getAttribute('data-e'); if (e === 'SALTATO' || e === 'ERRORE') cb.checked = true; }); conta(); };
+    var sn = $('chvSelNo'); if (sn) sn.onclick = function () { cbs().forEach(function (cb) { cb.checked = false; }); conta(); };
+    cbs().forEach(function (cb) { cb.onchange = conta; });
   },
   // correzione a mano: si aggiunge un esito GIA_FATTO (lo storico resta), con motivo e operatore; nel LOG
   segnaMan: async function () {
@@ -4205,14 +4212,19 @@ var Ddt = {
     y += 18;
     // dettaglio colli in grande (tipo, misure, peso): due colli per riga
     if (C.length) {
-      d.setFont('helvetica', 'bold'); d.setFontSize(9); d.text('DETTAGLIO COLLI', M, y + 1); y += 5.5;
-      d.setFontSize(9);   // stesso corpo dell'etichetta "DETTAGLIO COLLI"
+      // in un riquadro come gli altri: etichetta piccola in alto, colli in grassetto 10 (1 punto più dei 9 di prima)
+      d.setFont('helvetica', 'bold'); d.setFontSize(10);
       var tc = C.map(function (c, ci) { return (ci + 1) + ') ' + L.s(c.tipo_collo || 'PLT') + '  ' + c.lunghezza_cm + 'x' + c.larghezza_cm + 'x' + c.altezza_cm + ' cm  ' + c.peso_kg + ' kg'; });
-      var per = tc.every(function (t) { return d.getTextWidth(t) < W / 2 - 4; }) ? 2 : 1;   // due per riga se ci stanno
-      for (var ci = 0; ci < C.length; ci++) {
-        d.text(tc[ci], M + (ci % per) * (W / 2), y);
-        if (ci % per === per - 1 || ci === C.length - 1) y += 4.6;
-        if (y > 250) { d.addPage(); y = 20; }
+      var per = tc.every(function (t) { return d.getTextWidth(t) < W / 2 - 6; }) ? 2 : 1;   // due per riga se ci stanno
+      var nR = Math.ceil(C.length / per), LH = 5, ri = 0;
+      while (ri < nR) {
+        var spazio = Math.max(1, Math.floor((275 - y - 8) / LH)), q = Math.min(nR - ri, spazio), h = 7 + q * LH + 1;
+        d.setDrawColor(120); d.rect(M, y, W, h);
+        d.setFont('helvetica', 'bold'); d.setFontSize(7.5); d.text('DETTAGLIO COLLI' + (ri ? ' (segue)' : ''), M + 2, y + 4);
+        d.setFontSize(10);
+        for (var k = 0; k < q; k++) for (var j = 0; j < per; j++) { var ci = (ri + k) * per + j; if (ci < C.length) d.text(tc[ci], M + 2 + j * (W / 2), y + 9 + k * LH); }
+        ri += q; y += h + 2;
+        if (ri < nR) { d.addPage(); y = 20; }
       }
       d.setFont('helvetica', 'normal'); y += 2;
     }
@@ -5870,6 +5882,7 @@ var Rma = {
         { k: 'posizione', label: 'Posizione', filter: 'select', cls: 'mono' },
         { k: 'note', label: 'Note', filter: 'text' },
         { k: 'creato_da', label: 'Da', filter: 'select', get: function (c) { return App.sigla(c.creato_da); } },
+        { k: 'usc', label: 'In uscita', filter: 'text', get: function (c) { var x = Rma.carMotivo(c); return x ? 'NO: ' + x.m : 'SI'; }, html: function (c) { var x = Rma.carMotivo(c); return x ? '<span class="pill p-amber" title="' + esc(x.m) + '">no</span>' + (x.fix === 'RICOLLEGA' ? ' <button class="ico-btn" title="Rimetti in uscita: ' + esc(x.m) + '" onclick="Rma.carRicollega(\'' + c.id_carico + '\')">↻</button>' : '') : '<span class="pill p-green">sì</span>'; } },
         { k: 'pend', label: 'Pending', filter: 'text', get: function (c) { var p = Rma.pend(c.id_unita); return p ? p.motivo : ''; }, html: function (c) { return Rma.pendCella({ id_unita: c.id_unita }); } },
         { k: 'az', label: '', html: function (c) { return '<button class="ico-btn" title="Annulla carico: il pezzo torna in giacenza" onclick="Rma.carAnnulla(\'' + c.id_carico + '\')">✕</button>'; } }
       ]
@@ -6377,6 +6390,39 @@ var Rma = {
     out.forEach(function (x) { if (!x.rit && R[x.rma]) x.rit = R[x.rma]; });
     return out.filter(function (x) { return L.s(x.dest) && !Rma.pend(x.u.id_unita); });   // in pending: fermo a deposito finché non viene sbloccato
   },
+  // perché un carico aperto non compare nelle uscite ('' = compare). fix: 'RICOLLEGA' se si può rimettere la scheda in lavorazione
+  carMotivo: function (c) {
+    var U = DB.t.UNITA.rows, u = U.find(function (x) { return x.id_unita === c.id_unita; }), alt = null;
+    if (!u || Giacenze.A_MAG.indexOf(u.stato) < 0) alt = U.find(function (x) { return x !== u && L.up(x.seriale) === L.up(c.seriale) && Giacenze.A_MAG.indexOf(x.stato) >= 0; }) || null;
+    if (!u && !alt) return { m: 'scheda del pezzo non trovata in giacenza' };
+    if (!u || (alt && Giacenze.A_MAG.indexOf(u.stato) < 0)) return { m: 'il carico punta a una scheda ' + (u ? 'in stato ' + u.stato : 'inesistente') + ', ma il seriale è in giacenza su un\'altra scheda (' + alt.id_unita + ')', fix: 'RICOLLEGA', u: alt };
+    if (u.stato !== 'IN_LAVORAZIONE') return Giacenze.A_MAG.indexOf(u.stato) >= 0 ? { m: 'la scheda è in stato ' + u.stato + ' (dovrebbe essere IN_LAVORAZIONE)', fix: 'RICOLLEGA', u: u } : { m: 'la scheda è in stato ' + u.stato + ' (già uscita o tolta): annulla il carico' };
+    if (!L.s(c.destinazione)) return { m: 'manca la destinazione' };
+    var p = Rma.pend(u.id_unita); if (p) return { m: 'in pending RMA: ' + L.s(p.motivo) };
+    var sp = L.s(u.id_spedizione) && DB.t.SPEDIZIONI.rows.find(function (s) { return s.id_spedizione === u.id_spedizione && s.tipo === 'RMA' && s.n_ddt && s.stato === 'PRONTA'; });
+    if (sp && L.normDate(sp.data) !== $('uscData').value) return { m: 'è nel DDT ' + sp.n_ddt + ' già pronto del ' + L.itDate(L.normDate(sp.data)) };
+    return null;
+  },
+  carNonVisti: function () { return Rma.carichi().map(function (c) { return { c: c, x: Rma.carMotivo(c) }; }).filter(function (o) { return o.x; }); },
+  carRicollega: async function (id) {
+    var c = DB.t.CARICHI_RMA.rows.find(function (x) { return x.id_carico === id; }); if (!c) return;
+    var x = Rma.carMotivo(c); if (!x || x.fix !== 'RICOLLEGA') { toast('Niente da ricollegare', 'ko'); return; }
+    var u = x.u;
+    if (!(await Modal.confirm('Rimetti in uscita', c.seriale + ' · RMA ' + (c.rma || '—') + ' → ' + c.destinazione + '\n\nLa scheda ' + u.id_unita + ' (ora ' + u.stato + ') torna IN_LAVORAZIONE con RMA e destinazione del carico.'))) return;
+    var tU = DB.t.UNITA, tC = DB.t.CARICHI_RMA, now = L.nowStamp(), upd = [];
+    var ch = { stato: 'IN_LAVORAZIONE', rma: L.s(c.rma), destinazione_prevista: L.s(c.destinazione), modificato_il: now, modificato_da: Auth.email, rev: (parseInt(u.rev, 10) || 1) + 1 };
+    Object.keys(ch).forEach(function (h) { if (h in tU.idx) { u[h] = String(ch[h]); upd.push({ range: tU.cell(h, u._r), values: [[u[h]]] }); } });
+    if (c.id_unita !== u.id_unita) { c.id_unita = u.id_unita; upd.push({ range: tC.cell('id_unita', c._r), values: [[u.id_unita]] }); }
+    try { await Promise.all([API.batchUpdate(DB.id, upd), API.append(DB.id, 'LOG', [App.log('RICOLLEGA_CARICO', 'CARICHI_RMA', id, { seriale: c.seriale, id_unita: u.id_unita, stato_prima: x.u === u ? x.m : '' })])]); toast('Carico rimesso in uscita', 'ok'); Rma.render(); }
+    catch (e) { toast('Errore: ' + e.message, 'ko'); }
+  },
+  carCard: function () {
+    var L0 = Rma.carNonVisti(); if (!L0.length) return '';
+    return '<div class="hint warn" style="margin-bottom:10px"><b>⚠ ' + L0.length + ' carichi NEW/REUSE aperti non compaiono nelle uscite</b>' + L0.map(function (o) {
+      return '<div style="margin-top:4px"><span class="mono">' + esc(o.c.seriale) + '</span> · RMA ' + esc(o.c.rma || '—') + ' → ' + esc(o.c.destinazione || '—') + ': ' + esc(o.x.m) +
+        (o.x.fix === 'RICOLLEGA' ? ' <button class="btn ghost sm" onclick="Rma.carRicollega(\'' + o.c.id_carico + '\')">↻ Rimetti in uscita</button>' : '') + '</div>';
+    }).join('') + '</div>';
+  },
   escl: function () { return lsG('usc_escl_' + $('uscData').value) || {}; },
   toggle: function (id, on) { var e = Rma.escl(); if (on) delete e[id]; else e[id] = 1; lsS('usc_escl_' + $('uscData').value, e); Rma.renderUscite(); },
   cp: function (dest) { return DB.t.CONTROPARTI.rows.find(function (c) { return L.up(c.codice) === L.up(dest); }) || null; },
@@ -6402,7 +6448,7 @@ var Rma = {
     $('rmaStats').innerHTML = '<div class="stat"><b>' + G.length + '</b><span>destinazioni</span></div><div class="stat"><b>' + tot + '</b><span>pezzi da spedire</span></div>' + (nM ? '<div class="stat"><b style="color:var(--amber)">' + nM + '</b><span>senza RMA</span></div>' : '') + '<div class="stat"><b style="color:var(--violet)">' + nP + '</b><span>pronte per ddt</span></div><div class="stat"><b style="color:var(--green)">' + sped + '</b><span>destinazioni spedite</span></div>' +
       '<div class="stat"><b style="color:var(--green)">' + nSch + '</b><span>schede spedite</span></div><div class="stat"><b>' + nCol + '</b><span>colli spediti · ' + Math.round(kgS * 100) / 100 + ' kg</span></div>';
     var PILL = { BOZZA: 'p-blue', PRONTA: 'p-violet', SPEDITA: 'p-green' };
-    $('rmaUsc').innerHTML = Rma.pendCard() + (G.length ? '<div class="ack-grid usc-grid">' + G.map(function (g) {
+    $('rmaUsc').innerHTML = Rma.carCard() + Rma.pendCard() + (G.length ? '<div class="ack-grid usc-grid">' + G.map(function (g) {
       var s = g.s, k = Ack.key(g.dest), cp = Rma.cp(g.dest), st = s ? s.stato : 'DA PREPARARE', done = s && s.stato === 'SPEDITA', lock = '';
       var col = done ? Ack.colliDb(s.id_spedizione).map(function (c) { return { tipo: c.tipo_collo, misura: [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X'), peso: c.peso_kg }; })
         : (Rma.colli[k] || (s ? Ack.colliDb(s.id_spedizione).map(function (c) { return { tipo: c.tipo_collo, misura: [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X'), peso: c.peso_kg }; }) : []));
