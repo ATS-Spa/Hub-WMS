@@ -659,6 +659,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
         <div class="fg" style="flex:1;min-width:220px"><span class="fl">Cerca seriale, FR, RMA, DDT, AWB, P/N, PO, mittente</span><input class="fc mono" id="stoQ" oninput="Sto.cerca()"></div>
         <button class="btn ghost sm" style="margin-bottom:2px" onclick="Sto.ricarica()">↻ Ricarica</button>
         <button class="btn ghost sm" style="margin-bottom:2px" onclick="Sto.colonneScegli()" title="Mostra o nascondi colonne">⚙ Colonne</button>
+        <button class="btn ghost sm" style="margin-bottom:2px" onclick="MovBon.apri()" title="Cambia in blocco uno o più campi di tutti i movimenti IN/OUT che vedi con i filtri: motivo, anteprima, password; si aggiornano anche schede e altri movimenti collegati, come con il ✎">🧹 Bonifica</button>
         <button class="btn ghost sm" style="margin-bottom:2px" onclick="Sto.etichette()" title="Un'etichetta 10×5 per ogni riga che vedi (filtri e ricerca della scheda aperta)">🏷 Etichette</button>
         <button class="btn ghost sm" style="margin-bottom:2px" onclick="Sto.excelVista()" title="Le righe della scheda aperta, con i filtri">⬇ Excel vista</button>
         <button class="btn sm" style="margin-bottom:2px" onclick="Sto.excelEasyloader()" title="File come l'Easyloader: fogli INBOUND e OUTBOUND del periodo scelto">⬇ Excel Easyloader</button>
@@ -3385,6 +3386,124 @@ var MovEd = {
       toast(r.id_mov + ' salvato' + (u && Object.keys(uCh).length ? ' · aggiornata anche la scheda ' + u.id_unita : '') + (altri.loc.length ? ' · ' + altri.loc.length + ' altri movimenti' : ''), 'ok');
       Sto.render(); if (App.tab === 'giacenze') Giacenze.render();
     } catch (e) { Modal.progress(''); err('Non salvato: ' + e.message); }
+  }
+};
+
+
+// ─ BONIFICA DEI MOVIMENTI FILTRATI (tab Movimenti): come il ✎ di un movimento, ma su tutte le righe IN/OUT che vedi.
+//   Motivo, password e anteprima; seriale, P/N, MNFT, tipo, FR, RMA e riparatore si riflettono su scheda, altri movimenti e righe di spedizione.
+var MovBon = {
+  CAMPI: [['tipo', 'Tipo'], ['fr', 'FR'], ['rma', 'RMA'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['mnft', 'MNFT'], ['riparatore', 'Riparatore'], ['po_mrn', 'PO / MRN'], ['controparte', 'Mittente / destino'], ['awb', 'AWB'], ['vettore', 'Vettore'], ['ddt', 'DDT'], ['posizione_note', 'Posizione e note new/reuse (IN)'], ['anomalia', 'Anomalia (IN)'], ['note', 'Note']],
+  nome: function (k) { var f = MovBon.CAMPI.find(function (x) { return x[0] === k; }); return f ? f[1] : k; },
+  apri: function () {
+    var M = (Sto.grid(Sto.sez).visibili || []).filter(function (m) { return (m.direzione === 'IN' || m.direzione === 'OUT') && !Sto.annullato(m) && L.s(m.id_mov); });
+    if (!M.length) { toast('Nessun movimento IN/OUT con i filtri attuali', 'ko'); return; }
+    MovBon.M = M;
+    var opz = '<option value="">— campo —</option>' + MovBon.CAMPI.map(function (f) { return '<option value="' + f[0] + '">' + esc(f[1]) + '</option>'; }).join('');
+    var riga = function () { return '<div class="row" style="gap:8px;margin-top:6px;flex-wrap:nowrap"><select class="fc mbF" style="width:220px">' + opz + '</select><input class="fc mbV" style="flex:1" autocomplete="off" placeholder="nuovo valore (vuoto = svuota il campo)"></div>'; };
+    Modal.html('🧹 Bonifica dei ' + M.length + ' movimenti filtrati',
+      '<div class="hint" style="margin-bottom:8px">Cambia gli stessi campi su <b>tutti i ' + M.length + ' movimenti IN/OUT</b> che vedi con i filtri (gli annullati e gli interni restano fuori). Come con il ✎ di un movimento: seriale, P/N, MNFT, tipo, FR, RMA e riparatore si aggiornano anche sulla scheda, sugli altri suoi movimenti e sulle righe di spedizione (solo dove c\'è il valore vecchio); la nota dell\'ingresso anche sulla scheda. Prima vedi l\'anteprima.</div>' +
+      '<div class="fg"><span class="fl">Campi da cambiare</span>' + [0, 1, 2].map(riga).join('') + '</div>' +
+      '<label style="display:flex;gap:8px;align-items:center;margin-top:8px;font-size:13px"><input type="checkbox" id="mbCoda" checked> Note: aggiungi in coda alla nota di ogni movimento (non sostituirla)</label>' +
+      '<div class="fg" style="margin-top:8px"><span class="fl">Motivo *</span><input class="fc" id="mbMot" autocomplete="off" placeholder="es. DDT del mittente corretto"></div>' +
+      '<div class="fg" style="margin-top:8px"><span class="fl">Password *</span><input class="fc" type="password" id="mbPwd" autocomplete="new-password"></div><div class="hint" id="mbErr" style="margin-top:6px"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Anteprima', cls: 'green', keep: true, fn: async function () {
+        var err = function (t) { $('mbErr').textContent = t; $('mbErr').className = 'hint err'; };
+        var F = [].slice.call(document.querySelectorAll('#mBody .mbF')), V = [].slice.call(document.querySelectorAll('#mBody .mbV')), C = [];
+        F.forEach(function (f, i) { if (f.value && !C.some(function (c) { return c[0] === f.value; })) C.push([f.value, L.s(V[i].value)]); });
+        var mot = L.s($('mbMot').value);
+        if (!C.length) return err('Scegli almeno un campo');
+        if (C.some(function (c) { return (c[0] === 'seriale' || c[0] === 'tipo') && !c[1]; })) return err('Seriale e Tipo non si possono svuotare');
+        if (!mot) { $('mbMot').focus(); return err('Scrivi il motivo'); }
+        if (!(await Pwd.ok($('mbPwd').value))) return err('Password errata');
+        MovBon.calcola(C, $('mbCoda').checked, mot); MovBon.anteprima();
+      } }], true);
+  },
+  calcola: function (C, coda, mot) {
+    var U = {}; DB.t.UNITA.rows.forEach(function (u) { U[u.id_unita] = u; });
+    MovBon.mot = mot;
+    MovBon.L = MovBon.M.map(function (m) {
+      var it = { m: m, u: m.id_unita ? U[m.id_unita] || null : null, ch: {}, avv: [], err: '' };
+      if (it.u) it.rev = L.s(it.u.rev);
+      C.forEach(function (c) {
+        var k = c[0], v = c[1];
+        if ((k === 'posizione_note' || k === 'anomalia') && m.direzione !== 'IN') return;
+        if (/^(seriale|pn|tipo|mnft|awb|ddt)$/.test(k)) v = L.up(v);
+        if (k === 'fr' && v) v = L.frKey(v);
+        if (k === 'note' && coda && v) v = L.s(m.note) ? L.s(m.note) + ' · ' + v : v;
+        if (v !== L.s(m[k])) it.ch[k] = v;
+      });
+      var ch = it.ch;
+      if (ch.tipo && TIPI.indexOf(ch.tipo) < 0) { it.err = 'Tipo "' + ch.tipo + '" non valido'; return it; }
+      if (ch.fr && !/^\d+$/.test(ch.fr)) { it.err = 'FR "' + ch.fr + '" non è un numero'; return it; }
+      if (ch.fr && !DB.vltMap[ch.fr]) it.avv.push('FR ' + ch.fr + ' non trovato su VLT');
+      if (ch.fr && DB.vltMap[ch.fr]) { var vs = L.up(DB.vltMap[ch.fr].f_mat_serial_no), ss = L.up(ch.seriale || m.seriale); if (vs && vs !== ss && L.up(L.afterSpace(vs)) !== L.up(L.afterSpace(ss))) it.avv.push('seriale su VLT ' + DB.vltMap[ch.fr].f_mat_serial_no); }
+      if (ch.seriale && it.u && Giacenze.A_MAG.indexOf(it.u.stato) >= 0) { var d = DB.t.UNITA.rows.find(function (x) { return x !== it.u && Giacenze.A_MAG.indexOf(x.stato) >= 0 && L.up(x.seriale) === ch.seriale; }); if (d) { it.err = 'Seriale ' + ch.seriale + ' già in giacenza su ' + d.id_unita; return it; } }
+      if (ch.seriale) it.avv.push('cambio seriale ' + m.seriale + ' → ' + ch.seriale);
+      if (ch.tipo) it.avv.push('cambio tipo ' + m.tipo + ' → ' + ch.tipo);
+      if (!Object.keys(ch).length) it.uguale = true;
+      return it;
+    });
+  },
+  anteprima: function () {
+    var Lst = MovBon.L, mod = Lst.filter(function (x) { return !x.err && !x.uguale; }), err = Lst.filter(function (x) { return x.err; }), ug = Lst.filter(function (x) { return x.uguale; });
+    var cel = function (it) { return Object.keys(it.ch).map(function (k) { return '<div style="white-space:nowrap"><b>' + esc(MovBon.nome(k)) + '</b> <span class="mono" style="color:var(--subtle)">' + esc(L.s(it.m[k]) || '—').slice(0, 60) + '</span> → <span class="mono">' + esc(it.ch[k] || '—').slice(0, 80) + '</span></div>'; }).join(''); };
+    var righe = mod.map(function (it) { return '<tr' + (it.avv.length ? ' class="r-warn"' : '') + '><td><input type="checkbox" class="mbSel" data-k="' + Lst.indexOf(it) + '"' + (it.avv.length ? '' : ' checked') + '></td><td class="mono">' + esc(it.m.id_mov) + '</td><td>' + esc(it.m.direzione) + ' · ' + esc(L.itDate(L.s(it.m.data_ora).slice(0, 10))) + '</td><td class="mono">' + esc(it.m.seriale) + '</td><td class="mono">' + esc(it.u ? it.u.id_unita + ' (' + it.u.stato + ')' : '—') + '</td><td style="font-size:12px">' + cel(it) + '</td><td style="font-size:11.5px;color:var(--amber)">' + esc(it.avv.join(' / ')) + '</td></tr>'; }).join('');
+    Modal.html('Anteprima bonifica movimenti · ' + esc(MovBon.mot),
+      '<div class="row" style="gap:16px;flex-wrap:wrap;margin-bottom:6px"><span><b>' + mod.length + '</b> movimenti cambiano</span><span><b>' + ug.length + '</b> restano uguali</span>' + (mod.some(function (x) { return x.avv.length; }) ? '<span style="color:var(--amber)"><b>' + mod.filter(function (x) { return x.avv.length; }).length + '</b> con avvisi (non spuntati)</span>' : '') + (err.length ? '<span style="color:var(--red)"><b>' + err.length + '</b> scartati</span>' : '') + '</div>' +
+      (mod.length ? '<div class="tbl-wrap modal-scroll" style="max-height:46vh"><table><thead><tr><th><input type="checkbox" id="mbTutti"></th><th>Movimento</th><th>Dir. · data</th><th>Seriale</th><th>Scheda</th><th>Cambi (prima → dopo)</th><th>Avvisi</th></tr></thead><tbody>' + righe + '</tbody></table></div>' : '<div class="empty">Nessun movimento da cambiare.</div>') +
+      (err.length ? '<details style="margin-top:8px"><summary style="cursor:pointer;color:var(--red)">' + err.length + ' scartati</summary><div style="font-size:12px;max-height:20vh;overflow:auto">' + err.map(function (x) { return esc(x.m.id_mov) + ' · ' + esc(x.err); }).join('<br>') + '</div></details>' : ''),
+      [{ label: 'Annulla', cls: 'ghost' }].concat(mod.length ? [{ label: '💾 Salva i movimenti spuntati', cls: 'green', keep: true, fn: function () {
+        var sel = [].slice.call(document.querySelectorAll('#mBody .mbSel')).filter(function (c) { return c.checked; }).map(function (c) { return MovBon.L[+c.getAttribute('data-k')]; });
+        if (!sel.length) { toast('Spunta almeno un movimento', 'ko'); return; }
+        MovBon.salva(sel);
+      } }] : []), true);
+    if ($('mbTutti')) $('mbTutti').onchange = function () { document.querySelectorAll('#mBody .mbSel').forEach(function (c) { c.checked = $('mbTutti').checked; }); };
+  },
+  salva: async function (sel) {
+    Modal.open('Bonifica movimenti', 'Non chiudere la pagina.', []);
+    try {
+      await DB.loadTables(['UNITA', 'SPEDIZIONI_RIGHE']);
+      var tU = DB.t.UNITA, tS = DB.t.SPEDIZIONI_RIGHE, U = {}; tU.rows.forEach(function (u) { U[u.id_unita] = u; });
+      var H = await Ingresso.heads(), tM = H.MOVIMENTI, mr = await Spec.righe(tM), now = L.nowStamp(), me = Auth.email, sg = App.me.sigla || '';
+      var upd = [], loc = [], movs = [], logs = [], fatti = [], salt = [], uToc = {};
+      sel.forEach(function (it) {
+        var m = it.m, row = mr[m.id_mov]; if (!row) { salt.push(m.id_mov + ' (non trovato nel foglio)'); return; }
+        var u = m.id_unita ? U[m.id_unita] : null;
+        if (u && it.rev !== undefined && L.s(u.rev) !== it.rev && !uToc[u.id_unita]) { salt.push(m.id_mov + ' (scheda ' + u.id_unita + ' modificata nel frattempo)'); return; }
+        var ch = it.ch, prima = {};
+        Object.keys(ch).forEach(function (k) { if (!(k in tM.idx)) return; prima[k] = m[k]; upd.push({ range: tM.cell(k, row), values: [[ch[k]]] }); loc.push([m, k, ch[k]]); });
+        var cambi = {}; Object.keys(ch).forEach(function (k) { if (Spec.CAMPI.indexOf(k) >= 0) cambi[k] = [L.s(m[k]), ch[k]]; });
+        var uCh = {};
+        if (u) {
+          Object.keys(cambi).forEach(function (k) { if ((k in tU.idx) && L.s(u[k]) === cambi[k][0]) uCh[k] = cambi[k][1]; });
+          if ('note' in ch && u.id_mov_in === m.id_mov) { var cl = Spec.pulita(u.note); if (!cl || cl === L.s(m.note)) uCh.note = ch.note + Spec.fonte(u.note); }
+          if (Object.keys(uCh).length) {
+            Object.assign(uCh, { modificato_il: now, modificato_da: me, rev: String((parseInt(u.rev, 10) || 1) + 1) });
+            Object.keys(uCh).forEach(function (h) { if (h in tU.idx) upd.push({ range: tU.cell(h, u._r), values: [[String(uCh[h])]] }); });
+            uToc[u.id_unita] = 1;
+          }
+          var al = Spec.movimenti(tM, mr, u.id_unita, cambi, m); upd = upd.concat(al.upd); loc = loc.concat(al.loc);
+          var cs = Object.keys(cambi).filter(function (c) { return Spec.SPED.indexOf(c) >= 0 && (c in tS.idx); });
+          if (cs.length) tS.rows.forEach(function (r) { if (r.id_unita === u.id_unita) cs.forEach(function (c) { if (L.s(r[c]) === cambi[c][0]) { upd.push({ range: tS.cell(c, r._r), values: [[cambi[c][1]]] }); loc.push([r, c, cambi[c][1]]); } }); });
+        }
+        var x = Object.assign({}, u || m, uCh), desc = Object.keys(ch).map(function (k) { return MovBon.nome(k) + ': ' + (L.s(prima[k]) || '—') + ' → ' + (ch[k] || '—'); }).join(' · ');
+        movs.push({ data_ora: now, direzione: 'INT', causale: 'VARIAZIONE', id_unita: u ? u.id_unita : '', seriale: x.seriale || m.seriale, pn: x.pn || m.pn, mnft: x.mnft || m.mnft, tipo: x.tipo || m.tipo, fr: x.fr || '', rma: x.rma || '', riparatore: x.riparatore || '', operatore: me, operatore_sigla: sg, note: 'Bonifica movimenti filtrati (' + MovBon.mot + ') · mov ' + m.id_mov + ' · ' + desc, origine: 'APP' });
+        logs.push(App.log('BONIFICA_MOVIMENTI', 'MOVIMENTI', m.id_mov, { motivo: MovBon.mot, prima: prima, dopo: ch, scheda: u ? u.id_unita : '', scheda_dopo: uCh }));
+        fatti.push([u, uCh]);
+      });
+      if (!fatti.length) { Modal.close(); Modal.open('Nessun movimento salvato', salt.join('\n')); return; }
+      for (var i = 0; i < upd.length; i += 400) await API.batchUpdate(DB.id, upd.slice(i, i + 400));
+      var r0 = await API.append(DB.id, 'MOVIMENTI', movs.map(function (mv) { return tM.toRow(mv); })), base = parseInt(DB.param('mov_id_base', ''), 10) || 0;
+      if (r0) { movs.forEach(function (mv, k) { mv.id_mov = 'MV' + (base + r0 + k); }); await API.batchUpdate(DB.id, [{ range: tM.cell('id_mov', r0) + ':' + tM.col('id_mov') + (r0 + movs.length - 1), values: movs.map(function (mv) { return [mv.id_mov]; }) }]).catch(function () { }); }
+      logs.push(App.log('BONIFICA_MOVIMENTI_RIEPILOGO', 'MOVIMENTI', '', { motivo: MovBon.mot, movimenti: fatti.length, saltati: salt }));
+      await API.append(DB.id, 'LOG', logs);
+      Spec.applica(loc); fatti.forEach(function (f) { if (f[0]) Object.keys(f[1]).forEach(function (h) { f[0][h] = String(f[1][h]); }); });
+      if (Sto.dati.cur) movs.forEach(function (mv) { Sto.COLS.forEach(function (c) { if (!(c in mv)) mv[c] = ''; }); Sto.dati.cur.push(mv); });
+      Export.scrivi().catch(function () { });
+      Modal.close(); MovBon.L = null; Sto.render(); App.syncInfo();
+      if (salt.length) Modal.open('Bonifica: ' + fatti.length + ' movimenti salvati', 'Saltati (premi Ricarica e riprova):\n• ' + salt.join('\n• ')); else toast('Bonifica: ' + fatti.length + ' movimenti aggiornati', 'ok');
+    } catch (e) { Modal.close(); Modal.open('Errore durante la bonifica', e.message + '\n\nPremi Ricarica e controlla prima di riprovare.'); }
   }
 };
 
