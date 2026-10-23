@@ -533,7 +533,9 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
           <div class="fg" style="width:220px"><span class="fl">Riparatore fuori calendario</span><select class="fc" id="ackExtra"></select></div>
           <button class="btn ghost sm" onclick="Ack.aggiungiExtra()">+ Aggiungi</button>
           <div class="spacer"></div>
-          <button class="btn ghost sm" onclick="Ack.mailGiorno()" title="Una mail con tutte le destinazioni del giorno: destinatario, indirizzo, DDT con link, AWB, colli, misure e peso (destinatari in Admin → ✉ Mail)">✉ Mail bollettazione (tutte)</button>
+          <button class="btn ghost sm" onclick="Ack.mailGiorno()" title="Una mail con tutte le destinazioni del giorno: destinatario, indirizzo, DDT con link, AWB, colli, misure e peso, più il link al foglio AWB da compilare (destinatari in Admin → ✉ Mail)">✉ Mail bollettazione (tutte)</button>
+          <button class="btn ghost sm" onclick="AwbF.apri('ACK')" title="Apre il foglio AWB del giorno (Google Sheet condiviso con la bollettazione); lo crea o aggiunge le destinazioni se serve">📄 Foglio AWB</button>
+          <button class="btn ghost sm" onclick="AwbF.leggiAwb('ACK')" title="Legge AWB e vettore scritti dalla bollettazione nel foglio del giorno e li salva sulle schede (con anteprima)">⟳ Leggi AWB dal foglio</button>
           <button class="btn ghost sm" onclick="Ack.ricaricaVlt()" title="Rilegge subito il foglio VLT">↻ VLT</button>
           <button class="btn ghost sm" onclick="Ack.export()" title="Riscrive il foglio EXPORT_FR_DA_CHIUDERE letto dallo script VLT">Aggiorna export FR da chiudere</button>
         </div>
@@ -1385,6 +1387,7 @@ var App = {
     if (!App.isAdmin || !DB.t.PARAMETRI) return;
     var P = [['chat_giorni', '90', 'Chat: i messaggi più vecchi di questi giorni si cancellano (pulizia una volta al giorno)'],
       ['chat_palmarino', 'NO', 'Chat sul palmarino (account condiviso): SI per attivarla'],
+      ['awb_foglio', 'SI', 'Mail bollettazione ACK/RMA: SI = crea il foglio AWB del giorno (Google Sheet nella cartella AWB BOLLETTAZIONE), lo condivide con i destinatari e mette il link nella mail; NO = mail senza foglio'],
       ['ack_motivi_pending', Ack.MOTIVI_BASE, 'ACK: motivi per togliere una scheda / metterla in pending (separati da ;). Dopo | scrivi SI se il pezzo è a scaffale, NO se non c\'è: il confronto della giacenza faulty usa questo'],
       ['chat_modifica_min', '5', 'Chat: minuti entro cui si può modificare o eliminare un proprio messaggio'],
       ['rma_ritorni_giorni', '3', 'Ritorni in giacenza più vecchi di questi giorni lavorativi: non si vedono e non si propongono'],
@@ -3785,9 +3788,12 @@ var Mail = {
       '<table style="width:auto"><tbody>' + A.map(function (x) { return riga(x, 'A'); }).join('') + C.map(function (x) { return riga(x, 'CC'); }).join('') + '</tbody></table>' +
       (A.length + C.length ? '' : '<div class="hint warn">Nessun destinatario impostato: Admin → ✉ Mail.</div>') +
       '<div class="fg" style="margin-top:8px"><span class="fl">Altri destinatari (A), separati da virgola</span><input class="fc" id="mlAltri" placeholder="nome@dominio.it"></div>' +
-      '<div class="hint" style="margin-top:6px">Togli la spunta a chi non deve riceverla. Destinatari fissi in Admin → ✉ Mail.' + '<br><b>📤 Invia dal server</b>: parte in automatico dall\'account aziendale (servizio sul PC server, entro un paio di minuti)' + (opz.allegati && opz.allegati.length ? ', con ' + opz.allegati.length + ' PDF DDT allegati' : '') + '. <b>✉ Apri mail</b>: si apre il tuo programma di posta' + (html ? ' (Ctrl+V nel corpo per la tabella)' : '') + '.</div>',
-      [{ label: 'Annulla', cls: 'ghost' }, { label: '✉ Apri mail', cls: 'ghost', keep: true, fn: function () { var d = leggi(); if (!d) return; Modal.close(); Mail.invia(d.to, d.cc, subj, body, html); if (dopo) dopo(); } },
-        { label: '📤 Invia dal server', cls: 'green', keep: true, fn: async function () { var d = leggi(); if (!d) return; Modal.close(); if (await Mail.coda(t, d.to, d.cc, subj, body, html, opz) && dopo) dopo(); } }]);
+      '<div class="hint" style="margin-top:6px">Togli la spunta a chi non deve riceverla. Destinatari fissi in Admin → ✉ Mail.' + '<br><b>📤 Invia dal server</b>: parte in automatico dall\'account aziendale (servizio sul PC server, entro un paio di minuti)' + (opz.allegati && opz.allegati.length ? ', con ' + opz.allegati.length + ' PDF DDT allegati' : '') + '. <b>✉ Apri mail</b>: si apre il tuo programma di posta' + (html ? ' (Ctrl+V nel corpo per la tabella)' : '') + '.</div>' +
+      (opz.rispondi ? '<label style="display:flex;gap:8px;align-items:flex-start;margin-top:8px;font-size:13px"><input type="checkbox" id="mlRisp" checked> <span><b>Rispondi alla mail delle ' + esc(opz.rispondi.quando) + '</b> (stessa conversazione: &quot;' + esc(opz.rispondi.oggetto) + '&quot;). Con 📤 parte come risposta; con ✉ si apre una mail con lo stesso oggetto (Outlook la raggruppa nella stessa conversazione).</span></label>' : ''),
+      [{ label: 'Annulla', cls: 'ghost' }, { label: '✉ Apri mail', cls: 'ghost', keep: true, fn: async function () { var d = leggi(); if (!d) return; var R = risp(); Modal.close(); if (opz.prima) await opz.prima(d.to, d.cc); Mail.invia(d.to, d.cc, R ? R.oggetto : subj, R ? R.body : body, R ? R.html : html); if (dopo) dopo(); } },
+        { label: '📤 Invia dal server', cls: 'green', keep: true, fn: async function () { var d = leggi(); if (!d) return; var R = risp(); Modal.close(); if (opz.prima) await opz.prima(d.to, d.cc);
+          if (await Mail.coda(t, d.to, d.cc, R ? R.oggetto : subj, R ? R.body : body, R ? R.html : html, Object.assign({}, opz, { rispondi_a: R ? R.message_id : '' })) && dopo) dopo(); } }]);
+    function risp() { return opz.rispondi && $('mlRisp') && $('mlRisp').checked ? opz.rispondi : null; }
     function leggi() {
       var to = [], cc = [];
       document.querySelectorAll('#mBody .mlSel').forEach(function (cb) { if (!cb.checked) return; var r = cb.closest('tr').querySelector('.mlRuolo').value; (r === 'CC' ? cc : to).push(cb.getAttribute('data-m')); });
@@ -3817,18 +3823,20 @@ var Mail = {
     if (copiato) toast('Testo della mail copiato anche negli appunti', 'ok');
   },
   // ─ coda per il servizio sul PC server (ATS Ticket Service → easyloader_mail_handler.py): invia con Outlook dall'account aziendale
-  H: ['id_mail', 'creato_il', 'tab', 'a', 'cc', 'oggetto', 'testo', 'html', 'allegati', 'id_spedizioni', 'operatore', 'stato', 'inviata_il', 'dettaglio', 'message_id'],
+  H: ['id_mail', 'creato_il', 'tab', 'a', 'cc', 'oggetto', 'testo', 'html', 'allegati', 'id_spedizioni', 'operatore', 'stato', 'inviata_il', 'dettaglio', 'message_id', 'rispondi_a'],
   carica: async function () { try { await DB.loadTables(['CODA_MAIL']); } catch (e) { DB.t.CODA_MAIL = null; } },
   coda: async function (t, to, cc, subj, body, html, opz) {
     try {
       var tb = await DB.ensureSheet('CODA_MAIL', Mail.H);
+      if (opz.rispondi_a && !('rispondi_a' in tb.idx)) tb = await DB.ensureCols('CODA_MAIL', ['rispondi_a']);   // risposta nella stessa conversazione (servizio aggiornato)
       if (html && html.length > 45000) html = '';   // limite di una cella Google (50.000 caratteri): resta il testo
       var o = { id_mail: 'M' + Date.now().toString(36).toUpperCase() + Math.random().toString(36).slice(2, 5).toUpperCase(), creato_il: L.nowStamp(), tab: t, a: to.join(';'), cc: cc.join(';'), oggetto: subj,
-        testo: L.s(body).slice(0, 45000), html: html || '', allegati: JSON.stringify((opz.allegati || []).filter(function (x) { return x.id; })), id_spedizioni: (opz.ids || []).join(';'), operatore: App.chi().email || Auth.email, stato: 'DA_INVIARE' };
+        testo: L.s(body).slice(0, 45000), html: html || '', allegati: JSON.stringify((opz.allegati || []).filter(function (x) { return x.id; })), id_spedizioni: (opz.ids || []).join(';'), operatore: App.chi().email || Auth.email, stato: 'DA_INVIARE', rispondi_a: L.s(opz.rispondi_a) };
       var r = await API.append(DB.id, 'CODA_MAIL', [tb.toRow(o)]); o._r = r; tb.rows.push(o);
       await API.append(DB.id, 'LOG', [App.log('MAIL_IN_CODA', 'CODA_MAIL', o.id_mail, { tab: t, a: o.a, cc: o.cc, oggetto: subj, allegati: (opz.allegati || []).length })]);
       toast('Mail in coda: parte dal server entro un paio di minuti', 'ok'); Mail.poll(); Mail.rinfresca();
-      return true;
+      if (opz.dopoCoda) { try { await opz.dopoCoda(o.id_mail); } catch (e) { } }
+      return o.id_mail;
     } catch (e) { Modal.open('Mail non messa in coda', e.message + '\n\nPuoi usare "✉ Apri mail".'); return false; }
   },
   ultima: function (id) {
@@ -3906,6 +3914,185 @@ var Export = {
 };
 
 // ───────────────────────── DRIVE (PDF DDT nella cartella STORICO DDT) ─────────────────────────
+// ───────────────────────── FOGLIO AWB DEL GIORNO ─────────────────────────
+// Un Google Sheet per giorno e tipo (ACK / RMA) nella cartella AWB BOLLETTAZIONE: la bollettazione compila AWB e VETTORE
+// (colonne gialle, il resto è protetto con avviso), l'app li legge con "⟳ Leggi AWB dal foglio". Elenco dei fogli in FOGLI_AWB.
+var AwbF = {
+  H: ['DATA', 'TIPO', 'DESTINATARIO', 'INDIRIZZO', 'DDT', 'PEZZI', 'COLLI', 'PESO KG', 'MISURE COLLI', 'AWB', 'VETTORE', 'NOTE BOLLETTAZIONE', 'ID (non modificare)'],
+  TH: ['data', 'tipo', 'file_id', 'link', 'id_mail', 'condiviso_con', 'creato_il', 'creato_da'],
+  TAB: 'AWB', COMPILA: ['AWB', 'VETTORE', 'NOTE BOLLETTAZIONE'],
+  // CE/2896014 → CE2896014 (via "/", spazi e trattini)
+  pulisci: function (a) { return L.up(a).replace(/[\s\/\\\-]+/g, ''); },
+  giorno: function (tipo) { return (tipo === 'RMA' ? $('uscData') && $('uscData').value : $('ackData') && $('ackData').value) || L.isoToday(); },
+  carica: async function () { try { await DB.loadTables(['FOGLI_AWB']); } catch (e) { DB.t.FOGLI_AWB = null; } return DB.t.FOGLI_AWB; },
+  rec: function (tipo, d) { var t = DB.t.FOGLI_AWB; return t ? t.rows.filter(function (r) { return r.tipo === tipo && L.normDate(r.data) === d && L.s(r.file_id); }).pop() || null : null; },
+  _cart: null,
+  cartella: async function () {
+    var id = L.s(DB.param('drive_cartella_awb', '')); if (id) return id;
+    if (AwbF._cart) return AwbF._cart;
+    var q = "'" + CFG.FOLDER_ID + "' in parents and name='AWB BOLLETTAZIONE' and mimeType='application/vnd.google-apps.folder' and trashed=false";
+    var js = await API.call('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id)&q=' + encodeURIComponent(q));
+    var f = (js.files || [])[0];
+    if (!f) f = await API.call('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id', { method: 'POST', body: JSON.stringify({ name: 'AWB BOLLETTAZIONE', mimeType: 'application/vnd.google-apps.folder', parents: [CFG.FOLDER_ID] }) });
+    AwbF._cart = f.id; return f.id;
+  },
+  crea: async function (tipo, d) {
+    var t = await DB.ensureSheet('FOGLI_AWB', AwbF.TH), cart = await AwbF.cartella();
+    var f = await API.call('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id,webViewLink', { method: 'POST', body: JSON.stringify({ name: 'AWB ' + tipo + ' ' + L.itDate(d).replace(/\//g, '-'), mimeType: 'application/vnd.google-apps.spreadsheet', parents: [cart] }) });
+    var info = await API.call(API.S + f.id + '?fields=' + encodeURIComponent('sheets(properties(sheetId,title))')), sid = (((info.sheets || [])[0] || {}).properties || { sheetId: 0 }).sheetId;
+    var nC = AwbF.H.length, iA = AwbF.H.indexOf('AWB'), larg = { DESTINATARIO: 240, INDIRIZZO: 300, 'MISURE COLLI': 220, AWB: 150, VETTORE: 130, 'NOTE BOLLETTAZIONE': 220, 'ID (non modificare)': 150 };
+    var vet = ((DB.t.VETTORI || {}).rows || []).map(function (v) { return L.s(v.vettore); }).filter(Boolean);
+    var req = [
+      { updateSheetProperties: { properties: { sheetId: sid, title: AwbF.TAB, gridProperties: { frozenRowCount: 1 } }, fields: 'title,gridProperties.frozenRowCount' } },
+      { repeatCell: { range: { sheetId: sid, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: nC }, cell: { userEnteredFormat: { textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } }, backgroundColor: { red: 0.12, green: 0.31, blue: 0.47 } } }, fields: 'userEnteredFormat(textFormat,backgroundColor)' } },
+      { repeatCell: { range: { sheetId: sid, startRowIndex: 0, endRowIndex: 1, startColumnIndex: iA, endColumnIndex: iA + 2 }, cell: { userEnteredFormat: { textFormat: { bold: true }, backgroundColor: { red: 1, green: 0.85, blue: 0.2 } } }, fields: 'userEnteredFormat(textFormat,backgroundColor)' } },
+      { repeatCell: { range: { sheetId: sid, startRowIndex: 1, startColumnIndex: iA, endColumnIndex: iA + 3 }, cell: { userEnteredFormat: { backgroundColor: { red: 1, green: 0.96, blue: 0.75 }, numberFormat: { type: 'TEXT' } } }, fields: 'userEnteredFormat(backgroundColor,numberFormat)' } },
+      { addProtectedRange: { protectedRange: { range: { sheetId: sid }, description: 'Si compilano solo AWB, VETTORE e NOTE BOLLETTAZIONE', warningOnly: true, unprotectedRanges: [{ sheetId: sid, startRowIndex: 1, startColumnIndex: iA, endColumnIndex: iA + 3 }] } } },
+      { updateDimensionProperties: { range: { sheetId: sid, dimension: 'COLUMNS', startIndex: 0, endIndex: nC }, properties: { pixelSize: 95 }, fields: 'pixelSize' } }
+    ];
+    AwbF.H.forEach(function (h, j) { if (larg[h]) req.push({ updateDimensionProperties: { range: { sheetId: sid, dimension: 'COLUMNS', startIndex: j, endIndex: j + 1 }, properties: { pixelSize: larg[h] }, fields: 'pixelSize' } }); });
+    if (vet.length) req.push({ setDataValidation: { range: { sheetId: sid, startRowIndex: 1, startColumnIndex: iA + 1, endColumnIndex: iA + 2 }, rule: { condition: { type: 'ONE_OF_LIST', values: vet.map(function (v) { return { userEnteredValue: v }; }) }, strict: false, showCustomUi: true } } });
+    await API.call(API.S + f.id + ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: req }) });
+    await API.batchUpdate(f.id, [{ range: API.q(AwbF.TAB) + '!A1', values: [AwbF.H] }]);
+    var o = { data: d, tipo: tipo, file_id: f.id, link: f.webViewLink || ('https://docs.google.com/spreadsheets/d/' + f.id + '/edit'), id_mail: '', condiviso_con: '', creato_il: L.nowStamp(), creato_da: Auth.email };
+    var r = await API.append(DB.id, 'FOGLI_AWB', [t.toRow(o)]); o._r = r; t.rows.push(o);
+    API.append(DB.id, 'LOG', [App.log('FOGLIO_AWB_CREATO', 'FOGLI_AWB', f.id, { tipo: tipo, data: d })], true).catch(function () { });
+    return o;
+  },
+  // contenuto del foglio; c(nome) = colonna (per nome: se spostano le colonne si ritrovano lo stesso)
+  leggi: async function (rec) {
+    var v = (await API.batchGet(rec.file_id, [API.q(AwbF.TAB) + '!A1:Z']))[0] || [], h = (v[0] || []).map(function (x) { return L.up(x); });
+    var c = function (n) { n = L.up(n); var i = h.indexOf(n); if (i < 0 && n.indexOf('ID') === 0) i = h.findIndex(function (x) { return /^ID\b/.test(x); }); if (i < 0 && n.indexOf('NOTE') === 0) i = h.findIndex(function (x) { return /^NOTE/.test(x); }); return i; };
+    return { h: h.length ? h : AwbF.H.map(L.up), rows: v.slice(1), c: c };
+  },
+  riga: function (s) {
+    var r = Ack.mailRiga(s), o = {};
+    o['DATA'] = L.itDate(L.normDate(s.data)); o['TIPO'] = s.tipo === 'RMA' ? 'RMA' : 'ACK'; o['DESTINATARIO'] = r.dest; o['INDIRIZZO'] = r.ind; o['DDT'] = s.n_ddt ? String(s.n_ddt) : r.ddt;
+    o['PEZZI'] = r.pz; o['COLLI'] = r.nColli || ''; o['PESO KG'] = r.nColli ? r.peso : ''; o['MISURE COLLI'] = r.colli.join(', ');
+    o['AWB'] = L.up(s.awb) === 'DA ASSEGNARE' ? '' : L.s(s.awb); o['VETTORE'] = L.s(s.vettore); o['NOTE BOLLETTAZIONE'] = ''; o['ID (NON MODIFICARE)'] = s.id_spedizione;
+    return o;
+  },
+  // crea il foglio se manca, aggiunge le destinazioni nuove e aggiorna i dati (DDT, colli, peso) di quelle già presenti; AWB / vettore / note scritti da loro non si toccano
+  sincronizza: async function (tipo, d, ids) {
+    await AwbF.carica(); var rec = AwbF.rec(tipo, d) || await AwbF.crea(tipo, d);
+    var F = await AwbF.leggi(rec), iId = F.c('ID'), riga = {};
+    F.rows.forEach(function (r, i) { var id = iId >= 0 ? L.s(r[iId]) : ''; if (id) riga[id] = i + 2; });
+    var upd = [], add = [], nuovi = [], q = API.q(AwbF.TAB);
+    ids.map(Ack.byId).filter(Boolean).forEach(function (s) {
+      var o = AwbF.riga(s), n = riga[s.id_spedizione];
+      if (n) {
+        F.h.forEach(function (h, j) {
+          if (!(h in o) && !(h === 'ID (NON MODIFICARE)')) return; var nu = o[h], cur = L.s((F.rows[n - 2] || [])[j]);
+          if (AwbF.COMPILA.indexOf(h) >= 0) { if (h !== 'NOTE BOLLETTAZIONE' && !cur && L.s(nu)) upd.push({ range: q + '!' + L.colLetter(j) + n, values: [[nu]] }); return; }   // AWB già nell'app e foglio vuoto: lo scrivo
+          if (cur !== L.s(nu)) upd.push({ range: q + '!' + L.colLetter(j) + n, values: [[nu]] });
+        });
+      } else { add.push(F.h.map(function (h) { return h in o ? o[h] : ''; })); nuovi.push(s); }
+    });
+    if (upd.length) await API.batchUpdate(rec.file_id, upd);
+    if (add.length) await API.append(rec.file_id, AwbF.TAB, add);
+    return { rec: rec, nuovi: nuovi };
+  },
+  inMail: function (m, rec) {
+    var t = 'Vi chiediamo cortesemente di compilare AWB e VETTORE (colonne gialle) nel file al seguente link:';
+    m.body = m.body.replace(/\n\nGrazie$/, '') + '\n\n' + t + '\n' + rec.link + '\n\nGrazie';
+    if (m.html) m.html = m.html.replace(/<br><br>Grazie<\/div>$/, '') + '<br><br>' + esc(t) + '<br><a href="' + esc(rec.link) + '"><b>📄 File AWB ' + esc(rec.tipo) + ' del ' + esc(L.itDate(L.normDate(rec.data))) + '</b></a><br><br>Grazie</div>';
+  },
+  // condivisione (Editor, senza notifica di Google: il link è già nella mail) con i destinatari scelti
+  condividi: async function (rec, emails) {
+    var gia = L.s(rec.condiviso_con).toLowerCase().split(';').filter(Boolean), io = L.s(Auth.email).toLowerCase(), err = [], cambiato = false;
+    var da = emails.map(function (e) { return L.s(e).toLowerCase(); }).filter(function (e, i, a) { return /@/.test(e) && e !== io && gia.indexOf(e) < 0 && a.indexOf(e) === i; });
+    for (var i = 0; i < da.length; i++) {
+      try {
+        await API.call('https://www.googleapis.com/drive/v3/files/' + rec.file_id + '/permissions?supportsAllDrives=true&sendNotificationEmail=false', { method: 'POST', body: JSON.stringify({ type: 'user', role: 'writer', emailAddress: da[i] }), quiet: true });
+        gia.push(da[i]); cambiato = true;
+      } catch (e) { err.push(da[i] + ': ' + e.message); }
+    }
+    if (cambiato && rec._r && DB.t.FOGLI_AWB) { rec.condiviso_con = gia.join(';'); API.batchUpdate(DB.id, [{ range: DB.t.FOGLI_AWB.cell('condiviso_con', rec._r), values: [[rec.condiviso_con]] }], true).catch(function () { }); }
+    if (err.length) Modal.open('Foglio AWB non condiviso con tutti', 'La mail parte lo stesso, ma questi indirizzi non possono aprire il file (condividilo da Drive):\n\n' + err.join('\n'));
+  },
+  segnaMail: async function (rec, idMail) {
+    if (L.s(rec.id_mail) || !rec._r || !DB.t.FOGLI_AWB) return;
+    rec.id_mail = idMail; await API.batchUpdate(DB.id, [{ range: DB.t.FOGLI_AWB.cell('id_mail', rec._r), values: [[idMail]] }], true);
+  },
+  // prima mail del foglio partita dal server: le successive possono andare in risposta
+  mailOrig: async function (rec) {
+    if (!L.s(rec.id_mail)) return null;
+    if (!DB.t.CODA_MAIL) await Mail.carica();
+    var t = DB.t.CODA_MAIL, r = t && t.rows.find(function (x) { return x.id_mail === rec.id_mail; });
+    if (!r || L.up(r.stato) !== 'INVIATA' || !L.s(r.message_id)) { await Mail.carica(); t = DB.t.CODA_MAIL; r = t && t.rows.find(function (x) { return x.id_mail === rec.id_mail; }); }
+    return r && L.up(r.stato) === 'INVIATA' && L.s(r.message_id) ? r : null;
+  },
+  ids: function (tipo) {
+    if (tipo === 'RMA') return Rma.gruppi().filter(function (g) { return g.s && (g.s.stato === 'PRONTA' || g.s.stato === 'SPEDITA'); }).map(function (g) { Rma._npz[g.s.id_spedizione] = g.attivi.length; return g.s.id_spedizione; });
+    var d = AwbF.giorno('ACK');
+    return Ack.giro(d).map(function (c) { return Ack.sped(d, c); }).filter(function (s) { return s && (s.stato === 'PRONTA' || s.stato === 'SPEDITA'); }).map(function (s) { return s.id_spedizione; });
+  },
+  // 📄 apre il foglio del giorno (lo crea / aggiorna se serve)
+  apri: async function (tipo) {
+    var w = window.open('', '_blank'), d = AwbF.giorno(tipo);
+    try {
+      var ids = AwbF.ids(tipo), rec;
+      if (ids.length) rec = (await Busy.wrap(AwbF.sincronizza(tipo, d, ids))).rec; else { await AwbF.carica(); rec = AwbF.rec(tipo, d); }
+      if (!rec) { if (w) w.close(); Modal.open('Foglio AWB', 'Nessuna destinazione pronta o spedita il ' + L.itDate(d) + ': il foglio si crea quando ci sono colli salvati.'); return; }
+      if (w) w.location.href = rec.link; else window.open(rec.link, '_blank');
+    } catch (e) { if (w) w.close(); Modal.open('Foglio AWB', e.message); }
+  },
+  // ⟳ legge AWB e vettore scritti dalla bollettazione e propone di salvarli
+  leggiAwb: async function (tipo) {
+    var d = AwbF.giorno(tipo), rec, F;
+    try {
+      await AwbF.carica(); rec = AwbF.rec(tipo, d);
+      if (!rec) { Modal.open('Foglio AWB', 'Non c\'è ancora il foglio AWB ' + tipo + ' del ' + L.itDate(d) + ': si crea con la mail bollettazione o con 📄 Foglio AWB.'); return; }
+      await DB.loadTables(['SPEDIZIONI']); F = await Busy.wrap(AwbF.leggi(rec));
+    } catch (e) { Modal.open('Foglio AWB', e.message); return; }
+    var V = (DB.t.VETTORI || {}).rows || [], P = [], cI = F.c('ID'), cA = F.c('AWB'), cV = F.c('VETTORE'), cD = F.c('DDT'), cR = F.c('DESTINATARIO'), cN = F.c('NOTE');
+    var cella = function (r, c) { return c >= 0 ? L.s(r[c]) : ''; };
+    F.rows.forEach(function (r, i) {
+      var raw = cella(r, cA); if (!raw) return;
+      var id = cella(r, cI), s = id ? DB.t.SPEDIZIONI.rows.find(function (x) { return x.id_spedizione === id; }) : null;
+      if (!s) {   // riserva: DDT o destinatario dello stesso giorno
+        var ddt = cella(r, cD), de = L.up(cella(r, cR).split(' - ')[0]);
+        s = DB.t.SPEDIZIONI.rows.find(function (x) { return (x.tipo === 'RMA') === (tipo === 'RMA') && L.normDate(x.data) === d && x.stato !== 'ANNULLATA' && ((ddt && /^\d+$/.test(ddt) && L.s(x.n_ddt) === ddt) || (de && L.up(x.destinatario) === de)); }) || null;
+      }
+      var awb = AwbF.pulisci(raw), vet = L.up(cella(r, cV)) || L.vettoreDaAwb(awb, V) || '', o = { n: i + 2, s: s, raw: raw, awb: awb, vet: vet, nota: cella(r, cN), dest: s ? s.destinatario : cella(r, cR) };
+      if (!s) o.esito = 'NON TROVATA';
+      else if (s.stato === 'ANNULLATA') o.esito = 'ANNULLATA';
+      else { var cur = L.up(s.awb); o.esito = !cur || cur === 'DA ASSEGNARE' ? 'NUOVO' : (cur === awb && (!vet || L.up(s.vettore) === vet) ? 'UGUALE' : 'DIVERSO'); }
+      P.push(o);
+    });
+    AwbF._P = P;
+    var PILL = { NUOVO: 'p-green', UGUALE: '', DIVERSO: 'p-amber', 'NON TROVATA': 'p-red', ANNULLATA: 'p-red' };
+    var n = function (e) { return P.filter(function (o) { return o.esito === e; }).length; };
+    Modal.html('Leggi AWB dal foglio · ' + tipo + ' ' + L.itDate(d),
+      '<div class="hint" style="margin-bottom:8px">AWB scritti dalla bollettazione nel <a href="' + esc(rec.link) + '" target="_blank">foglio del giorno</a>: <b>' + n('NUOVO') + '</b> nuovi, <b>' + n('DIVERSO') + '</b> diversi da quello già salvato (non spuntati: controlla e spunta se è giusto il foglio), ' + n('UGUALE') + ' uguali' + (n('NON TROVATA') ? ', <b style="color:var(--red)">' + n('NON TROVATA') + ' righe non trovate</b>' : '') + '. L\'AWB viene pulito (via "/", spazi e trattini). Sui DDT già emessi si aggiornano anche movimenti e PDF su Drive.</div>' +
+      (P.length ? '<div class="tbl-wrap modal-scroll"><table><thead><tr><th><input type="checkbox" id="afTutti"></th><th>Destinazione</th><th>DDT</th><th>AWB nel foglio</th><th>→ AWB</th><th>Vettore</th><th>AWB attuale</th><th>Esito</th><th>Note bollettazione</th></tr></thead><tbody>' +
+        P.map(function (o, i) { var ok = o.esito === 'NUOVO' || o.esito === 'DIVERSO'; return '<tr' + (o.esito === 'DIVERSO' ? ' class="r-warn"' : (ok ? '' : ' class="r-off"')) + '><td>' + (ok ? '<input type="checkbox" class="afS" data-i="' + i + '"' + (o.esito === 'NUOVO' ? ' checked' : '') + '>' : '') + '</td><td>' + esc(o.dest) + '</td><td class="mono">' + esc(o.s ? o.s.n_ddt || '—' : '') + '</td><td class="mono">' + esc(o.raw) + '</td><td class="mono"><b>' + esc(o.awb) + '</b></td><td>' + esc(o.vet) + '</td><td class="mono">' + esc(o.s ? (o.s.awb || '') + (o.s.vettore ? ' (' + o.s.vettore + ')' : '') : '') + '</td><td><span class="pill ' + PILL[o.esito] + '">' + esc(o.esito.toLowerCase()) + '</span></td><td style="font-size:11.5px">' + esc(o.nota) + '</td></tr>'; }).join('') + '</tbody></table></div>'
+        : '<div class="card empty">Nel foglio non c\'è ancora nessun AWB.</div>'),
+      [{ label: 'Chiudi', cls: 'ghost' }, { label: '✔ Salva gli AWB spuntati', cls: 'green', keep: true, fn: function () { AwbF.salva(tipo); } }], true);
+    var tt = $('afTutti'); if (tt) tt.onchange = function () { document.querySelectorAll('#mBody .afS').forEach(function (c) { c.checked = tt.checked; }); };
+  },
+  salva: async function (tipo) {
+    var S = [].slice.call(document.querySelectorAll('#mBody .afS')).filter(function (c) { return c.checked; }).map(function (c) { return AwbF._P[+c.getAttribute('data-i')]; }).filter(Boolean);
+    if (!S.length) { toast('Spunta almeno una riga', 'ko'); return; }
+    Modal.open('AWB dal foglio', 'Non chiudere la pagina.', []);
+    var fatti = [], err = [];
+    for (var i = 0; i < S.length; i++) {
+      var o = S[i], s = o.s; Modal.progress((i + 1) + '/' + S.length + ' · ' + o.dest);
+      try {
+        if (s.n_ddt) await Ack.awbDopoDdt(s, o.awb, o.vet, true);
+        else {
+          var prima = { awb: s.awb, vettore: s.vettore };
+          await API.batchUpdate(DB.id, Ack.setS(s, { awb: o.awb, vettore: o.vet }));
+          await API.append(DB.id, 'LOG', [App.log(tipo === 'RMA' ? 'RMA_AWB' : 'ACK_AWB', 'SPEDIZIONI', s.id_spedizione, { destinazione: s.destinatario, prima: prima, dopo: { awb: o.awb, vettore: o.vet }, da: 'foglio AWB' })]);
+        }
+        fatti.push(o.dest + ' · ' + o.awb + (o.vet ? ' ' + o.vet : '') + (s.n_ddt ? ' (DDT ' + s.n_ddt + ')' : ''));
+      } catch (e) { err.push(o.dest + ': ' + e.message); }
+    }
+    if (tipo === 'RMA') Rma.render(); else Ack.render();
+    Modal.open('AWB dal foglio', 'Salvati: ' + fatti.length + (fatti.length ? '\n' + fatti.join('\n') : '') + (err.length ? '\n\nNon salvati: ' + err.length + '\n' + err.join('\n') : '') + (tipo === 'ACK' && S.some(function (o) { return !o.s.n_ddt; }) ? '\n\nACK senza DDT: l\'AWB è salvato, il DDT si genera dalla card come sempre.' : ''));
+  }
+};
+
 var Drive = {
   _f: null,
   folder: async function () {
@@ -5244,14 +5431,15 @@ var Ack = {
     await Ack.emetti(id);
   },
   // AWB inserito dopo il DDT: SPEDIZIONI + MOVIMENTI OUT della spedizione + PDF rigenerato e sostituito su Drive
-  awbDopoDdt: async function (s, awb, vet) {
-    if (L.s(s.awb) === awb && L.s(s.vettore) === vet) { toast('Nessuna modifica', 'ok'); return; }
+  awbDopoDdt: async function (s, awb, vet, muto) {
+    if (L.s(s.awb) === awb && L.s(s.vettore) === vet) { if (!muto) toast('Nessuna modifica', 'ok'); return; }
     var id = s.id_spedizione, prima = { awb: s.awb, vettore: s.vettore };
-    Modal.open('AWB su DDT ' + s.n_ddt, 'Non chiudere la pagina.', []);
+    if (!muto) Modal.open('AWB su DDT ' + s.n_ddt, 'Non chiudere la pagina.', []);
+    var pr = muto ? function () { } : function (t) { Modal.progress(t); };   // muto: salvataggio in blocco dal foglio AWB
     try {
-      Modal.progress('1/4 spedizione');
+      pr('1/4 spedizione');
       await API.batchUpdate(DB.id, Ack.setS(s, { awb: awb, vettore: vet }));
-      Modal.progress('2/4 movimenti');
+      pr('2/4 movimenti');
       var sh = API.q('MOVIMENTI'), h = (await API.batchGet(DB.id, [sh + '!1:1']))[0][0] || [], tM = new Table('MOVIMENTI', h);
       var cS = tM.col('id_spedizione'), cD = tM.col('direzione'), nMov = 0, upd = [];
       if (cS && 'awb' in tM.idx) {
@@ -5262,7 +5450,7 @@ var Ack = {
         }
         if (upd.length) await API.batchUpdate(DB.id, upd);
       }
-      Modal.progress('3/4 PDF DDT');
+      pr('3/4 PDF DDT');
       var pdfOk = '';
       try {
         var rma = s.tipo === 'RMA'; await Ack.loghi(); if (rma) { try { await Lib.qr(); } catch (e) { } }
@@ -5273,12 +5461,13 @@ var Ack = {
           await API.batchUpdate(DB.id, Ack.setS(s, { link_pdf: link })); pdfOk = 'PDF salvato in STORICO DDT.';
         }
       } catch (e) { pdfOk = 'PDF non aggiornato su Drive (' + e.message + '): usa "Stampa DDT".'; }
-      Modal.progress('4/4 log');
+      pr('4/4 log');
       await API.append(DB.id, 'LOG', [App.log(s.tipo === 'RMA' ? 'RMA_AWB_DOPO_DDT' : 'ACK_AWB_DOPO_DDT', 'SPEDIZIONI', id, { ddt: s.n_ddt, prima: prima, dopo: { awb: awb, vettore: vet }, movimenti: nMov })]);
+      if (muto) return { movimenti: nMov, pdf: pdfOk };
       if (s.tipo === 'RMA') Rma.render(); else Ack.render();
       Modal.open('AWB inserito', 'DDT ' + s.n_ddt + ' · AWB ' + awb + ' ' + vet + '\nMovimenti aggiornati: ' + nMov + '\n' + pdfOk,
         [{ label: 'Chiudi', cls: 'ghost' }, { label: 'Stampa DDT', fn: function () { if (s.tipo === 'RMA') Rma.stampa(id); else Ack.stampa(id); } }]);
-    } catch (e) { Modal.open('Errore AWB', e.message); }
+    } catch (e) { if (muto) throw e; Modal.open('Errore AWB', e.message); }
   },
 
   // DDT + uscita: parte da sola quando la spunta è chiusa e c'è l'AWB
@@ -5409,11 +5598,27 @@ var Ack = {
       }).join('') + '</table>' + (noAwb.length ? '<br><b>AWB da assegnare:</b> ' + e(noAwb.join(', ')) : '') + '<br><br>Grazie</div>';
     return { subj: subj, body: body, html: html };
   },
-  inviaMail: function (ids) {
+  inviaMail: async function (ids) {
     var m = Ack.mailTesto(ids); if (!m) { toast('Nessuna spedizione', 'ko'); return; }
     var s0 = Ack.byId(ids[0]);
     var all = ids.map(Ack.byId).filter(function (s) { return s && Drive.idDa(s.link_pdf); }).map(function (s) { return { id: Drive.idDa(s.link_pdf), nome: 'DDT ' + (s.tipo === 'RMA' ? 'RMA ' : 'ACK ') + s.n_ddt + ' ' + s.destinatario + '.pdf' }; });
-    Mail.apri(s0 && s0.tipo === 'RMA' ? 'rma' : 'ack', m.subj, m.body, function () { ids.forEach(Ack.mailInviata); }, m.html, { allegati: all, ids: ids });
+    var opz = { allegati: all, ids: ids };
+    // foglio AWB del giorno (Google Sheet): la bollettazione scrive AWB e vettore, l'app li legge con "⟳ Leggi AWB dal foglio"
+    if (L.up(DB.param('awb_foglio', 'SI')) !== 'NO') {
+      try {
+        var fa = await Busy.wrap(AwbF.sincronizza(s0.tipo === 'RMA' ? 'RMA' : 'ACK', L.normDate(s0.data), ids));
+        AwbF.inMail(m, fa.rec);
+        opz.prima = function (to, cc) { return AwbF.condividi(fa.rec, to.concat(cc)); };
+        opz.dopoCoda = function (idm) { return AwbF.segnaMail(fa.rec, idm); };
+        var or = await AwbF.mailOrig(fa.rec);
+        if (or) {
+          var agg = fa.nuovi.length ? 'Aggiornamento: ' + (fa.nuovi.length === 1 ? 'aggiunta la destinazione ' : 'aggiunte ' + fa.nuovi.length + ' destinazioni: ') + fa.nuovi.map(function (x) { return x.destinatario; }).join(', ') + '. Il file AWB al solito link è aggiornato.' : 'Aggiornamento delle destinazioni del giorno. Il file AWB al solito link è aggiornato.';
+          opz.rispondi = { message_id: or.message_id, quando: L.s(or.inviata_il).slice(11, 16), oggetto: 'Re: ' + L.s(or.oggetto).replace(/^\s*(re|r)\s*:\s*/i, ''),
+            body: m.body.replace('Ciao Ragazzi,\n\n', 'Ciao Ragazzi,\n\n' + agg + '\n\n'), html: m.html ? m.html.replace('Ciao Ragazzi,<br><br>', 'Ciao Ragazzi,<br><br><b>' + esc(agg) + '</b><br><br>') : '' };
+        }
+      } catch (e) { toast('Foglio AWB non preparato: ' + e.message + ' (la mail parte lo stesso)', 'ko'); }
+    }
+    Mail.apri(s0 && s0.tipo === 'RMA' ? 'rma' : 'ack', m.subj, m.body, function () { ids.forEach(Ack.mailInviata); }, m.html, opz);
   },
   // mail unica con tutte le destinazioni del giorno (spunte chiuse o spedite)
   mailGiorno: function () {
@@ -5754,7 +5959,7 @@ var Rma = {
       '<button class="btn ghost sm" onclick="Rma.carModello()">Modello Excel</button> <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button>' + xr + '</div></div>' +
       '';
     return '<div class="row"><div class="fg" style="width:160px"><span class="fl">Giorno di uscita</span><input class="fc" type="date" id="uscData2" value="' + esc($('uscData').value) + '" onchange="$(\'uscData\').value=this.value;Rma.render()"></div><div class="spacer"></div>' +
-      '<button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button> <button class="btn ghost sm" onclick="Rma.ddtTutti()" title="Ristampa in un solo PDF tutti i DDT già emessi delle destinazioni della pagina">🖨 Tutti i DDT</button> <button class="btn ghost sm" onclick="Rma.cedoliniTutti()" title="Tutti i cedolini delle destinazioni della pagina in un solo PDF (un foglio per collo)">🖨 Tutti i cedolini</button> <button class="btn ghost sm" onclick="Rma.mailGiorno()" title="Una mail a Service Desk e bollettazione con tutte le destinazioni del giorno: indirizzo, DDT, AWB, colli, misure e peso">✉ Mail bollettazione</button> <button class="btn green" id="uscTutti" onclick="Rma.emettiTutti()">Genera i DDT pronti</button></div>' +
+      '<button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button> <button class="btn ghost sm" onclick="Rma.ddtTutti()" title="Ristampa in un solo PDF tutti i DDT già emessi delle destinazioni della pagina">🖨 Tutti i DDT</button> <button class="btn ghost sm" onclick="Rma.cedoliniTutti()" title="Tutti i cedolini delle destinazioni della pagina in un solo PDF (un foglio per collo)">🖨 Tutti i cedolini</button> <button class="btn ghost sm" onclick="AwbF.apri(\'RMA\')" title="Apre il foglio AWB del giorno (Google Sheet condiviso con la bollettazione); lo crea o aggiunge le destinazioni se serve">📄 Foglio AWB</button> <button class="btn ghost sm" onclick="AwbF.leggiAwb(\'RMA\')" title="Legge AWB e vettore scritti dalla bollettazione nel foglio del giorno e li salva sulle schede (con anteprima)">⟳ Leggi AWB dal foglio</button> <button class="btn ghost sm" onclick="Rma.mailGiorno()" title="Una mail a Service Desk e bollettazione con tutte le destinazioni del giorno: indirizzo, DDT, AWB, colli, misure e peso">✉ Mail bollettazione</button> <button class="btn green" id="uscTutti" onclick="Rma.emettiTutti()">Genera i DDT pronti</button></div>' +
       '<div class="hint" style="margin-top:8px">Un DDT per destinazione (serie RMA). Pronta = colli e peso salvati + AWB. Le schede ci sono già per tutte le destinazioni di oggi: puoi mettere colli e AWB subito. I pezzi senza RMA restano non spuntati e si spuntano da soli appena l\'RMA c\'è; se al DDT ne manca qualcuno, l\'app chiede conferma.</div>';
   },
   render: function (rifai) {
@@ -8732,17 +8937,17 @@ var Prop = {
     // 1. FR in Aborted: schede in magazzino e movimenti IN/OUT
     DB.t.UNITA.rows.forEach(function (u) {
       if (Giacenze.A_MAG.indexOf(u.stato) < 0 || !u.fr) return; var v = DB.vltMap[u.fr]; if (!v || L.up(v.stato) !== 'ABORTED') return;
-      var n = Prop.nuovoDopoAbort(u.seriale, v); if (n) add({ tipo: 'ABORT', dove: 'SCHEDA', id: u.id_unita, seriale: u.seriale, pn: u.pn, tip: u.tipo, frOld: u.fr, frNew: n.fr_id, statoNew: n.stato, ripNew: n.riparatore, u: u });
+      var n = Prop.nuovoDopoAbort(u.seriale, v); if (n) add({ tipo: 'ABORT', dove: 'SCHEDA', id: u.id_unita, seriale: u.seriale, pn: u.pn, tip: u.tipo, frOld: u.fr, frNew: n.fr_id, statoNew: n.stato, ripNew: n.riparatore, ripOld: L.s(u.riparatore), u: u });
     });
     (Sto.dati.cur || []).forEach(function (m) {
       if ((m.direzione !== 'IN' && m.direzione !== 'OUT') || !m.fr || Sto.annullato(m)) return; var v = DB.vltMap[m.fr]; if (!v || L.up(v.stato) !== 'ABORTED') return;
-      var n = Prop.nuovoDopoAbort(m.seriale, v); if (n) add({ tipo: 'ABORT', dove: m.direzione, id: m.id_mov, seriale: m.seriale, pn: m.pn, tip: m.tipo, frOld: m.fr, frNew: n.fr_id, statoNew: n.stato, ripNew: n.riparatore, m: m });
+      var n = Prop.nuovoDopoAbort(m.seriale, v); if (n) add({ tipo: 'ABORT', dove: m.direzione, id: m.id_mov, seriale: m.seriale, pn: m.pn, tip: m.tipo, frOld: m.fr, frNew: n.fr_id, statoNew: n.stato, ripNew: n.riparatore, ripOld: L.s(m.riparatore), m: m });
     });
     // 2. in attesa di FR  3. in giacenza senza FR (FAULTY): stesse regole delle pending
     DB.t.UNITA.rows.forEach(function (u) {
       var pend = u.stato === 'IN_ATTESA' && L.s(u.pending_fr), senza = !L.s(u.fr) && u.tipo === 'FAULTY' && Giacenze.A_MAG.indexOf(u.stato) >= 0 && !pend;
       if (!pend && !senza) return; var n = Prop.nuovo(u.seriale, u.data_in, '');
-      if (n) add({ tipo: pend ? 'PEND' : 'NOFR', dove: 'SCHEDA', id: u.id_unita, seriale: u.seriale, pn: u.pn, tip: u.tipo, frOld: '', frNew: n.fr_id, statoNew: n.stato, ripNew: n.riparatore, u: u });
+      if (n) add({ tipo: pend ? 'PEND' : 'NOFR', dove: 'SCHEDA', id: u.id_unita, seriale: u.seriale, pn: u.pn, tip: u.tipo, frOld: '', frNew: n.fr_id, statoNew: n.stato, ripNew: n.riparatore, ripOld: L.s(u.riparatore), u: u });
     });
     // 4. riparatore: quello giusto è sempre quello di VLT (schede in magazzino con FR valido)
     //    solo se il riparatore di VLT è riconosciuto (anagrafica o alias) e l'FR non è chiuso/abortito/draft
@@ -8755,11 +8960,29 @@ var Prop = {
     Prop.L = out; Prop.badge();
     if ($('propBody')) Prop.render();
   },
+  kRip: function (x) { return App._k(App.ripNoto(x) || x || ''); },
+  // Excel con tutto quello che si sa di ogni proposta (scheda, movimento, FR attuale e nuovo su VLT)
+  excel: function () {
+    if (!Prop.L.length) { toast('Nessuna proposta', 'ko'); return; }
+    var U = {}; DB.t.UNITA.rows.forEach(function (u) { U[u.id_unita] = u; });
+    var d = function (x) { return L.itDate(L.normDate(L.s(x).slice(0, 10))) || L.s(x); };
+    var H = ['Proposta', 'Dove', 'ID', 'Seriale', 'P/N', 'Tipo', 'Riparatore attuale', 'Riparatore VLT (FR nuovo)', 'Ubicazione', 'Magazzino', 'Stato scheda', 'Data ingresso', 'ID mov. ingresso', 'Data movimento', 'DDT movimento', 'Controparte movimento',
+      'FR attuale', 'Stato VLT FR attuale', 'Apertura FR attuale', 'FR nuovo', 'Stato VLT FR nuovo', 'Apertura FR nuovo', 'Riparatore VLT FR nuovo', 'Note VLT FR nuovo', 'Pending FR', 'Note scheda', 'Note movimento', 'Nota che si aggiunge'];
+    var riga = function (o) {
+      var m = o.m || {}, u = o.u || (m.id_unita && U[m.id_unita]) || {}, vo = (o.frOld && DB.vltMap[o.frOld]) || {}, vn = (o.frNew && DB.vltMap[o.frNew]) || {};
+      return [Prop.TIPI[o.tipo].replace(/^\S+\s/, ''), o.dove === 'SCHEDA' ? 'Scheda' : 'Movimento ' + o.dove, o.id, o.seriale, o.pn, o.tip, o.ripOld || '', o.ripNew || '', L.s(u.ubicazione), L.s(u.magazzino), L.s(u.stato), d(u.data_in), L.s(u.id_mov_in),
+        m.data_ora ? d(m.data_ora) : '', L.s(m.ddt), L.s(m.controparte),
+        o.frOld || '', L.s(vo.stato), d(vo.data_apertura), o.frNew || '', L.s(vn.stato) || L.s(o.statoNew), d(vn.data_apertura), L.s(vn.riparatore), L.s(vn.note), L.s(u.pending_fr), L.s(u.note), L.s(m.note), Prop.nota(o)];
+    };
+    var fogli = [{ nome: 'Tutte', headers: H, rows: Prop.L.map(riga) }];
+    Object.keys(Prop.TIPI).forEach(function (t) { var R = Prop.L.filter(function (o) { return o.tipo === t; }); if (R.length) fogli.push({ nome: Prop.TIPI[t].replace(/^\S+\s/, ''), headers: H, rows: R.map(riga) }); });
+    Xls.scarica('Proposte_VLT', fogli);
+  },
   badge: function () { var b = $('propBadge'), n = Prop.L.length; if (!b) return; $('propBtn').style.display = ''; b.textContent = n > 99 ? '99+' : n; b.style.display = n ? '' : 'none'; },
   apri: function () {
     Modal.html('🔔 Proposte da confermare',
       '<div class="hint" style="margin-bottom:8px">Il sistema confronta schede e movimenti con il file FR di VLT. Spunta le righe giuste e conferma: si aggiornano FR (e riparatore sulle schede), con la nota; resta tutto nel LOG. Le schede <b>non</b> passano a tuo nome. Le righe scartate non vengono più proposte.</div><div id="propBody"></div>',
-      [{ label: 'Chiudi', cls: 'ghost' }, { label: '🏷 Etichette delle spuntate', cls: 'ghost', keep: true, fn: function () { Prop.etichette(); } }, { label: 'Scarta le spuntate', cls: 'ghost', keep: true, fn: function () { Prop.scarta(); } }, { label: '✔ Conferma le spuntate', cls: 'green', keep: true, fn: function () { Prop.conferma(); } }], true);
+      [{ label: 'Chiudi', cls: 'ghost' }, { label: '⬇ Excel', cls: 'ghost', keep: true, fn: function () { Prop.excel(); } }, { label: '🏷 Etichette delle spuntate', cls: 'ghost', keep: true, fn: function () { Prop.etichette(); } }, { label: 'Scarta le spuntate', cls: 'ghost', keep: true, fn: function () { Prop.scarta(); } }, { label: '✔ Conferma le spuntate', cls: 'green', keep: true, fn: function () { Prop.conferma(); } }], true);
     Prop.render();
   },
   render: function () {
@@ -8767,8 +8990,8 @@ var Prop = {
     if (!Prop.L.length) { box.innerHTML = '<div class="card empty">Nessuna proposta: schede e movimenti sono allineati con VLT.</div>'; return; }
     box.innerHTML = Object.keys(Prop.TIPI).map(function (t) {
       var R = Prop.L.filter(function (o) { return o.tipo === t; }); if (!R.length) return '';
-      return '<div class="card-t" style="font-size:14px;margin:10px 0 6px">' + Prop.TIPI[t] + ' · ' + R.length + '</div><div class="tbl-wrap" style="max-height:34vh"><table><thead><tr><th><input type="checkbox" checked onchange="document.querySelectorAll(\'.prS[data-t=' + t + ']\').forEach(function(c){c.checked=this.checked}.bind(this))"></th><th>Dove</th><th>ID</th><th>Seriale</th><th>P/N</th><th>Tipo</th>' + (t === 'RIP' ? '<th>FR</th><th>Riparatore attuale</th><th>→ Riparatore VLT</th><th>Stato VLT</th>' : '<th>FR attuale</th><th>→ FR nuovo</th><th>Stato VLT nuovo</th>') + '<th>Nota che si aggiunge</th></tr></thead><tbody>' +
-        R.map(function (o) { var i = Prop.L.indexOf(o); return '<tr><td><input type="checkbox" class="prS" data-t="' + t + '" data-i="' + i + '" checked></td><td>' + esc(o.dove === 'SCHEDA' ? 'Scheda' : 'Movimento ' + o.dove) + '</td><td class="mono">' + esc(o.id) + '</td><td class="mono">' + esc(o.seriale) + '</td><td class="mono">' + esc(o.pn) + '</td><td>' + esc(o.tip) + '</td>' + (o.tipo === 'RIP' ? '<td class="mono">' + esc(o.frOld) + '</td><td>' + esc(o.ripOld || '(vuoto)') + '</td><td><b>' + esc(o.ripNew) + '</b></td><td>' + esc(o.statoNew) + '</td><td style="font-size:11.5px">' + esc(Prop.nota(o)) + '</td></tr>' : '<td class="mono">' + (o.frOld ? esc(o.frOld) + ' <span class="hint">Aborted</span>' : '<span class="hint">' + (o.tipo === 'PEND' ? 'in attesa' : 'vuoto') + '</span>') + '</td><td class="mono"><b>' + esc(o.frNew) + '</b></td><td>' + esc(o.statoNew) + '</td><td style="font-size:11.5px">' + esc(Prop.nota(o)) + '</td></tr>'); }).join('') + '</tbody></table></div>';
+      return '<div class="card-t" style="font-size:14px;margin:10px 0 6px">' + Prop.TIPI[t] + ' · ' + R.length + '</div><div class="tbl-wrap" style="max-height:34vh"><table><thead><tr><th><input type="checkbox" checked onchange="document.querySelectorAll(\'.prS[data-t=' + t + ']\').forEach(function(c){c.checked=this.checked}.bind(this))"></th><th>Dove</th><th>ID</th><th>Seriale</th><th>P/N</th><th>Tipo</th>' + (t === 'RIP' ? '<th>FR</th><th>Riparatore attuale</th><th>→ Riparatore VLT</th><th>Stato VLT</th>' : '<th>Riparatore</th><th>FR attuale</th><th>→ FR nuovo</th><th>Stato VLT nuovo</th>') + '<th>Nota che si aggiunge</th></tr></thead><tbody>' +
+        R.map(function (o) { var i = Prop.L.indexOf(o); return '<tr><td><input type="checkbox" class="prS" data-t="' + t + '" data-i="' + i + '" checked></td><td>' + esc(o.dove === 'SCHEDA' ? 'Scheda' : 'Movimento ' + o.dove) + '</td><td class="mono">' + esc(o.id) + '</td><td class="mono">' + esc(o.seriale) + '</td><td class="mono">' + esc(o.pn) + '</td><td>' + esc(o.tip) + '</td>' + (o.tipo === 'RIP' ? '<td class="mono">' + esc(o.frOld) + '</td><td>' + esc(o.ripOld || '(vuoto)') + '</td><td><b>' + esc(o.ripNew) + '</b></td><td>' + esc(o.statoNew) + '</td><td style="font-size:11.5px">' + esc(Prop.nota(o)) + '</td></tr>' : '<td>' + esc(o.ripOld || '') + (o.ripNew && Prop.kRip(o.ripNew) !== Prop.kRip(o.ripOld) ? '<div class="hint" style="margin:0">su VLT: ' + esc(o.ripNew) + '</div>' : '') + '</td><td class="mono">' + (o.frOld ? esc(o.frOld) + ' <span class="hint">Aborted</span>' : '<span class="hint">' + (o.tipo === 'PEND' ? 'in attesa' : 'vuoto') + '</span>') + '</td><td class="mono"><b>' + esc(o.frNew) + '</b></td><td>' + esc(o.statoNew) + '</td><td style="font-size:11.5px">' + esc(Prop.nota(o)) + '</td></tr>'); }).join('') + '</tbody></table></div>';
     }).join('') + '<div class="hint" id="prErr" style="margin-top:6px"></div>';
   },
   nota: function (o) { if (o.tipo === 'RIP') return 'Riparatore aggiornato da VLT il ' + L.itDate(L.isoToday()) + ' (era ' + (o.ripOld || 'vuoto') + ')'; return o.tipo === 'ABORT' ? 'FR ' + o.frOld + ' ABORTED (sostituito da ' + o.frNew + ' il ' + L.itDate(L.isoToday()) + ')' : 'FR ' + o.frNew + ' associato da VLT il ' + L.itDate(L.isoToday()) + (o.tipo === 'PEND' ? ' (era pending: ' + L.s(o.u.pending_fr) + ')' : ''); },
