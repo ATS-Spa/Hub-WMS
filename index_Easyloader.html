@@ -493,7 +493,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
       <div class="card"><div class="row">
         <div class="fg" style="flex:1;min-width:240px"><span class="fl">Cerca</span><input class="fc mono" id="nrQ" placeholder="pratica, mittente, PO/MRN, DDT, AWB, note" oninput="clearTimeout(Nr._qt);Nr._qt=setTimeout(function(){Nr.render()},200)"></div>
         <div class="fg"><span class="fl">Tipo</span><select class="fc" id="nrTipo" onchange="Nr.render()"><option value="">Tutti</option><option>NEW</option><option>REUSE</option></select></div>
-        <div class="fg"><span class="fl">Stato</span><select class="fc" id="nrStato" onchange="Nr.render()"><option value="ATT">Da completare (non spedite)</option><option value="DA_INVIARE">Da inviare</option><option value="INVIATA">Inviate al SD</option><option value="LAVORATA">Lavorate dal cliente</option><option value="IN_USCITA">In uscita RMA</option><option value="SPEDITA">Spedite</option><option value="">Tutte</option></select></div>
+        <div class="fg"><span class="fl">Stato</span><select class="fc" id="nrStato" onchange="Nr.render()"><option value="ATT">Da completare (non spedite)</option><option value="DA_INVIARE">Da inviare</option><option value="INVIATA">Inviate al SD</option><option value="LAVORATA">Lavorate dal cliente</option><option value="IN_USCITA">In uscita RMA</option><option value="SPEDITA">Spedite</option><option value="">Tutte</option><option value="ELIMINATA">🗑 Eliminate</option></select></div>
         <div class="spacer"></div>
         <button class="btn ghost sm" onclick="Nr.loaded=false;Nr.show()">↻ Aggiorna</button>
         <button class="btn ghost sm" onclick="Nr.grid&&Nr.grid.excel('Pratiche_NEW_REUSE')">⬇ Excel</button>
@@ -6458,10 +6458,11 @@ var Rma = {
         { k: 'tipo', label: 'Tipo', filter: 'select', html: function (c) { return Pill.tipo(c.tipo); } },
         { k: 'seriale', label: 'Seriale', filter: 'text', cls: 'mono' },
         { k: 'pn', label: 'P/N', filter: 'select', cls: 'mono' },
+        { k: 'material', label: 'Material', filter: 'text', cls: 'mono', get: function (c) { var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === c.id_unita; }); return L.s(c.material) || (u ? L.mat(u.material) : ''); } },
         { k: 'rma', label: 'RMA', filter: 'text', cls: 'mono', html: function (c) { return '<input class="edit-cell mono' + (L.s(c.rma) ? '' : ' dirty') + '" style="width:10ch" placeholder="manca" value="' + esc(c.rma) + '" title="RMA del carico: stesso RMA su più pezzi solo verso la stessa destinazione" onchange="Rma.carSet(\'' + c.id_carico + '\',{rma:this.value})">'; } },
         { k: 'destinazione', label: 'Destinazione', filter: 'select', html: function (c) { return '<input class="edit-cell" style="width:22ch" list="dlControparti" value="' + esc(c.destinazione) + '" onchange="Rma.carSet(\'' + c.id_carico + '\',{destinazione:this.value})">'; } },
         { k: 'po_mrn', label: 'PO / MRN', filter: 'text', cls: 'mono' },
-        { k: 'posizione', label: 'Posizione', filter: 'select', cls: 'mono' },
+        { k: 'posizione', label: 'Posizione', filter: 'select', cls: 'mono', html: function (c) { var b = Rma.ubiBin(c.posizione); return esc(c.posizione) + (b ? '<div class="hint" style="margin:0" title="Decodifica ubicazioni">→ ' + esc(b) + '</div>' : ''); } },
         { k: 'note', label: 'Note', filter: 'text' },
         { k: 'creato_da', label: 'Da', filter: 'select', get: function (c) { return App.sigla(c.creato_da); } },
         { k: 'usc', label: 'In uscita', filter: 'text', get: function (c) { var x = Rma.carMotivo(c); return x ? 'NO: ' + x.m : 'SI'; }, html: function (c) { var x = Rma.carMotivo(c); return x ? '<span class="pill p-amber" title="' + esc(x.m) + '">no</span>' + (x.fix === 'RICOLLEGA' ? ' <button class="ico-btn" title="Rimetti in uscita: ' + esc(x.m) + '" onclick="Rma.carRicollega(\'' + c.id_carico + '\')">↻</button>' : '') : '<span class="pill p-green">sì</span>'; } },
@@ -6472,7 +6473,7 @@ var Rma = {
     return Rma.grids[s];
   },
   set: function (id, f, v) {
-    var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); v = f === 'rma' ? L.frKey(v) : L.s(v);
+    var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); v = f === 'rma' ? Rma.rmaPulito(v) : L.s(v);
     if (f === 'rma' && v && Rma.rmaErr(v, true)) toast(Rma.rmaErr(v, true), 'ko');
     var orig = L.s(f === 'dest' ? u.destinazione_prevista : (f === 'ndt' ? u.nota_ddt : u.rma)), d = Rma.dirty[id] || {};
     if (v === orig) delete d[f]; else d[f] = v;
@@ -6669,20 +6670,20 @@ var Rma = {
     inv.forEach(function (u) { byId[u.id_unita] = u; [L.up(u.seriale), L.up(L.afterSpace(u.seriale))].forEach(function (k) { if (k && (bySer[k] = bySer[k] || []).indexOf(u) < 0) bySer[k].push(u); }); });
     var nelFile = {}, out = [];
     rows.forEach(function (r, i) {
-      var o = { riga: i + 2, ser: L.s(r['SERIALE']), id: L.s(r['ID UNITA']), rma: L.frKey(r['RMA CREATO']), nd: L.s(r['NUOVA DESTINAZIONE']), err: '', note: [] };
+      var o = { riga: i + 2, ser: L.s(r['SERIALE']), id: L.s(r['ID UNITA']), rma: Rma.rmaPulito(r['RMA CREATO']), nd: L.s(r['NUOVA DESTINAZIONE']), err: '', note: [] };
       if (!o.ser && !o.id && !o.rma && !o.nd) return;
       var u = o.id && byId[o.id], cand = bySer[L.up(o.ser)] || bySer[L.up(L.afterSpace(o.ser))] || [];
       if (u && o.ser && cand.length && cand.indexOf(u) < 0) o.err = 'ID UNITA ' + o.id + ' e seriale ' + o.ser + ' non sono la stessa scheda';
       else if (!u) { if (cand.length === 1) u = cand[0]; else if (cand.length > 1) o.err = 'seriale presente su più schede: indica l ID UNITA'; else o.err = 'seriale non presente nell inventario giornaliero'; }
       o.u = u || null;
-      if (!o.err && !o.rma && !o.nd && !(snap && L.frKey(r['RMA CREATO']))) { o.skip = 'niente da importare'; }
+      if (!o.err && !o.rma && !o.nd && !(snap && Rma.rmaPulito(r['RMA CREATO']))) { o.skip = 'niente da importare'; }
       if (!o.err && u) {
         o.car = carDi[u.id_unita] || null;
         if (o.car) { o.rmaPrima = L.s(o.car.rma); o.destPrima = L.s(o.car.destinazione); }
         else { o.rmaPrima = L.s(Rma.dv(u, 'rma')); o.destPrima = (Rma.varia(u) || {}).nuova || L.s(Rma.dv(u, 'dest')); }
         // file con la colonna RMA AL DOWNLOAD: se chi importa non ha cambiato RMA CREATO, la riga non tocca l'RMA (anche se un collega l'ha cambiato)
         if (snap && o.rma) {
-          var sn = L.frKey(r['RMA AL DOWNLOAD']), ora = o.car ? L.s(o.car.rma) : L.s(u.rma);
+          var sn = Rma.rmaPulito(r['RMA AL DOWNLOAD']), ora = o.car ? L.s(o.car.rma) : L.s(u.rma);
           if (o.rma === sn) o.rma = '';
           else if (sn !== ora && o.rma !== ora) { o.note.push('⚠ nel frattempo un altro lo aveva cambiato (era ' + (sn || 'vuoto') + ', poi ' + (ora || 'vuoto') + '): vale il tuo'); o.avviso = true; }
         }
@@ -6817,9 +6818,14 @@ var Rma = {
   ultimoAuto: function () { var ult = Rma.ultimoImport(), r = DB.t.RMA_RITORNI.rows.find(function (x) { return x.importato_il === ult; }); return r && r.importato_da.indexOf(Rma.AUTO) === 0 ? r.importato_da.slice(Rma.AUTO.length) : ''; },
 
   // ─ CARICHI NEW/REUSE
-  carUnita: function (ser) {
-    ser = L.up(ser); if (!ser) return null;
-    return DB.t.UNITA.rows.find(function (u) { return (u.tipo === 'NEW' || u.tipo === 'REUSE') && (u.stato === 'IN_GIACENZA' || u.stato === 'IN_LAVORAZIONE') && (L.up(u.seriale) === ser || L.up(L.afterSpace(u.seriale)) === ser); }) || null;
+  // ubi (facoltativa, dal file): con più schede dello stesso seriale vince quella in quell'ubicazione
+  // ubicazione di transcodifica (es. "DC12BB / FLM 550") → bin del magazzino (71-STK-…) dalla decodifica ubicazioni; '' se non c'è
+  ubiBin: function (ubi) { ubi = L.up(ubi); if (!ubi || /^71-/.test(ubi)) return ''; var pb = Cedolino.pos(ubi); return pb[1] && L.up(pb[1]) !== ubi ? L.up(pb[1]) : ''; },
+  carUnita: function (ser, ubi) {
+    ser = L.up(ser); if (!ser) return null; ubi = L.up(ubi);
+    var C = DB.t.UNITA.rows.filter(function (u) { return (u.tipo === 'NEW' || u.tipo === 'REUSE') && (u.stato === 'IN_GIACENZA' || u.stato === 'IN_LAVORAZIONE') && (L.up(u.seriale) === ser || L.up(L.afterSpace(u.seriale)) === ser); });
+    var bin = ubi ? Rma.ubiBin(ubi) : '';
+    return (ubi && C.find(function (u) { var x = L.up(u.ubicazione); return x === ubi || (bin && (x === bin || Rma.ubiBin(x) === bin)); })) || C[0] || null;
   },
   carInfo: function () {
     var u = Rma.carUnita($('carSer').value), h = $('carHint'); if (!h) return;
@@ -6830,7 +6836,7 @@ var Rma = {
   },
   // controlla una riga di carico; restituisce { u, err }
   carValida: function (o, visti, destFac) {
-    var u = Rma.carUnita(o.seriale);
+    var u = Rma.carUnita(o.seriale, o.ubicazione);
     if (!L.s(o.seriale)) return { err: 'seriale mancante' };
     if (!u) return { err: 'seriale non trovato tra NEW/REUSE in giacenza' };
     if (Rma.carichi().some(function (c) { return c.id_unita === u.id_unita; })) return { u: u, err: 'già in un carico aperto' };
@@ -6843,7 +6849,7 @@ var Rma = {
   },
   carScrivi: async function (lista) {   // lista: [{ u, rma, destinazione, po_mrn, note }]
     var t = DB.t.CARICHI_RMA, tU = DB.t.UNITA, now = L.nowStamp(), oggi = L.isoToday();
-    var objs = lista.map(function (x) { return { data: oggi, id_unita: x.u.id_unita, seriale: x.u.seriale, pn: x.u.pn, tipo: x.u.tipo, rma: x.rma, destinazione: x.destinazione, po_mrn: x.po_mrn, posizione: x.u.ubicazione, note: x.note, stato: 'APERTO', creato_il: now, creato_da: Auth.email }; });
+    var objs = lista.map(function (x) { return { data: oggi, id_unita: x.u.id_unita, seriale: x.u.seriale, pn: x.u.pn, tipo: x.u.tipo, rma: x.rma, destinazione: x.destinazione, po_mrn: x.po_mrn, posizione: L.up(x.ubicazione) || x.u.ubicazione, note: x.note, stato: 'APERTO', creato_il: now, creato_da: Auth.email }; });
     var r = await API.append(DB.id, 'CARICHI_RMA', objs.map(function (o) { return t.toRow(o); }));
     objs.forEach(function (o, i) { o.id_carico = 'K' + L.pad(r + i - 1, 6); });
     var upd = [{ range: t.cell('id_carico', r) + ':' + t.col('id_carico') + (r + objs.length - 1), values: objs.map(function (o) { return [o.id_carico]; }) }];
@@ -6901,17 +6907,20 @@ var Rma = {
       var rRaw = campo(r, ['RMA']);
       var o = { seriale: campo(r, ['SERIALE', 'SERIAL', 'SERIAL NO.', 'SN', 'S/N']), rma: Rma.rmaPulito(rRaw), rmaRaw: rRaw, destinazione: campo(r, ['DESTINAZIONE', 'PV DESTINO', 'DESTINO', 'DESTINAZIONE INTERA']),
         po_mrn: campo(r, ['PO', 'P.O', 'PO / MRN', 'PO/MRN', 'MRN', 'PO NEW / MRN']), note: campo(r, ['NOTE', 'NOTE SD / FR', 'NOTE SD']),
-        material: campo(r, ['MATERIAL SAP CODE', 'MATERIAL SAPCODE', 'SAP CODE', 'MATERIAL']) };
+        material: campo(r, ['MATERIAL SAP CODE', 'MATERIAL SAPCODE', 'SAP CODE', 'MATERIAL']), ubicazione: L.up(campo(r, ['UBICAZIONE', 'POSIZIONE', 'BIN', 'UBICAZIONE PRELIEVO'])) };
       visti.rma = visti.rma || {};
-      if (Rma.resta(o.destinazione)) { var ur = Rma.carUnita(o.seriale); o.u = ur; o.resta = true; o.err = ur ? '' : 'seriale non trovato tra NEW/REUSE in giacenza'; return o; }
-      var v = Rma.carValida(o, visti, true); if (v.u && !v.err) { visti[v.u.id_unita] = 1; if (o.rma) visti.rma[o.rma] = o.destinazione; } o.manca = !!v.manca; o.u = v.u; o.err = v.err; o.senzaDest = !L.s(o.destinazione); return o;
+      if (Rma.resta(o.destinazione)) { var ur = Rma.carUnita(o.seriale, o.ubicazione); o.u = ur; o.resta = true; o.err = ur ? '' : 'seriale non trovato tra NEW/REUSE in giacenza'; return o; }
+      var v = Rma.carValida(o, visti, true); if (v.u && !v.err) { visti[v.u.id_unita] = 1; if (o.rma) visti.rma[o.rma] = o.destinazione; } o.manca = !!v.manca; o.u = v.u; o.err = v.err; o.senzaDest = !L.s(o.destinazione);
+      var bF = Rma.ubiBin(o.ubicazione); if (bF) { o.ubiCod = o.ubicazione; o.ubicazione = bF; }   // DC12BB… → 71-STK-… (decodifica ubicazioni)
+      if (o.u && o.ubicazione && L.up(o.u.ubicazione) && L.up(o.u.ubicazione) !== o.ubicazione && Rma.ubiBin(o.u.ubicazione) !== o.ubicazione) o.ubiDiv = L.up(o.u.ubicazione);   // il carico prende l'ubicazione del file (prelievo); la scheda resta com'è
+      return o;
     }).filter(function (o) { return o.seriale || o.rma; });
     var ok = righe.filter(function (o) { return !o.err && !o.resta; }), ko = righe.filter(function (o) { return o.err; }), rest = righe.filter(function (o) { return o.resta && !o.err; }), sd = ok.filter(function (o) { return o.senzaDest; });
-    var esito = function (o) { return o.err || (o.resta ? 'resta in giacenza (' + o.destinazione + ')' : (o.senzaDest ? '⚠ senza destinazione' : 'ok') + (o.manca ? ' · senza RMA: può uscire, il SD lo aggiunge dopo' : '') + (o.rmaRaw && o.rmaRaw !== o.rma ? ' · RMA pulito da "' + o.rmaRaw + '"' : '')); };
+    var esito = function (o) { return o.err || (o.resta ? 'resta in giacenza (' + o.destinazione + ')' : (o.senzaDest ? '⚠ senza destinazione' : 'ok') + (o.manca ? ' · senza RMA: può uscire, il SD lo aggiunge dopo' : '') + (o.rmaRaw && o.rmaRaw !== o.rma ? ' · RMA pulito da "' + o.rmaRaw + '"' : '') + (o.ubiCod ? ' · ubicazione ' + o.ubiCod + ' decodificata in ' + o.ubicazione : '') + (o.ubiDiv ? ' · ⚠ ubicazione del file ' + o.ubicazione + ', sulla scheda ' + o.ubiDiv : '')); };
     var col = function (o) { return o.err ? 'var(--red)' : (o.resta ? 'var(--blue)' : (o.senzaDest ? 'var(--amber)' : 'var(--green)')); };
     var html = '<div style="font-size:13px;margin-bottom:8px"><b style="color:var(--green)">' + ok.length + '</b> carichi da creare' + (sd.length ? ' (<b style="color:var(--amber)">' + sd.length + ' senza destinazione</b>)' : '') + (rest.length ? ' · <b style="color:var(--blue)">' + rest.length + '</b> restano in giacenza a Maddaloni' : '') + (ko.length ? ' · <b style="color:var(--red)">' + ko.length + ' con errori (non vengono caricate)</b>' : '') + '</div>' +
-      '<div class="tbl-wrap modal-scroll"><table><thead><tr><th>Seriale</th><th>Tipo</th><th>P/N</th><th>RMA</th><th>Destinazione</th><th>PO</th><th>Material SAP</th><th>Note</th><th>Esito</th></tr></thead><tbody>' +
-      righe.map(function (o) { return '<tr class="' + (o.err ? 'r-err' : (o.senzaDest ? 'r-warn' : '')) + '"><td class="mono">' + esc(o.seriale) + '</td><td>' + esc(o.u ? o.u.tipo : '') + '</td><td class="mono">' + esc(o.u ? o.u.pn : '') + '</td><td class="mono">' + esc(o.rma) + '</td><td>' + esc(o.destinazione) + '</td><td class="mono">' + esc(o.po_mrn) + '</td><td class="mono">' + esc(o.material) + '</td><td>' + esc(o.note) + '</td><td style="font-size:11.5px;color:' + col(o) + '">' + esc(esito(o)) + '</td></tr>'; }).join('') + '</tbody></table></div>';
+      '<div class="tbl-wrap modal-scroll"><table><thead><tr><th>Seriale</th><th>Tipo</th><th>P/N</th><th>RMA</th><th>Destinazione</th><th>Ubicazione</th><th>PO</th><th>Material SAP</th><th>Note</th><th>Esito</th></tr></thead><tbody>' +
+      righe.map(function (o) { return '<tr class="' + (o.err ? 'r-err' : (o.senzaDest ? 'r-warn' : '')) + '"><td class="mono">' + esc(o.seriale) + '</td><td>' + esc(o.u ? o.u.tipo : '') + '</td><td class="mono">' + esc(o.u ? o.u.pn : '') + '</td><td class="mono">' + esc(o.rma) + '</td><td>' + esc(o.destinazione) + '</td><td class="mono">' + esc(o.ubicazione || (o.u ? o.u.ubicazione : '')) + '</td><td class="mono">' + esc(o.po_mrn) + '</td><td class="mono">' + esc(o.material) + '</td><td>' + esc(o.note) + '</td><td style="font-size:11.5px;color:' + col(o) + '">' + esc(esito(o)) + '</td></tr>'; }).join('') + '</tbody></table></div>';
     Modal.html('Import carichi NEW/REUSE · ' + f.name, html, [{ label: 'Annulla', cls: 'ghost' }].concat(ok.length || rest.length ? [{ label: 'Carica ' + (ok.length + rest.length) + ' righe', cls: 'green', fn: async function () {
       if (sd.length && !(await Modal.confirm('Destinazione mancante', sd.length + ' righe non hanno la destinazione:\n• ' + sd.slice(0, 15).map(function (o) { return o.seriale; }).join('\n• ') + (sd.length > 15 ? '\n…' : '') + '\n\nLe carico lo stesso? In Uscite compariranno senza destinazione finché non la scrivi nella griglia dei carichi.'))) return;
       Modal.open('Import carichi', 'Salvo ' + (ok.length + rest.length) + ' righe…', []);
@@ -6934,12 +6943,26 @@ var Rma = {
     if (upd.length) await API.batchUpdate(DB.id, upd);
     if (logs.length) await API.append(DB.id, 'LOG', logs);
   },
+  // modello da compilare: DESTINAZIONE con menu a tendina (foglio DESTINAZIONI), RMA come testo (all'import restano solo le cifre: "RMA 125854" → 125854)
   carModello: async function () {
+    var H = ['SERIALE', 'RMA', 'DESTINAZIONE', 'MATERIAL', 'UBICAZIONE', 'PO', 'NOTE'], D = Rma.destinazioni(), dest = Object.keys(D).map(function (k) { return D[k]; }).sort();
     try {
-      await Lib.xlsx();
-      var ws = XLSX.utils.aoa_to_sheet([['SERIALE', 'RMA', 'DESTINAZIONE', 'PO', 'NOTE']]), wb = XLSX.utils.book_new();
-      XLSX.utils.book_append_sheet(wb, ws, 'CARICHI'); XLSX.writeFile(wb, 'modello_carichi_new_reuse.xlsx');
-    } catch (e) { toast(e.message, 'ko'); }
+      await Lib.exceljs();
+      var wb = new ExcelJS.Workbook(), ws = wb.addWorksheet('CARICHI', { views: [{ state: 'frozen', ySplit: 1 }] }), n = 1000;
+      ws.addRow(H);
+      ws.getRow(1).eachCell(function (cell) { cell.font = { bold: true, color: { argb: 'FFFFFFFF' } }; cell.fill = { type: 'pattern', pattern: 'solid', fgColor: { argb: 'FF1F3864' } }; });
+      [26, 14, 40, 22, 24, 18, 40].forEach(function (w, i) { ws.getColumn(i + 1).width = w; });
+      [1, 2, 4, 5, 6].forEach(function (c) { ws.getColumn(c).numFmt = '@'; });   // testo: niente zeri persi su seriali, RMA, material e PO
+      var wd = wb.addWorksheet('DESTINAZIONI'); wd.addRow(['DESTINAZIONE']); dest.forEach(function (d) { wd.addRow([d]); }); wd.getColumn(1).width = 46; wd.getRow(1).font = { bold: true };
+      ws.dataValidations.add('C2:C' + n, { type: 'list', allowBlank: true, formulae: ['DESTINAZIONI!$A$2:$A$' + (dest.length + 1)], showErrorMessage: true, errorStyle: 'stop', errorTitle: 'Destinazione', error: 'Scegli una destinazione dal menu (foglio DESTINAZIONI)' });
+      var wi = wb.addWorksheet('ISTRUZIONI'); wi.getColumn(1).width = 120;
+      ['SERIALE: il seriale del pezzo NEW/REUSE in giacenza (obbligatorio).', 'RMA: anche "RMA 125854" o "RMA125854": all import restano solo le cifre. Si può lasciare vuoto e darlo dopo.', 'DESTINAZIONE: scegli dal menu a tendina (obbligatoria).', 'MATERIAL: il Material SAP Code del pezzo (facoltativo): se c\'è viene scritto sulla scheda.', 'UBICAZIONE: da dove prelevare il pezzo in magazzino (facoltativa): va nella posizione del carico; un codice di transcodifica (es. DC12BB / FLM 550) viene decodificato nel bin del magazzino (71-STK-…); se ci sono più schede con lo stesso seriale si prende quella in questa ubicazione.', 'PO e NOTE: facoltativi.', 'Poi in RMA → Carichi NEW/REUSE premi "⬆ Importa Excel": vedi l anteprima e confermi.'].forEach(function (t) { wi.addRow([t]); });
+      var buf = await wb.xlsx.writeBuffer(), url = URL.createObjectURL(new Blob([buf], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' })), a = document.createElement('a');
+      a.href = url; a.download = 'modello_carichi_new_reuse.xlsx'; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 4000);
+    } catch (e) {
+      toast('Menu a tendina non disponibile (' + e.message + '): scarico il modello semplice', 'ko');
+      Xls.scarica('modello_carichi_new_reuse', [{ nome: 'CARICHI', headers: H, rows: [] }, { nome: 'DESTINAZIONI', headers: ['DESTINAZIONE'], rows: dest.map(function (d) { return [d]; }) }]);
+    }
   },
   carAnnulla: async function (id) {
     var c = DB.t.CARICHI_RMA.rows.find(function (x) { return x.id_carico === id; }); if (!c) return;
@@ -7961,9 +7984,42 @@ var Nr = {
     try {
       var cestino = function (fid) { return L.s(fid) ? API.call('https://www.googleapis.com/drive/v3/files/' + fid + '?supportsAllDrives=true', { method: 'PATCH', body: JSON.stringify({ trashed: true }) }).catch(function (e) { return e; }) : null; };
       await Promise.all([cestino(p.file_id), cestino(p.file_originale_id)]);
-      await Nr.set(p, { stato: 'ELIMINATA', note: (L.s(p.note) ? L.s(p.note) + ' | ' : '') + 'eliminata da ' + Auth.email + ' il ' + L.nowStamp() }, 'NR_ELIMINATA');
+      await Nr.set(p, { stato: 'ELIMINATA', note: (L.s(p.note) ? L.s(p.note) + ' | ' : '') + 'eliminata da ' + Auth.email + ' il ' + L.nowStamp() + ' (era ' + p.stato + ')' }, 'NR_ELIMINATA');
       Modal.close(); toast('Pratica ' + id + ' eliminata', 'ok');
     } catch (e) { Modal.progress(''); err('Non eliminata: ' + e.message); }
+  },
+  // ripristino di una pratica eliminata (solo admin + password): torna allo stato di prima e i file escono dal cestino di Drive
+  statoPrima: function (p) {
+    var m = /eliminata da [^|]*\(era ([A-Z_]+)\)\s*$/.exec(L.s(p.note));
+    if (m && Nr.STATI[m[1]]) return m[1];
+    return L.s(p.in_uscita_il) ? 'IN_USCITA' : (L.s(p.lavorata_il) ? 'LAVORATA' : (L.s(p.mail_inviata_il) ? 'INVIATA' : 'DA_INVIARE'));   // eliminate prima di questa versione
+  },
+  chiediRipristino: function (id) {
+    if (!App.isAdmin) { toast('Solo gli admin possono ripristinare', 'ko'); return; }
+    var p = Nr.t().rows.find(function (x) { return x.id_pratica === id; }); if (!p) return;
+    var st = Nr.statoPrima(p);
+    Modal.html('♻ Ripristina pratica ' + id,
+      '<div style="font-size:13px;line-height:1.6;margin-bottom:10px">' + esc(p.tipo) + ' · ' + esc(p.mittente) + ' · PO ' + esc(p.po_mrn || '—') + ' · DDT ' + esc(p.ddt || '—') + ' · ' + esc(p.n_pezzi) + ' pezzi<br>' + esc(p.file_nome || '') + '<br>Torna nell\'elenco come <b>' + esc((Nr.STATI[st] || ['', st])[1]) + '</b> e i file (con l\'eventuale originale) escono dal cestino di Drive. Resta tutto nel LOG.</div>' +
+      '<div class="fg"><span class="fl">Motivo *</span><input class="fc" id="nrRiMot" autocomplete="off" placeholder="es. eliminata per errore"></div>' +
+      '<div class="fg" style="margin-top:8px"><span class="fl">Password *</span><input class="fc" type="password" id="nrRiPwd" autocomplete="new-password"></div><div class="hint" id="nrRiErr" style="margin-top:6px"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: '♻ Ripristina', cls: 'green', keep: true, fn: function () { Nr.ripristina(id); } }]);
+    setTimeout(function () { $('nrRiMot').focus(); }, 50);
+  },
+  ripristina: async function (id) {
+    var p = Nr.t().rows.find(function (x) { return x.id_pratica === id; }), err = function (m) { $('nrRiErr').textContent = m; $('nrRiErr').className = 'hint err'; };
+    var mot = L.s($('nrRiMot').value); if (!mot) { $('nrRiMot').focus(); return err('Scrivi il motivo'); }
+    if (!(await Pwd.ok($('nrRiPwd').value))) return err('Password errata');
+    if (!p || p.stato !== 'ELIMINATA') return err('La pratica non è più eliminata: premi Aggiorna');
+    Modal.progress('Ripristino…');
+    try {
+      var st = Nr.statoPrima(p), avv = [];
+      var esci = function (fid) { return L.s(fid) ? API.call('https://www.googleapis.com/drive/v3/files/' + fid + '?supportsAllDrives=true', { method: 'PATCH', body: JSON.stringify({ trashed: false }) }).catch(function (e) { avv.push(e.message); }) : null; };
+      await Promise.all([esci(p.file_id), esci(p.file_originale_id)]);
+      await Nr.set(p, { stato: st, note: L.s(p.note) + ' | ripristinata da ' + Auth.email + ' il ' + L.nowStamp() + ': ' + mot }, 'NR_RIPRISTINATA');
+      Modal.close(); Nr.render();
+      if (avv.length) Modal.open('Pratica ' + id + ' ripristinata', 'La pratica è tornata in elenco, ma un file non è uscito dal cestino di Drive (forse svuotato): usa ↻ Crea file.\n\n' + avv.join('\n'));
+      else toast('Pratica ' + id + ' ripristinata (' + (Nr.STATI[st] || ['', st])[1] + ')', 'ok');
+    } catch (e) { Modal.progress(''); err('Non ripristinata: ' + e.message); }
   },
   ricrea: async function (id) {
     var p = Nr.t().rows.find(function (x) { return x.id_pratica === id; }), P = Nr.pezziRic(p.id_ricezione);
@@ -7977,7 +8033,7 @@ var Nr = {
     if (!Nr.loaded) return;
     if (!Nr.grid) Nr.grid = new Grid('nr', {
       thead: 'nrHead', tbody: 'nrRows', foot: 'nrFoot', sort: 'id_pratica', dir: -1, empty: 'Nessuna pratica: si creano da sole con gli ingressi NEW/REUSE',
-      rows: function () { var st = $('nrStato').value, tp = $('nrTipo').value; return Nr.t().rows.filter(function (p) { return p.stato !== 'ELIMINATA' && (st === 'ATT' ? p.stato !== 'SPEDITA' : (!st || p.stato === st)) && (!tp || p.tipo === tp); }); },
+      rows: function () { var st = $('nrStato').value, tp = $('nrTipo').value; return Nr.t().rows.filter(function (p) { return (st === 'ELIMINATA' ? p.stato === 'ELIMINATA' : p.stato !== 'ELIMINATA') && (st === 'ELIMINATA' || st === 'ATT' ? p.stato !== 'SPEDITA' : (!st || p.stato === st)) && (!tp || p.tipo === tp); }); },
       cerca: function () { return $('nrQ').value; },
       cols: [
         { k: 'id_pratica', label: 'ID', cls: 'mono' },
@@ -7991,6 +8047,7 @@ var Nr = {
         { k: 'lavorata_il', label: 'Lavorata il', cls: 'mono nw', filter: 'date', get: function (p) { return L.s(p.lavorata_il).slice(0, 16); } },
         { k: 'az', label: 'Azioni', noXls: true, html: function (p) {
           var id = esc(p.id_pratica), b = function (t, fn, tit, cls) { return '<button class="btn ' + (cls || 'ghost') + ' sm" style="padding:3px 8px" title="' + tit + '" onclick="' + fn + '">' + t + '</button> '; };
+          if (p.stato === 'ELIMINATA') return App.isAdmin ? b('♻ Ripristina', 'Nr.chiediRipristino(\'' + id + '\')', 'Ripristina la pratica e i suoi file dal cestino di Drive (solo admin, con password)') : '<span class="hint">eliminata</span>';
           if (!p.file_id) return b('↻ Crea file', 'Nr.ricrea(\'' + id + '\')', 'Crea il file della pratica');
           return '<span class="nw">' + b('⬇', 'Nr.scarica(\'' + id + '\')', 'Scarica il file') + (p.file_link ? '<a class="btn ghost sm" style="padding:3px 8px" target="_blank" href="' + esc(p.file_link) + '" title="Apri su Drive">↗</a> ' : '') +
             b('✉', 'Nr.mail(\'' + id + '\')', 'Mail al Service Desk con il link al file') +
@@ -8006,7 +8063,7 @@ var Nr = {
     });
     Nr.grid.render();
     var R = Nr.t().rows, n = function (s) { return R.filter(function (p) { return p.stato === s; }).length; };
-    $('nrStats').innerHTML = Object.keys(Nr.STATI).map(function (k) { return '<div class="stat"><b>' + n(k) + '</b><span>' + Nr.STATI[k][1] + '</span></div>'; }).join('');
+    $('nrStats').innerHTML = Object.keys(Nr.STATI).map(function (k) { return '<div class="stat"><b>' + n(k) + '</b><span>' + Nr.STATI[k][1] + '</span></div>'; }).join('') + (n('ELIMINATA') ? '<div class="stat" style="cursor:pointer" title="Mostra le pratiche eliminate" onclick="$(\'nrStato\').value=\'ELIMINATA\';Nr.render()"><b style="color:var(--red)">' + n('ELIMINATA') + '</b><span>eliminate</span></div>' : '');
   }
 };
 
