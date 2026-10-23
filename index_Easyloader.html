@@ -1638,6 +1638,7 @@ var Ingresso = {
     setTimeout(function () { $('ubVal').focus(); }, 50);
   },
   edit: function (i, f, v) { var r = Ingresso.rows[i]; r.man[f] = L.s(v); Ingresso.ricalcola(); Ingresso.save(); },
+  NR_SCHEDA: 'N.SCHEDA',
   editUbi: function (i, v) { Ingresso.rows[i].ubi = L.up(v); Ingresso.ricalcola(); Ingresso.save(); },
   // FR corretto a mano sul pezzo letto: tutto il resto (P/N, produttore, riparatore, stato VLT, destinazione) si ricalcola da VLT; resta il seriale letto
   editFr: function (i, v) {
@@ -1785,7 +1786,7 @@ var Ingresso = {
       o.mail = { tipo: 'bal' };
     } else if (o.tipo === 'GOOD') {
       o.destinazione = frIn === '98787' ? 'INGEGNERIA' : (o.depDest || '');
-      o.nota = (r.man.nota !== undefined) ? r.man.nota : (o.destinazione ? o.destinazione + ' / ' + ctx.nextLabel() : '');
+      o.nota = (r.man.nota !== undefined) ? r.man.nota : (o.destinazione ? o.destinazione + ' / ' + Ingresso.NR_SCHEDA : '');   // il numero della scheda si scrive al salvataggio
       if (!v && !(jg && !L.s(jg.fr))) { o.msgs.push(['warn', 'FR non trovato in VLT']); o.warn = true; }
       if (!o.destinazione && !(jg && !L.s(jg.fr))) { o.msgs.push(['warn', 'Destinazione non ricavata dal depot VLT']); o.warn = true; }
     } else {
@@ -1980,6 +1981,13 @@ var Ingresso = {
     Modal.progress('2/2 numerazione, anomalie e log');
     function colRange(t, h, r) { return t.cell(h, r) + ':' + t.col(h) + (r + n - 1); }
     var upd = [{ range: tR.cell('id_ricezione', rR), values: [[idR]] }];
+    // GOOD: nella nota "destinazione / N.SCHEDA" va il numero della scheda appena creata (es. TELEBIT MI - FASTWEB / 21213)
+    uObjs.forEach(function (o, i) {
+      var t0 = ' / ' + Ingresso.NR_SCHEDA; if (L.s(o.note).indexOf(t0) < 0) return;
+      var nt = L.s(o.note).replace(t0, ' / ' + Etichette.idScheda(o)); o.note = nt; mObjs[i].note = nt;
+      if ('note' in tU.idx) upd.push({ range: tU.cell('note', rU + i), values: [[nt]] });
+      if ('note' in tM.idx) upd.push({ range: tM.cell('note', rM + i), values: [[nt]] });
+    });
     // balancing previste dal Service Desk: ora sono arrivate
     var tB = DB.t.BALANCING;
     C.forEach(function (c, i) { if (c.bal && c.bal._r) { var ch = { gestito: 'SI', data_gestione: now, gestito_da: me, id_unita: uObjs[i].id_unita }; Object.keys(ch).forEach(function (h) { if (h in tB.idx) { c.bal[h] = ch[h]; upd.push({ range: tB.cell(h, c.bal._r), values: [[ch[h]]] }); } }); } });
@@ -3579,7 +3587,7 @@ var Chv = {
       }
       Chv.post({ tipo: 'esiti_ok', ids: esiti.map(function (e) { return e && e.id_esito; }) });
       if (nuovi.length) { var ko = nuovi.filter(function (e) { return e.esito === 'ERRORE'; }).length; toast('VLT: ' + nuovi.length + ' esiti registrati' + (ko ? ' · ' + ko + ' errori' : ''), ko ? 'ko' : 'ok'); }
-      if (App.tab === 'chiusure') Chv.render();
+      if (App.tab === 'chiusure') { Chv.render(); Chv.aggVedi(); }
     }).catch(function (e) { toast('Esiti VLT non salvati (riprovo al prossimo invio): ' + e.message, 'ko'); });
     return Chv._q;
   },
@@ -3702,7 +3710,7 @@ var Chv = {
     var p; try { p = await Busy.wrap(Chv.prepara(proc, Chv.giorno())); } catch (e) { Modal.open('Errore', e.message); return; }
     var f = Chv.fatti(proc, Chv.giorno());
     Chv._vedi = { proc: proc, tutti: p.tutti };
-    var rows = p.tutti.map(function (it, i) { var e = f[it.k]; return '<tr' + (Chv.FATTO[e] ? ' class="r-off"' : (e === 'ERRORE' ? ' class="r-err"' : '')) + '><td>' + (Chv.FATTO[e] ? '' : '<input type="checkbox" class="chvMan" data-i="' + i + '" data-e="' + esc(e || '') + '">') + '</td><td class="mono">' + esc(it.fr || it.rma) + '</td><td class="mono">' + esc(it.seriale || (it.serials || []).join(' ')) + '</td><td>' + esc(it.stato_file || it.dest || '') + '</td><td>' + esc(it.note || it.awb || '') + '</td><td>' + esc(e || 'da fare') + '</td></tr>'; }).join('');
+    var rows = p.tutti.map(function (it, i) { var e = f[it.k]; return '<tr data-k="' + esc(it.k) + '"' + (Chv.FATTO[e] ? ' class="r-off"' : (e === 'ERRORE' ? ' class="r-err"' : '')) + '><td>' + (Chv.FATTO[e] ? '' : '<input type="checkbox" class="chvMan" data-i="' + i + '" data-e="' + esc(e || '') + '">') + '</td><td class="mono">' + esc(it.fr || it.rma) + '</td><td class="mono">' + esc(it.seriale || (it.serials || []).join(' ')) + '</td><td>' + esc(it.stato_file || it.dest || '') + '</td><td>' + esc(it.note || it.awb || '') + '</td><td class="chvEs">' + esc(e || 'da fare') + '</td></tr>'; }).join('');
     Modal.html(Chv.PROC[proc] + ' · ' + L.itDate(Chv.giorno()), '<div class="hint" style="margin-bottom:6px">Schede chiuse davvero su VLT ma segnate "saltato" o "errore" (es. falso errore di salvataggio): spuntale e premi <b>✔ Segna come già chiuse</b>. In alternativa rimandale a VLT: lo script vede lo stato già finale e le segna "già a posto" da solo.</div><div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:6px"><button class="btn ghost sm" id="chvSelSE" type="button">Seleziona saltate ed errori</button><button class="btn ghost sm" id="chvSelNo" type="button">Deseleziona</button><span class="hint" id="chvSelN" style="margin:0">0 selezionate</span></div><div class="tbl-wrap modal-scroll"><table><thead><tr><th><input type="checkbox" id="chvTutti" title="Seleziona tutte"></th><th>' + (proc === 'RMA' ? 'RMA' : 'FR') + '</th><th>Seriale</th><th>' + (proc === 'ACK' || proc === 'RMA' ? 'Destinazione' : 'Stato VLT (file)') + '</th><th>' + (proc === 'ACK' || proc === 'RMA' ? 'AWB' : 'Nota') + '</th><th>Esito</th></tr></thead><tbody>' + (rows || '<tr><td colspan="6" class="empty">Nessuna scheda</td></tr>') + '</tbody></table></div>' +
       (p.scarti.length ? '<div class="hint warn" style="margin-top:8px">Non inviabili: ' + p.scarti.map(function (s) { return esc(s.motivo); }).join(' · ') + '</div>' : ''), [{ label: 'Chiudi', cls: 'ghost' }, { label: '⬇ Excel', fn: function () { Chv.excel(proc); } }, { label: '✔ Segna come già chiuse', cls: 'green', keep: true, fn: function () { Chv.segnaMan(); } }], true);
     var cbs = function () { return Array.prototype.slice.call(document.querySelectorAll('#mBody .chvMan')); };
@@ -3730,15 +3738,30 @@ var Chv = {
   },
   show: async function () {
     Chv.init(); Chv.ping(); setTimeout(function () { if (App.tab === 'chiusure') Chv.render(); }, 1200);
-    // esiti scritti da altri operatori: si rileggono da soli ogni 30 secondi mentre sei sul tab (non con un popup aperto)
-    clearInterval(Chv._poll); Chv._poll = setInterval(async function () {
-      if (App.tab !== 'chiusure') { clearInterval(Chv._poll); return; }
-      if (document.hidden || document.querySelector('.modal-bg.show')) return;
-      try { var n0 = ((DB.t.VLT_CHIUSURE || {}).rows || []).length; await DB.loadTables(['VLT_CHIUSURE']); if (DB.t.VLT_CHIUSURE.rows.length !== n0) { Chv._cnt = null; Chv.render(); } } catch (e) { }
-    }, 30000);
+    // esiti scritti da altri operatori (o arrivati a un'altra finestra dell'app): si rileggono da soli ogni 15 secondi mentre sei sul tab,
+    // anche con "Vedi coda" aperta (gli esiti nella finestra si aggiornano); ricontrollo subito quando torni sulla pagina
+    clearInterval(Chv._poll); Chv._poll = setInterval(Chv.rileggi, 15000);
+    if (!Chv._vis) { Chv._vis = true; document.addEventListener('visibilitychange', function () { if (!document.hidden && App.tab === 'chiusure') Chv.rileggi(); }); window.addEventListener('focus', function () { if (App.tab === 'chiusure') Chv.rileggi(); }); }
     if (!$('chvData').value) $('chvData').value = L.isoToday();
     try { await Chv.tab(); } catch (e) { $('chvBox').innerHTML = '<div class="empty">Errore: ' + esc(e.message) + '</div>'; return; }
     Chv.render();
+  },
+  rileggi: async function () {
+    if (App.tab !== 'chiusure') { clearInterval(Chv._poll); return; }
+    if (document.hidden || Chv._rl) return; Chv._rl = true;
+    try { var n0 = ((DB.t.VLT_CHIUSURE || {}).rows || []).length; await DB.loadTables(['VLT_CHIUSURE']); if (DB.t.VLT_CHIUSURE.rows.length !== n0) { Chv._cnt = null; Chv.render(); Chv.aggVedi(); } } catch (e) { }
+    Chv._rl = false;
+  },
+  // "Vedi coda" aperta: aggiorna la colonna Esito senza chiudere la finestra (le spunte già messe restano)
+  aggVedi: function () {
+    var V = Chv._vedi; if (!V || !$('modal').classList.contains('show')) return;
+    var f = Chv.fatti(V.proc, Chv.giorno());
+    document.querySelectorAll('#mBody tr[data-k]').forEach(function (tr) {
+      var e = f[tr.getAttribute('data-k')], td = tr.querySelector('.chvEs'); if (!td) return;
+      td.textContent = e || 'da fare';
+      tr.className = Chv.FATTO[e] ? 'r-off' : (e === 'ERRORE' ? 'r-err' : '');
+      var cb = tr.querySelector('.chvMan'); if (cb) { if (Chv.FATTO[e]) cb.remove(); else cb.setAttribute('data-e', e || ''); }
+    });
   },
   rilasciaMie: async function (proc) {
     var g = Chv.giorno(), att = await Chv.attive(g, proc, true), me = Chv.io(), mie = Object.keys(att).filter(function (k) { return L.s(att[k].operatore).toLowerCase() === me; });
