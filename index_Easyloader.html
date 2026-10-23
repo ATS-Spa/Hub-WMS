@@ -457,7 +457,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
         <div class="card-h"><div class="card-t">Pezzi letti</div>
           <div class="stats" style="margin:0 0 0 8px" id="inStats"></div>
           <div class="spacer"></div>
-          <button class="btn ghost sm" onclick="Ingresso.excelLetti()">⬇ Excel</button> <button class="btn ghost sm" onclick="Ingresso.etichetteLetti()">🏷 Etichette</button> <button class="btn ghost sm" onclick="Ingresso.cedolinoLetti()" title="Cedolino per P/N: quantità e posizione (NEW/REUSE)">📋 Cedolino</button>
+          <button class="btn ghost sm" onclick="Ingresso.excelLetti()">⬇ Excel</button> <button class="btn ghost sm" id="btnEtLetti" onclick="Ingresso.etichetteLetti()">🏷 Etichette</button> <button class="btn ghost sm" onclick="Ingresso.cedolinoLetti()" title="Cedolino per P/N: quantità e posizione (NEW/REUSE)">📋 Cedolino</button>
           <button class="btn ghost sm" id="btnPendTutti" onclick="Ingresso.pendScegli()" title="Scegli dall'elenco i pezzi senza FR da caricare in attesa">⏳ Metti in attesa FR</button> <button class="btn ghost sm" onclick="Ingresso.ubiScegli()" title="Assegna un'ubicazione ai pezzi scelti dall'elenco">📍 Assegna ubicazione</button>
           <button class="btn green" id="btnCarica" onclick="Ingresso.carica()">Carica dati</button></div>
         <div class="tbl-wrap"><table>
@@ -468,7 +468,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
 
       <div class="card">
         <div class="card-h"><div class="card-t">Ingressi di oggi</div>
-          <label style="font-size:12px;color:var(--subtle);display:flex;gap:6px;align-items:center"><input type="checkbox" id="oggiTutti" onchange="Ingresso.renderOggi()"> tutti gli operatori</label><div class="spacer"></div><button class="btn ghost sm" onclick="Blk.apri()" title="Registra un giorno di blocco VLT: non conta nei KPI e mette la nota DISSERVIZIO VLT alle entrate FAULTY/GOOD">⛔ Blocco VLT</button> <button class="btn ghost sm" onclick="Ingresso.excelOggi()">⬇ Excel</button> <button class="btn ghost sm" onclick="Ingresso.etichetteOggi()">🏷 Etichette</button> <button class="btn ghost sm" onclick="Ingresso.cedolinoOggi()" title="Cedolino per P/N degli ingressi NEW/REUSE mostrati">📋 Cedolino</button></div>
+          <label style="font-size:12px;color:var(--subtle);display:flex;gap:6px;align-items:center"><input type="checkbox" id="oggiTutti" onchange="Ingresso.renderOggi()"> tutti gli operatori</label><div class="spacer"></div><button class="btn ghost sm" onclick="Blk.apri()" title="Registra un giorno di blocco VLT: non conta nei KPI e mette la nota DISSERVIZIO VLT alle entrate FAULTY/GOOD">⛔ Blocco VLT</button> <button class="btn ghost sm" onclick="Ingresso.excelOggi()">⬇ Excel</button> <button class="btn ghost sm" onclick="Ingresso.etichetteOggi()" title="Stampa le etichette degli ingressi di oggi non ancora stampate">🏷 Etichette</button> <button class="btn ghost sm" onclick="Ingresso.ristampa()" title="Scegli le etichette già stampate da ristampare">↺ Ristampa etichette</button> <button class="btn ghost sm" onclick="Ingresso.cedolinoOggi()" title="Cedolino per P/N degli ingressi NEW/REUSE mostrati">📋 Cedolino</button></div>
         <div class="stats" id="oggiStats"></div>
         <div class="tbl-wrap" style="max-height:40vh"><table>
           <thead><tr><th>ID</th><th>Tipo</th><th>FR</th><th>RMA</th><th>Seriale</th><th>P/N</th><th>Riparatore</th><th>Nota</th><th>Operatore</th><th></th></tr></thead>
@@ -1834,7 +1834,8 @@ var Ingresso = {
     } else if (o.tipo === 'GOOD') {
       o.destinazione = frIn === '98787' ? 'INGEGNERIA' : (o.depDest || '');
       o.idPrev = ctx.idPrev ? ctx.idPrev(ctx.n) : '';   // ID che avrà la scheda (al salvataggio si scrive quello vero)
-      o.nota = (r.man.nota !== undefined) ? r.man.nota : (o.destinazione ? o.destinazione + ' / ' + (o.idPrev || Ingresso.NR_SCHEDA) : '');
+      var sgl = L.up((Ingresso.perConto ? Ingresso.perConto.sigla : (App.me && App.me.sigla)) || '');   // "destinazione / ID scheda / sigla operatore"
+      o.nota = (r.man.nota !== undefined) ? r.man.nota : (o.destinazione ? o.destinazione + ' / ' + (o.idPrev || Ingresso.NR_SCHEDA) + (sgl ? ' / ' + sgl : '') : '');
       if (!v && !(jg && !L.s(jg.fr))) { o.msgs.push(['warn', 'FR non trovato in VLT']); o.warn = true; }
       if (!o.destinazione && !(jg && !L.s(jg.fr))) { o.msgs.push(['warn', 'Destinazione non ricavata dal depot VLT']); o.warn = true; }
     } else {
@@ -1940,6 +1941,8 @@ var Ingresso = {
       (nWarn ? '<div class="stat"><b style="color:var(--amber)">' + nWarn + '</b><span>da verificare</span></div>' : '');
     var nPd = C.filter(function (c) { return c.puoPend && !c.pend; }).length, bp = $('btnPendTutti');
     if (bp) { bp.textContent = '⏳ Metti in attesa FR' + (nPd ? ' (' + nPd + ')' : ''); bp.style.borderColor = nPd ? 'var(--amber)' : ''; bp.style.color = nPd ? 'var(--amber)' : ''; }
+    var etNo = T.tipo === 'GOOD' || T.tipo === 'SCRAP', be = $('btnEtLetti');   // GOOD e SCRAP: l'etichetta ha l'ID scheda, che esiste solo dopo Carica dati
+    if (be) { be.disabled = etNo; be.title = etNo ? 'GOOD e SCRAP: le etichette si stampano dopo "Carica dati", da Ingressi di oggi (con l\'ID scheda vero)' : 'Un\'etichetta 10×5 per ogni pezzo letto'; }
     $('btnCarica').disabled = !C.length || nErr > 0;
     $('btnCarica').title = nErr ? 'Correggi le righe in rosso' : '';
     $('wrapUbi').style.visibility = Ingresso.mostraUbi() ? 'visible' : 'hidden'; $('lblUbi').textContent = Ingresso.needUbi() ? 'Ubicazione *' : 'Ubicazione (facoltativa)';
@@ -1965,7 +1968,11 @@ var Ingresso = {
     try {
       var esito = await Ingresso.scrivi(T, C);
       Modal.close(); toast(C.length + ' pezzi caricati', 'ok');
-      if (Ingresso._idDiversi) Modal.open('Etichette da ristampare', Ingresso._idDiversi + ' GOOD hanno preso un ID scheda diverso da quello previsto (un altro operatore ha caricato nello stesso momento): se avevi già stampato le etichette dai pezzi letti, ristampale da Ingressi di oggi.');
+      if ((T.tipo === 'GOOD' || T.tipo === 'SCRAP') && esito && esito.pezzi && esito.pezzi.length) {
+        var nuoveU = esito.pezzi.map(function (o) { return DB.t.UNITA.rows.find(function (x) { return x.id_unita === o.id_unita; }) || o; });
+        Modal.html('🏷 Etichette', '<div style="font-size:13px">' + nuoveU.length + ' ' + T.tipo + ' caricate: stampo ora le etichette con l\'ID scheda (' + esc(nuoveU[0].id_unita) + (nuoveU.length > 1 ? ' … ' + esc(nuoveU[nuoveU.length - 1].id_unita) : '') + ')?<br><span class="hint">Restano segnate come stampate: da Ingressi di oggi l\'app proporrà solo quelle nuove.</span></div>',
+          [{ label: 'Dopo', cls: 'ghost' }, { label: '🏷 Stampa ' + nuoveU.length + ' etichette', cls: 'green', fn: function () { Ingresso.stampaEt(nuoveU); } }]);
+      } else if (Ingresso._idDiversi) Modal.open('Etichette da ristampare', Ingresso._idDiversi + ' GOOD hanno preso un ID scheda diverso da quello previsto (un altro operatore ha caricato nello stesso momento): se avevi già stampato le etichette dai pezzi letti, ristampale da Ingressi di oggi.');
       if (esito && (T.tipo === 'NEW' || T.tipo === 'REUSE')) Nr.daIngresso(T, esito.pezzi, esito.idR);
       if (esito && esito.pezzi.some(function (p) { return p.tipo === 'FAULTY'; })) Jun.dopoIngresso(esito.pezzi, L.isoToday());
       var pz = esito ? esito.pezzi.filter(function (p) { return p.stato === 'IN_ATTESA' && p.pending_fr; }) : [];
@@ -2167,7 +2174,7 @@ var Ingresso = {
     Xls.scarica('Pezzi_letti_' + (T.tipo || ''), [{ nome: 'Pezzi letti', headers: ['#', 'Tipo', 'FR', 'RMA', 'Seriale', 'P/N', 'P/N in anagrafica', 'MNFT', 'Riparatore', 'Stato VLT', 'Nota', 'Destinazione / Ubicazione', 'Controlli', 'Mittente', 'AWB', 'DDT mittente', 'Data ingresso'],
       rows: Ingresso.computed.map(function (c, i) { return [i + 1, c.tipo, c.fr, c.rma, c.ser, c.pn, c.pnAnag === undefined ? '' : (c.pnAnag ? 'SI' : 'NO'), c.mnft, c.rip, c.statoVlt, c.nota, c.tipo === 'NEW' || c.tipo === 'REUSE' ? c.ubicazione : [c.destinazione, c.ubicazione].filter(Boolean).join(' · '), c.msgs.map(function (m) { return m[1]; }).join(' / '), T.mittente, T.awb, T.ddt, T.data]; }) }]);
   },
-  etichetteLetti: function () { var T = Ingresso.T(); Etichette.pezzi(Ingresso.computed.map(function (c) { return Etichette.ingresso({ tipo: c.tipo, id: c.idPrev, dest: c.destinazione, fr: c.fr, po: T.po, seriale: c.ser, pn: c.pn, riparatore: c.rip, ubicazione: c.ubicazione, mittente: T.mittente }); })); },
+  etichetteLetti: function () { var T = Ingresso.T(); if (T.tipo === 'GOOD' || T.tipo === 'SCRAP') { Modal.open('Etichette GOOD e SCRAP', 'Per GOOD e SCRAP l\'etichetta riporta l\'ID della scheda, che esiste solo dopo "Carica dati".\nCarica i pezzi e stampale da Ingressi di oggi: l\'app ricorda quelle già stampate e propone solo le nuove.'); return; } Etichette.pezzi(Ingresso.computed.map(function (c) { return Etichette.ingresso({ tipo: c.tipo, id: c.idPrev, dest: c.destinazione, fr: c.fr, po: T.po, seriale: c.ser, pn: c.pn, riparatore: c.rip, ubicazione: c.ubicazione, mittente: T.mittente }); })); },
   excelOggi: function () {
     var U = Ingresso._oggi || [];
     Xls.scarica('Ingressi_di_oggi', [Object.assign({ nome: 'Ingressi di oggi' }, Xls.oggetti(U, [['id_unita', 'ID'], ['tipo', 'Tipo'], ['fr', 'FR'], ['rma', 'RMA'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['mnft', 'MNFT'], ['riparatore', 'Riparatore'], ['destinazione_prevista', 'Destinazione'], ['ubicazione', 'Ubicazione'], ['note', 'Nota'], ['data_in', 'Data ingresso'], ['id_mov_in', 'Movimento'], ['creato_da', 'Operatore'], ['creato_il', 'Registrato il']]))]);
@@ -2187,10 +2194,46 @@ var Ingresso = {
       return { testa: { mittente: x.mittente, po: x.po_mrn, ddt: x.ddt_mittente || x.ddt, tipo: g[k][0].tipo, data: g[k][0].data_in }, pezzi: g[k].map(function (u) { return { pn: u.pn, ubicazione: u.ubicazione, nota: Rma.nota(u.note), plt: u.n_plt }; }) };
     }));
   },
-  etichetteOggi: async function () {
+  // Ingressi di oggi: propone solo le etichette mai stampate (UNITA.etichetta_il, vale per tutti gli operatori); si possono ristampare tutte o una riga
+  etichetteOggi: function () {
+    var U = Ingresso._oggi || []; if (!U.length) { toast('Nessun ingresso da stampare', 'ko'); return; }
+    var nuove = U.filter(function (u) { return !L.s(u.etichetta_il); });
+    if (!nuove.length) { Modal.open('🏷 Etichette', 'Le etichette di questo elenco (' + U.length + ') sono già state stampate tutte.\nPer ristamparle usa "↺ Ristampa etichette" e scegli quali.'); return; }
+    Ingresso.stampaEt(nuove);
+    if (nuove.length < U.length) toast('Stampo le ' + nuove.length + ' nuove (' + (U.length - nuove.length) + ' già stampate: ↺ Ristampa etichette)', 'ok');
+  },
+  // ristampa: elenco delle già stampate (degli ingressi di oggi visibili), scegli quali
+  ristampa: function () {
+    var G = (Ingresso._oggi || []).filter(function (u) { return L.s(u.etichetta_il); });
+    if (!G.length) { toast('Nessuna etichetta già stampata tra gli ingressi di oggi', 'ko'); return; }
+    Ingresso._rs = G;
+    Modal.html('↺ Ristampa etichette', '<div class="hint" style="margin-bottom:8px">Etichette già stampate degli ingressi di oggi: spunta quelle da ristampare.</div>' +
+      '<div class="fg" style="margin-bottom:6px"><input class="fc mono" id="rsQ" placeholder="🔍 cerca: ID, seriale, FR, P/N, nota…" oninput="Ingresso.rsFiltra()"></div>' +
+      '<div class="tbl-wrap modal-scroll" style="max-height:50vh"><table><thead><tr><th><input type="checkbox" id="rsTutti"></th><th>ID</th><th>Tipo</th><th>FR</th><th>Seriale</th><th>P/N</th><th>Nota</th><th>Stampata il</th></tr></thead><tbody>' +
+      G.map(function (u, i) { return '<tr><td><input type="checkbox" class="rsEt" data-i="' + i + '"></td><td class="mono">' + esc(u.id_unita) + '</td><td>' + Pill.tipo(u.tipo) + '</td><td class="mono">' + esc(u.fr) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td style="font-size:11.5px">' + esc(Spec.pulita(u.note)) + '</td><td class="mono" style="font-size:11px">' + esc(L.vedi(L.s(u.etichetta_il).slice(0, 16))) + '</td></tr>'; }).join('') + '</tbody></table></div><div class="hint" id="rsN" style="margin-top:6px">0 selezionate</div>',
+      [{ label: 'Chiudi', cls: 'ghost' }, { label: '🏷 Ristampa le selezionate', cls: 'green', keep: true, fn: function () {
+        var S = [].slice.call(document.querySelectorAll('#mBody .rsEt')).filter(function (c) { return c.checked && c.closest('tr').style.display !== 'none'; }).map(function (c) { return Ingresso._rs[+c.getAttribute('data-i')]; });
+        if (!S.length) { toast('Spunta almeno un\'etichetta', 'ko'); return; }
+        Modal.close(); Ingresso.stampaEt(S);
+      } }], true);
+    var conta = function () { $('rsN').textContent = [].filter.call(document.querySelectorAll('#mBody .rsEt'), function (c) { return c.checked && c.closest('tr').style.display !== 'none'; }).length + ' selezionate'; };
+    $('rsTutti').onchange = function () { document.querySelectorAll('#mBody .rsEt').forEach(function (c) { if (c.closest('tr').style.display !== 'none') c.checked = $('rsTutti').checked; }); conta(); };
+    document.querySelectorAll('#mBody .rsEt').forEach(function (c) { c.onchange = conta; });
+    Ingresso._rsConta = conta;
+  },
+  rsFiltra: function () { var qq = L.qm($('rsQ').value); document.querySelectorAll('#mBody .rsEt').forEach(function (c) { var tr = c.closest('tr'); tr.style.display = !qq || qq(tr.textContent) ? '' : 'none'; }); if (Ingresso._rsConta) Ingresso._rsConta(); },
+  etichettaRiga: function (id) { var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); if (u) Ingresso.stampaEt([u]); },
+  stampaEt: async function (U) {
     try { if (!DB.t.RICEZIONI) await DB.loadTables(['RICEZIONI']); } catch (e) { }
     var ric = {}; ((DB.t.RICEZIONI || {}).rows || []).forEach(function (r) { ric[r.id_ricezione] = r; });
-    Etichette.pezzi((Ingresso._oggi || []).map(function (u) { var r = ric[u.id_ricezione] || {}; return Etichette.ingresso({ tipo: u.tipo, id: u.id_unita, dest: u.destinazione_prevista, fr: u.fr, po: r.po_mrn, seriale: u.seriale, pn: u.pn, riparatore: u.riparatore, ubicazione: u.ubicazione, mittente: r.mittente, data: L.itDate(u.data_in) }); }));
+    await Etichette.pezzi(U.map(function (u) { var r = ric[u.id_ricezione] || {}; return Etichette.ingresso({ tipo: u.tipo, id: u.id_unita, dest: u.destinazione_prevista, fr: u.fr, po: r.po_mrn, seriale: u.seriale, pn: u.pn, riparatore: u.riparatore, ubicazione: u.ubicazione, mittente: r.mittente, data: L.itDate(u.data_in) }); }));
+    try {   // memoria delle stampate (in sottofondo)
+      var ids = U.map(function (u) { return u.id_unita; }), tU = (await DB.ensureCols('UNITA', ['etichetta_il'])) || DB.t.UNITA, now = L.nowStamp(), upd = [];
+      tU.rows.forEach(function (u) { if (ids.indexOf(u.id_unita) < 0) return; u.etichetta_il = now; if ('etichetta_il' in tU.idx) upd.push({ range: tU.cell('etichetta_il', u._r), values: [[now]] }); });
+      U.forEach(function (u) { u.etichetta_il = now; });
+      if (upd.length) await API.batchUpdate(DB.id, upd, true);
+      Ingresso.renderOggi();
+    } catch (e) { toast('Etichette stampate, ma non ho potuto segnarle: ' + e.message, 'ko'); }
   },
   // schede create da riallineamento / rettifica / rimesse in giacenza: non sono ingressi fisici del giorno
   nonIngresso: function (u) { return /riallineata da movimento|RETTIFICA \(aggiunto\)|rimessa in giacenza/i.test(L.s(u.note)); },
@@ -2202,7 +2245,7 @@ var Ingresso = {
     $('oggiRows').innerHTML = list.length ? list.slice(0, 1000).map(function (u) {
       var op = DB.t.OPERATORI.rows.find(function (o) { return L.s(o.email).toLowerCase() === u.creato_da; });
       var mia = Ingresso.puoModificare(u);
-      return '<tr' + (mia ? ' class="r-edit" title="Clicca per modificare" onclick="Ingresso.apriModifica(\'' + u.id_unita + '\')"' : ' title="Riga di un altro operatore (o già uscita): sola lettura"') + '><td class="mono">' + esc(u.id_unita) + '</td><td>' + Pill.tipo(u.tipo) + '</td><td class="mono">' + esc(u.fr) + '</td><td class="mono">' + esc(u.rma) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.riparatore) + '</td><td>' + esc(u.note) + '</td><td>' + esc(op ? (op.sigla || op.nome) : u.creato_da) + '</td><td>' + (mia ? '<button class="ico-btn" title="Elimina" onclick="event.stopPropagation();Ingresso.chiediElimina(\'' + u.id_unita + '\')">🗑</button>' : '') + '</td></tr>';
+      return '<tr' + (mia ? ' class="r-edit" title="Clicca per modificare" onclick="Ingresso.apriModifica(\'' + u.id_unita + '\')"' : ' title="Riga di un altro operatore (o già uscita): sola lettura"') + '><td class="mono nw">' + esc(u.id_unita) + (L.s(u.etichetta_il) ? ' <span title="Etichetta stampata il ' + esc(L.vedi(L.s(u.etichetta_il).slice(0, 16))) + '" style="font-size:11px">🏷✓</span>' : '') + '</td><td>' + Pill.tipo(u.tipo) + '</td><td class="mono">' + esc(u.fr) + '</td><td class="mono">' + esc(u.rma) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.riparatore) + '</td><td>' + esc(u.note) + '</td><td>' + esc(op ? (op.sigla || op.nome) : u.creato_da) + '</td><td class="nw"><button class="ico-btn" title="Stampa (o ristampa) l\'etichetta di questa scheda" onclick="event.stopPropagation();Ingresso.etichettaRiga(\'' + u.id_unita + '\')">🏷</button>' + (mia ? '<button class="ico-btn" title="Elimina" onclick="event.stopPropagation();Ingresso.chiediElimina(\'' + u.id_unita + '\')">🗑</button>' : '') + '</td></tr>';
     }).join('') : '<tr><td colspan="10" class="empty">Nessun ingresso oggi</td></tr>';
     Ingresso.renderPend();
   },
@@ -6467,7 +6510,7 @@ var Rma = {
         { k: 'creato_da', label: 'Da', filter: 'select', get: function (c) { return App.sigla(c.creato_da); } },
         { k: 'usc', label: 'In uscita', filter: 'text', get: function (c) { var x = Rma.carMotivo(c); return x ? 'NO: ' + x.m : 'SI'; }, html: function (c) { var x = Rma.carMotivo(c); return x ? '<span class="pill p-amber" title="' + esc(x.m) + '">no</span>' + (x.fix === 'RICOLLEGA' ? ' <button class="ico-btn" title="Rimetti in uscita: ' + esc(x.m) + '" onclick="Rma.carRicollega(\'' + c.id_carico + '\')">↻</button>' : '') : '<span class="pill p-green">sì</span>'; } },
         { k: 'pend', label: 'Pending', filter: 'text', get: function (c) { var p = Rma.pend(c.id_unita); return p ? p.motivo : ''; }, html: function (c) { return Rma.pendCella({ id_unita: c.id_unita }); } },
-        { k: 'az', label: '', html: function (c) { return '<button class="ico-btn" title="Annulla carico: il pezzo torna in giacenza" onclick="Rma.carAnnulla(\'' + c.id_carico + '\')">✕</button>'; } }
+        { k: 'az', label: '', html: function (c) { return '<span class="nw"><button class="ico-btn" title="Modifica il Material (e, se manca, lo aggiunge all\'anagrafica articoli)" onclick="Rma.carModifica(\'' + c.id_carico + '\')">✎</button>' + '<button class="ico-btn" title="Annulla carico: il pezzo torna in giacenza" onclick="Rma.carAnnulla(\'' + c.id_carico + '\')">✕</button></span>'; } }
       ]
     }));
     return Rma.grids[s];
@@ -6963,6 +7006,54 @@ var Rma = {
       toast('Menu a tendina non disponibile (' + e.message + '): scarico il modello semplice', 'ko');
       Xls.scarica('modello_carichi_new_reuse', [{ nome: 'CARICHI', headers: H, rows: [] }, { nome: 'DESTINAZIONI', headers: ['DESTINAZIONE'], rows: dest.map(function (d) { return [d]; }) }]);
     }
+  },
+  // ─ ✎ Material del carico (sulla scheda) e anagrafica articoli che si completa da sola
+  matStato: function (mat, pn) {
+    var m = L.mat(mat), p = L.up(pn); if (!m) return { k: 'vuoto', t: 'Scrivi il Material SAP code' };
+    var pA = DB.matPn && DB.matPn[m], altri = Object.keys(DB.matPn || {}).filter(function (x) { return x !== m && L.up(DB.matPn[x]) === p; });
+    if (pA && L.up(pA) === p) return { k: 'ok', t: '✓ In anagrafica: ' + m + ' = ' + pA };
+    if (pA) return { k: 'diverso', t: '⚠ In anagrafica il material ' + m + ' è il P/N ' + pA + ' (non ' + pn + '): l\'anagrafica non viene toccata, controlla quale è giusto' };
+    if (altri.length) return { k: 'pnaltro', t: '⚠ Il P/N ' + pn + ' in anagrafica ha già il material ' + altri.slice(0, 3).join(', ') + ': puoi aggiungere anche questa coppia', altri: altri };
+    return { k: 'nuovo', t: '＋ Non in anagrafica: al salvataggio aggiungo ' + m + ' = ' + pn + ' agli articoli' };
+  },
+  carModifica: function (idCar) {
+    var c = DB.t.CARICHI_RMA.rows.find(function (x) { return x.id_carico === idCar; }); if (!c) return;
+    var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === c.id_unita; }); if (!u) { toast('Scheda del carico non trovata', 'ko'); return; }
+    var pn = L.s(u.pn) || L.s(c.pn);
+    Modal.html('✎ Carico ' + c.id_carico + ' · ' + esc(c.seriale),
+      '<div style="font-size:12.5px;color:var(--subtle);margin-bottom:10px">' + Pill.tipo(c.tipo) + ' · P/N <b class="mono">' + esc(pn) + '</b> · MNFT ' + esc(u.mnft || '—') + ' · scheda ' + esc(u.id_unita) + '</div>' +
+      '<div class="fg"><span class="fl">Material SAP code</span><input class="fc mono" id="cmMat" autocomplete="off" value="' + esc(L.mat(u.material)) + '"></div>' +
+      '<div class="hint" id="cmStato" style="margin-top:6px"></div><label id="cmAggW" style="display:none;gap:8px;align-items:center;margin-top:6px;font-size:13px"><input type="checkbox" id="cmAgg"> aggiungi comunque la coppia in anagrafica articoli</label><div class="hint" id="cmErr" style="margin-top:6px"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Salva', cls: 'green', keep: true, fn: function () { Rma.carSalvaMat(idCar); } }]);
+    var agg = function () { var st = Rma.matStato($('cmMat').value, pn); $('cmStato').textContent = st.t; $('cmStato').className = 'hint' + (st.k === 'diverso' || st.k === 'pnaltro' ? ' warn' : ''); $('cmAggW').style.display = st.k === 'pnaltro' ? 'flex' : 'none'; };
+    $('cmMat').oninput = agg; agg(); setTimeout(function () { $('cmMat').focus(); $('cmMat').select(); }, 50);
+  },
+  carSalvaMat: async function (idCar) {
+    var err = function (t) { $('cmErr').textContent = t; $('cmErr').className = 'hint err'; };
+    var c = DB.t.CARICHI_RMA.rows.find(function (x) { return x.id_carico === idCar; }), tU = DB.t.UNITA, u = c && tU.rows.find(function (x) { return x.id_unita === c.id_unita; }); if (!u) return;
+    var mat = L.mat($('cmMat').value), pn = L.s(u.pn) || L.s(c.pn), st = Rma.matStato(mat, pn), crea = st.k === 'nuovo' || (st.k === 'pnaltro' && $('cmAgg').checked);
+    if (!mat) return err('Scrivi il Material');
+    if (!/^[0-9A-Za-z.\-]+$/.test(mat)) return err('Material non valido');
+    Modal.progress('Salvataggio…');
+    try {
+      var now = L.nowStamp(), cambia = mat !== L.mat(u.material), prima = L.s(u.material), creato = false;
+      if (cambia) {
+        var ch = { material: mat, modificato_il: now, modificato_da: Auth.email, rev: (parseInt(u.rev, 10) || 1) + 1 };
+        await API.batchUpdate(DB.id, Object.keys(ch).filter(function (h) { return h in tU.idx; }).map(function (h) { return { range: tU.cell(h, u._r), values: [[String(ch[h])]] }; }));
+        Object.keys(ch).forEach(function (h) { u[h] = String(ch[h]); });
+      }
+      if (crea && pn) {   // riga nuova in ARTICOLI (con chi e quando nel LOG)
+        var h = (await API.batchGet(DB.id, [API.q('ARTICOLI') + '!1:1']))[0][0] || [], tA = new Table('ARTICOLI', h);
+        if (!('material' in tA.idx) || !('pn' in tA.idx)) throw new Error('il foglio ARTICOLI non ha le colonne material e pn');
+        await API.append(DB.id, 'ARTICOLI', [tA.toRow({ material: mat, pn: pn, mnft: L.s(u.mnft), riparatore: '', creato_il: now, creato_da: Auth.email, rev: 1, note: 'aggiunto dal carico ' + c.id_carico + ' (' + c.seriale + ')' })]);
+        DB.matPn = DB.matPn || {}; DB.pnSet = DB.pnSet || {}; DB.artPn = DB.artPn || {}; DB.matPn[mat] = pn; DB.pnSet[L.up(pn)] = 1; if (u.mnft && !DB.artPn[L.up(pn)]) DB.artPn[L.up(pn)] = u.mnft;
+        if (Rma.lk) { Rma.lk.pnByMat[Rma.mk(mat)] = pn; if (!Rma.lk.matByPn[L.up(pn)]) Rma.lk.matByPn[L.up(pn)] = Rma.mk(mat); }
+        DB.cacheSet('lookups', null); DB.cacheSet('rmalk', null); Bon._pm = null; creato = true;
+      }
+      if (cambia || creato) await API.append(DB.id, 'LOG', [App.log(creato ? 'MATERIAL_CARICO_ANAGRAFICA' : 'MATERIAL_CARICO', 'UNITA', u.id_unita, { carico: c.id_carico, seriale: c.seriale, pn: pn, prima: prima, dopo: mat, anagrafica: creato ? 'articolo aggiunto' : st.k })]);
+      Modal.close(); Rma.render();
+      toast((cambia ? 'Material ' + mat + ' salvato' : 'Material invariato') + (creato ? ' · aggiunto in anagrafica articoli' : (st.k === 'diverso' ? ' · ⚠ in anagrafica ha un altro P/N' : '')), st.k === 'diverso' ? 'ko' : 'ok');
+    } catch (e) { Modal.progress(''); err('Non salvato: ' + e.message); }
   },
   carAnnulla: async function (id) {
     var c = DB.t.CARICHI_RMA.rows.find(function (x) { return x.id_carico === id; }); if (!c) return;
@@ -8612,7 +8703,7 @@ var Etichette = {
       lista.forEach(function (e, i) {
         if (i) d.addPage([100, 50], 'landscape');
         Etichette.testata(d, logo, e.ubi !== undefined ? e.ubi : e.riparatore);   // ingresso: in alto a destra l'ubicazione (vuoto se non c'è)
-        Etichette.riga(d, 13, e.lab || 'FR', e.fr, 20);
+        Etichette.riga(d, 13, e.lab || 'FR', e.fr, 20, e.qr);
         Etichette.riga(d, 27, 'S/N', e.seriale, 16);
         d.setDrawColor(200); d.line(3, 41, 97, 41);
         d.setTextColor(0); d.setFont('helvetica', 'bold');
@@ -8644,11 +8735,11 @@ var Etichette = {
     try { var q = qrcode(0, 'M'); q.addData(String(testo)); q.make(); d.addImage(q.createDataURL(4, 0), 'GIF', x, y, lato, lato); } catch (x2) { }
   },
   // riga etichetta: titolo piccolo sopra, valore grande, QR piccolo a destra
-  riga: function (d, y, tit, val, max) {
+  riga: function (d, y, tit, val, max, qrVal) {
     var q = Etichette.QR;
     d.setTextColor(110); d.setFont('helvetica', 'bold'); d.setFontSize(7); d.text(tit, 3, y + 2.5);
     d.setTextColor(0); Etichette.fit(d, L.s(val) || '—', 3, y + 10.5, 94 - q - 3, max, 8);
-    Etichette.qr(d, val, 97 - q, y + 2, q);
+    Etichette.qr(d, qrVal || val, 97 - q, y + 2, q);
   },
   // etichetta RMA: nuova destinazione e ID della scheda
   rma: async function (lista) {
@@ -8679,8 +8770,9 @@ var Etichette = {
     var nr = x.tipo === 'NEW' || x.tipo === 'REUSE';
     // GOOD: numero della scheda al posto dell'FR, in basso l'FR al posto del riparatore, in alto a destra l'ubicazione (o la destinazione se non c'è)
     if (x.tipo === 'GOOD') {
-      var idS = L.s(x.id);   // ID scheda per esteso (U0021213)
-      return { lab: idS ? 'SCHEDA' : 'FR', fr: idS || L.s(x.fr), seriale: x.seriale, pn: x.pn, tipo: x.tipo, ubi: L.up(x.ubicazione) || L.up(x.dest), sotto: [idS && L.s(x.fr) ? 'FR ' + L.s(x.fr) : '', x.data].map(L.s).filter(Boolean).join(' · ') };
+      var idS = L.s(x.id), op = L.s(x.op);   // ID scheda per esteso (U0021213) / sigla di chi l'ha caricata
+      if (idS && !op) { var uE = DB.t.UNITA.rows.find(function (y) { return y.id_unita === idS; }); if (uE && uE.creato_da && uE.creato_da !== 'MIGRAZIONE') op = App.sigla(uE.creato_da); }
+      return { lab: idS ? 'SCHEDA' : 'FR', fr: idS ? idS + (op ? ' / ' + L.up(op) : '') : L.s(x.fr), qr: idS || '', seriale: x.seriale, pn: x.pn, tipo: x.tipo, ubi: L.up(x.ubicazione) || L.up(x.dest), sotto: [idS && L.s(x.fr) ? 'FR ' + L.s(x.fr) : '', x.data].map(L.s).filter(Boolean).join(' · ') };
     }
     return { lab: nr ? 'PO/MRN' : 'FR', fr: nr ? L.s(x.po) : L.s(x.fr), seriale: x.seriale, pn: x.pn, tipo: x.tipo, ubi: L.up(x.ubicazione), sotto: [x.riparatore, x.mittente, x.data].map(L.s).filter(Boolean).join(' · ') };
   },
