@@ -412,7 +412,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
         <option value="">🌙 Scuro</option><option value="theme-dim">🌗 Dim</option><option value="theme-grafite">🩶 Grafite</option><option value="theme-sap">🔵 SAP</option><option value="theme-oceano">🌊 Oceano</option><option value="theme-foresta">🌲 Foresta</option><option value="theme-ametista">🔮 Ametista</option><option value="theme-carbone">⬛ Carbone</option><option value="theme-mezzanotte">🌌 Mezzanotte</option><option value="theme-ardesia">🪨 Ardesia</option><option value="theme-contrasto-scuro">◼️ Alto contrasto scuro</option><option value="theme-light">☀️ Chiaro</option><option value="theme-avorio">🤍 Avorio</option><option value="theme-salvia">🌿 Salvia</option><option value="theme-rovere">🪵 Rovere</option><option value="theme-celeste">🩵 Celeste</option><option value="theme-lavanda">💜 Lavanda</option><option value="theme-perla">⚪ Perla</option><option value="theme-ghiaccio">🧊 Ghiaccio</option><option value="theme-sabbia">🏖️ Sabbia</option><option value="theme-contrasto">◻️ Alto contrasto chiaro</option>
       </select>
       <div class="user-wrap"><div class="user-badge" style="cursor:pointer" title="Account" onclick="App.menuUtente(event)"><div class="user-av" id="uAv">?</div><span id="uName"></span><span class="role-tag" id="uRole"></span><span style="font-size:10px">▾</span></div>
-        <div class="user-menu" id="userMenu"><div class="hint" id="uMail" style="padding:6px 12px"></div><button onclick="Pin.apri()">🔑 Il mio PIN</button><button onclick="Auth.esci(true)">🔄 Cambia account</button><button onclick="Auth.esci(false)">⎋ Esci</button></div></div>
+        <div class="user-menu" id="userMenu"><div class="hint" id="uMail" style="padding:6px 12px"></div><button id="uSuoni" onclick="Snd.set(!Snd.on())">🔊 Suoni</button><button onclick="Pin.apri()">🔑 Il mio PIN</button><button onclick="Auth.esci(true)">🔄 Cambia account</button><button onclick="Auth.esci(false)">⎋ Esci</button></div></div>
     </div>
   </div>
   <div class="tabbar" id="tabbar"></div>
@@ -973,7 +973,36 @@ var TIPI = ['FAULTY', 'GOOD', 'REUSE', 'NEW', 'BALANCING', 'RESO', 'SCRAP'];
 // ───────────────────────── utilità UI ─────────────────────────
 function $(id) { return document.getElementById(id); }
 function esc(s) { return L.s(s).replace(/[&<>"']/g, function (c) { return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c]; }); }
-function toast(msg, kind) { var t = $('toast'); t.textContent = msg; t.className = 'show ' + (kind || ''); clearTimeout(t._h); t._h = setTimeout(function () { t.className = ''; }, 3800); }
+// ───────────────────────── SUONI (OK / attenzione / errore) ─────────────────────────
+// generati dal browser (Web Audio), niente file. Accesi di base; 🔊/🔇 dal menu utente, salvato per dispositivo.
+// Più suoni ravvicinati (es. riga in errore + toast) diventano uno solo: vince il più grave.
+var Snd = {
+  LIV: { ok: 1, warn: 2, err: 3 }, _ctx: null, _q: 0, _t: null,
+  on: function () { try { return localStorage.getItem('suoni') !== '0'; } catch (e) { return true; } },
+  set: function (v) { try { localStorage.setItem('suoni', v ? '1' : '0'); } catch (e) { } Snd.menu(); if (v) { Snd.sblocca(); Snd.ok(); } toast(v ? '🔊 Suoni accesi' : '🔇 Suoni spenti', 'ok'); },
+  menu: function () { var b = $('uSuoni'); if (b) b.textContent = Snd.on() ? '🔊 Suoni: accesi (clic per spegnere)' : '🔇 Suoni: spenti (clic per accendere)'; },
+  sblocca: function () { try { if (!Snd._ctx) { var C = window.AudioContext || window.webkitAudioContext; if (C) Snd._ctx = new C(); } if (Snd._ctx && Snd._ctx.state === 'suspended') Snd._ctx.resume(); } catch (e) { } },
+  ok: function () { Snd.suona('ok'); }, warn: function () { Snd.suona('warn'); }, err: function () { Snd.suona('err'); },
+  suona: function (l) {
+    if (!Snd.on()) return; if (Snd.LIV[l] > Snd._q) Snd._q = Snd.LIV[l];
+    clearTimeout(Snd._t); Snd._t = setTimeout(function () { var q = Snd._q; Snd._q = 0; Snd._play(q === 3 ? 'err' : q === 2 ? 'warn' : 'ok'); }, 60);
+  },
+  _tono: function (f, t0, dur, tipo, vol) {
+    var c = Snd._ctx, o = c.createOscillator(), g = c.createGain(); o.type = tipo; o.frequency.value = f;
+    g.gain.setValueAtTime(0.0001, c.currentTime + t0); g.gain.exponentialRampToValueAtTime(vol, c.currentTime + t0 + 0.012); g.gain.exponentialRampToValueAtTime(0.0001, c.currentTime + t0 + dur);
+    o.connect(g); g.connect(c.destination); o.start(c.currentTime + t0); o.stop(c.currentTime + t0 + dur + 0.02);
+  },
+  _play: function (l) {
+    try {
+      Snd.sblocca(); if (!Snd._ctx) return;
+      if (l === 'ok') Snd._tono(1320, 0, 0.12, 'sine', 0.35);                                  // bip corto e acuto
+      else if (l === 'warn') { Snd._tono(660, 0, 0.13, 'triangle', 0.4); Snd._tono(660, 0.19, 0.13, 'triangle', 0.4); }   // due toni medi
+      else { Snd._tono(170, 0, 0.45, 'sawtooth', 0.28); Snd._tono(120, 0, 0.45, 'square', 0.12); }   // buzz basso e lungo
+    } catch (e) { }
+  }
+};
+['keydown', 'pointerdown'].forEach(function (ev) { window.addEventListener(ev, function () { if (Snd.on()) Snd.sblocca(); }, { capture: true, passive: true }); });
+function toast(msg, kind) { if (kind === 'ko') Snd.err(); var t = $('toast'); t.textContent = msg; t.className = 'show ' + (kind || ''); clearTimeout(t._h); t._h = setTimeout(function () { t.className = ''; }, 3800); }
 function lsG(k) { try { return JSON.parse(localStorage.getItem('el_' + k)); } catch (e) { return null; } }
 function lsS(k, v) { try { localStorage.setItem('el_' + k, JSON.stringify(v)); } catch (e) { } }
 function sleep(ms) { return new Promise(function (r) { setTimeout(r, ms); }); }
@@ -1350,7 +1379,7 @@ var App = {
   },
   TEMI: ['theme-dim', 'theme-grafite', 'theme-sap', 'theme-oceano', 'theme-foresta', 'theme-ametista', 'theme-carbone', 'theme-mezzanotte', 'theme-ardesia', 'theme-contrasto-scuro', 'theme-light', 'theme-avorio', 'theme-salvia', 'theme-rovere', 'theme-celeste', 'theme-lavanda', 'theme-perla', 'theme-ghiaccio', 'theme-sabbia', 'theme-contrasto'],
   menuUtente: function (e) {
-    e.stopPropagation(); var m = $('userMenu'); $('uMail').textContent = Auth.email + (App.isOwner ? ' · super admin' : (App.isAdmin ? ' · admin' : ''));
+    e.stopPropagation(); var m = $('userMenu'); $('uMail').textContent = Auth.email + (App.isOwner ? ' · super admin' : (App.isAdmin ? ' · admin' : '')); Snd.menu();
     m.classList.toggle('show');
     if (!App._mc) { App._mc = 1; document.addEventListener('click', function (ev) { if (!ev.target.closest || !ev.target.closest('.user-wrap')) $('userMenu').classList.remove('show'); }); }
   },
@@ -1427,7 +1456,7 @@ var Ingresso = {
     bc.addEventListener('input', function () { clearTimeout(tA); tA = setTimeout(function () { Ingresso.anteprima('bc'); }, 120); });
     fr.addEventListener('input', function () { clearTimeout(tB); tB = setTimeout(function () { Ingresso.anteprima('fr'); }, 120); });
     bc.addEventListener('keydown', function (e) { if (e.key === 'Enter' || (e.key === 'Tab' && !e.shiftKey)) { if (!L.s(bc.value) && !L.s(fr.value)) return; e.preventDefault(); clearTimeout(tA); Ingresso.anteprima('bc');
-      if (Ingresso.chiediFr()) { fr.focus(); fr.select(); $('hFr').textContent = 'FR non trovato dal seriale: spara o scrivi l\'FR, poi Invio (Invio a vuoto = aggiungi senza FR)'; $('hFr').className = 'hint warn'; return; }
+      if (Ingresso.chiediFr()) { Snd.err(); fr.focus(); fr.select(); $('hFr').textContent = 'FR non trovato dal seriale: spara o scrivi l\'FR, poi Invio (Invio a vuoto = aggiungi senza FR)'; $('hFr').className = 'hint warn'; return; }
       avanti(); } });
     fr.addEventListener('keydown', function (e) {
       if (e.key === 'Enter') { e.preventDefault(); clearTimeout(tB); if (/^\W*FR|^0/i.test(L.s(fr.value))) fr.value = L.frKey(fr.value); Ingresso.anteprima('fr'); if (L.s(bc.value)) avanti(); else bc.focus(); }
@@ -1595,6 +1624,7 @@ var Ingresso = {
     $('scFr').value = ''; $('scBc').value = ''; $('scFr').dataset.auto = '0'; $('scBc').dataset.auto = '0'; $('hFr').textContent = ''; $('hBc').textContent = '';
     if (!Ingresso.mostraUbi()) $('scUbi').value = '';
     Ingresso.fitScan(); Ingresso.ricalcola(); Ingresso.save(); $('scBc').focus();
+    var cN = Ingresso.computed[Ingresso.computed.length - 1]; if (cN) { if (cN.err) Snd.err(); else if (cN.warn) Snd.warn(); else Snd.ok(); }
   },
   del: function (i) { Ingresso.rows.splice(i, 1); Ingresso.ricalcola(); Ingresso.save(); },
   MOTIVI: ['Manca tipo e FR: pezzo senza etichetta né documenti', 'FR non ancora aperto dal Service Desk', 'Etichetta FR mancante o illeggibile', 'FR indicato errato / non corrisponde al seriale', 'FR chiuso o in stato non valido in VLT', 'Seriale non trovato in VLT', 'Altro'],
@@ -3706,7 +3736,7 @@ var Chv = {
         objs.forEach(function (o, i) { o._r = r + i; t.rows.push(o); });
       }
       Chv.post({ tipo: 'esiti_ok', ids: esiti.map(function (e) { return e && e.id_esito; }) });
-      if (nuovi.length) { var ko = nuovi.filter(function (e) { return e.esito === 'ERRORE'; }).length; toast('VLT: ' + nuovi.length + ' esiti registrati' + (ko ? ' · ' + ko + ' errori' : ''), ko ? 'ko' : 'ok'); }
+      if (nuovi.length) { var ko = nuovi.filter(function (e) { return e.esito === 'ERRORE'; }).length; if (!ko) Snd.ok(); toast('VLT: ' + nuovi.length + ' esiti registrati' + (ko ? ' · ' + ko + ' errori' : ''), ko ? 'ko' : 'ok'); }
       if (App.tab === 'chiusure') { Chv.render(); Chv.aggVedi(); }
     }).catch(function (e) { toast('Esiti VLT non salvati (riprovo al prossimo invio): ' + e.message, 'ko'); });
     return Chv._q;
@@ -5323,7 +5353,7 @@ var Ack = {
       { nome: 'Spare false', headers: ['FR', 'Seriale', 'Descrizione', 'Letto il'], rows: sf.map(function (a) { return [a.fr, a.seriale, a.descrizione, a.data]; }) },
       { nome: 'Spedizione', headers: ['ID', 'Riparatore', 'Data', 'Stato', 'Pezzi', 'Colli', 'Peso kg', 'AWB', 'Vettore', 'DDT'], rows: [[s.id_spedizione, s.destinatario, s.data, s.stato, s.n_pezzi, s.n_colli, s.peso_tot_kg, s.awb, s.vettore, s.n_ddt]] }]);
   },
-  fb: function (txt, cls) { Ack._fb = [txt, cls || '']; var e = $('ackFb'); if (e) { e.textContent = txt; e.className = 'fb ' + (cls || ''); } },
+  fb: function (txt, cls) { if (cls === 'ok') Snd.ok(); else if (cls === 'warn') Snd.warn(); else if (cls === 'err') Snd.err(); Ack._fb = [txt, cls || '']; var e = $('ackFb'); if (e) { e.textContent = txt; e.className = 'fb ' + (cls || ''); } },
   scan: function () {
     var s = Ack.byId(Ack.cur); var raw = L.s($('ackScan').value); $('ackScan').value = '';
     if (!s || s.stato !== 'IN_SPUNTA' || !raw) return;
@@ -6716,7 +6746,7 @@ var Rma = {
     if (!DB.t.CONTROPARTI.rows.some(function (c) { return L.up(c.codice) === L.up(o.destinazione); }) && !(await Modal.confirm('Destinazione non in anagrafica', '"' + o.destinazione + '" non è tra le controparti: il DDT uscirà senza indirizzo. Continuo?'))) return;
     try {
       await Rma.carScrivi([Object.assign({ u: v.u }, o)]);
-      toast('Carico aggiunto: ' + v.u.seriale, 'ok'); $('carSer').value = ''; $('carNote').value = ''; $('carHint').textContent = '';
+      Snd.ok(); toast('Carico aggiunto: ' + v.u.seriale, 'ok'); $('carSer').value = ''; $('carNote').value = ''; $('carHint').textContent = '';
       Rma.render(); $('carSer').focus();
     } catch (e) { Modal.open('Carico non salvato', e.message); }
   },
