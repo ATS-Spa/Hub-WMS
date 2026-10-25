@@ -1208,6 +1208,19 @@ Table.prototype.toRow = function (o) { return this.header.map(function (h) { ret
 Table.prototype.col = function (h) { if (!(h in this.idx)) throw new Error('Colonna "' + h + '" mancante nel foglio ' + this.name); return L.colLetter(this.idx[h]); };
 Table.prototype.cell = function (h, row) { return API.q(this.name) + '!' + this.col(h) + row; };
 
+// seriale → P/N e produttore già conosciuti: { pn, mnft, fonte }
+function serNoto(ser) {
+  var k = L.up(ser); if (!k) return null;
+  var idx = function (rows, nome, cache) {
+    if (!rows || !rows.length) return null;
+    if (serNoto[cache] && serNoto[cache].R === rows && serNoto[cache].n === rows.length) return serNoto[cache].m;
+    var m = {}; rows.forEach(function (r) { var s = L.up(r.seriale), p = L.s(r.pn); if (s && p && L.up(r.stato) !== 'ANNULLATO' && !(r.direzione && Sto.annullato && Sto.annullato(r))) m[s] = { pn: p, mnft: L.s(r.mnft), fonte: nome }; });   // la riga più recente vince
+    serNoto[cache] = { R: rows, n: rows.length, m: m }; return m;
+  };
+  var a = idx(DB.t.UNITA ? DB.t.UNITA.rows : null, 'pezzi passati in hub', '_u'); if (a && a[k]) return a[k];
+  var b = idx(typeof Sto !== 'undefined' && Sto.dati ? Sto.dati.cur : null, 'movimenti', '_m'); if (b && b[k]) return b[k];
+  var c = DB.serNoti[k]; return c && L.s(c.pn) ? { pn: L.s(c.pn), mnft: L.s(c.mnft), fonte: 'seriali noti' } : null;
+}
 var DB = {
   id: null, t: {}, vlt: null, vltMap: {}, vltBySer: {}, artPn: {}, serNoti: {}, huaweiFr: {}, huaweiTs: null,
   SMALL: ['OPERATORI', 'PARAMETRI', 'RIPARATORI', 'RIPARATORI_ALIAS', 'CONTROPARTI', 'DEPOT_VLT', 'VETTORI', 'REGOLE_BARCODE', 'MAGAZZINI', 'BALANCING', 'CALENDARIO_USCITE', 'VLT_RETTIFICHE'],
@@ -1287,7 +1300,8 @@ var DB = {
     App._pnKeys = null; DB.artPn = {}; DB.pnSet = {}; DB.matPn = {};
     c.art.forEach(function (a) { var m = L.mat(a.material); if (m && L.s(a.pn) && !DB.matPn[m]) DB.matPn[m] = L.s(a.pn); });
     c.art.concat(c.anag || []).forEach(function (a) { var k = L.up(a.pn); if (!k) return; DB.pnSet[k] = 1; if (a.mnft && !DB.artPn[k]) DB.artPn[k] = a.mnft; });
-    DB.serNoti = {}; c.ser.forEach(function (s) { if (s.seriale) DB.serNoti[L.up(s.seriale)] = s; });
+    // nei seriali noti della migrazione ci sono anche barcode interi (es. "(3S)GAI0181 101276440009810"): vale anche l'ultimo pezzo dopo lo spazio
+    DB.serNoti = {}; c.ser.forEach(function (s) { var k = L.up(s.seriale); if (!k) return; if (!DB.serNoti[k]) DB.serNoti[k] = s; if (/[\s()]/.test(k)) { var u = k.split(/[\s()]+/).filter(Boolean).pop(); if (u && u.length >= 6 && !DB.serNoti[u]) DB.serNoti[u] = s; } });
     DB.ubicazioni = c.ub;
     DB.ubBin = {}; DB.ubVlt = {}; (c.ubv || []).forEach(function (x) { var b = L.up(x[0]), v = L.up(x[1]); if (v && !DB.ubBin[v]) DB.ubBin[v] = b; if (b) DB.ubVlt[b] = v; });
   }
@@ -1765,8 +1779,8 @@ var Ingresso = {
   anteprimaSer: function () {
     var b = L.s($('scBc').value), h = $('hBc');
     if (!b) { h.textContent = ''; h.className = 'hint'; Ingresso.pnR(false); return; }
-    var fr = L.frKey($('scFr').value), v = DB.vltMap[fr], rip = v ? v.riparatore : '', sc = Ingresso.pulisci(b, rip), ser = sc.ser, sn = DB.serNoti[L.up(ser)];
-    var pn = sc.pn || (sn && sn.pn) || (v ? v.f_mat_tmpn : ''), da = sc.pn ? ' (' + sc.fonte + ')' : (sn && sn.pn ? ' (da seriali noti)' : (pn ? ' (da VLT)' : ''));
+    var fr = L.frKey($('scFr').value), v = DB.vltMap[fr], rip = v ? v.riparatore : '', sc = Ingresso.pulisci(b, rip), ser = sc.ser, sn = serNoto(ser);
+    var pn = sc.pn || (sn && sn.pn) || (v ? v.f_mat_tmpn : ''), da = sc.pn ? ' (' + sc.fonte + ')' : (sn && sn.pn ? ' (da ' + sn.fonte + ')' : (pn ? ' (da VLT)' : ''));
     var ok = pn && App.pnEsiste(pn), sim = pn && !ok ? App.pnSimile(pn) : '';
     h.innerHTML = 'Seriale: <b class="mono">' + esc(ser) + '</b>' + (ser !== b ? ' <span style="opacity:.7">(pulito)</span>' : '') +
       ' · P/N: <b class="mono">' + esc(pn || 'verificare fisicamente') + '</b> <span style="opacity:.7">' + esc(da) + '</span>' + (pn ? (ok ? ' <span style="color:var(--green)">✓ in anagrafica</span>' : ' <span style="color:var(--amber)">✗ non in anagrafica' + (sim ? ' (simile ' + esc(sim) + ')' : '') + '</span>') : '');
@@ -1806,7 +1820,7 @@ var Ingresso = {
     if (frScart && !frIn) o.msgs.push(['info', 'Su VLT c\'è l\'FR ' + frScart.fr_id + ' (' + frScart.stato + (frScart.data_apertura ? ', aperto il ' + L.s(frScart.data_apertura).slice(0, 10) : '') + ') ma non è stato associato: troppo vecchio o in uno stato non valido']);
     if (jg) o.msgs.push(['info', 'GOOD Juniper · pratica ' + jg.id_juniper + (L.s(jg.fr) ? ' · FR dalla pratica' : ' · faulty non ancora arrivata: l\'FR si associa da solo quando la ricevi')]);
     o.rip = r.man.rip || App.normRip(v ? v.riparatore : '');   // sempre la stessa scritta (Admin → Riparatori / Alias riparatori)
-    var sn = DB.serNoti[L.up(o.ser)];
+    var sn = serNoto(o.ser);
     var scP = r.bc ? Ingresso.pulisci(r.bc, o.rip) : { pn: L.scegliPn(o.ser, o.ser, o.rip, regole, App.pnEsiste).pn, fonte: 'regole barcode' };
     o.pn = r.man.pn || scP.pn || (sn && sn.pn) || (v ? v.f_mat_tmpn : '');
     // P/N assente su VLT: si propone quello dell'anagrafica per il material dell'FR, e la scheda va in pending con la nota classica
@@ -10593,7 +10607,15 @@ var Kpi = {
         s.addText([{ text: 'FAULTY HUB TRANSITO', options: { bold: true } }, { text: ' = In attesa di Delivery o Ack Repairer vs Repairer', options: { breakLine: true } }, { text: 'DISMISSED', options: { bold: true } }, { text: ' = In attesa dismissione cespite', options: { breakLine: true } }, { text: 'BUFFER (GOOD HUB)', options: { bold: true } }, { text: ' = All Spare available in HUB (GOOD + NEW + REUSE + BALANCING)' }], { x: 0.51, y: 6.35, w: 10.34, h: 0.71, fontSize: 10, color: BLU, fontFace: 'Arial', margin: 0 });
         // chiusura
         s = P.addSlide(); s.addImage({ data: LG.ats.d, x: 4.19, y: 2.47, w: 4.96, h: 2.56 }); s.addImage({ data: LG.wca.d, x: 7.66, y: 6.04, w: 1.91, h: 1.06 }); s.addImage({ data: LG.sgs.d, x: 9.57, y: 6.04, w: 3.51, h: 1.06 });
-        await P.writeFile({ fileName: 'Performance_FLM_BPR_' + sel + '.pptx' });
+        // PowerPoint vuole il file pulito: niente valori vuoti nei grafici (mesi senza dati) e niente etichette "fuori" sulla linea del target
+        await Lib.jszip();
+        var zp = await JSZip.loadAsync(await P.write({ outputType: 'arraybuffer' })), cf = Object.keys(zp.files).filter(function (f) { return /^ppt\/charts\/chart\d+\.xml$/.test(f); });
+        for (var q = 0; q < cf.length; q++) {
+          var cx = await zp.file(cf[q]).async('string');
+          cx = cx.replace(/<c:pt idx="\d+">\s*<c:v>\s*<\/c:v>\s*<\/c:pt>/g, '').replace(/<c:lineChart>[\s\S]*?<\/c:lineChart>/g, function (b) { return b.replace(/<c:dLblPos val="outEnd"\/>/g, '<c:dLblPos val="t"/>'); });
+          zp.file(cf[q], cx);
+        }
+        Kpi.scaricaBlob(await zp.generateAsync({ type: 'blob', mimeType: 'application/vnd.openxmlformats-officedocument.presentationml.presentation', compression: 'DEFLATE' }), 'Performance_FLM_BPR_' + sel + '.pptx');
         toast('PowerPoint BPR ' + lm(sel) + ' creato', 'ok');
       })());
     } catch (e) { toast('PowerPoint non creato: ' + e.message, 'ko'); }
@@ -10866,6 +10888,21 @@ var Arc = {
       } }]);
   },
   passo: function (t) { Arc.log.push(L.nowStamp().slice(11) + ' ' + t); Modal.progress(t); },
+  // seriali con P/N delle schede (UNITA) e dei movimenti archiviati che non sono già in SERIALI_NOTI: si aggiungono con fonte ARCHIVIO_<anno>
+  seriali: async function (F, Y) {
+    var nuovi = {}, ord = ['UNITA', 'MOVIMENTI'];
+    ord.forEach(function (n) {
+      var x = F.find(function (z) { return z.f.n === n; }); if (!x) return;
+      var iS = x.h.indexOf('seriale'), iP = x.h.indexOf('pn'), iM = x.h.indexOf('mnft'), iSt = x.h.indexOf('stato'); if (iS < 0 || iP < 0) return;
+      x.righe.forEach(function (r) { var s = L.up(r[iS]), p = L.s(r[iP]); if (!s || !p || (iSt >= 0 && L.up(r[iSt]) === 'ANNULLATO')) return; nuovi[s] = { seriale: L.s(r[iS]), pn: p, mnft: iM >= 0 ? L.s(r[iM]) : '' }; });   // l'ultima riga vince
+    });
+    var h = ((await API.batchGet(DB.id, [API.q('SERIALI_NOTI') + '!1:1']))[0][0] || []).map(L.s); if (h.indexOf('seriale') < 0) throw new Error('SERIALI_NOTI senza colonna seriale');
+    var gia = {}; (await DB.loadCols(DB.id, 'SERIALI_NOTI', ['seriale'])).forEach(function (r) { var k = L.up(r.seriale); if (k) gia[k] = 1; });
+    var oggi = L.isoToday(), t = new Table('SERIALI_NOTI', h, []), righe = Object.keys(nuovi).filter(function (k) { return !gia[k]; }).map(function (k) { var o = nuovi[k]; o.fonte = 'ARCHIVIO_' + Y; o.aggiornato_il = oggi; return t.toRow(o); });
+    for (var i = 0; i < righe.length; i += 5000) { Arc.passo('Seriali noti: ' + Math.min(i + 5000, righe.length) + ' / ' + righe.length); await API.append(DB.id, 'SERIALI_NOTI', righe.slice(i, i + 5000), true); }
+    try { await DB.cacheSet('lookups', null); } catch (e) { }   // al prossimo avvio si rileggono
+    return righe.length;
+  },
   esegui: async function () {
     var P = Arc.piano, Y = P.anno, nomeA = 'DB_ARCHIVIO_' + Y, fase = 'preparazione', backup = null, arcId = null;
     Arc.log = []; Modal.open('Archiviazione ' + Y, 'Non chiudere la pagina finché non finisce.', []);
@@ -10924,10 +10961,11 @@ var Arc = {
         if (x.f.n === 'UNITA') par.unita_id_base = String(x.maxId + 2 - (x.n - x.sel.length + 2));
       });
       await Arc.parametri(par);
-      await API.append(DB.id, 'LOG', [App.log('ARCHIVIAZIONE_ANNO', 'DATABASE', nomeA, { anno: Y, archivio: arcId, copia_sicurezza: backup.id, righe: F.map(function (x) { return x.f.n + ' ' + x.sel.length; }), parametri: par })]);
+      var nSer = 0; try { Arc.passo('Seriali noti: aggiungo i seriali archiviati…'); nSer = await Arc.seriali(F, Y); } catch (eS) { Arc.passo('Seriali noti non aggiornati: ' + eS.message); }   // non blocca l'archiviazione, già completa
+      await API.append(DB.id, 'LOG', [App.log('ARCHIVIAZIONE_ANNO', 'DATABASE', nomeA, { anno: Y, archivio: arcId, copia_sicurezza: backup.id, righe: F.map(function (x) { return x.f.n + ' ' + x.sel.length; }), parametri: par, seriali_noti_aggiunti: nSer })]);
       try { await DB.cacheSet('arch_' + Y, null); } catch (e) { }
       Arc.passo('Fatto');
-      Modal.html('Archiviazione ' + Y + ' completata', '<div style="font-size:13px;line-height:1.7">Creato <b>' + esc(nomeA) + '</b> e verificato.<br>Righe spostate: ' + F.map(function (x) { return esc(x.f.n) + ' ' + x.sel.length.toLocaleString('it-IT'); }).join(' · ') + '<br>Copia di sicurezza: ' + esc(backup.name || backup.id) + '<br>Numerazioni aggiornate: ' + Object.keys(par).map(function (k) { return '<span class="mono">' + esc(k) + ' = ' + esc(par[k]) + '</span>'; }).join(', ') + '<br><br><b>Ora tutti devono premere ↻ Aggiorna (o riaprire l\'app).</b></div>',
+      Modal.html('Archiviazione ' + Y + ' completata', '<div style="font-size:13px;line-height:1.7">Creato <b>' + esc(nomeA) + '</b> e verificato.<br>Righe spostate: ' + F.map(function (x) { return esc(x.f.n) + ' ' + x.sel.length.toLocaleString('it-IT'); }).join(' · ') + '<br>Seriali noti aggiunti (P/N ritrovabile anche dopo): ' + nSer.toLocaleString('it-IT') + '<br>Copia di sicurezza: ' + esc(backup.name || backup.id) + '<br>Numerazioni aggiornate: ' + Object.keys(par).map(function (k) { return '<span class="mono">' + esc(k) + ' = ' + esc(par[k]) + '</span>'; }).join(', ') + '<br><br><b>Ora tutti devono premere ↻ Aggiorna (o riaprire l\'app).</b></div>',
         [{ label: 'Ricarica l\'app', fn: function () { location.reload(); } }]);
     } catch (e) {
       Modal.html('Archiviazione interrotta', '<div style="font-size:13px;line-height:1.7">Fase: <b>' + esc(fase) + '</b><br>Errore: ' + esc(e.message) + '<br><br>' +
