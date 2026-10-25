@@ -683,17 +683,20 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
     </div>
 
     <div class="view" id="view-kpi">
-      <div class="card"><div class="row">
-        <div class="fg" style="width:200px" title="Periodo di fatturazione: dal giorno al giorno di ogni mese. Di base dal parametro kpi_periodo (1-21). Se il primo giorno è più grande del secondo il periodo parte nel mese prima (es. 22 → 21)"><span class="fl">Periodo: dal giorno · al giorno</span><div style="display:flex;gap:4px;align-items:center"><input class="fc" type="number" min="1" max="31" id="kpiDa" style="width:62px" onchange="Kpi.setPeriodo()"><span>→</span><input class="fc" type="number" min="1" max="31" id="kpiA" style="width:62px" onchange="Kpi.setPeriodo()"></div><span class="hint mono" id="kpiPer"></span></div><div class="fg" style="width:170px"><span class="fl">Mese</span><input class="fc" type="month" id="kpiMese" onchange="if(this.value){Kpi.mese=this.value;Kpi.render()}"></div>
-        <label style="font-size:12px;display:flex;gap:6px;align-items:center;margin-bottom:9px" title="Spenta (come la macro): KPI 1-2 finiscono alla registrazione VLT dei movimenti. Accesa: KPI 1 finisce a Received and Verify e KPI 2 a Good Material Received del foglio TABLEAU, dove ci sono. Il valore di base è il parametro kpi12_data_fine"><input type="checkbox" id="kpiTab" onchange="Kpi.usaTab=this.checked;Kpi.render()"> KPI 1-2 con date TABLEAU</label><label style="font-size:12px;display:flex;gap:6px;align-items:center;margin-bottom:9px" title="Spenta (come la macro): KPI 5 parte dalla data out. Accesa: con la colonna RMA compilata parte dalla data di creazione RMA (se manca resta la data out). Il valore di base è il parametro kpi5_data_inizio"><input type="checkbox" id="kpiRma" onchange="Kpi.daRma=this.checked;Kpi.render()"> KPI 5 da creazione RMA</label><span class="hint" id="kpiTabInfo" style="margin-bottom:9px"></span>
-        <div class="spacer"></div>
+      <div class="card"><div class="row" style="align-items:flex-end;gap:12px;flex-wrap:wrap">
+        <div class="fg" style="width:auto" title="Periodo di fatturazione: dal giorno al giorno di ogni mese (di base 1 → 21, parametro kpi_periodo). Se il primo è più grande del secondo il periodo parte nel mese prima (es. 22 → 21)"><span class="fl">Periodo <span class="mono" id="kpiPer" style="text-transform:none;letter-spacing:0;margin-left:4px"></span></span><div style="display:flex;gap:4px;align-items:center"><input class="fc" type="number" min="1" max="31" id="kpiDa" style="width:58px" onchange="Kpi.setPeriodo()"><span>→</span><input class="fc" type="number" min="1" max="31" id="kpiA" style="width:58px" onchange="Kpi.setPeriodo()"></div></div>
+        <div class="fg" style="width:170px"><span class="fl">Mese</span><input class="fc" type="month" id="kpiMese" onchange="if(this.value){Kpi.mese=this.value;Kpi.render()}"></div>
+        <label style="font-size:12px;display:flex;gap:6px;align-items:center;height:36px" title="Spenta (come la macro): KPI 1-2 finiscono alla registrazione VLT dei movimenti. Accesa: KPI 1 finisce a Received and Verify e KPI 2 a Good Material Received del foglio TABLEAU, dove ci sono. Valore di base: parametro kpi12_data_fine"><input type="checkbox" id="kpiTab" onchange="Kpi.usaTab=this.checked;Kpi.render()"> KPI 1-2 con date TABLEAU</label>
+        <label style="font-size:12px;display:flex;gap:6px;align-items:center;height:36px" title="Spenta (come la macro): KPI 5 parte dalla data out. Accesa: con la colonna RMA compilata parte dalla data di creazione RMA (se manca resta la data out). Valore di base: parametro kpi5_data_inizio"><input type="checkbox" id="kpiRma" onchange="Kpi.daRma=this.checked;Kpi.render()"> KPI 5 da creazione RMA</label>
+        <div style="display:flex;gap:6px;flex-wrap:wrap;margin-left:auto;justify-content:flex-end">
+        <button class="btn ghost sm" onclick="Kpi.guida()" title="Come si calcola ogni KPI, con i nomi dei campi">ℹ Calcoli</button>
         <button class="btn ghost sm" onclick="Blk.apri()">⛔ Blocco VLT</button>
         <button class="btn ghost sm" onclick="Chi.nuova()">📅 Chiusura</button>
-        <button class="btn ghost sm" onclick="Kpi.carica(true).then(Kpi.render).catch(function(e){toast(e.message,'ko')})">↻ Aggiorna</button>
+        <button class="btn ghost sm" onclick="Kpi.aggiorna()" title="Rilegge movimenti, archivio, Suite, TABLEAU, blocchi e chiusure e ricalcola">↻ Aggiorna</button>
         <button class="btn ghost sm" onclick="Kpi.excel()" title="Come il file della macro check_FLM: Report_KPI con i grafici, Report_Anomalie_Match, Report_Fuori_SLA, Report_SLA_OK (12 mesi dell'anno del mese scelto)">⬇ Excel KPI</button>
-        <button class="btn ghost sm" onclick="Kpi.excelAltro()" title="Volumi, shipment, giacenza, KPI 6 per riparatore, giorni esclusi, chiusure">⬇ Excel altre tabelle</button>
+        <button class="btn ghost sm" onclick="Kpi.excelAltro()" title="Volumi, shipment, giacenza, KPI 6 per riparatore, giorni esclusi, chiusure">⬇ Altre tabelle</button>
         <button class="btn ghost sm" onclick="Kpi.ppt()" title="Presentazione BPR: 12 mesi fino al mese scelto">📊 PowerPoint</button>
-      </div><div class="hint" style="margin-top:8px">Calcolo della macro check_FLM: ultimi 12 mesi fino al mese scelto. KPI 1-3: data in hub → registrazione VLT (mese = registrazione). KPI 5: data out → consegna Suite; KPI 6 (FAULTY): Repairer Ack Received del TABLEAU → consegna Suite (mese = data out). Giorni lavorativi tra le due date compresi meno uno, esclusi sabato, domenica, festivi (parametro <span class="mono">kpi_festivi</span>, Pasquetta automatica) e i giorni spuntati in "Giorni esclusi dai KPI". Soglie e target nel parametro <span class="mono">kpi_soglie</span>.</div></div>
+      </div></div></div>
       <div id="kpiBody"></div>
     </div>
 
@@ -705,7 +708,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
           <input class="fc" id="admQ" placeholder="filtra…" style="width:200px" oninput="Admin.render()">
           <button class="btn ghost sm" id="admAdd" onclick="Admin.addRow()">+ Riga</button>
           <label class="btn ghost sm" id="admCal" style="cursor:pointer;display:none" title="Importa il calendario aggiornato (xlsx): sostituisce quello esistente">⬆ Importa calendario<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Cal.importa(this)"></label>
-          <label class="btn ghost sm" id="admKpiImp" style="cursor:pointer;display:none" title="Excel con colonne kpi, mese, perc_1, perc_2, fonte: aggiorna i mesi già presenti e aggiunge i nuovi">⬆ Importa Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Admin.importaKpi(this)"></label>
+          
           <button class="btn ghost sm" id="admXls" onclick="Admin.excel()">⬇ Excel</button>
           <button class="btn sm" id="admSave" onclick="Admin.save()">Salva modifiche</button></div>
         <div id="spzBox"></div>
@@ -1365,7 +1368,7 @@ var App = {
     if (t.soon) { $('view-soon').classList.add('active'); $('soonMsg').textContent = 'Il tab "' + t.label + '" è in sviluppo: arriva nei prossimi rilasci.'; return; }
     $('view-' + t.k).classList.add('active');
     if (t.k === 'giacenze') Giacenze.render();
-    if (t.k === 'admin') Admin.render();
+    if (t.k === 'admin') { if (Admin.sez === 'ARCHIVIO') Admin.sez = 'SPAZIO'; Admin.render(); }   // l'archiviazione si apre solo cliccandola
     if (t.k === 'ingresso') setTimeout(function () { if ($('inTipo').value) $('scBc').focus(); else $('inTipo').focus(); }, 50);
     if (t.k === 'ack') Ack.show();
     if (t.k === 'rma') Rma.show();
@@ -1411,7 +1414,7 @@ var App = {
     if (Rma.loaded) { await DB.loadTables(['RMA_RITORNI', 'SPEDIZIONI', 'SPEDIZIONI_COLLI', 'CARICHI_RMA', 'RMA_PENDING']); await Rma.autoVlt(false); try { await Chi.syncRma(); } catch (e) { toast('Pending per chiusura: ' + e.message, 'ko'); } }
     if (Bal.loaded) await Bal.load(); if (Jun.loaded) await Jun.load(); Sto.dati.cur = null;
     if (Ack.loaded) { await Ack.flush(); await Ack.load(); }
-      App.fillLists(); App.syncInfo(); Ingresso.ricalcola(); Ingresso.renderOggi(); if (App.tab === 'giacenze') Giacenze.render(); if (App.tab === 'admin') Admin.render(); if (App.tab === 'ack') Ack.render(); if (App.tab === 'rma') Rma.render(); if (App.tab === 'balancing') Bal.render(); if (App.tab === 'juniper') Jun.render(); if (App.tab === 'vlt') Vlt.render();
+      App.fillLists(); App.syncInfo(); Ingresso.ricalcola(); Ingresso.renderOggi(); if (App.tab === 'giacenze') Giacenze.render(); if (App.tab === 'admin' && Admin.sez !== 'ARCHIVIO' && Admin.sez !== 'SPAZIO') Admin.render(); if (App.tab === 'ack') Ack.render(); if (App.tab === 'rma') Rma.render(); if (App.tab === 'balancing') Bal.render(); if (App.tab === 'juniper') Jun.render(); if (App.tab === 'vlt') Vlt.render();
       Modal.close(); toast('Dati aggiornati', 'ok');
     } catch (e) { Modal.close(); toast('Errore aggiornamento: ' + e.message, 'ko'); }
   },
@@ -3651,7 +3654,6 @@ var Admin = {
     MAGAZZINI: { title: 'Magazzini', hint: 'Aree logiche della giacenza.', cols: ['codice', 'descrizione'], add: true },
     PARAMETRI: { title: 'Parametri', hint: 'Modifica con attenzione: numerazioni DDT, mail, regole.', cols: ['chiave', 'valore', 'descrizione'], add: true },
     VETTORI: { title: 'Vettori', hint: 'Prefisso AWB per il riconoscimento automatico del vettore.', cols: ['vettore', 'prefisso_awb'], add: true },
-    KPI_STORICO: { title: 'KPI storico (BPR)', hint: 'Valori dei KPI dei mesi in cui il tool non li calcola (presentazione BPR). kpi = KPI6, mese = AAAA-MM, perc_1 / perc_2 = percentuali entro le due soglie. Un mese calcolato dal tool ha la precedenza.', cols: ['kpi', 'mese', 'perc_1', 'perc_2', 'fonte'], add: true },
     REGOLE_BARCODE: { title: 'Regole barcode', hint: 'Estrazione seriale/PN dal barcode, in ordine di priorità.', cols: ['priorita', 'prefisso', 'lunghezza', 'condizione_extra', 'riparatore', 'seriale_da', 'seriale_lung', 'pn_da', 'pn_lung', 'pn_prefisso', 'note'], add: true }
   },
   init: function () {
@@ -4826,8 +4828,8 @@ var Lib = {
   xlsx: function () { return Lib.load('https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js', function () { return !!window.XLSX; }); },
   exceljs: function () { return Lib.load('https://cdnjs.cloudflare.com/ajax/libs/exceljs/4.4.0/exceljs.min.js', function () { return !!window.ExcelJS; }); },   // Excel con tendine (convalida dati)
   qr: function () { return Lib.load('https://cdnjs.cloudflare.com/ajax/libs/qrcode-generator/1.4.4/qrcode.min.js', function () { return !!window.qrcode; }); },
-  jszip: function () { return Lib.load('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', function () { return !!window.JSZip; }); },
-  pptx: function () { return Lib.load('https://cdnjs.cloudflare.com/ajax/libs/pptxgenjs/3.12.0/pptxgen.bundle.js', function () { return !!window.PptxGenJS; }); }
+  jszip: function () { var t = function () { return !!window.JSZip; }; return Lib.load('https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js', t).catch(function () { return Lib.load('https://cdn.jsdelivr.net/npm/jszip@3.10.1/dist/jszip.min.js', t); }); },
+  pptx: function () { var t = function () { return !!window.PptxGenJS; }; return Lib.load('https://cdn.jsdelivr.net/npm/pptxgenjs@3.12.0/dist/pptxgen.bundle.js', t).catch(function () { return Lib.load('https://unpkg.com/pptxgenjs@3.12.0/dist/pptxgen.bundle.js', t); }); }
 };
 // legge un Excel/CSV caricato: righe come oggetti {INTESTAZIONE MAIUSCOLA: valore}
 async function leggiFoglio(file) {
@@ -9181,7 +9183,7 @@ var Chi = {
   SEME: [['KPI6', '2025-09', 95.5, 100], ['KPI6', '2025-10', 98.7, 100], ['KPI6', '2025-11', 99.3, 99.9], ['KPI6', '2025-12', 95.7, 100], ['KPI6', '2026-01', 97.1, 99.2], ['KPI6', '2026-02', 99.9, 100],
     ['KPI6', '2026-03', 99.1, 100], ['KPI6', '2026-04', 100, 100], ['KPI6', '2026-05', 99.4, 99.9], ['KPI6', '2026-06', 96.3, 100], ['KPI6', '2026-07', 99.2, 100], ['KPI6', '2026-08', 78.2, 99]],
   load: async function () {
-    for (var n of ['CHIUSURE', 'KPI_STORICO']) {
+    for (var n of ['CHIUSURE']) {
       try { await DB.loadTables([n]); if (!DB.t[n].header.length) throw new Error('no sheet'); DB.t[n]._ok = true; }
       catch (e) { if (!/parse range|no sheet|unable to parse/i.test(e.message)) throw e; DB.t[n] = new Table(n, n === 'CHIUSURE' ? Chi.H : Chi.KH, []); }
     }
@@ -9252,7 +9254,7 @@ var Chi = {
       } }]);
   },
   dopo: function () {
-    if (App.tab === 'kpi') Kpi.render(); if (App.tab === 'admin') Admin.render(); if (App.tab === 'ack') Ack.render();
+    if (App.tab === 'kpi') Kpi.render(); if (App.tab === 'admin' && Admin.sez !== 'ARCHIVIO' && Admin.sez !== 'SPAZIO') Admin.render(); if (App.tab === 'ack') Ack.render();
     if (Rma.loaded) Chi.syncRma().then(function () { if (App.tab === 'rma') Rma.render(); }).catch(function (e) { toast('Pending per chiusura: ' + e.message, 'ko'); });
   },
   // uscite RMA: in pending i pezzi per una destinazione chiusa oggi; alla riapertura tornano in uscita con l'RMA da rifare
@@ -9986,11 +9988,6 @@ var Kpi = {
     })());
     await Promise.all(job);
     RmaD.load().then(function () { return Tab.salva(); });   // le date VLT nuove restano salvate nei movimenti
-    // base del KPI₆: valori della presentazione BPR, scritti una volta in KPI_STORICO (modificabili da Admin)
-    if (App.isAdmin && DB.t.KPI_STORICO && !DB.t.KPI_STORICO._ok && !DB.t.KPI_STORICO.rows.length) {
-      try { var tk = await Chi.foglio('KPI_STORICO'); var rs = Chi.SEME.map(function (x) { return { kpi: x[0], mese: x[1], perc_1: x[2], perc_2: x[3], fonte: 'BPR luglio-agosto 2026' }; });
-        var r0 = await API.append(DB.id, 'KPI_STORICO', rs.map(function (o) { return tk.toRow(o); })); rs.forEach(function (o, i) { Ack.pushRow(tk, o, r0 + i); }); } catch (e) { }
-    }
   },
   mesi: function () { var a = [], p = Kpi.mese.split('-'), y = +p[0], m = +p[1]; for (var i = 11; i >= 0; i--) { var d = new Date(y, m - 1 - i, 1); a.push(d.getFullYear() + '-' + L.pad(d.getMonth() + 1, 2)); } return a; },
   lab: function (mk) { return Kpi.MESI[+mk.slice(5) - 1] + ' ' + mk.slice(2, 4); },
@@ -10039,6 +10036,14 @@ var Kpi = {
     return p(y0, m0, da) + ' – ' + p(y, mo, a);
   },
   setPeriodo: function () { var a = parseInt($('kpiDa').value, 10), b = parseInt($('kpiA').value, 10); if (!(a >= 1 && a <= 31 && b >= 1 && b <= 31)) return toast('Giorni da 1 a 31', 'ko'); Kpi.pDa = a; Kpi.pA = b; Kpi.render(); },
+  // ↻ Aggiorna: rilegge tutto dal database (movimenti compresi) e ricalcola, con la rotellina e l'esito
+  aggiorna: async function () {
+    try {
+      await Busy.wrap(Kpi.carica(true)); Kpi.render();
+      var n = (Sto.dati.cur || []).length;
+      toast('KPI aggiornati alle ' + L.nowStamp().slice(11, 16) + ': ' + n.toLocaleString('it-IT') + ' movimenti letti' + (Kpi.arch && Kpi.arch.length ? ' + ' + Kpi.arch.length.toLocaleString('it-IT') + ' in archivio' : '') + ' · periodo ' + Kpi.rangeLab(Kpi.mese), 'ok');
+    } catch (e) { Modal.open('KPI non aggiornati', e.message); }
+  },
   // giorni scelti in "Giorni esclusi dai KPI" (parametro kpi_giorni_esclusi)
   esclusi: function () { var g = {}; L.s(DB.param('kpi_giorni_esclusi', '')).split(/[,;\s]+/).forEach(function (x) { x = Kpi.dt(x); if (x) g[x] = 1; }); return g; },
   // come la macro: giorni lavorativi da a a b compresi, meno uno (esclusi sabato, domenica, festivi e giorni esclusi). Solo b prima di a → -1 (anomalia)
@@ -10378,6 +10383,38 @@ var Kpi = {
     if (R.length > MAX) h += '<div class="hint" style="margin-top:6px">Mostrate le prime ' + MAX + ' righe su ' + R.length.toLocaleString('it-IT') + ': l\'elenco completo è nell\'Excel.</div>';
     el.innerHTML = h;
   },
+  // ℹ Come si calcola: spiegazione dei KPI con i nomi dei campi e i valori attuali dei parametri
+  guida: function () {
+    Kpi.periodo(); var S = Kpi.soglie(), ex = Object.keys(Kpi.esclusi()).length, c = function (t) { return '<span class="mono" style="background:var(--bg2,rgba(127,127,127,.12));padding:0 4px;border-radius:4px">' + esc(t) + '</span>'; };
+    var sg = function (n) { var s = S[n]; return s.s1 + ' gg · ' + s.s2 + ' gg · ' + s.t + '%'; };
+    var td = function (a) { return '<tr>' + a.map(function (x) { return '<td style="vertical-align:top">' + x + '</td>'; }).join('') + '</tr>'; };
+    var h = '<div style="font-size:13px;line-height:1.5">' +
+      '<p>Stesso calcolo della macro <b>check_FLM</b> (GeneraReportKPIInboundEOutbound). Al posto dei fogli del file Excel il tool usa:</p>' +
+      '<div class="tbl-wrap"><table><thead><tr><th>Foglio della macro</th><th>Nel tool</th><th>Campi usati</th></tr></thead><tbody>' +
+      td(['INBOUND', 'Movimenti con direzione IN (stesse colonne dell\'Excel Easyloader)', c('TYPE') + ' ' + c('DATA IN HUB') + ' ' + c('DATA RECEIVED AND VERIFY (REGISTRAZIONE VLT)') + ' ' + c('FR') + ' ' + c('#AWB1-3') + ' ' + c('OP')]) +
+      td(['OUTBOUND', 'Movimenti con direzione OUT', c('TYPE') + ' ' + c('data out') + ' ' + c('#AWB2-4') + ' ' + c('FR') + ' ' + c('RMA') + ' ' + c('OP') + ' ' + c('DESTINO')]) +
+      td(['Suite', 'Foglio SUITE_CONSEGNE (⬆ Carica Suite)', c('SteFiliale') + ' + ' + c('SteProgressivo') + ' (chiave) → ' + c('SteDataConsegna')]) +
+      td(['__vlt_export__E2FR', 'Foglio TABLEAU di VLT (export E2FR caricato dal backend) e date già salvate nei movimenti', c('Fr Id') + ' → ' + c('DATA_REPAIRER_ACK_RECEIVED') + (Kpi.usaTab ? ', ' + c('DATA_FAILED_MATERIAL_RECEIVED_AND_VERIFY') + ', ' + c('DATA_GOOD_MATERIAL_RECEIVED') : '')]) +
+      td(['rma', 'La macro lo legge ma non lo usa. Nel tool serve solo con la spunta "KPI 5 da creazione RMA" (foglio RMA_DATE)', c('Id RMA') + ' → ' + c('Data Apertura') + ' (colonna ' + c('DATA CREAZIONE RMA') + ')']) +
+      '</tbody></table></div>' +
+      '<p style="margin-top:12px"><b>Come si calcola ogni KPI</b> (soglia 1 · soglia massima · target, dal parametro ' + c('kpi_soglie') + '):</p>' +
+      '<div class="tbl-wrap"><table><thead><tr><th>KPI</th><th>Pezzi</th><th>Data inizio</th><th>Data fine</th><th>Mese</th><th>Soglie</th></tr></thead><tbody>' +
+      td(['<b>KPI 1</b> Inbound FAULTY in HUB', 'INBOUND con ' + c('TYPE') + ' = FAULTY', c('DATA IN HUB'), Kpi.usaTab ? c('DATA_FAILED_MATERIAL_RECEIVED_AND_VERIFY') + ' (TABLEAU), se manca ' + c('DATA RECEIVED AND VERIFY') : c('DATA RECEIVED AND VERIFY (REGISTRAZIONE VLT)'), 'della data fine', sg(1)]) +
+      td(['<b>KPI 2</b> Inbound GOOD in HUB', c('TYPE') + ' = GOOD', c('DATA IN HUB'), Kpi.usaTab ? c('DATA_GOOD_MATERIAL_RECEIVED') + ' (TABLEAU), se manca ' + c('DATA RECEIVED AND VERIFY') : c('DATA RECEIVED AND VERIFY (REGISTRAZIONE VLT)'), 'della data fine', sg(2)]) +
+      td(['<b>KPI 3</b> Inbound REUSE &amp; NEW in HUB', c('TYPE') + ' = NEW o REUSE', c('DATA IN HUB'), c('DATA RECEIVED AND VERIFY (REGISTRAZIONE VLT)'), 'della data fine', sg(3)]) +
+      td(['<b>KPI 5</b> Outbound GOOD / NEW / REUSE / BALANCING', 'OUTBOUND con ' + c('TYPE') + ' = GOOD, NEW, REUSE, BALANCING e ' + c('#AWB2-4') + ' che inizia con CE', Kpi.daRma ? c('DATA CREAZIONE RMA') + ' se ' + c('RMA') + ' è compilato, altrimenti ' + c('data out') : c('data out'), c('SteDataConsegna') + ' della spedizione Suite con lo stesso AWB', 'di ' + c('data out'), sg(5)]) +
+      td(['<b>KPI 6</b> Outbound FAULTY', c('TYPE') + ' = FAULTY e AWB CE', c('DATA_REPAIRER_ACK_RECEIVED') + ' del ' + c('FR') + ' (TABLEAU)', c('SteDataConsegna'), 'di ' + c('data out'), sg(6)]) +
+      '</tbody></table></div>' +
+      '<ul style="margin:10px 0 0 18px;padding:0">' +
+      '<li><b>AWB → Suite</b>: ' + c('CE2896014') + ' o ' + c('CE/2896014') + ' diventa filiale ' + c('CE') + ' + progressivo ' + c('2896014') + ' (spazi, / e zeri davanti si tolgono).</li>' +
+      '<li><b>Giorni lavorativi</b> = giorni dalla data inizio alla data fine <b>compresi, meno uno</b> (stesso giorno = 0), senza sabato, domenica, festivi (' + c('kpi_festivi') + ' + Pasquetta) e i ' + ex + ' giorni spuntati in "Giorni esclusi dai KPI". Data fine prima della data inizio = anomalia.</li>' +
+      '<li><b>Periodo</b> ' + Kpi.pDa + ' → ' + Kpi.pA + ': per ' + esc(Kpi.lab(Kpi.mese)) + ' contano le date dal ' + esc(Kpi.rangeLab(Kpi.mese)) + ' (parametro ' + c('kpi_periodo') + ').</li>' +
+      '<li><b>Report_KPI</b> per ogni mese: ' + c('% soglia 1') + ' = pezzi entro la soglia 1 / pezzi del mese · ' + c('Vol. soglia 1') + ' = pezzi entro la soglia 1 · ' + c('% soglia 2') + ' = pezzi entro la soglia massima / pezzi · ' + c('Vol. soglia 2') + ' = pezzi entro la soglia massima meno quelli entro la soglia 1. <b>In target</b> se la % soglia 1 arriva al target (in rosso se sotto).</li>' +
+      '<li><b>Anomalie</b> (escluse dal calcolo, Report_Anomalie_Match): date inbound mancanti, ' + c('data out') + ' mancante, AWB non CE o mancante, AWB non trovato nel Suite, ' + c('SteDataConsegna') + ' vuota, ' + c('FR') + ' vuoto o senza ' + c('DATA_REPAIRER_ACK_RECEIVED') + ', giorni negativi.</li>' +
+      '<li><b>Fuori SLA</b> = oltre la soglia massima · <b>SLA OK</b> = entro la soglia massima.</li>' +
+      '<li>I movimenti annullati non contano. I mesi dell\'anno prima arrivano da ' + c('DB_ARCHIVIO') + '.</li></ul></div>';
+    Modal.html('ℹ Come si calcolano i KPI', h, null, true);
+  },
   // ── Excel identico al file della macro check_FLM: Report_KPI (blocchi + grafici), Report_Anomalie_Match, Report_Fuori_SLA, Report_SLA_OK ──
   MESIX: ['GEN', 'FEB', 'MAR', 'APR', 'MAG', 'GIU', 'LUG', 'AGO', 'SET', 'OTT', 'NOV', 'DIC'],
   MESIF: ['GENNAIO', 'FEBBRAIO', 'MARZO', 'APRILE', 'MAGGIO', 'GIUGNO', 'LUGLIO', 'AGOSTO', 'SETTEMBRE', 'OTTOBRE', 'NOVEMBRE', 'DICEMBRE'],
@@ -10687,7 +10724,7 @@ var Spz = {
   },
   carica: async function () {
     $('admRows').innerHTML = '<tr><td class="empty">Leggo la griglia di database e archivi…</td></tr>'; $('spzBox').innerHTML = '';
-    try { var F = await Spz.file(), D = []; for (var i = 0; i < F.length; i++) D.push(await Spz.analizza(F[i])); Spz.dati = D; Spz.disegna(); }
+    try { var F = await Spz.file(), D = []; for (var i = 0; i < F.length; i++) D.push(await Spz.analizza(F[i])); Spz.dati = D; if (Admin.sez === 'SPAZIO') Spz.disegna(); }
     catch (e) { $('admRows').innerHTML = '<tr><td class="empty">Errore: ' + esc(e.message) + '</td></tr>'; }
   },
   render: function () {
@@ -10803,7 +10840,7 @@ var Arc = {
     $('admTitle').textContent = 'Archiviazione annuale';
     $('admHint').textContent = 'Solo super admin. Sposta l\'anno chiuso in DB_ARCHIVIO_<anno> (file a parte, con il suo limite di celle). Prima fa una copia di sicurezza del database e verifica l\'archivio: se qualcosa non torna si ferma senza cancellare.';
     $('admHead').innerHTML = ''; $('admRows').innerHTML = '<tr><td class="empty">Leggo il database e preparo il piano (nessuna modifica)…</td></tr>'; $('spzBox').innerHTML = '';
-    try { await Arc.prepara(); Arc.disegna(); } catch (e) { $('admRows').innerHTML = '<tr><td class="empty">Errore: ' + esc(e.message) + '</td></tr>'; }
+    try { await Arc.prepara(); if (Admin.sez !== 'ARCHIVIO') return; Arc.disegna(); }   /* nel frattempo si è passati ad altro: non scrivere sopra */ catch (e) { $('admRows').innerHTML = '<tr><td class="empty">Errore: ' + esc(e.message) + '</td></tr>'; }
   },
   disegna: function () {
     var P = Arc.piano, n = function (x) { return (x || 0).toLocaleString('it-IT'); }, tot = 0;
