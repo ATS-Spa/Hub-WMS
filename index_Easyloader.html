@@ -2463,7 +2463,7 @@ var Giacenze = {
       rowAttr: function (u) { return u.stato === 'BLOCCATO' ? 'class="r-err"' : (u.stato === 'IN_ATTESA' ? 'class="r-warn"' : ''); },
       rows: function () { Giacenze.indice(); return DB.t.UNITA.rows.filter(Giacenze.filtra); },
       cols: [
-        { k: 'az', label: '', noXls: true, html: function (u) { return '<button class="btn ghost sm" style="padding:2px 8px" title="Nota, blocco, attesa, variazione" onclick="Giacenze.gestisci(\'' + esc(u.id_unita) + '\')">✎</button>'; } },
+        { k: 'az', label: '', noXls: true, html: function (u) { var us = u.stato === 'IN_GIACENZA' && ['NEW', 'GOOD', 'REUSE', 'BALANCING'].indexOf(u.tipo) >= 0 && !(DB.t.CARICHI_RMA && DB.t.CARICHI_RMA.rows.some(function (c) { return c.id_unita === u.id_unita && c.stato === 'APERTO'; })); return '<span style="white-space:nowrap;display:inline-flex;gap:3px"><button class="btn ghost sm" style="padding:2px 8px" title="Nota, blocco, attesa, variazione" onclick="Giacenze.gestisci(\'' + esc(u.id_unita) + '\')">✎</button>' + (us ? '<button class="btn ghost sm" style="padding:2px 8px" title="Metti in uscita: diventa un carico in Pratiche Carichi NEW/REUSE (destinazione, RMA, PO)" onclick="Rma.carDaGiacenza(\'' + esc(u.id_unita) + '\')">📤</button>' : '') + '</span>'; } },
         { k: 'id_unita', label: 'ID', filter: 'text', cls: 'mono' },
         { k: 'tipo', label: 'Tipo', filter: 'select', html: function (u) { return Pill.tipo(u.tipo); } },
         { k: 'stato', label: 'Stato', filter: 'select', html: function (u) { var x = STATO[u.stato] || ['', u.stato]; return '<span class="pill ' + x[0] + '">' + esc(x[1]) + '</span>'; } },
@@ -6445,7 +6445,7 @@ var Rma = {
     var ann = Rma.attivi(true).length ? ' <button class="btn ghost sm" onclick="Rma.annullaImport()" title="Annulla i ritorni dell\'ultimo import (es. file sbagliato): poi puoi caricarne uno nuovo">🗑 Annulla import ritorni</button>' : '';
     var xr = ' <button class="btn ghost sm" onclick="Rma.excelRma()" title="Schede filtrate da far compilare al Service Desk (RMA creato e nuova destinazione), poi da reimportare">⬇ Excel RMA</button>' +
       ' <label class="btn ghost sm" style="cursor:pointer" title="Reimporta l Excel RMA compilato: anteprima e anomalie prima di confermare">⬆ Importa RMA<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Rma.importaRma(this)"></label>';
-    if (s === 'inv') return '<div class="row" style="justify-content:flex-end">' + imp + ann + xl + xr + ' <button class="btn ghost sm" onclick="Rma.etichette()" title="Etichetta 10x5 solo per le schede con variazione di destino (tra le righe filtrate)">🏷 Etichette RMA</button>' + (Rma.ieri().length ? ' <button class="btn sm" onclick="Rma.associaIeri()" title="Gli RMA giacenza aperti ieri diventano RMA creato; i più vecchi li controlla il Service Desk">✓ Associa RMA di ieri (' + Rma.ieri().length + ')</button>' : '') + ' <button class="btn sm" ' + (nD ? '' : 'disabled') + ' onclick="Rma.salva()">Salva modifiche' + (nD ? ' (' + nD + ')' : '') + '</button></div>' + info;
+    if (s === 'inv') return '<div class="row" style="justify-content:flex-end">' + imp + ann + xl + xr + ' <button class="btn ghost sm" onclick="Rma.pendFiltrate()" title="Mette in pending (fermi a deposito) tutti i pezzi filtrati nella tabella qui sotto">⏸ Pending filtrate</button> <button class="btn ghost sm" onclick="Rma.sbloccaFiltrate()" title="Rimette in uscita tutti i pezzi filtrati che sono in pending">▶ Sblocca filtrate</button>' + ' <button class="btn ghost sm" onclick="Rma.etichette()" title="Etichetta 10x5 solo per le schede con variazione di destino (tra le righe filtrate)">🏷 Etichette RMA</button>' + (Rma.ieri().length ? ' <button class="btn sm" onclick="Rma.associaIeri()" title="Gli RMA giacenza aperti ieri diventano RMA creato; i più vecchi li controlla il Service Desk">✓ Associa RMA di ieri (' + Rma.ieri().length + ')</button>' : '') + ' <button class="btn sm" ' + (nD ? '' : 'disabled') + ' onclick="Rma.salva()">Salva modifiche' + (nD ? ' (' + nD + ')' : '') + '</button></div>' + info;
     if (s === 'rit') return '<div class="row" style="justify-content:flex-end">' + imp + ann + xl + '</div>' + info;
     if (s === 'res') return '<div class="row" style="align-items:center"><div class="hint" style="flex:1;min-width:260px">Pezzi in reso senza RMA: escono con il DDT di <b>Uscite e DDT RMA</b> della loro destinazione (causale RESO). ✕ toglie dal reso finché il DDT non è emesso.</div>' +
       '<label style="font-size:12px;display:flex;gap:6px;align-items:center"><input type="checkbox"' + (Rma.resTutti ? ' checked' : '') + ' onchange="Rma.resTutti=this.checked;Rma.render()"> anche spediti</label>' +
@@ -6459,7 +6459,7 @@ var Rma = {
       '<button class="btn" onclick="Rma.carAggiungi()">Aggiungi</button></div>' +
       '<div class="row" style="margin-top:8px;align-items:center"><div style="flex:1;min-width:260px"><div class="hint" id="carHint" style="color:var(--text)"></div><div class="hint" title="Excel RMA / Importa RMA: RMA e destinazione dei carichi già aperti (filtrati qui sotto), compilati dal Service Desk e reimportati. Importa Excel: colonne SERIALE, RMA, DESTINAZIONE, PO, NOTE (anche PV DESTINO, P.O, SERIAL).">Nuovi carichi: solo NEW/REUSE in giacenza, l\'RMA si può dare anche dopo · Excel RMA / Importa RMA aggiornano i carichi aperti filtrati.</div></div>' +
       '<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;margin-left:auto"><label class="btn ghost sm" style="cursor:pointer">⬆ Importa Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Rma.carImporta(this)"></label>' +
-      '<button class="btn ghost sm" onclick="Rma.carModello()">Modello Excel</button> <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button>' + xr + '</div></div>' +
+      '<button class="btn ghost sm" onclick="Rma.pendFiltrate()" title="Mette in pending (fermi a deposito) tutti i carichi filtrati nella tabella qui sotto">⏸ Pending filtrate</button> <button class="btn ghost sm" onclick="Rma.sbloccaFiltrate()" title="Rimette in uscita tutti i carichi filtrati che sono in pending">▶ Sblocca filtrate</button> <button class="btn ghost sm" onclick="Rma.carModello()">Modello Excel</button> <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button>' + xr + '</div></div>' +
       '';
     return '<div class="row"><div class="fg" style="width:160px"><span class="fl">Giorno di uscita</span><input class="fc" type="date" id="uscData2" value="' + esc($('uscData').value) + '" onchange="$(\'uscData\').value=this.value;Rma.render()"></div><div class="spacer"></div>' +
       '<button class="btn ghost sm" onclick="Rma.ctrlApri()" title="Spara (o incolla, separati da ;) i seriali: per ognuno vedi in grande la destinazione di uscita di oggi, RMA, DDT e stato">🔍 Controllo destinazioni</button> <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button> <button class="btn ghost sm" onclick="Rma.ddtTutti()" title="Ristampa in un solo PDF tutti i DDT già emessi delle destinazioni della pagina">🖨 Tutti i DDT</button> <button class="btn ghost sm" onclick="Rma.cedoliniTutti()" title="Tutti i cedolini delle destinazioni della pagina in un solo PDF (un foglio per collo)">🖨 Tutti i cedolini</button> <button class="btn ghost sm" onclick="AwbF.apri(\'RMA\')" title="Apre il foglio AWB del giorno (Google Sheet condiviso con la bollettazione); lo crea o aggiunge le destinazioni se serve">📄 Foglio AWB</button> <button class="btn ghost sm" onclick="AwbF.leggiAwb(\'RMA\')" title="Legge AWB e vettore scritti dalla bollettazione nel foglio del giorno e li salva sulle schede (con anteprima)">⟳ Leggi AWB dal foglio</button> <button class="btn ghost sm" onclick="Rma.mailGiorno()" title="Una mail a Service Desk e bollettazione con tutte le destinazioni del giorno: indirizzo, DDT, AWB, colli, misure e peso">✉ Mail bollettazione</button> <button class="btn green" id="uscTutti" onclick="Rma.emettiTutti()">Genera i DDT pronti</button></div>' +
@@ -6620,7 +6620,7 @@ var Rma = {
         { k: 'posizione', label: 'Posizione', filter: 'select', cls: 'mono', html: function (c) { var b = Rma.ubiBin(c.posizione); return esc(c.posizione) + (b ? '<div class="hint" style="margin:0" title="Decodifica ubicazioni">→ ' + esc(b) + '</div>' : ''); } },
         { k: 'note', label: 'Note', filter: 'text' },
         { k: 'creato_da', label: 'Da', filter: 'select', get: function (c) { return App.sigla(c.creato_da); } },
-        { k: 'usc', label: 'In uscita', filter: 'text', get: function (c) { var x = Rma.carMotivo(c); return x ? 'NO: ' + x.m : 'SI'; }, html: function (c) { var x = Rma.carMotivo(c); return x ? '<span class="pill p-amber" title="' + esc(x.m) + '">no</span>' + (x.fix === 'RICOLLEGA' ? ' <button class="ico-btn" title="Rimetti in uscita: ' + esc(x.m) + '" onclick="Rma.carRicollega(\'' + c.id_carico + '\')">↻</button>' : '') : '<span class="pill p-green">sì</span>'; } },
+        { k: 'usc', label: 'In uscita', filter: 'select', get: function (c) { return Rma.carMotivo(c) ? 'NO' : 'SI'; }, /* prima il testo NO: Prossima… conteneva si e il filtro SI non filtrava */ html: function (c) { var x = Rma.carMotivo(c); return x ? '<span class="pill p-amber" title="' + esc(x.m) + '">no</span>' + (x.fix === 'RICOLLEGA' ? ' <button class="ico-btn" title="Rimetti in uscita: ' + esc(x.m) + '" onclick="Rma.carRicollega(\'' + c.id_carico + '\')">↻</button>' : '') : '<span class="pill p-green">sì</span>'; } },
         { k: 'pend', label: 'Pending', filter: 'text', get: function (c) { var p = Rma.pend(c.id_unita); return p ? p.motivo : ''; }, html: function (c) { return Rma.pendCella({ id_unita: c.id_unita }); } },
         { k: 'az', label: '', html: function (c) { return '<span style="white-space:nowrap;display:inline-flex;gap:2px"><button class="ico-btn" title="Modifica il carico: RMA, destinazione, PO, posizione, note, P/N e Material (se manca lo aggiunge all\'anagrafica articoli)" onclick="Rma.carModifica(\'' + c.id_carico + '\')">✎</button>' + '<button class="ico-btn" title="Annulla carico: il pezzo torna in giacenza" onclick="Rma.carAnnulla(\'' + c.id_carico + '\')">✕</button></span>'; } }
       ]
@@ -6657,6 +6657,103 @@ var Rma = {
   },
   // ─ PENDING del Service Desk: la riga resta in giacenza (fermo a deposito) e non esce, oggi e nei giorni dopo, finché non viene rimessa in uscita
   pend: function (idUnita) { var t = DB.t.RMA_PENDING; return t ? t.rows.find(function (p) { return p.id_unita === idUnita && p.stato === 'ATTIVO'; }) || null : null; },
+  // ⏸ su tutte le righe filtrate della tabella (inventario giornaliero o carichi): un motivo per tutte
+  pendFiltrate: function () {
+    var g = Rma.grids[Rma.sez]; if (!g) return;
+    var vis = g.visibili || g.render() || [], ids = [], gia = 0;
+    vis.forEach(function (r) { var id = r.id_unita || (r.u && r.u.id_unita); if (!id || ids.indexOf(id) >= 0) return; if (Rma.pend(id)) gia++; else ids.push(id); });
+    if (!ids.length) { toast(gia ? 'Le righe filtrate sono già tutte in pending' : 'Nessuna riga filtrata', 'ko'); return; }
+    var U = {}; DB.t.UNITA.rows.forEach(function (u) { U[u.id_unita] = u; });
+    Modal.html('⏸ Pending sulle righe filtrate',
+      '<div style="font-size:13px;margin-bottom:8px"><b>' + ids.length + '</b> righe della tabella filtrata vanno in pending: restano ferme a deposito e non escono finché non le rimetti in uscita (▶ sulla riga)' + (gia ? ' · ' + gia + ' erano già in pending' : '') + '.</div>' +
+      '<div class="fg" style="margin-bottom:8px"><span class="fl">Motivo * (uguale per tutte)</span><input class="fc" id="pfMot" autocomplete="off" placeholder="es. In attesa conferma Service Desk"></div>' +
+      '<div class="tbl-wrap modal-scroll" style="max-height:40vh"><table><thead><tr><th>Seriale</th><th>Tipo</th><th>P/N</th><th>Destinazione</th></tr></thead><tbody>' +
+      ids.slice(0, 300).map(function (id) { var u = U[id] || {}; return '<tr><td class="mono">' + esc(u.seriale) + '</td><td>' + esc(u.tipo) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.destinazione_prevista) + '</td></tr>'; }).join('') +
+      (ids.length > 300 ? '<tr><td colspan="4" class="hint">… e altre ' + (ids.length - 300) + '</td></tr>' : '') + '</tbody></table></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: '⏸ Metti in pending ' + ids.length + ' righe', cls: 'red', keep: true, fn: function () { Rma.pendFiltrateSalva(ids); } }], true);
+    setTimeout(function () { if ($('pfMot')) $('pfMot').focus(); }, 50);
+  },
+  // ▶ sulle righe filtrate in pending: stesso sblocco della riga (GOOD/BALANCING e carichi con RMA: l'RMA va ricreato e resta nelle note come "RMA Precedente …")
+  sbloccaFiltrate: function () {
+    var g = Rma.grids[Rma.sez]; if (!g) return;
+    var vis = g.visibili || g.render() || [], P = [], visti = {};
+    vis.forEach(function (r) { var id = r.id_unita || (r.u && r.u.id_unita), p = id && Rma.pend(id); if (p && !visti[p.id_pending]) { visti[p.id_pending] = 1; P.push(p); } });
+    if (!P.length) { toast('Nessuna riga filtrata in pending', 'ko'); return; }
+    var U = {}; DB.t.UNITA.rows.forEach(function (u) { U[u.id_unita] = u; });
+    var chiusa = function (p) { return L.s(p.chiusura) && Chi.inCorso(p.chiusura); }, nCh = P.filter(chiusa).length;
+    var ricrea = function (p) { var u = U[p.id_unita], car = p.id_carico && DB.t.CARICHI_RMA.rows.find(function (c) { return c.id_carico === p.id_carico && c.stato === 'APERTO'; }); return !!(u && (car ? L.s(car.rma) : (!p.id_carico && (u.tipo === 'GOOD' || u.tipo === 'BALANCING') && (L.s(u.rma) || L.s(p.rma))))); }, nR = P.filter(ricrea).length;
+    Modal.html('▶ Sblocca le righe filtrate',
+      '<div style="font-size:13px;margin-bottom:8px"><b>' + P.length + '</b> righe filtrate in pending tornano in uscita.' + (nR ? '<br><b style="color:var(--amber)">' + nR + ' hanno un RMA che va ricreato</b>: lo tolgo dalla riga e lo scrivo nelle note come "RMA Precedente …".' : '') +
+      (nCh ? '<br><b style="color:var(--red)">' + nCh + ' hanno la destinazione ancora chiusa (chiusura programmata)</b>: <label style="font-weight:normal"><input type="checkbox" id="sfCh"> sblocca anche quelle</label>' : '') + '</div>' +
+      '<div class="fg" style="margin-bottom:8px"><span class="fl">Nota (facoltativa, uguale per tutte)</span><input class="fc" id="sfNota" autocomplete="off"></div>' +
+      '<div class="tbl-wrap modal-scroll" style="max-height:40vh"><table><thead><tr><th>Seriale</th><th>Tipo</th><th>Motivo pending</th><th>Messo da</th><th></th></tr></thead><tbody>' +
+      P.slice(0, 300).map(function (p) { return '<tr><td class="mono">' + esc(p.seriale) + '</td><td>' + esc(p.tipo) + '</td><td>' + esc(p.motivo) + '</td><td>' + esc(L.s(p.messo_da).split('@')[0]) + ' · ' + esc(Sto.dataOra(p.messo_il)) + '</td><td>' + (ricrea(p) ? '<span class="pill p-amber">RMA da ricreare</span>' : '') + (chiusa(p) ? ' <span class="pill p-red">chiusa</span>' : '') + '</td></tr>'; }).join('') +
+      (P.length > 300 ? '<tr><td colspan="5" class="hint">… e altre ' + (P.length - 300) + '</td></tr>' : '') + '</tbody></table></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: '▶ Sblocca ' + P.length + ' righe', cls: 'green', keep: true, fn: function () { Rma.sbloccaFiltrateSalva(P, chiusa); } }], true);
+  },
+  sbloccaFiltrateSalva: async function (P, chiusa) {
+    var nota = L.s($('sfNota') && $('sfNota').value), conCh = !!($('sfCh') && $('sfCh').checked);
+    var L2 = P.filter(function (p) { return p.stato === 'ATTIVO' && (conCh || !chiusa(p)); }), ok = 0, ko = [];
+    if (!L2.length) { Modal.close(); toast('Niente da sbloccare', 'ko'); return; }
+    await Busy.wrap((async function () {
+      for (var i = 0; i < L2.length; i++) {
+        Modal.progress('Sblocco ' + (i + 1) + ' / ' + L2.length + ' · ' + L2[i].seriale);
+        try { await Rma.pendRiapri(L2[i], nota); ok++; } catch (e) { ko.push(L2[i].seriale + ': ' + e.message); }
+      }
+    })());
+    try { await API.append(DB.id, 'LOG', [App.log('RMA_PENDING_SBLOCCO_MASSIVO', 'UNITA', L2[0].id_pending + (L2.length > 1 ? '…' + L2[L2.length - 1].id_pending : ''), { sbloccati: ok, errori: ko.length, nota: nota, sezione: Rma.sez })], true); } catch (e) { }
+    Rma.render();
+    if (ko.length) Modal.open('Sblocco righe filtrate', ok + ' sbloccate, ' + ko.length + ' non sbloccate:\n' + ko.join('\n'));
+    else { Modal.close(); toast(ok + ' righe di nuovo in uscita' + (P.length > L2.length ? ' · ' + (P.length - L2.length) + ' lasciate in pending (destinazione chiusa)' : ''), 'ok'); }
+  },
+  pendFiltrateSalva: async function (ids) {
+    var motivo = L.s($('pfMot') && $('pfMot').value); if (!motivo) { toast('Serve il motivo', 'ko'); $('pfMot').focus(); return; }
+    ids = ids.filter(function (id) { return !Rma.pend(id); }); if (!ids.length) { Modal.close(); return; }
+    try {
+      await Busy.wrap((async function () {
+        var t = await DB.ensureSheet('RMA_PENDING', Rma.PEN_H), now = L.nowStamp(), U = {}, CAR = {}, X = {};
+        DB.t.UNITA.rows.forEach(function (u) { U[u.id_unita] = u; }); Rma.carichi().forEach(function (c) { CAR[c.id_unita] = c; }); Rma.daSpedire().forEach(function (y) { X[y.u.id_unita] = y; });
+        var objs = ids.filter(function (id) { return U[id]; }).map(function (id) { var u = U[id], car = CAR[id], x = X[id]; return { id_unita: id, seriale: u.seriale, tipo: u.tipo, id_carico: car ? car.id_carico : '', rma: car ? car.rma : (x ? x.rma : L.s(u.rma)), destinazione: car ? car.destinazione : (x ? x.dest : u.destinazione_prevista), motivo: motivo, stato: 'ATTIVO', messo_il: now, messo_da: Auth.email }; });
+        var r0 = await API.append(DB.id, 'RMA_PENDING', objs.map(function (o) { return t.toRow(o); }));
+        objs.forEach(function (o, i) { o.id_pending = 'P' + L.pad(r0 + i - 1, 6); });
+        await Promise.all([API.batchUpdate(DB.id, [{ range: t.cell('id_pending', r0) + ':' + t.col('id_pending') + (r0 + objs.length - 1), values: objs.map(function (o) { return [o.id_pending]; }) }]),
+          API.append(DB.id, 'LOG', [App.log('RMA_PENDING_MASSIVO', 'UNITA', objs[0].id_pending + (objs.length > 1 ? '…' + objs[objs.length - 1].id_pending : ''), { righe: objs.length, motivo: motivo, sezione: Rma.sez, seriali: objs.map(function (o) { return o.seriale; }).slice(0, 500) })])]);
+        objs.forEach(function (o, i) { Ack.pushRow(t, o, r0 + i); });
+        Modal.close(); toast(objs.length + ' righe in pending: non escono finché non le sblocchi', 'ok'); Rma.render();
+      })());
+    } catch (e) { toast('Pending non salvati: ' + e.message, 'ko'); }
+  },
+  // 📤 dalla giacenza: una NEW, GOOD, REUSE o BALANCING in giacenza diventa un carico aperto (Pratiche Carichi NEW/REUSE) ed esce con le Uscite e DDT RMA
+  carDaGiacenza: async function (id) {
+    if (!Rma.loaded) { try { await Busy.wrap(Rma.load()); } catch (e) { Modal.open('Metti in uscita', e.message); return; } }
+    var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); if (!u) return;
+    if (u.stato !== 'IN_GIACENZA' || ['NEW', 'GOOD', 'REUSE', 'BALANCING'].indexOf(u.tipo) < 0) { toast('Solo NEW, GOOD, REUSE e BALANCING in giacenza', 'ko'); return; }
+    if (Rma.carichi().some(function (c) { return c.id_unita === id; })) { toast(u.seriale + ' è già in un carico aperto', 'ko'); return; }
+    var dest = u.tipo === 'BALANCING' ? App.destDaSigla(u.destinazione_prevista) : L.s(u.destinazione_prevista), pe = Rma.pend(id);
+    Modal.html('📤 Metti in uscita · ' + u.seriale,
+      '<div class="hint" style="margin-bottom:10px">' + Pill.tipo(u.tipo) + ' · P/N <b class="mono">' + esc(u.pn) + '</b>' + (u.fr ? ' · FR <span class="mono">' + esc(u.fr) + '</span>' : '') + (u.ubicazione ? ' · ubicazione <span class="mono">' + esc(u.ubicazione) + '</span>' : '') + '<br>Il pezzo va in <b>Pratiche Carichi NEW/REUSE</b> ed esce con <b>Uscite e DDT RMA</b> della destinazione (l\'RMA si può dare anche dopo).' +
+        (u.tipo === 'GOOD' || u.tipo === 'BALANCING' ? '<br><b style="color:var(--amber)">' + u.tipo + ': finché il carico è aperto non compare più nell\'Inventario giornaliero.</b>' : '') + (pe ? '<br><b style="color:var(--amber)">È in pending (' + esc(pe.motivo) + '): resta fermo finché non lo sblocchi.</b>' : '') + '</div>' +
+      '<div class="row"><div class="fg" style="width:130px"><span class="fl">RMA</span><input class="fc mono" id="cgRma" autocomplete="off" placeholder="anche dopo" value="' + esc(L.s(u.rma)) + '"></div>' +
+      '<div class="fg" style="width:240px"><span class="fl">Destinazione *</span><input class="fc" id="cgDest" list="dlControparti" autocomplete="off" value="' + esc(dest) + '"></div>' +
+      '<div class="fg" style="width:140px"><span class="fl">PO / MRN</span><input class="fc mono" id="cgPo" autocomplete="off" value="' + esc(L.s(u.po_mrn)) + '"></div>' +
+      '<div class="fg" style="flex:1;min-width:180px"><span class="fl">Note</span><input class="fc" id="cgNote" autocomplete="off"></div></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: '📤 Metti in uscita', cls: 'green', keep: true, fn: function () { Rma.carDaGiacenzaSalva(id); } }], true);
+    setTimeout(function () { var e = $('cgDest'); if (e) { e.focus(); e.select(); } }, 50);
+  },
+  carDaGiacenzaSalva: async function (id) {
+    var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); if (!u) return;
+    var o = { rma: Rma.rmaPulito($('cgRma').value), destinazione: L.s($('cgDest').value), po_mrn: L.s($('cgPo').value), note: L.s($('cgNote').value) };
+    if (!o.destinazione) { toast('Serve la destinazione', 'ko'); $('cgDest').focus(); return; }
+    if (Rma.resta(o.destinazione)) { toast('"' + o.destinazione + '" è una destinazione che resta in giacenza (parametro carichi_dest_in_giacenza): il pezzo non esce', 'ko'); return; }
+    if (o.rma) { var re = Rma.rmaErr(o.rma, true) || Rma.rmaConflitto(o.rma, o.destinazione, id); if (re) { toast(re, 'ko'); $('cgRma').focus(); return; } }
+    if (Rma.carichi().some(function (c) { return c.id_unita === id; })) { Modal.close(); toast('Già in un carico aperto', 'ko'); return; }
+    if (!DB.t.CONTROPARTI.rows.some(function (c) { return L.up(c.codice) === L.up(o.destinazione); }) && !confirm('"' + o.destinazione + '" non è tra le controparti: il DDT uscirà senza indirizzo. Continuo?')) return;
+    try {
+      await Busy.wrap(Rma.carScrivi([Object.assign({ u: u }, o)]));
+      Modal.close(); Snd.ok(); toast(u.seriale + ' messo in uscita (Pratiche Carichi NEW/REUSE → ' + o.destinazione + ')', 'ok');
+      if (App.tab === 'giacenze') Giacenze.render(); else Rma.render();
+    } catch (e) { Modal.open('Carico non salvato', e.message); }
+  },
   pendAttivi: function () { return DB.t.RMA_PENDING ? DB.t.RMA_PENDING.rows.filter(function (p) { return p.stato === 'ATTIVO'; }) : []; },
   pendCella: function (u) {
     var p = Rma.pend(u.id_unita);
