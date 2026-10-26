@@ -693,8 +693,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
         <button class="btn ghost sm" onclick="Blk.apri()">⛔ Blocco VLT</button>
         <button class="btn ghost sm" onclick="Chi.nuova()">📅 Chiusura</button>
         <button class="btn ghost sm" onclick="Kpi.aggiorna()" title="Rilegge movimenti, archivio, Suite, TABLEAU, blocchi e chiusure e ricalcola">↻ Aggiorna</button>
-        <button class="btn ghost sm" onclick="Kpi.excel()" title="Come il file della macro check_FLM: Report_KPI con i grafici, Report_Anomalie_Match, Report_Fuori_SLA, Report_SLA_OK (12 mesi dell'anno del mese scelto)">⬇ Excel KPI</button>
-        <button class="btn ghost sm" onclick="Kpi.excelAltro()" title="Volumi, shipment, giacenza, KPI 6 per riparatore, giorni esclusi, chiusure">⬇ Altre tabelle</button>
+        <button class="btn ghost sm" onclick="Kpi.excel()" title="Come il file della macro check_FLM (Report_KPI con i grafici, Report_Anomalie_Match, Report_Fuori_SLA, Report_SLA_OK: 12 mesi dell'anno del mese scelto) più volumi, RMA delivered, spedizioni, shipment, giacenza, KPI 6 per riparatore, giorni esclusi e chiusure">⬇ Excel KPI</button>
         <button class="btn ghost sm" onclick="Kpi.ppt()" title="Presentazione BPR: 12 mesi fino al mese scelto">📊 PowerPoint</button>
       </div></div></div>
       <div id="kpiBody"></div>
@@ -10435,6 +10434,8 @@ var Kpi = {
   gruppo6: function (n) { var d = Kpi.DEF.filter(function (x) { return x.n === n; })[0]; return d ? d.tit.replace(' · ', ' - ') : 'KPI ' + n; },
   // calcolo su un altro intervallo (12 mesi che finiscono a "fine") senza toccare la vista
   calcolaFino: function (fine) { var m = Kpi.mese; try { Kpi.mese = fine; return Kpi.calcola(); } finally { Kpi.mese = m; } },
+  // caratteri di controllo (es. il separatore GS dei barcode GS1 negli AWB letti con la pistola): Excel non li accetta e svuota il foglio
+  xlsTxt: function (t) { return String(t).replace(/[\u0000-\u0008\u000B\u000C\u000E-\u001F\u007F\uFFFE\uFFFF]/g, ''); },
   xlsDt: function (iso) { if (!iso) return ''; var p = iso.split('-'); return new Date(Date.UTC(+p[0], +p[1] - 1, +p[2])); },
   excel: async function () {
     if (!Kpi.dati) return;
@@ -10469,7 +10470,7 @@ var Kpi = {
         var foglio = function (nome, titolo, head, col, righe) {
           var w = wb.addWorksheet(nome); w.getCell('A1').value = titolo; w.getCell('A1').font = { bold: true, size: 14 };
           head.forEach(function (h, i) { var x = w.getCell(3, i + 1); x.value = h; x.font = { bold: true }; x.fill = fill(col); });
-          righe.forEach(function (v, i) { var row = w.getRow(4 + i); v.forEach(function (x, j) { var c = row.getCell(j + 1); c.value = x; if (x instanceof Date) c.numFmt = 'dd/mm/yyyy'; }); });
+          righe.forEach(function (v, i) { var row = w.getRow(4 + i); v.forEach(function (x, j) { var c = row.getCell(j + 1); c.value = typeof x === 'string' ? Kpi.xlsTxt(x) : x; if (x instanceof Date) c.numFmt = 'dd/mm/yyyy'; }); });
           head.forEach(function (h, i) { var m = h.length; righe.slice(0, 500).forEach(function (v) { var x = v[i]; m = Math.max(m, x instanceof Date ? 10 : String(x == null ? '' : x).length); }); w.getColumn(i + 1).width = Math.min(60, m + 2); });
         };
         var d = Kpi.xlsDt;
@@ -10480,6 +10481,24 @@ var Kpi = {
         var DH = ['KPI Riferimento', 'Codice AWB / Riferimento', 'Riferimento FR', 'Riferimento RMA', 'Operatore', 'Data Inizio', 'Data Fine', 'Giorni Lavorativi Impiegati'];
         foglio('Report_Fuori_SLA', 'REPORT DETTAGLIATO FUORI SLA (> SOGLIA MASSIMA)', DH.concat(['Soglia Max SLA']), 'FFFFC7CE', dett(C.KO, false));
         foglio('Report_SLA_OK', 'REPORT DETTAGLIATO RECORD IN SLA (CONFORMI AL TARGET)', DH.concat(['Esito SLA']), 'FFC6EFCE', dett(C.OK, true));
+        // le altre tabelle del tab KPI (12 mesi fino al mese scelto, come a video)
+        var V = Kpi.dati, vm = V.mesi, lab = function (m) { return Kpi.MESIX[+m.slice(5) - 1] + ' - ' + m.slice(0, 4); }, per = function (m) { return Kpi.rangeLab(m); };
+        foglio('Volumi INBOUND – OUTBOUND', 'VOLUMI INBOUND – OUTBOUND (ingressi per mese di registrazione VLT, uscite per data out; periodo ' + Kpi.pDa + ' → ' + Kpi.pA + ')', ['Mese', 'Periodo', 'IN FAULTY', 'IN GOOD', 'IN NEW/REUSE', 'OUT FAULTY', 'OUT GOOD', 'OUT NEW/REUSE', 'OUT BALANCING'], grigio,
+          vm.map(function (m) { var o = V.M[m]; return [lab(m), per(m), o.inF, o.inG, o.inNR, o.outF, o.outG, o.outNR, o.outB]; }));
+        foglio('RMA delivered', 'RMA DELIVERED (uscite GOOD, NEW/REUSE e BALANCING per mese)', ['Mese', 'Periodo', 'GOOD', 'NEW/REUSE', 'BALANCING', 'Totale'], grigio,
+          vm.map(function (m) { var o = V.M[m]; return [lab(m), per(m), o.outG, o.outNR, o.outB, o.outG + o.outNR + o.outB]; }));
+        foglio('Spedizioni (DDT distinti)', 'SPEDIZIONI (DDT DISTINTI PER MESE)', ['Mese', 'Periodo', 'Spedizioni (DDT)'], grigio, vm.map(function (m) { return [lab(m), per(m), Object.keys(V.M[m].ddt).length]; }));
+        var tD = { s: 0, d: 0, c: 0, b: 0, k: 0 }; V.D.forEach(function (x) { tD.s += x.schede; tD.d += x.ddt; tD.c += x.colli || 0; tD.b += x.bancali || 0; tD.k += x.kg || 0; });
+        foglio('Shipment ' + Kpi.lab(Kpi.mese) + ' per destino', 'SHIPMENT ' + Kpi.lab(Kpi.mese).toUpperCase() + ' PER DESTINO (' + per(Kpi.mese) + ') · colli, bancali e peso solo per le spedizioni create dal tool · ASP = destino che non è un riparatore', ['Destino', 'Tipo', 'Nr schede', 'Spedizioni', 'Colli', 'Bancali', 'Peso kg'], grigio,
+          V.D.map(function (x) { return [x.g, x.asp ? 'ASP' : 'REPAIRER', x.schede, x.ddt, x.colli === null ? '' : x.colli, x.bancali === null ? '' : x.bancali, x.kg === null ? '' : x.kg]; }).concat([['Totale', '', tD.s, tD.d, tD.c, tD.b, tD.k]]));
+        var G = V.G, tec = Object.keys(G.tec).sort(function (a, b) { return G.tec[b] - G.tec[a]; }), gr = Object.keys(G.tab).sort(function (a, b) { return G.tab[b].tot - G.tab[a].tot; });
+        foglio('Giacenza HUB attuale', 'GIACENZA HUB ATTUALE (' + L.itDate(L.isoToday()) + ') · buffer ' + G.buffer + ' (GOOD + NEW + REUSE + BALANCING) · FAULTY hub transito ' + G.faulty + ' · SCRAP / dismissed ' + G.scrap + ' · gruppo e tecnologia da Anagrafiche → Articoli', ['Gruppo articoli'].concat(tec, ['Totale']), grigio,
+          gr.map(function (g) { return [g].concat(tec.map(function (t) { return G.tab[g][t] || ''; }), [G.tab[g].tot]); }).concat([['Totale'].concat(tec.map(function (t) { return G.tec[t]; }), [G.buffer])]));
+        foglio('KPI 6 per riparatore', 'KPI 6 PER RIPARATORE · ' + Kpi.lab(Kpi.mese).toUpperCase(), ['Riparatore', 'Schede', '% entro soglia 1', '% entro soglia 2'], grigio, V.RIP6.map(function (r) { return [r.g, r.n, r.p1 === null ? '' : r.p1 / 100, r.p2 === null ? '' : r.p2 / 100]; }));
+        foglio('Giorni esclusi dai KPI', 'GIORNI ESCLUSI DAI KPI (blocchi VLT e chiusure ATS; Escluso = SI se non contato come lavorativo)', ['Giorno', 'Escluso', 'Blocco VLT', 'Chiusura ATS'], grigio,
+          Kpi.giorniCandidati().map(function (x) { return [Kpi.xlsDt(x.d), x.sel ? 'SI' : 'NO', x.blk ? x.blk.motivo : '', x.ats ? (x.ats.motivo || 'SI') : '']; }));
+        foglio('Chiusure', 'CHIUSURE PROGRAMMATE (ferie ATS e ditte)', ['Tipo', 'Ditta', 'Dal', 'Al', 'Motivo'], grigio, Chi.attive().map(function (r) { return [r.tipo, r.ditta, Kpi.xlsDt(L.normDate(r.dal)), Kpi.xlsDt(Chi.al(r)), r.motivo]; }));
+        wb.getWorksheet('KPI 6 per riparatore').getColumn(3).numFmt = '0.0%'; wb.getWorksheet('KPI 6 per riparatore').getColumn(4).numFmt = '0.0%';
         var buf = await wb.xlsx.writeBuffer();
         // grafici nativi come quelli della macro (ExcelJS non li fa: si aggiungono al file)
         var zip = await JSZip.loadAsync(buf), ct = await zip.file('[Content_Types].xml').async('string');
@@ -10586,7 +10605,7 @@ var Kpi = {
         // shipment del mese
         var fin = new Date(+sel.slice(0, 4), +sel.slice(5), 0).getDate(), mm = Kpi.MESIX[+sel.slice(5) - 1];
         s = P.addSlide(); logo(s); titolo(s, 'SHIPMENT  (Ref. 01 ' + mm + ' – ' + fin + ' ' + mm + ' ' + sel.slice(0, 4) + ')', 0.26, 24);
-        var hd = { bold: true, color: 'FFFFFF', fill: { color: '185D80' }, fontSize: 7, fontFace: 'Arial' }, cel = function (t, o) { return { text: String(t), options: Object.assign({ fontSize: 7, fontFace: 'Arial' }, o || {}) }; };
+        var hd = { bold: true, color: 'FFFFFF', fill: { color: '185D80' }, fontSize: 7, fontFace: 'Arial' }, cel = function (t, o) { return { text: Kpi.xlsTxt(t), options: Object.assign({ fontSize: 7, fontFace: 'Arial' }, o || {}) }; };
         var TD = C.D.slice(0, 26), tot = { s: 0, c: 0, b: 0 };
         C.D.forEach(function (x) { tot.s += x.schede; tot.c += x.colli || 0; tot.b += x.bancali || 0; });
         var rows = [[cel('DESTINO', hd), cel('Nr Schede', hd), cel('Nr Colli', hd), cel('Nr Bancali', hd)]].concat(TD.map(function (x) { var c = x.asp ? { color: 'C00000' } : {}; return [cel(x.g, c), cel(x.schede, c), cel(x.colli === null ? '' : x.colli, c), cel(x.bancali === null ? '' : x.bancali, c)]; }));
