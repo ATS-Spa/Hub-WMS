@@ -551,10 +551,10 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
       <input type="hidden" id="uscData">
       <div class="subtabs" id="rmaTabs">
         <span class="subtab" id="rmaT-inv" onclick="Rma.apri('inv')">Inventario giornaliero</span>
-        <span class="subtab" id="rmaT-rit" onclick="Rma.apri('rit')">Ritorni in giacenza (VLT)</span>
         <span class="subtab" id="rmaT-car" onclick="Rma.apri('car')">Carichi NEW/REUSE</span>
         <span class="subtab" id="rmaT-res" onclick="Rma.apri('res')">Resi</span>
         <span class="subtab" id="rmaT-usc" onclick="Rma.apri('usc')">Uscite e DDT RMA</span>
+        <span class="subtab" id="rmaT-rit" onclick="Rma.apri('rit')">Ritorni in giacenza (VLT)</span>
       </div>
       <div class="card" id="rmaBar"></div>
       <div class="stats" id="rmaStats"></div>
@@ -971,7 +971,6 @@ var CFG = {
   HUAWEI_ID: '1oorvMVY8DIfBfVl2Bdi4EmL7C3swNgijOdP9sOEFskQ',
   ASSETS: 'https://ats-spa.github.io/Hub-WMS/',   // loghi del DDT: stessa repository dell'Hub
   HUAWEI_RANGE: "'CERCA FR HUAWEI ASSOCIATO'!F2:I",   // F = seriale, I = FR (come la funzione con nome del prototipo)
-  VLT_REFRESH_HOUR: 8          // dopo questa ora la cache VLT del giorno prima viene ricaricata
 };
 var TIPI = ['FAULTY', 'GOOD', 'REUSE', 'NEW', 'BALANCING', 'RESO', 'SCRAP'];
 
@@ -1243,17 +1242,28 @@ var DB = {
   idb: function () { return new Promise(function (res, rej) { var r = indexedDB.open('easyloader', 1); r.onupgradeneeded = function () { r.result.createObjectStore('kv'); }; r.onsuccess = function () { res(r.result); }; r.onerror = function () { rej(r.error); }; }); },
   cacheGet: async function (k) { try { var db = await DB.idb(); return await new Promise(function (res) { var q = db.transaction('kv').objectStore('kv').get(k); q.onsuccess = function () { res(q.result || null); }; q.onerror = function () { res(null); }; }); } catch (e) { return null; } },
   cacheSet: async function (k, v) { try { var db = await DB.idb(); await new Promise(function (res) { var tx = db.transaction('kv', 'readwrite'); tx.objectStore('kv').put(v, k); tx.oncomplete = res; tx.onerror = res; }); } catch (e) { } },
+  // ora del rinnovo quotidiano dei dati esterni (parametro aggiornamento_dati_ora, di base 07:20)
+  oraAgg: function () { var v = '07:20'; try { v = L.s(DB.param('aggiornamento_dati_ora', '07:20')) || '07:20'; } catch (e) { } var m = /^(\d{1,2})[:.](\d{2})/.exec(v) || [0, 7, 20]; return [Math.min(23, +m[1]), Math.min(59, +m[2])]; },
+  // ora dell'ultima modifica di un file su Drive (lettura leggera, senza rotellina); '' se non si riesce a leggerla
+  modTime: async function (id) { try { var js = await API.call('https://www.googleapis.com/drive/v3/files/' + id + '?supportsAllDrives=true&fields=modifiedTime'); return L.s(js && js.modifiedTime); } catch (e) { return ''; } },
+  // cache vecchia ma file non cambiato: si tiene quella e si sposta solo l'ora del controllo
+  invariato: async function (key, id, c) {
+    if (!c || !c.mod) return false; var m = await DB.modTime(id); if (!m || m !== c.mod) return false;
+    c.ts = Date.now(); c.ctrl = Date.now(); try { await DB.cacheSet(key, c); } catch (e) { } return true;
+  },
+  cutOggi: function () { var n = new Date(), o = DB.oraAgg(); return new Date(n.getFullYear(), n.getMonth(), n.getDate(), o[0], o[1], 0); },
+  // dati esterni vecchi: letti in un giorno precedente (primo accesso del giorno) o prima dell'ora di aggiornamento di oggi, se è già passata
   vltStale: function (ts) {
-    if (!ts) return true; var now = new Date(), d = new Date(ts);
-    var cut = new Date(now.getFullYear(), now.getMonth(), now.getDate(), CFG.VLT_REFRESH_HOUR, 0, 0);
-    return d < cut && now >= cut || (now - d) > 24 * 3600 * 1000;
+    if (!ts) return true; var now = new Date(), d = new Date(ts), cut = DB.cutOggi();
+    return L.isoToday(d) !== L.isoToday(now) || (d < cut && now >= cut);
   },
   loadVlt: async function (force) {
     if (force) DB._vltFogli = null;   // rilegge i nomi dei fogli (se qualcuno li ha rinominati)
     var c = force ? null : await DB.cacheGet('vlt');
-    if (!c || DB.vltStale(c.ts) || (c.rows[0] && !('data_apertura' in c.rows[0]))) {
+    if (!c || DB.vltStale(c.ts) || (c.rows[0] && !('data_apertura' in c.rows[0]))) if (!(c && c.rows[0] && 'data_apertura' in c.rows[0] && await DB.invariato('vlt', CFG.VLT_ID, c))) {
+      var mod = await DB.modTime(CFG.VLT_ID);
       var rows = await DB.loadCols(CFG.VLT_ID, await DB.vltFoglio(CFG.VLT_SHEET, CFG.VLT_GID, 'Foglio1'), ['fr_id', 'data_apertura', 'depot_origine', 'f_mat_serial_no', 'f_mat_tmpn', 'awb_cw', 'note', 'stato', 'riparatore', 'advanced_swap', 'f_mat_material']);
-      c = { ts: Date.now(), rows: rows }; await DB.cacheSet('vlt', c);
+      c = { ts: Date.now(), rows: rows, mod: mod }; await DB.cacheSet('vlt', c);
     }
     DB.vlt = c; DB.indexVlt();
   },
@@ -1278,17 +1288,18 @@ var DB = {
   },
   loadHuawei: async function (force) {
     var c = force ? null : await DB.cacheGet('huawei');
-    if (!c || (Date.now() - c.ts) > 3 * 3600 * 1000) {
+    if (!c || (Date.now() - c.ts) > 3 * 3600 * 1000 || DB.vltStale(c.ts)) if (!(await DB.invariato('huawei', CFG.HUAWEI_ID, c))) {
+      var modH = await DB.modTime(CFG.HUAWEI_ID);
       var v = (await API.batchGet(CFG.HUAWEI_ID, [CFG.HUAWEI_RANGE]))[0] || [];
       var m = {};
       v.forEach(function (r) { var sn = L.up(r[0]), fr = L.s(r[3]).replace(/^FR/i, '').replace(/^0+(?=\d)/, ''); if (sn && fr) m[sn] = fr; });
-      c = { ts: Date.now(), map: m }; await DB.cacheSet('huawei', c);
+      c = { ts: Date.now(), map: m, mod: modH }; await DB.cacheSet('huawei', c);
     }
     DB.huaweiFr = c.map; DB.huaweiTs = c.ts;
   },
   loadLookups: async function (force) {
     var c = force ? null : await DB.cacheGet('lookups');
-    if (!c || !c.anag || !c.ubv || !c.mat || (Date.now() - c.ts) > 24 * 3600 * 1000) {
+    if (!c || !c.anag || !c.ubv || !c.mat || DB.vltStale(c.ts)) {
       var art; try { art = await DB.loadCols(DB.id, 'ARTICOLI', ['pn', 'mnft', 'material']); } catch (e) { art = await DB.loadCols(DB.id, 'ARTICOLI', ['pn', 'mnft']); }
       var anag = []; try { anag = await DB.loadCols(DB.id, 'ANAGRAFICA_PN', ['pn', 'mnft']); } catch (e) { console.warn('ANAGRAFICA_PN non disponibile: ' + e.message); }
       var ser = await DB.loadCols(DB.id, 'SERIALI_NOTI', ['seriale', 'pn', 'mnft']);
@@ -1370,7 +1381,7 @@ var App = {
     if (App.isAdmin) setTimeout(Spz.avviso, 8000);
     Chi.load().catch(function () { });
     AckV.load().then(AckV.sync).catch(function (e) { console.warn('ACK VLT: ' + e.message); });
-    Sync.avvia(); Chat.avvia(); App.paramBase(); setTimeout(function () { Prop.calcola(); }, 6000); setInterval(function () { Prop.calcola(); }, 300000); Chv.init(); Jun.tab().catch(function () { }); setTimeout(function () { Spec.mov().then(function () { Ingresso.ricalcola(); }).catch(function () { }); }, 3000);
+    Sync.avvia(); Chat.avvia(); App.autoGiorno(); App.paramBase(); setTimeout(function () { Prop.calcola(); }, 6000); setInterval(function () { Prop.calcola(); }, 300000); Chv.init(); Jun.tab().catch(function () { }); setTimeout(function () { Spec.mov().then(function () { Ingresso.ricalcola(); }).catch(function () { }); }, 3000);
   },
   go: function (k) {
     var t = TABS.find(function (x) { return x.k === k; }) || TABS[0];
@@ -1417,6 +1428,47 @@ var App = {
     $('dlVettori').innerHTML = vt.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('');
     if (DB.ubicazioni) $('dlUbicazioni').innerHTML = DB.ubicazioni.slice(0, 20000).map(function (c) { return '<option value="' + esc(c) + '">'; }).join('');
   },
+  // rinnovo automatico all'ora di aggiornamento (anche con l'app già aperta): VLT, TABLEAU, date RMA, Huawei, anagrafiche, ritorni RMA
+  // rinnovo automatico dei dati esterni, senza fermare l'operatore:
+  // all'ora di aggiornamento (di base 07:20) e ogni 15 minuti si guarda solo l'ora di modifica dei file su Drive;
+  // si rilegge (in sottofondo) solo il file che è davvero cambiato
+  autoGiorno: function () {
+    if (App._agT) return;
+    var tick = async function () {
+      if (App._agIn) return; App._agIn = true;
+      try {
+        var cut = DB.cutOggi(), oggi = L.isoToday(), ora = new Date() >= cut && App._agFatto !== oggi, ogni = Date.now() - (App._agCtrl || 0) >= 15 * 60000;
+        if (!ora && !ogni) return;
+        if (ora) App._agFatto = oggi; App._agCtrl = Date.now();
+        await App.aggiornaEsterni(true);
+      } finally { App._agIn = false; }
+    };
+    App._agCtrl = Date.now(); App._agT = setInterval(tick, 60000);
+  },
+  // auto: in silenzio se non è cambiato niente. Torna l'elenco di cosa è stato riletto
+  aggiornaEsterni: async function (auto) {
+    var fatto = [];
+    try {
+      var mV = await DB.modTime(CFG.VLT_ID), mH = await DB.modTime(CFG.HUAWEI_ID);
+      if (mV && DB.vlt && DB.vlt.mod !== mV) {
+        await DB.loadVlt(true); fatto.push('VLT');
+        await Promise.all([
+          (typeof Tab !== 'undefined' ? (Tab._p = null, Tab.load(true)) : Promise.resolve()).catch(function () { }),
+          (typeof RmaD !== 'undefined' ? (RmaD._p = null, RmaD.load(true)) : Promise.resolve()).catch(function () { })
+        ]);
+        if (typeof Rma !== 'undefined' && Rma.loaded) { try { await Rma.autoVlt(false); } catch (e) { } }
+        try { AckV.sync().catch(function () { }); } catch (e) { }
+      } else if (DB.vlt && mV) { DB.vlt.ts = Date.now(); try { await DB.cacheSet('vlt', DB.vlt); } catch (e) { } }
+      if (mH && DB.huaweiMod !== mH) { var hc = await DB.cacheGet('huawei'); if (!hc || hc.mod !== mH) { await DB.loadHuawei(true); fatto.push('Huawei'); } DB.huaweiMod = mH; }
+      if (!auto || App._lkGiorno !== L.isoToday()) { App._lkGiorno = L.isoToday(); await DB.loadLookups(false).catch(function () { }); }   // anagrafiche: una volta al giorno (cambiano dall'app stessa)
+      if (fatto.length) {
+        App.fillLists(); App.syncInfo(); Ingresso.ricalcola();
+        if (App.tab === 'rma' && Rma.loaded) Rma.render(); if (App.tab === 'vlt' && typeof Vlt !== 'undefined') Vlt.render(); if (App.tab === 'ack' && Ack.loaded) Ack.render(); if (App.tab === 'kpi' && typeof Kpi !== 'undefined' && Kpi.dati) Kpi.render();
+        toast('Dati esterni cambiati: ' + fatto.join(', ') + ' aggiornati in sottofondo', 'ok');
+      } else if (!auto) toast('Dati esterni già aggiornati: nessun file cambiato', 'ok');
+    } catch (e) { if (!auto) toast('Dati esterni non aggiornati: ' + e.message, 'ko'); }
+    return fatto;
+  },
   reload: async function () {
     Modal.open('Aggiornamento', 'Ricarico configurazione, giacenza e VLT…', []);
     try {
@@ -1445,6 +1497,7 @@ var App = {
       ['kpi_soglie', 'KPI1:1,2,95;KPI2:1,2,95;KPI3:5,7,80;KPI5:4,8,95;KPI6:6,11,95', 'KPI: per ogni KPI giorni lavorativi soglia 1, soglia massima (soglia 2) e target % entro la soglia 1 (KPIn:s1,s2,target separati da ;). Base = macro check_FLM'],
       ['kpi12_data_fine', 'VLT', 'KPI 1 e 2: data di FINE del calcolo (l’inizio è sempre la data in hub). VLT (di base, come la macro check_FLM) = colonna DATA RECEIVED AND VERIFY (REGISTRAZIONE VLT) dei movimenti, cioè il giorno in cui l’operatore ha registrato il pezzo su VLT. TABLEAU = data dello stato VLT preso dal foglio TABLEAU (export E2FR): KPI 1 FAULTY = DATA_FAILED_MATERIAL_RECEIVED_AND_VERIFY, KPI 2 GOOD = DATA_GOOD_MATERIAL_RECEIVED, cioè quando lo stato è cambiato davvero su VLT; dove manca o è prima della data in hub resta la registrazione VLT. Il KPI 3 usa sempre la registrazione VLT'],
       ['kpi5_data_inizio', 'DATA_OUT', 'KPI 5 (uscite GOOD/NEW/REUSE/BALANCING): data di INIZIO del calcolo (la fine è la consegna del Suite). DATA_OUT (di base, come la macro check_FLM) = giorno in cui la scheda è uscita dall’hub (colonna data out). CREAZIONE_RMA = se la colonna RMA è compilata parte dalla data di creazione dell’RMA su VLT (Data Apertura del foglio RMA, colonna DATA CREAZIONE RMA dell’Easyloader), quindi conta anche l’attesa in hub prima dell’uscita; senza RMA o senza data resta la data out. Il mese del KPI resta quello della data out'],
+      ['aggiornamento_dati_ora', '07:20', 'Ora (HH:MM) del controllo quotidiano dei dati esterni (VLT, TABLEAU, date RMA, file Huawei, ritorni RMA). Al primo accesso del giorno, a quest’ora e ogni 15 minuti l’app guarda solo se i file su Drive sono cambiati: se sì li rilegge in sottofondo, se no non rilegge niente'],
       ['kpi_periodo', '1-21', 'KPI: periodo di fatturazione, dal giorno-al giorno di ogni mese (di base 1-21 = dal 1 al 21 del mese). Se il primo è più grande del secondo il periodo parte nel mese prima (22-21 = dal 22 del mese prima al 21). I pezzi fuori periodo non si contano. Nel tab KPI si può cambiare al volo'],
       ['kpi_giorni_esclusi', '', 'KPI: giorni esclusi dal conteggio dei giorni lavorativi (aaaa-mm-gg separati da virgola). Si scelgono dal tab KPI → Giorni esclusi dai KPI'],
       ['carichi_dest_in_giacenza', 'MADDALONI', 'Carichi NEW/REUSE con queste destinazioni (separate da ;) restano in giacenza (HUB_MAGAZZINO)']];
@@ -6251,7 +6304,7 @@ var Rma = {
     try { if (!DB.t.JUNIPER) await DB.loadTables(['JUNIPER']); } catch (e) { }   // per tenere fuori le GOOD Juniper non ancora messe in uscita dalla pratica
     await Mail.carica(); if (((DB.t.CODA_MAIL || {}).rows || []).some(function (r) { return r.stato === 'DA_INVIARE' || r.stato === 'IN_INVIO'; })) Mail.poll();
     var c = await DB.cacheGet('rmalk');
-    if (!c || (Date.now() - c.ts) > 24 * 3600 * 1000) {
+    if (!c || DB.vltStale(c.ts)) {
       var art = await DB.loadCols(DB.id, 'ARTICOLI', ['material', 'pn']);
       var eq = await DB.loadCols(DB.id, 'EQUIVALENTI', ['material', 'material_equivalente']);
       c = { ts: Date.now(), art: art, eq: eq }; await DB.cacheSet('rmalk', c);
@@ -6441,7 +6494,7 @@ var Rma = {
     var au = Rma.ultimoAuto();
     imp = '<button class="btn ghost sm" onclick="Rma.autoVlt(true)" title="Rilegge il foglio RMA scritto ogni mattina dal backend (rma.csv: To Ship From CW, senza i Minore)">🔄 Ritorni da VLT</button> ' + imp;
     var info = '<div class="hint" style="margin-top:8px">' + (ult ? 'Ultimo import ritorni: ' + esc(ult) + (au ? ' (automatico, rma.csv del ' + esc(au) + ')' : '') + ' · ' + Rma.attivi().length + ' RMA aperte dal ' + esc(L.itDate(DB.dataInizio())) + (function () { var v = Rma.attivi(true).length - Rma.attivi().length; return v ? ' · ' + v + ' più vecchie di ' + (parseInt(DB.param('rma_ritorni_giorni', '3'), 10) || 3) + ' giorni lavorativi nascoste (non si propongono)' : ''; })() : 'Nessun import ritorni: carica il CSV esportato da VLT.') + '</div>';
-    var xl = ' <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button>';
+    var xl = ' <button class="btn ghost sm" onclick="Rma.excel()" title="La tabella così come la vedi (righe filtrate): non serve per creare gli RMA">⬇ Excel Tabella</button>';
     var ann = Rma.attivi(true).length ? ' <button class="btn ghost sm" onclick="Rma.annullaImport()" title="Annulla i ritorni dell\'ultimo import (es. file sbagliato): poi puoi caricarne uno nuovo">🗑 Annulla import ritorni</button>' : '';
     var xr = ' <button class="btn ghost sm" onclick="Rma.excelRma()" title="Schede filtrate da far compilare al Service Desk (RMA creato e nuova destinazione), poi da reimportare">⬇ Excel RMA</button>' +
       ' <label class="btn ghost sm" style="cursor:pointer" title="Reimporta l Excel RMA compilato: anteprima e anomalie prima di confermare">⬆ Importa RMA<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Rma.importaRma(this)"></label>';
@@ -6449,7 +6502,7 @@ var Rma = {
     if (s === 'rit') return '<div class="row" style="justify-content:flex-end">' + imp + ann + xl + '</div>' + info;
     if (s === 'res') return '<div class="row" style="align-items:center"><div class="hint" style="flex:1;min-width:260px">Pezzi in reso senza RMA: escono con il DDT di <b>Uscite e DDT RMA</b> della loro destinazione (causale RESO). ✕ toglie dal reso finché il DDT non è emesso.</div>' +
       '<label style="font-size:12px;display:flex;gap:6px;align-items:center"><input type="checkbox"' + (Rma.resTutti ? ' checked' : '') + ' onchange="Rma.resTutti=this.checked;Rma.render()"> anche spediti</label>' +
-      '<button class="btn sm" onclick="Reso.apri()">📤 Nuovo reso</button> <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button></div>';
+      '<button class="btn sm" onclick="Reso.apri()">📤 Nuovo reso</button> <button class="btn ghost sm" onclick="Rma.excel()" title="La tabella così come la vedi (righe filtrate): non serve per creare gli RMA">⬇ Excel Tabella</button></div>';
     if (s === 'car') return '<div class="row">' +
       '<div class="fg" style="width:240px"><span class="fl">Seriale *</span><input class="fc mono" id="carSer" autocomplete="off" placeholder="spara il seriale" onkeydown="if(event.key===\'Enter\'){event.preventDefault();$(\'carRma\').focus()}" oninput="Rma.carInfo()"></div>' +
       '<div class="fg" style="width:120px"><span class="fl">RMA</span><input class="fc mono" id="carRma" autocomplete="off" placeholder="anche dopo"></div>' +
@@ -6459,10 +6512,10 @@ var Rma = {
       '<button class="btn" onclick="Rma.carAggiungi()">Aggiungi</button></div>' +
       '<div class="row" style="margin-top:8px;align-items:center"><div style="flex:1;min-width:260px"><div class="hint" id="carHint" style="color:var(--text)"></div><div class="hint" title="Excel RMA / Importa RMA: RMA e destinazione dei carichi già aperti (filtrati qui sotto), compilati dal Service Desk e reimportati. Importa Excel: colonne SERIALE, RMA, DESTINAZIONE, PO, NOTE (anche PV DESTINO, P.O, SERIAL).">Nuovi carichi: solo NEW/REUSE in giacenza, l\'RMA si può dare anche dopo · Excel RMA / Importa RMA aggiornano i carichi aperti filtrati.</div></div>' +
       '<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;margin-left:auto"><label class="btn ghost sm" style="cursor:pointer">⬆ Importa Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Rma.carImporta(this)"></label>' +
-      '<button class="btn ghost sm" onclick="Rma.pendFiltrate()" title="Mette in pending (fermi a deposito) tutti i carichi filtrati nella tabella qui sotto">⏸ Pending filtrate</button> <button class="btn ghost sm" onclick="Rma.sbloccaFiltrate()" title="Rimette in uscita tutti i carichi filtrati che sono in pending">▶ Sblocca filtrate</button> <button class="btn ghost sm" onclick="Rma.carModello()">Modello Excel</button> <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button>' + xr + '</div></div>' +
+      '<button class="btn ghost sm" onclick="Rma.pendFiltrate()" title="Mette in pending (fermi a deposito) tutti i carichi filtrati nella tabella qui sotto">⏸ Pending filtrate</button> <button class="btn ghost sm" onclick="Rma.sbloccaFiltrate()" title="Rimette in uscita tutti i carichi filtrati che sono in pending">▶ Sblocca filtrate</button> <button class="btn ghost sm" onclick="Rma.carModello()">Modello Excel</button> <button class="btn ghost sm" onclick="Rma.excel()" title="La tabella così come la vedi (righe filtrate): non serve per creare gli RMA">⬇ Excel Tabella</button>' + xr + '</div></div>' +
       '';
     return '<div class="row"><div class="fg" style="width:160px"><span class="fl">Giorno di uscita</span><input class="fc" type="date" id="uscData2" value="' + esc($('uscData').value) + '" onchange="$(\'uscData\').value=this.value;Rma.render()"></div><div class="spacer"></div>' +
-      '<button class="btn ghost sm" onclick="Rma.ctrlApri()" title="Spara (o incolla, separati da ;) i seriali: per ognuno vedi in grande la destinazione di uscita di oggi, RMA, DDT e stato">🔍 Controllo destinazioni</button> <button class="btn ghost sm" onclick="Rma.excel()">⬇ Excel</button> <button class="btn ghost sm" onclick="Rma.ddtTutti()" title="Ristampa in un solo PDF tutti i DDT già emessi delle destinazioni della pagina">🖨 Tutti i DDT</button> <button class="btn ghost sm" onclick="Rma.cedoliniTutti()" title="Tutti i cedolini delle destinazioni della pagina in un solo PDF (un foglio per collo)">🖨 Tutti i cedolini</button> <button class="btn ghost sm" onclick="AwbF.apri(\'RMA\')" title="Apre il foglio AWB del giorno (Google Sheet condiviso con la bollettazione); lo crea o aggiunge le destinazioni se serve">📄 Foglio AWB</button> <button class="btn ghost sm" onclick="AwbF.leggiAwb(\'RMA\')" title="Legge AWB e vettore scritti dalla bollettazione nel foglio del giorno e li salva sulle schede (con anteprima)">⟳ Leggi AWB dal foglio</button> <button class="btn ghost sm" onclick="Rma.mailGiorno()" title="Una mail a Service Desk e bollettazione con tutte le destinazioni del giorno: indirizzo, DDT, AWB, colli, misure e peso">✉ Mail bollettazione</button> <button class="btn green" id="uscTutti" onclick="Rma.emettiTutti()">Genera i DDT pronti</button></div>' +
+      '<button class="btn ghost sm" onclick="Rma.ctrlApri()" title="Spara (o incolla, separati da ;) i seriali: per ognuno vedi in grande la destinazione di uscita di oggi, RMA, DDT e stato">🔍 Controllo destinazioni</button> <button class="btn ghost sm" onclick="Rma.riepilogo()" title="Foglio A4 con destinazioni, quantità di pezzi in uscita e 5 caselle Misure da compilare a mano sui bancali">🖨 Stampa riepilogo</button> <button class="btn ghost sm" onclick="Rma.excel()" title="La tabella così come la vedi (righe filtrate): non serve per creare gli RMA">⬇ Excel Tabella</button> <button class="btn ghost sm" onclick="Rma.ddtTutti()" title="Ristampa in un solo PDF tutti i DDT già emessi delle destinazioni della pagina">🖨 Tutti i DDT</button> <button class="btn ghost sm" onclick="Rma.cedoliniTutti()" title="Tutti i cedolini delle destinazioni della pagina in un solo PDF (un foglio per collo)">🖨 Tutti i cedolini</button> <button class="btn ghost sm" onclick="AwbF.apri(\'RMA\')" title="Apre il foglio AWB del giorno (Google Sheet condiviso con la bollettazione); lo crea o aggiunge le destinazioni se serve">📄 Foglio AWB</button> <button class="btn ghost sm" onclick="AwbF.leggiAwb(\'RMA\')" title="Legge AWB e vettore scritti dalla bollettazione nel foglio del giorno e li salva sulle schede (con anteprima)">⟳ Leggi AWB dal foglio</button> <button class="btn ghost sm" onclick="Rma.mailGiorno()" title="Una mail a Service Desk e bollettazione con tutte le destinazioni del giorno: indirizzo, DDT, AWB, colli, misure e peso">✉ Mail bollettazione</button> <button class="btn green" id="uscTutti" onclick="Rma.emettiTutti()">Genera i DDT pronti</button></div>' +
       '<div class="hint" style="margin-top:8px">Un DDT per destinazione (serie RMA). Pronta = colli e peso salvati + AWB. Le schede ci sono già per tutte le destinazioni di oggi: puoi mettere colli e AWB subito. I pezzi senza RMA restano non spuntati e si spuntano da soli appena l\'RMA c\'è; se al DDT ne manca qualcuno, l\'app chiede conferma.</div>';
   },
   render: function (rifai) {
@@ -6556,7 +6609,7 @@ var Rma = {
           html: function (u) { if (u.tipo === 'BALANCING') return '<span class="mono">' + esc(u.rma) + '</span>'; var d = Rma.dirty[u.id_unita], on = d && d.rma !== undefined; return '<input class="edit-cell mono' + (on ? ' dirty' : '') + '" style="width:11ch" value="' + esc(Rma.dv(u, 'rma')) + '" placeholder="—" onchange="Rma.set(\'' + u.id_unita + '\',\'rma\',this.value)">'; } },
         { k: 'rmag', label: 'RMA giacenza', filter: 'text', cls: 'mono', get: function (u) { var a = Rma.ritDi(u); return a ? a.rma.id_rma : ''; }, html: function (u) { var a = Rma.ritDi(u); return a ? '<span style="color:var(--green)">' + esc(a.rma.id_rma) + '</span>' : ''; } },
         { k: 'open', label: 'Data open', cls: 'mono', get: function (u) { var a = Rma.ritDi(u); return a ? a.rma.data_apertura.slice(0, 10) : ''; } },
-        { k: 'scad', label: 'Scadenza', cls: 'mono', get: function (u) { var a = Rma.ritDi(u); return a ? a.rma.data_scadenza : ''; }, html: function (u) { var a = Rma.ritDi(u), sc = a ? a.rma.data_scadenza : ''; return '<span' + (sc && sc < oggi() ? ' style="color:var(--red)"' : '') + '>' + esc(sc) + '</span>'; } },
+        { k: 'scad', label: 'Scadenza', cls: 'mono', get: function (u) { var a = Rma.ritDi(u); return a ? a.rma.data_scadenza : ''; }, html: function (u) { var a = Rma.ritDi(u), sc = a ? a.rma.data_scadenza : ''; return '<span' + (sc && sc < oggi() ? ' style="color:var(--red)"' : '') + '>' + esc(L.vedi(sc)) + '</span>'; } },
         { k: 'nsd', label: 'Note SD', filter: 'text', get: function (u) { var a = Rma.ritDi(u); return a && a.rma.failure_report ? 'RITORNO GIACENZA FR ' + a.rma.failure_report : ''; } },
         { k: 'stvlt', label: 'Stato VLT', filter: 'select', get: function (u) { var v = u.fr && DB.vltMap[u.fr]; return v ? L.s(v.stato) : (u.fr ? '(FR non su VLT)' : ''); },
           html: function (u) {
@@ -6840,7 +6893,7 @@ var Rma = {
   },
   pendCard: function () {
     var L0 = Rma.pendAttivi(); if (!L0.length) return '';
-    return '<div class="card" style="margin-bottom:12px;border-color:var(--amber)"><div class="row" style="align-items:center"><b>⏸ In pending · fermi a deposito (' + L0.length + ')</b><span class="hint">non escono finché non li rimetti in uscita</span></div>' +
+    return '<div class="card" style="margin-bottom:12px;border-color:var(--amber)"><div class="row" style="align-items:center"><b>⏸ In pending · fermi a deposito (' + L0.length + ')</b><span class="hint">' + (function () { var nc = L0.filter(function (p) { return p.id_carico; }).length; return nc && nc < L0.length ? nc + ' carichi NEW/REUSE · ' + (L0.length - nc) + ' altre schede (GOOD/BALANCING) · ' : ''; })() + 'non escono finché non li rimetti in uscita</span></div>' +
       '<div class="usc-lista" style="margin-top:8px">' + L0.map(function (p) {
         return '<div class="usc-p"><div class="usc-pi"><span class="mono">' + esc(p.seriale) + '</span><span class="usc-pd">· ' + esc(p.tipo) + (p.rma ? ' · RMA <b class="mono">' + esc(p.rma) + '</b>' : '') + (p.destinazione ? ' · ' + esc(p.destinazione) : '') + ' · <span style="color:var(--amber)">' + esc(p.motivo) + '</span> · ' + esc(L.s(p.messo_da).split('@')[0]) + ' ' + esc(L.itDate(p.messo_il)) + '</span></div>' +
           '<button class="btn ghost sm" onclick="Rma.pendSblocca(\'' + p.id_pending + '\')">▶ Rimetti in uscita</button>' + (Rma.pendEliminabile(p) ? ' <button class="btn ghost sm" title="' + (p.id_carico ? 'Annulla il carico' : 'Togli l RMA creato') + '" onclick="Rma.pendElimina(\'' + p.id_pending + '\')">🗑 Elimina</button>' : '') + '</div>';
@@ -6857,7 +6910,8 @@ var Rma = {
   },
   excelRma: async function () {
     var soloCar = Rma.sez === 'car', vis = soloCar ? [] : ((Rma.grids.inv && Rma.grids.inv.visibili) || Rma.inventario()), c = Rma.ctx();
-    var rows = vis.filter(function (u) { return u.tipo === 'GOOD' || u.tipo === 'BALANCING'; }).map(function (u) {
+    var nPend = 0, noPend = function (id) { if (Rma.pend(id)) { nPend++; return false; } return true; };   /* le righe in pending non escono: non si scaricano */
+    var rows = vis.filter(function (u) { return (u.tipo === 'GOOD' || u.tipo === 'BALANCING') && noPend(u.id_unita); }).map(function (u) {
       var v = Rma.varia(u), a = Rma.ritDi(u), o = Rma.origine(u), att = v ? v.nuova : L.s(Rma.dv(u, 'dest'));
       var orig = u.tipo === 'GOOD' ? (o[0] || (v ? v.prima : '') || att) : att;   // dove andava (deposito VLT dell'FR) → dove va adesso
       return [u.pn, c.materialDi(u), u.id_unita, u.seriale, u.fr, u.tipo, u.mnft, u.riparatore, orig, att, '', L.s(Rma.dv(u, 'rma')),
@@ -6865,15 +6919,16 @@ var Rma = {
     });
     // carichi NEW/REUSE aperti: come le GOOD, l'RMA (e la destinazione) si possono dare da qui
     var UU = {}; DB.t.UNITA.rows.forEach(function (u) { UU[u.id_unita] = u; });
-    (soloCar ? ((Rma.grids.car && Rma.grids.car.visibili) || Rma.carichi()) : Rma.carichi()).forEach(function (k) { var u = UU[k.id_unita] || {}; rows.push([k.pn, L.mat(u.material) || c.materialDi(u), k.id_unita, k.seriale, '', k.tipo, u.mnft || '', '', k.destinazione, k.destinazione, '', L.s(k.rma), '', '', '', '', 'CARICO ' + k.id_carico, L.s(k.rma)]); });
-    if (!rows.length) { toast('Nessuna scheda GOOD/BALANCING o carico tra le righe filtrate', 'ko'); return; }
+    (soloCar ? ((Rma.grids.car && Rma.grids.car.visibili) || Rma.carichi()) : []).filter(function (k) { return noPend(k.id_unita); }).forEach(function (k) {   /* i carichi solo dall'Excel RMA del tab Carichi */ var u = UU[k.id_unita] || {}; rows.push([k.pn, L.mat(u.material) || c.materialDi(u), k.id_unita, k.seriale, '', k.tipo, u.mnft || '', '', k.destinazione, k.destinazione, '', L.s(k.rma), '', '', '', '', 'CARICO ' + k.id_carico, L.s(k.rma)]); });
+    if (!rows.length) { toast((soloCar ? 'Nessun carico tra le righe filtrate' : 'Nessuna scheda GOOD/BALANCING tra le righe filtrate') + (nPend ? ' (' + nPend + ' in pending non scaricate)' : ''), 'ko'); return; }
+    if (nPend) toast(nPend + ' righe in pending non scaricate (non devono uscire)', 'ok');
     var D = Rma.destinazioni(), dest = Object.keys(D).map(function (k) { return D[k]; }).sort();
     var istr = ['1. Compila solo le colonne gialle: NUOVA DESTINAZIONE (menu a tendina, solo se il pezzo deve andare altrove) e RMA CREATO.',
       '2. NUOVA DESTINAZIONE vuota = resta la DESTINAZIONE ATTUALE. Se l RMA è un ritorno in giacenza, la destinazione del ritorno viene presa da sola.',
       '3. DESTINAZIONE ORIGINALE = dove andava il pezzo (deposito VLT dell FR); DESTINAZIONE ATTUALE = dove va adesso (anche per variazione da ritorno in giacenza).',
       '4. Non cambiare ID UNITA e SERIALE: servono per riconoscere la scheda. RMA di ' + Rma.cifre().join(' o ') + ' cifre. Lo stesso RMA può stare su più righe solo se la destinazione è la stessa.',
-      '4b. Le righe con NOTE SD "CARICO …" sono carichi NEW/REUSE: si compilano allo stesso modo.',
-      '5. Poi in RMA → Inventario giornaliero premi "⬆ Importa RMA": vedi l anteprima e confermi.',
+      soloCar ? '4b. Sono carichi NEW/REUSE aperti (NOTE SD "CARICO …"). Le righe in pending non sono nel file.' : '4b. Solo GOOD e BALANCING dell inventario: i carichi NEW/REUSE hanno il loro Excel RMA nel tab Carichi. Le righe in pending non sono nel file.',
+      '5. Poi in RMA → ' + (soloCar ? 'Carichi NEW/REUSE' : 'Inventario giornaliero') + ' premi "⬆ Importa RMA": vedi l anteprima e confermi.',
       '6. Si può lavorare in più persone sullo stesso Excel (es. diviso per destinazioni): all import contano solo le righe che hai cambiato tu; le altre (e le celle lasciate vuote) non toccano quello che ha importato un collega. Non cancellare la colonna nascosta RMA AL DOWNLOAD.'];
     var nome = (soloCar ? 'Excel_RMA_carichi_' : 'Excel_RMA_') + L.isoToday() + '.xlsx';
     try {
@@ -7374,7 +7429,7 @@ var Rma = {
     if (sp && L.normDate(sp.data) !== $('uscData').value) return { m: 'è nel DDT ' + sp.n_ddt + ' già pronto del ' + L.itDate(L.normDate(sp.data)) };
     return null;
   },
-  carNonVisti: function () { return Rma.carichi().map(function (c) { return { c: c, x: Rma.carMotivo(c) }; }).filter(function (o) { return o.x; }); },
+  carNonVisti: function () { return Rma.carichi().map(function (c) { return { c: c, x: Rma.carMotivo(c) }; }).filter(function (o) { return o.x && !Rma.pend(o.c.id_unita); }); },   /* quelli in pending sono già nel riquadro In pending */
   carRicollega: async function (id) {
     var c = DB.t.CARICHI_RMA.rows.find(function (x) { return x.id_carico === id; }); if (!c) return;
     var x = Rma.carMotivo(c); if (!x || x.fix !== 'RICOLLEGA') { toast('Niente da ricollegare', 'ko'); return; }
@@ -7390,10 +7445,10 @@ var Rma = {
   },
   carCard: function () {
     var L0 = Rma.carNonVisti(); if (!L0.length) return '';
-    return '<div class="hint warn" style="margin-bottom:10px"><b>⚠ ' + L0.length + ' carichi NEW/REUSE aperti non compaiono nelle uscite</b>' + L0.map(function (o) {
+    return '<details class="hint warn" style="margin-bottom:10px"' + (Rma._carAperto ? ' open' : '') + ' ontoggle="Rma._carAperto=this.open"><summary style="cursor:pointer"><b>⚠ ' + L0.length + ' carichi NEW/REUSE aperti non compaiono nelle uscite</b> <span style="font-weight:normal">(clic per ' + (Rma._carAperto ? 'chiudere' : 'vedere l\'elenco') + ')</span></summary>' + L0.map(function (o) {
       return '<div style="margin-top:4px"><span class="mono">' + esc(o.c.seriale) + '</span> · RMA ' + esc(o.c.rma || '—') + ' → ' + esc(o.c.destinazione || '—') + ': ' + esc(o.x.m) +
         (o.x.fix === 'RICOLLEGA' ? ' <button class="btn ghost sm" onclick="Rma.carRicollega(\'' + o.c.id_carico + '\')">↻ Rimetti in uscita</button>' : '') + '</div>';
-    }).join('') + '</div>';
+    }).join('') + '</details>';
   },
   escl: function () { return lsG('usc_escl_' + $('uscData').value) || {}; },
   toggle: function (id, on) { var e = Rma.escl(); if (on) delete e[id]; else e[id] = 1; lsS('usc_escl_' + $('uscData').value, e); Rma.renderUscite(); },
@@ -7624,6 +7679,51 @@ var Rma = {
   },
   pdf: function (id) { return Ddt.pdf(Rma.pdfParams(id)); },
   _npz: {},
+  riepilogo: function () {
+    var J = window.jspdf && window.jspdf.jsPDF; if (!J) { toast('Libreria PDF non ancora caricata, riprova tra un attimo', 'ko'); return; }
+    var d0 = $('uscData').value, G = Rma.gruppi().map(function (g) {
+      var done = g.s && g.s.stato === 'SPEDITA', q = done ? (Ack.righe(g.s.id_spedizione).filter(function (r) { return r.esito === 'SPUNTATO'; }).length || (parseInt(g.s.n_pezzi, 10) || 0)) : g.pezzi.length;   /* tutti i pezzi del destino, con o senza RMA (i pending sono già fuori) */
+      return { dest: g.dest, q: q, ddt: '', manca: 0 };
+    }).filter(function (x) { return x.q > 0 || x.manca > 0; });
+    if (!G.length) { toast('Nessun pezzo in uscita per il ' + L.itDate(d0), 'ko'); return; }
+    var w = window.open('', '_blank');
+    try {
+      var d = new J({ unit: 'mm', format: 'a4' }), M = 10, W = 210 - 2 * M, lg = (Ack._lg || {}).sx, tot = 0, y;
+      var cw = [62, 18], mw = (W - cw[0] - cw[1]) / 5, H = 13;   // righe alte per scrivere a mano
+      var testa = function () {
+        y = 12;
+        if (lg) { try { d.addImage(lg, 'PNG', M, y - 4, 24, 12); } catch (e) { } }
+        d.setFont('helvetica', 'bold'); d.setFontSize(14); d.text('RIEPILOGO USCITE RMA', M + (lg ? 28 : 0), y + 2);
+        d.setFont('helvetica', 'normal'); d.setFontSize(10); d.text('Giorno di uscita: ' + L.itDate(d0) + '   ·   Stampato il ' + L.itDate(L.isoToday()) + ' ' + L.nowStamp().slice(11, 16), M + (lg ? 28 : 0), y + 8);
+        y += 16;
+        var hd = ['DESTINAZIONE', 'QUANTITÀ', 'MISURE 1', 'MISURE 2', 'MISURE 3', 'MISURE 4', 'MISURE 5'], x = M;
+        d.setFillColor(225, 230, 238); d.rect(M, y, W, 8, 'F'); d.setDrawColor(90); d.setLineWidth(0.3);
+        d.setFont('helvetica', 'bold'); d.setFontSize(8);
+        hd.forEach(function (h, i) { var ww = i === 0 ? cw[0] : (i === 1 ? cw[1] : mw); d.rect(x, y, ww, 8); d.text(h, x + ww / 2, y + 5.3, { align: 'center' }); x += ww; });
+        y += 8;
+      };
+      testa();
+      G.forEach(function (g) {
+        if (y + H > 297 - 22) { d.addPage(); testa(); }
+        var x = M; tot += g.q;
+        d.setDrawColor(90); d.rect(x, y, cw[0], H);
+        d.setFont('helvetica', 'bold'); d.setFontSize(10); var t = d.splitTextToSize(L.s(g.dest), cw[0] - 3); d.text(t.slice(0, 2), x + 1.5, y + (t.length > 1 ? 5.5 : 7.8));
+        x += cw[0]; d.rect(x, y, cw[1], H); d.setFont('helvetica', 'bold'); d.setFontSize(13); d.text(String(g.q), x + cw[1] / 2, y + H / 2 + 2, { align: 'center' }); x += cw[1];
+        d.setFont('helvetica', 'normal'); d.setFontSize(6); d.setTextColor(160);
+        for (var i = 0; i < 5; i++) { d.rect(x, y, mw, H); d.text('L × P × H', x + mw / 2, y + H - 1.6, { align: 'center' }); x += mw; }
+        d.setTextColor(0); y += H;
+      });
+      if (y + 30 > 297 - 10) { d.addPage(); y = 14; }
+      d.setDrawColor(90); d.setFillColor(240, 242, 246); d.rect(M, y, cw[0], 9, 'FD'); d.rect(M + cw[0], y, cw[1], 9, 'FD');
+      d.setFont('helvetica', 'bold'); d.setFontSize(10); d.text('TOTALE PEZZI (' + G.length + ' destinazioni)', M + 1.5, y + 6); d.setFontSize(12); d.text(String(tot), M + cw[0] + cw[1] / 2, y + 6.3, { align: 'center' });
+      y += 18; d.setFont('helvetica', 'normal'); d.setFontSize(10);
+      d.text('Controllato da: ____________________________', M, y); d.text('Firma: ______________________', M + 110, y);
+      d.setFontSize(7.5); d.setTextColor(120); d.text('Misure in cm (lunghezza × profondità × altezza), una casella per collo/bancale. Riportarle poi a video in Uscite e DDT RMA.', M, y + 7); d.setTextColor(0);
+      var n = d.getNumberOfPages(); for (var p = 1; p <= n; p++) { d.setPage(p); d.setFontSize(7.5); d.setTextColor(120); d.text('Pagina ' + p + ' di ' + n, 210 - M, 292, { align: 'right' }); d.setTextColor(0); }
+      Ddt.apri(d, w);
+      API.append(DB.id, 'LOG', [App.log('RMA_RIEPILOGO_STAMPATO', 'SPEDIZIONI', d0, { destinazioni: G.length, pezzi: tot })], true).catch(function () { });
+    } catch (e) { if (w) w.close(); Modal.open('Riepilogo non creato', e.message); }
+  },
   ddtTutti: function () {
     var ids = Rma.gruppi().filter(function (g) { return g.s && g.s.n_ddt && g.s.stato === 'SPEDITA'; }).map(function (g) { return g.s.id_spedizione; });
     if (!ids.length) { toast('Nessun DDT emesso in questa pagina', 'ko'); return; }
@@ -9413,7 +9513,8 @@ var Tab = {
     if (Tab._p && !forza) return Tab._p;
     return Tab._p = (async function () {
       var c = forza ? null : await DB.cacheGet('tableau');
-      if (!c || DB.vltStale(c.ts)) {
+      if (!c || DB.vltStale(c.ts)) if (!(await DB.invariato('tableau', CFG.VLT_ID, c))) {
+        var modT = await DB.modTime(CFG.VLT_ID);
         var f = await DB.vltFoglio(Tab.FOGLIO, Tab.GID, '');
         var h = ((await API.batchGet(CFG.VLT_ID, [API.q(f) + '!1:1']))[0] || [[]])[0] || [];
         var cols = ['Fr Id'].concat(Tab.COL.map(function (x) { return x[1]; })).concat(['Estratto Il']).filter(function (x) { return h.map(L.s).indexOf(x) >= 0; });
@@ -9421,7 +9522,7 @@ var Tab = {
         var rows = await DB.loadCols(CFG.VLT_ID, f, cols);
         var m = {}, est = '';
         rows.forEach(function (r) { var fr = L.s(r['Fr Id']).replace(/\.0$/, ''); if (!fr) return; var o = {}; Tab.COL.forEach(function (x) { if (L.s(r[x[1]])) o[x[0]] = L.s(r[x[1]]); }); m[fr] = o; if (!est && L.s(r['Estratto Il'])) est = L.s(r['Estratto Il']); });
-        c = { ts: Date.now(), map: m, estratto: est }; await DB.cacheSet('tableau', c);
+        c = { ts: Date.now(), map: m, estratto: est, mod: modT }; await DB.cacheSet('tableau', c);
       }
       Tab.map = c.map; Tab.estratto = c.estratto || '';
       return Tab.map;
@@ -9997,11 +10098,12 @@ var RmaD = {
     if (RmaD._p && !forza) return RmaD._p;
     return RmaD._p = (async function () {
       var c = forza ? null : await DB.cacheGet('rma_date');
-      if (!c || DB.vltStale(c.ts)) {
+      if (!c || DB.vltStale(c.ts)) if (!(await DB.invariato('rma_date', CFG.VLT_ID, c))) {
+        var modR = await DB.modTime(CFG.VLT_ID);
         var f = await DB.vltFoglio(L.s(DB.param('rma_date_foglio', '')) || RmaD.FOGLIO, '', '');
         var rows = await DB.loadCols(CFG.VLT_ID, f, ['Id RMA', 'Data Apertura']);
         var m = {}; rows.forEach(function (r) { var k = RmaD.k(r['Id RMA']); if (k && L.s(r['Data Apertura'])) m[k] = L.normDate(r['Data Apertura']); });
-        c = { ts: Date.now(), map: m }; await DB.cacheSet('rma_date', c);
+        c = { ts: Date.now(), map: m, mod: modR }; await DB.cacheSet('rma_date', c);
       }
       RmaD.map = c.map; RmaD.err = ''; return RmaD.map;
     })().catch(function (e) { RmaD._p = null; RmaD.err = e.message; return null; });
