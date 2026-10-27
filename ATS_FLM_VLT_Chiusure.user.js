@@ -2,7 +2,7 @@
 // @name         ATS FLM → VLT · Chiusure
 // @namespace    ats-spa.flm
 // @author       Daniele Izzo
-// @version      1.0.10
+// @version      1.0.11
 // @description  Chiude su VLT ingressi del giorno (op. linea), ACK, RMA e spare ferme in HUB con i dati dell'app "ATS - Fastweb FLM". Sostituisce i 4 script con i CSV.
 // @match        https://logistictoolvf.net.vodafone.it/*
 // @match        https://ats-spa.github.io/*
@@ -27,7 +27,7 @@
 */
 (function () {
   'use strict';
-  var VER = '1.0.10';
+  var VER = '1.0.11';
   var VLT_HOST = 'logistictoolvf.net.vodafone.it';
   var K = { CODA: 'ats_coda', STATO: 'ats_stato_', PEND: 'ats_esiti_pending', RICH: 'ats_richiesta', APP: 'ats_app_url', VIVO: 'ats_vlt_vivo', RUN: 'ats_run', UI: 'ats_ui', RICEVUTI: 'ats_esiti_ricevuti' };
   // esiti da consegnare = scritti da VLT (PEND) meno quelli già confermati dall'app (RICEVUTI): ognuno scrive solo la sua chiave
@@ -391,6 +391,11 @@
       var buone = function () { return NET.filter(function (e) { return scrittura(e) && e.s >= 200 && e.s < 300; }); };
       var fatto = function (come) { UI.seriali(null); console.log('[ATS→VLT] RMA ' + it.rma + ' salvato (' + come + ')'); return esitoOk(S0, 'Shipped From CW', 'salvato dall\'operatore · AWB ' + (it.awb || '')); };
       var segnalato = 0;
+      // clic dell'operatore su Salva (la risposta di VLT non sempre si vede): serve a distinguere "salvato" da "chiuso con Annulla"
+      var cliccato = 0, suClic = function (ev) { var b = ev.target && ev.target.closest ? ev.target.closest('button, span') : null; if (b && ((b.querySelector && b.querySelector('svg[data-icon="save"]')) || /^salva$/i.test(String(b.textContent || '').trim()))) cliccato = Date.now(); };
+      var conferma = function () { return /(is|è) (updated|created|aggiornat|creat)\w* with identifier|with identifier/.test(norm(document.body.innerText)); };
+      document.addEventListener('click', suClic, true);
+      try {
       while (true) {
         if (RUN.stop) { UI.seriali(null); throw new Ferma(); }
         if (RUN.attesa === 'salta') { RUN.attesa = null; UI.seriali(null); if ($('select#field_rmaStatus')) await esciForm(); return { esito: 'SALTATO', stato_prima: S0, stato_dopo: S0, dettaglio: 'saltato dall\'operatore' }; }
@@ -404,13 +409,18 @@
           var num2 = String(it.rma).trim().replace(/^RMA\s*/i, '').replace(/^0+(?=\d)/, '');
           var tr = await attendi(function () { return $$('table tbody tr').find(function (r) { return $$('td', r).some(function (td) { return String(td.textContent || '').trim().replace(/^RMA\s*/i, '').replace(/^0+(?=\d)/, '') === num2; }); }); }, 4000);
           if (tr && norm(tr.textContent).indexOf('shipped from cw') >= 0) return fatto('verificato dalla lista');
-          UI.seriali(null); return { esito: 'SALTATO', stato_prima: S0, stato_dopo: S0, dettaglio: 'scheda chiusa senza conferma del salvataggio: controlla su VLT' };
+          // Salva premuto e VLT ha chiuso la scheda senza errori (o messaggio verde "updated with identifier"): salvato
+          var koDopo = NET.filter(function (e) { return scrittura(e) && e.t0 >= cliccato - 500 && (e.s === 0 || e.s >= 400); });
+          if (conferma()) return fatto('messaggio di conferma di VLT');
+          if (cliccato && !koDopo.length) return fatto('Salva premuto, VLT ha chiuso la scheda senza errori');
+          UI.seriali(null); return { esito: 'SALTATO', stato_prima: S0, stato_dopo: S0, dettaglio: cliccato ? 'VLT ha risposto con errore al salvataggio: controlla su VLT' : 'scheda chiusa senza premere Salva (Annulla/indietro): non salvata' };
         }
         // errore solo se VLT ha risposto KO, nessuna risposta OK e la scheda è ancora aperta dopo 3 s
         var ko = NET.filter(function (e) { return scrittura(e) && (e.s === 0 || e.s >= 400); });
         if (ko.length > segnalato && Date.now() - ko[ko.length - 1].t > 3000) { segnalato = ko.length; var k = ko[ko.length - 1]; console.log('[ATS→VLT] risposta KO', k.m, k.u, k.s, k.b); UI.seriali(it, ['VLT ha rifiutato il salvataggio (' + k.s + ')' + msgServer(k.b) + ': correggi e salva di nuovo, o Salta'], false); }
         await sleep(300);
       }
+      } finally { document.removeEventListener('click', suClic, true); }
     };
     // RMA MNF: dalla lista RMA a video, ogni RMA in "To Ship From CW" → "Material Not Found" (come il vecchio script, ma
     // con pausa/ferma, conferma del salvataggio e senza riaprire due volte lo stesso RMA). Esiti nell'app (procedura MNF).
