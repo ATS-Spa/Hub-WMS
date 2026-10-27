@@ -1092,21 +1092,30 @@ var Busy = {
 var Sync = {
   n: 0, ogni: 60, ultimo: null, check: null, stato: 'off',
   hm: function (d) { return d ? d.toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—'; },
-  etichetta: function () { return ' · ' + (Sync.stato === 'off' ? '⚠ agg. auto spento' : (Sync.stato === 'pausa' ? '⏸ agg. auto in pausa' : '⟳ dati ' + Sync.hm(Sync.check))) + (Sync.ultimo ? ' (ricaricati ' + Sync.hm(Sync.ultimo) + ')' : ''); },
-  tooltip: function () { return 'Aggiornamento automatico ogni ' + Sync.ogni + ' s: controlla se altri operatori hanno salvato qualcosa.\nUltimo controllo: ' + Sync.hm(Sync.check) + (Sync.ultimo ? '\nUltimo ricaricamento per modifiche di altri: ' + Sync.hm(Sync.ultimo) : '\nNessuna modifica di altri finora') + (Sync.stato === 'pausa' ? '\nIn pausa: hai una finestra aperta o modifiche non salvate' : ''); },
+  etichetta: function () { return ' · ' + (Sync.stato === 'off' ? '⚠ agg. auto spento' : (Sync.stato === 'pausa' ? '⏸ agg. auto in pausa' + (Sync.motivo ? ': ' + Sync.motivo : '') : '⟳ dati ' + Sync.hm(Sync.check))) + (Sync.ultimo ? ' (ricaricati ' + Sync.hm(Sync.ultimo) + ')' : ''); },
+  tooltip: function () { return 'Aggiornamento automatico ogni ' + Sync.ogni + ' s: controlla se altri operatori hanno salvato qualcosa.\nUltimo controllo: ' + Sync.hm(Sync.check) + (Sync.ultimo ? '\nUltimo ricaricamento per modifiche di altri: ' + Sync.hm(Sync.ultimo) : '\nNessuna modifica di altri finora') + (Sync.stato === 'pausa' ? '\nIn pausa: ' + (Sync.motivo || 'hai una finestra aperta o modifiche non salvate') + '. Riparte da solo appena finisci (o salvi).' : ''); },
   avvia: async function () {
     try { var r = (await API.batchGet(DB.id, [API.q('LOG') + '!A1:A']))[0]; Sync.n = r.length; } catch (e) { Sync.stato = 'off'; App.syncInfo(); return; }
     Sync.stato = 'on'; Sync.check = new Date(); App.syncInfo();
     Sync.ogni = Math.max(30, parseInt(DB.param('aggiornamento_auto_sec', '60'), 10) || 60);
     clearInterval(Sync._i); Sync._i = setInterval(Sync.giro, Sync.ogni * 1000);
     document.addEventListener('visibilitychange', function () { if (!document.hidden && Sync.dovuto) Sync.giro(); });
+    document.addEventListener('input', function (e) { if (e.target && e.target.closest && e.target.closest('#rmaUsc')) Sync._tUsc = Date.now(); }, true);
   },
-  occupato: function () {
+  // perché l'aggiornamento automatico aspetta ('' = può aggiornare)
+  perche: function () {
     var a = document.activeElement;
-    return $('modal').classList.contains('show') || Busy.n > 0 ||
-      Object.keys(Rma.dirty || {}).length || Object.keys(Admin.dirty || {}).length || Object.keys((window.Vlt && Vlt.dirty) || {}).length ||
-      (a && a.classList && a.classList.contains('edit-cell')) || (a && a.closest && a.closest('#rmaUsc') && /INPUT|SELECT|TEXTAREA/.test(a.tagName)) || (Ack.q && (Ack.q.length || Ack.qA.length));
+    if ($('modal').classList.contains('show')) return 'finestra aperta';
+    if (Busy.n > 0) return 'operazione in corso';
+    if (Object.keys(Rma.dirty || {}).length) return 'modifiche RMA non salvate (Salva modifiche)';
+    if (Object.keys(Admin.dirty || {}).length) return 'modifiche in Admin non salvate';
+    if (Object.keys((window.Vlt && Vlt.dirty) || {}).length) return 'modifiche VLT non salvate';
+    if (a && a.classList && a.classList.contains('edit-cell')) return 'stai scrivendo in una cella';
+    if (a && a.closest && a.closest('#rmaUsc') && /INPUT|SELECT|TEXTAREA/.test(a.tagName) && Date.now() - (Sync._tUsc || 0) < 60000) return 'stai scrivendo colli/AWB nelle uscite';
+    if (Ack.q && (Ack.q.length || Ack.qA.length)) return 'spunte ACK da salvare';
+    return '';
   },
+  occupato: function () { Sync.motivo = Sync.perche(); return !!Sync.motivo; },
   giro: async function () {
     if (!DB.id || !Auth.token) return;
     if (Sync._run) return;
