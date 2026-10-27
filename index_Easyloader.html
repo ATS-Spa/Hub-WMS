@@ -407,7 +407,8 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
       <div class="pres" id="presBox"></div>
       <button class="btn ghost sm chat-btn" id="propBtn" style="display:none" onclick="Prop.apri()" title="Proposte del sistema da confermare: FR in Aborted, FR trovati su VLT, riparatore diverso da VLT">🔔<span class="chat-badge" id="propBadge" style="display:none"></span></button>
       <button class="btn ghost sm chat-btn" id="chatBtn" style="display:none" onclick="Chat.apri()" title="Chat: canale generale e messaggi diretti">💬<span class="chat-badge" id="chatBadge" style="display:none"></span></button>
-      <span class="sync" id="syncInfo"></span>
+      <span class="sync" id="syncInfo" style="display:none"></span>
+      <button class="btn ghost sm" id="syncBtn" onclick="App.infoDati()" title="Stato dei dati e dell'aggiornamento automatico">ⓘ</button>
       <button class="btn ghost sm" onclick="App.reload()" title="Ricarica i dati dal database">↻<span class="lbl"> Aggiorna</span></button>
       <select class="fc" style="width:auto;padding:5px 8px;font-size:11px" id="themeSel" onchange="App.setTheme(this.value)">
         <option value="">🌙 Scuro</option><option value="theme-dim">🌗 Dim</option><option value="theme-grafite">🩶 Grafite</option><option value="theme-sap">🔵 SAP</option><option value="theme-oceano">🌊 Oceano</option><option value="theme-foresta">🌲 Foresta</option><option value="theme-ametista">🔮 Ametista</option><option value="theme-carbone">⬛ Carbone</option><option value="theme-mezzanotte">🌌 Mezzanotte</option><option value="theme-ardesia">🪨 Ardesia</option><option value="theme-contrasto-scuro">◼️ Alto contrasto scuro</option><option value="theme-light">☀️ Chiaro</option><option value="theme-avorio">🤍 Avorio</option><option value="theme-salvia">🌿 Salvia</option><option value="theme-rovere">🪵 Rovere</option><option value="theme-celeste">🩵 Celeste</option><option value="theme-lavanda">💜 Lavanda</option><option value="theme-perla">⚪ Perla</option><option value="theme-ghiaccio">🧊 Ghiaccio</option><option value="theme-sabbia">🏖️ Sabbia</option><option value="theme-contrasto">◻️ Alto contrasto chiaro</option>
@@ -1431,7 +1432,15 @@ var App = {
     if (/theme-(light|avorio|salvia|rovere|celeste|lavanda|perla|ghiaccio|sabbia|contrasto)$/.test(th)) b.add('is-light');
     lsS('theme', th);
   },
-  syncInfo: function () { $('syncInfo').textContent = 'VLT ' + (DB.vlt ? new Date(DB.vlt.ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—') + ' · Huawei ' + Object.keys(DB.huaweiFr).length + ' seriali · giacenza ' + DB.t.UNITA.rows.length + (window.Sync ? Sync.etichetta() : ''); $('syncInfo').title = window.Sync ? Sync.tooltip() : ''; },
+  syncInfo: function () { $('syncInfo').textContent = 'VLT ' + (DB.vlt ? new Date(DB.vlt.ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—') + ' · Huawei ' + Object.keys(DB.huaweiFr).length + ' seriali · giacenza ' + DB.t.UNITA.rows.length + (window.Sync ? Sync.etichetta() : ''); $('syncInfo').title = window.Sync ? Sync.tooltip() : ''; var sb = $('syncBtn'); if (sb) { var st = window.Sync ? Sync.stato : ''; sb.textContent = st === 'off' ? 'ⓘ ⚠' : st === 'pausa' ? 'ⓘ ⏸' : 'ⓘ'; sb.style.color = st === 'off' ? 'var(--red)' : st === 'pausa' ? 'var(--amber)' : ''; } if ($('infoDatiBox')) $('infoDatiBox').innerHTML = App.infoDatiHtml(); },
+  infoDatiHtml: function () {
+    var hm = function (d) { return d ? new Date(d).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—'; }, S = window.Sync || {};
+    var aut = S.stato === 'off' ? '<b style="color:var(--red)">⚠ spento</b> (premi ↻ Aggiorna)' : S.stato === 'pausa' ? '<b style="color:var(--amber)">⏸ in pausa</b>: ' + esc(S.motivo || 'hai una finestra aperta o modifiche non salvate') + '. Riparte da solo appena finisci (o salvi).' : '<b style="color:var(--green)">attivo</b>, ogni ' + (S.ogni || 60) + ' s';
+    var R = [['Dati VLT', 'file delle ' + (DB.vlt ? hm(DB.vlt.ts) : '—')], ['Huawei', Object.keys(DB.huaweiFr || {}).length.toLocaleString('it-IT') + ' seriali'], ['Giacenza', (DB.t.UNITA ? DB.t.UNITA.rows.length : 0).toLocaleString('it-IT') + ' schede'],
+      ['Aggiornamento automatico', aut], ['Ultimo controllo modifiche', hm(S.check)], ['Ultimo ricaricamento', S.ultimo ? hm(S.ultimo) + ' (modifiche di altri operatori)' : 'nessuna modifica di altri finora'], ['Dati esterni (VLT, Huawei, TABLEAU, RMA)', 'si ricaricano da soli dalle ' + esc(DB.param('aggiornamento_dati_ora', '07:20')) + ' e poi ogni 15 min, solo se il file è cambiato']];
+    return '<table style="font-size:13px"><tbody>' + R.map(function (r) { return '<tr><td style="padding:4px 12px 4px 0;color:var(--muted);white-space:nowrap">' + r[0] + '</td><td style="padding:4px 0">' + r[1] + '</td></tr>'; }).join('') + '</tbody></table>';
+  },
+  infoDati: function () { Modal.html('ⓘ Stato dei dati', '<div id="infoDatiBox">' + App.infoDatiHtml() + '</div>', [{ label: 'Chiudi', cls: 'ghost' }, { label: '↻ Aggiorna', cls: 'green', fn: function () { App.reload(); } }]); },
   fillLists: function () {
     var cp = DB.t.CONTROPARTI.rows.map(function (r) { return r.codice; }).filter(Boolean);
     DB.t.RIPARATORI.rows.forEach(function (r) { if (r.codice && cp.indexOf(r.codice) < 0) cp.push(r.codice); });
