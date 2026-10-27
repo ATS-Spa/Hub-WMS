@@ -2,7 +2,7 @@
 // @name         ATS FLM → VLT · Chiusure
 // @namespace    ats-spa.flm
 // @author       Daniele Izzo
-// @version      1.0.11
+// @version      1.0.12
 // @description  Chiude su VLT ingressi del giorno (op. linea), ACK, RMA e spare ferme in HUB con i dati dell'app "ATS - Fastweb FLM". Sostituisce i 4 script con i CSV.
 // @match        https://logistictoolvf.net.vodafone.it/*
 // @match        https://ats-spa.github.io/*
@@ -27,7 +27,7 @@
 */
 (function () {
   'use strict';
-  var VER = '1.0.11';
+  var VER = '1.0.12';
   var VLT_HOST = 'logistictoolvf.net.vodafone.it';
   var K = { CODA: 'ats_coda', STATO: 'ats_stato_', PEND: 'ats_esiti_pending', RICH: 'ats_richiesta', APP: 'ats_app_url', VIVO: 'ats_vlt_vivo', RUN: 'ats_run', UI: 'ats_ui', RICEVUTI: 'ats_esiti_ricevuti' };
   // esiti da consegnare = scritti da VLT (PEND) meno quelli già confermati dall'app (RICEVUTI): ognuno scrive solo la sua chiave
@@ -115,6 +115,14 @@
             return r;
           }, function (err) { NET.push({ m: m, u: u, s: 0, t0: t0, t: Date.now(), b: String(err) }); throw err; });
         };
+      } catch (e) { }
+    })();
+    // VLT scrive in console "SALVATO UPDATE this.rma" quando il salvataggio va a buon fine: lo registro
+    var SALVATI = [];
+    (function () {
+      try {
+        var C = W.console, l0 = C.log;
+        C.log = function () { try { var a = String(arguments[0] == null ? '' : arguments[0]); if (/^\s*SALVATO\s+(UPDATE|CREATE)/i.test(a)) SALVATI.push(Date.now()); } catch (e) { } return l0.apply(this, arguments); };
       } catch (e) { }
     })();
     var netAttendi = async function (pred, ms, da) {
@@ -400,6 +408,7 @@
         if (RUN.stop) { UI.seriali(null); throw new Ferma(); }
         if (RUN.attesa === 'salta') { RUN.attesa = null; UI.seriali(null); if ($('select#field_rmaStatus')) await esciForm(); return { esito: 'SALTATO', stato_prima: S0, stato_dopo: S0, dettaglio: 'saltato dall\'operatore' }; }
         var ok = buone(), aperto = !!$('select#field_rmaStatus');
+        if (SALVATI.some(function (t) { return t >= t0; }) && !aperto) { await attendi(function () { return $('input#currentSearch'); }, 8000); return fatto('VLT: SALVATO UPDATE'); }
         if (ok.length && !aperto) { await attendi(function () { return $('input#currentSearch'); }, 8000); return fatto(ok[ok.length - 1].m + ' ' + ok[ok.length - 1].u); }
         if (ok.length && aperto && Date.now() - ok[ok.length - 1].t > 4000) return fatto('risposta OK, scheda ancora aperta');
         if (!aperto) {
@@ -410,7 +419,10 @@
           var tr = await attendi(function () { return $$('table tbody tr').find(function (r) { return $$('td', r).some(function (td) { return String(td.textContent || '').trim().replace(/^RMA\s*/i, '').replace(/^0+(?=\d)/, '') === num2; }); }); }, 4000);
           if (tr && norm(tr.textContent).indexOf('shipped from cw') >= 0) return fatto('verificato dalla lista');
           // Salva premuto e VLT ha chiuso la scheda senza errori (o messaggio verde "updated with identifier"): salvato
-          var koDopo = NET.filter(function (e) { return scrittura(e) && e.t0 >= cliccato - 500 && (e.s === 0 || e.s >= 400); });
+          if (SALVATI.some(function (t) { return t >= t0; })) return fatto('VLT: SALVATO UPDATE');
+          // errore solo con una risposta HTTP 400+ di VLT sull'RMA (le richieste interrotte dal cambio pagina, stato 0, non contano)
+          var koDopo = NET.filter(function (e) { return scrittura(e) && e.t0 >= cliccato - 500 && e.s >= 400 && /rma/i.test(e.u); });
+          if (koDopo.length) console.log('[ATS→VLT] risposte KO dopo Salva', koDopo.map(function (e) { return e.m + ' ' + e.u + ' ' + e.s; }).join(' | '));
           if (conferma()) return fatto('messaggio di conferma di VLT');
           if (cliccato && !koDopo.length) return fatto('Salva premuto, VLT ha chiuso la scheda senza errori');
           UI.seriali(null); return { esito: 'SALTATO', stato_prima: S0, stato_dopo: S0, dettaglio: cliccato ? 'VLT ha risposto con errore al salvataggio: controlla su VLT' : 'scheda chiusa senza premere Salva (Annulla/indietro): non salvata' };
