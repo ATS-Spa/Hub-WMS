@@ -7012,11 +7012,12 @@ var Rma = {
         // stesso RMA su più pezzi solo verso la stessa destinazione (nel file e rispetto a schede e carichi)
         // con un RMA creato dal SD il pezzo va alla SUA destinazione (quella della scheda): il ritorno in giacenza proposto, che la cambiava, non vale più
         var proprio = o.car ? o.destPrima : L.s(Rma.dv(u, 'dest'));
-        if (!o.err && o.rma && !o.dest && !o.car && L.up(proprio) !== L.up(o.destPrima)) o.note.push('va a ' + proprio + ' (destinazione della scheda): il ritorno proposto verso ' + o.destPrima + ' non vale più');
+        // con un RMA creato dal SD il pezzo va alla DESTINAZIONE ATTUALE (anche quella variata dal ritorno in giacenza): si scrive sulla scheda, così resta anche senza il ritorno
+        if (!o.err && o.rma && !o.dest && !o.car && L.up(proprio) !== L.up(o.destPrima)) { o.dest = o.destPrima; o.fissa = true; o.note.push('resta la destinazione attuale ' + o.destPrima + ' (variata dal ritorno in giacenza): salvata sulla scheda'); }
         if (!o.err && o.rma) { var fd = o.dest || proprio, cf = Rma.rmaConflitto(o.rma, fd, u.id_unita, nelFile); if (cf) o.err = cf; else if (nelFile[o.rma] === undefined) nelFile[o.rma] = fd; }
         if (!o.err) {
           if (o.rma === o.rmaPrima) o.rma = '';
-          if (o.dest && L.up(o.dest) === L.up(o.destPrima)) o.dest = '';
+          if (o.dest && !o.fissa && L.up(o.dest) === L.up(o.destPrima)) o.dest = '';
           if (!o.rma && !o.dest && !o.skip) o.skip = 'già così';
         }
       }
@@ -7028,7 +7029,7 @@ var Rma = {
       var st = o.err ? '<span style="color:var(--red)">✗ ' + esc(o.err) + '</span>' : o.skip ? '<span class="hint">' + esc(o.skip) + '</span>' : '<span style="color:var(--green)">✓</span>' + (o.note.length ? ' <span class="hint">' + esc(o.note.join(' · ')) + '</span>' : '');
       return '<tr' + (o.err ? ' style="background:rgba(220,38,38,.07)"' : '') + '><td class="mono">' + o.riga + '</td><td class="mono">' + esc(o.u ? o.u.seriale : o.ser) + '</td><td class="mono">' + esc(o.u ? o.u.id_unita : o.id) + '</td>' +
         '<td class="mono">' + (o.rma ? esc(o.rmaPrima || '—') + ' → <b>' + esc(o.rma) + '</b>' : esc(o.rmaPrima || '')) + '</td>' +
-        '<td>' + (o.dest ? esc(o.destPrima || '—') + ' → <b>' + esc(o.dest) + '</b>' : esc(o.destPrima || '')) + '</td><td>' + st + '</td></tr>';
+        '<td>' + (o.dest && !o.fissa ? esc(o.destPrima || '—') + ' → <b>' + esc(o.dest) + '</b>' : esc(o.destPrima || '')) + '</td><td>' + st + '</td></tr>';
     }
     var lista = ko.concat(ok);   // le righe senza modifiche si contano soltanto
     Modal.html('Importa RMA · ' + esc(f.name),
