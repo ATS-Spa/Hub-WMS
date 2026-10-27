@@ -5880,7 +5880,6 @@ var Ack = {
   },
   // ─ DDT già emesso: riapertura (solo admin) per aggiungere/togliere pezzi, poi Rigenera DDT con lo stesso numero
   riapriDdt: function (id) {
-    if (!App.isAdmin) { toast('Solo un admin può riaprire un DDT', 'ko'); return; }
     var s = Ack.byId(id); if (!s || s.stato !== 'SPEDITA' || !s.n_ddt) return;
     var c = Ack.cfg(), R = Ack.righe(id).filter(function (r) { return r.esito === 'SPUNTATO'; });
     var avanti = R.filter(function (r) { var v = DB.vltMap[r.fr]; return v && v.stato !== c.statoAck && v.stato !== c.statoAs; });
@@ -6266,8 +6265,8 @@ var Ack = {
     var html = (anche.length ? '<div class="fb" style="margin-bottom:8px;color:var(--amber)">👥 Aperta anche da ' + esc(anche.join(', ')) + ': attenzione a non lavorare in due sulla stessa spunta</div>' : '') + '<div class="card"><div class="card-h"><div class="card-t">' + (edit ? 'Spunta ' : 'ACK ') + esc(s.destinatario) + ' · ' + esc(L.itDate(s.data)) + '</div><span class="hint">' + esc(s.id_spedizione) + '</span><div class="spacer"></div>' +
       (edit ? '<span class="hint" id="ackSave"></span><button class="btn ghost sm" onclick="Ack.aggiornaVista()" title="Rilegge le spunte fatte dagli altri dispositivi (si aggiorna anche da solo ogni 30 secondi)">↻ Spunte</button><button class="btn ghost sm" onclick="Ack.pendTutti()" title="Mette in pending tutte le schede della lista non ancora spuntate (non barcodate): scegli il motivo per tutte o per qualcuna">⏸ Pending non spuntate</button><button class="btn ghost sm" onclick="Ack.aggiornaLista()">Aggiorna lista da VLT</button><button class="btn green" onclick="Ack.chiudi()">Chiudi spunta</button>' : '') +
       ((s.stato === 'PRONTA' || s.stato === 'CHIUSA') ? '<button class="btn ghost sm" onclick="Ack.riapri()">Riapri spunta</button>' : '') +
-      (s.stato === 'SPEDITA' && s.n_ddt && App.isAdmin ? '<button class="btn ghost sm" onclick="Ack.riapriDdt(\'' + s.id_spedizione + '\')" title="Riapre la spunta per aggiungere o togliere pezzi: poi Rigenera DDT (stesso numero). Solo admin, tracciato nel LOG.">↺ Riapri DDT</button>' +
-        '<button class="btn ghost sm" style="color:var(--red)" onclick="Storno.apri(\'' + s.id_spedizione + '\')" title="Annulla il DDT: tutti i pezzi rientrano in magazzino, il numero resta annullato. Solo admin, con password.">🗑 Storna DDT</button>' : '') +
+      (s.stato === 'SPEDITA' && s.n_ddt ? '<button class="btn ghost sm" onclick="Ack.riapriDdt(\'' + s.id_spedizione + '\')" title="Riapre la spunta per aggiungere o togliere pezzi: poi Rigenera DDT (stesso numero). Con motivo, tracciato nel LOG.">↺ Riapri DDT</button>' +
+        '<button class="btn ghost sm" style="color:var(--red)" onclick="Storno.apri(\'' + s.id_spedizione + '\')" title="Annulla il DDT: tutti i pezzi rientrano in magazzino, il numero resta annullato. Con password eliminazione.">🗑 Storna DDT</button>' : '') +
       '<button class="btn ghost sm" onclick="Ack.excel(\'' + s.id_spedizione + '\')">⬇ Excel</button> <button class="btn ghost sm" onclick="Ack.cur=null;Ack.render()">Chiudi pannello</button></div>';
     var opS = App.condiviso() && edit ? Ack._op[s.id_spedizione] : null;
     if (opS) html += '<div class="row" style="align-items:center;margin:4px 0 8px"><span class="pill p-violet">👤 ' + esc(opS.sigla) + ' · ' + esc(opS.nome) + '</span><button class="btn ghost sm" onclick="Ack.cambiaOp()">Cambia operatore</button></div>';
@@ -7535,7 +7534,7 @@ var Rma = {
       col = done ? col : Rma.colli[k];
       var peso = col.reduce(function (a, c) { return a + (parseFloat(String(c.peso).replace(',', '.')) || 0); }, 0);
       var bt = done ? '<button class="btn sm" onclick="Rma.stampa(\'' + s.id_spedizione + '\')">Stampa DDT</button> <button class="btn ghost sm" onclick="Rma.cedolini(\'' + s.id_spedizione + '\')">Cedolini</button>' + (s.link_pdf ? ' <a class="mail" target="_blank" href="' + esc(s.link_pdf) + '">PDF su Drive</a>' : '') +
-          (App.isAdmin ? ' <button class="btn ghost sm" title="Riapre la scheda per correggere pezzi, colli, peso o AWB: poi Rigenera DDT (stesso numero, il PDF viene sostituito). Tutto tracciato nel LOG." onclick="Rma.riapriDdt(\'' + s.id_spedizione + '\')">↺ Riapri DDT</button> <button class="btn ghost sm" style="color:var(--red)" title="Annulla il DDT: tutti i pezzi rientrano in magazzino, il numero resta annullato. Solo admin, con password." onclick="Storno.apri(\'' + s.id_spedizione + '\')">🗑 Storna DDT</button>' : '')
+          (true ? ' <button class="btn ghost sm" title="Riapre la scheda per correggere pezzi, colli, peso o AWB: poi Rigenera DDT (stesso numero, il PDF viene sostituito). Tutto tracciato nel LOG." onclick="Rma.riapriDdt(\'' + s.id_spedizione + '\')">↺ Riapri DDT</button> <button class="btn ghost sm" style="color:var(--red)" title="Annulla il DDT: tutti i pezzi rientrano in magazzino, il numero resta annullato. Con password eliminazione." onclick="Storno.apri(\'' + s.id_spedizione + '\')">🗑 Storna DDT</button>' : '')
         : (s && s.n_ddt ? '<span class="pill p-amber" title="DDT riaperto: correggi e rigenera">DDT ' + esc(s.n_ddt) + ' riaperto</span> ' : '') + '<button class="btn sm green"' + (g.pronta ? '' : ' disabled title="Servono colli/peso salvati e almeno un pezzo"') + ' onclick="Rma.emettiUno(\'' + esc(g.dest) + '\')">' + (s && s.n_ddt ? 'Rigenera DDT' : 'Genera DDT') + (s && !L.s(s.awb) ? ' (senza AWB)' : '') + '</button> <button class="btn ghost sm" onclick="Rma.cedolini(null,\'' + esc(g.dest) + '\')">Cedolini</button>';
       var lista = (done ? Ack.righe(s.id_spedizione).filter(function (r) { return r.esito !== 'RIMOSSO'; }).map(function (r) { return { u: { id_unita: r.id_unita, seriale: r.seriale, pn: r.pn, tipo: '' }, rma: r.rma, fonte: r.note }; }) : g.pezzi);
       return '<div class="ack-card">' +
@@ -7818,7 +7817,6 @@ var Rma = {
   // ─ RIAPERTURA DDT RMA (admin): i pezzi tornano in uscita sulla stessa scheda, il numero DDT resta;
   //   con "Rigenera DDT" movimenti e righe si aggiornano sul posto, i pezzi tolti vengono stornati, il PDF su Drive sostituito
   riapriDdt: async function (id) {
-    if (!App.isAdmin) { toast('Solo un admin può riaprire un DDT', 'ko'); return; }
     var s0 = DB.t.SPEDIZIONI.rows.find(function (x) { return x.id_spedizione === id; }); if (!s0 || s0.stato !== 'SPEDITA' || !s0.n_ddt) return;
     Modal.html('Riapri DDT ' + s0.n_ddt + ' · ' + s0.destinatario,
       '<div class="hint" style="margin-bottom:8px">I pezzi tornano in uscita su questa scheda (giorno ' + esc(L.itDate(s0.data)) + '): puoi togliere o aggiungere pezzi, cambiare RMA, colli, peso e AWB. ' +
@@ -10071,7 +10069,6 @@ var Prop = {
 // ─ storno di un DDT già emesso (ACK o RMA): tutti i pezzi rientrano in magazzino, il numero DDT resta ANNULLATO (non si riusa)
 var Storno = {
   apri: function (id) {
-    if (!App.isAdmin) { toast('Solo un admin può stornare un DDT', 'ko'); return; }
     var s = DB.t.SPEDIZIONI.rows.find(function (x) { return x.id_spedizione === id; }); if (!s || s.stato !== 'SPEDITA' || !s.n_ddt) return;
     var ack = s.tipo === 'ACK', R = Ack.righe(id).filter(function (r) { return r.esito === 'SPUNTATO'; }), c = Ack.cfg(), av = [];
     if (L.normDate(s.data_ddt) !== L.isoToday()) av.push('Il DDT non è di oggi (' + L.itDate(s.data_ddt) + '): se la merce è già partita o consegnata, lo storno cambia solo i dati dell\'app.');
