@@ -1105,7 +1105,7 @@ var Sync = {
     var a = document.activeElement;
     return $('modal').classList.contains('show') || Busy.n > 0 ||
       Object.keys(Rma.dirty || {}).length || Object.keys(Admin.dirty || {}).length || Object.keys((window.Vlt && Vlt.dirty) || {}).length ||
-      (a && a.classList && a.classList.contains('edit-cell')) || (Ack.q && (Ack.q.length || Ack.qA.length));
+      (a && a.classList && a.classList.contains('edit-cell')) || (a && a.closest && a.closest('#rmaUsc') && /INPUT|SELECT|TEXTAREA/.test(a.tagName)) || (Ack.q && (Ack.q.length || Ack.qA.length));
   },
   giro: async function () {
     if (!DB.id || !Auth.token) return;
@@ -1125,14 +1125,16 @@ var Sync = {
   },
   ricarica: async function (fogli) {
     var T = ['UNITA', 'BALANCING', 'CALENDARIO_USCITE'];
-    if (Rma.loaded) T = T.concat(['RMA_RITORNI', 'SPEDIZIONI', 'CARICHI_RMA', 'RMA_PENDING']);
+    if (Rma.loaded) T = T.concat(['RMA_RITORNI', 'SPEDIZIONI', 'SPEDIZIONI_COLLI', 'CARICHI_RMA', 'RMA_PENDING']);
     var ackLibero = Ack.loaded && !Ack.cur;
     if (ackLibero && T.indexOf('SPEDIZIONI') < 0) T = T.concat(['SPEDIZIONI']);
     if (ackLibero) T = T.concat(['SPEDIZIONI_RIGHE', 'ACK_PENDING']);
     if (Jun.loaded) T.push('JUNIPER');
     if (Nr.loaded) T.push('PRATICHE_NEW_REUSE');
     if (Sync.occupato()) { Sync.dovuto = true; return; }
+    var puliti = Rma.loaded ? Rma.colliPuliti() : [];   /* colli non toccati a video: si riprendono dal database (salvati da un collega) */
     await DB.loadTables(T);
+    puliti.forEach(function (k) { delete Rma.colli[k]; });
     if (Sto.dati.cur) { Sto.dati.cur = null; Giacenze._miN = -1; }
     Ingresso._heads = null; Sync.ultimo = new Date(); App.syncInfo();
     var t = App.tab;
@@ -4452,10 +4454,25 @@ var AwbF = {
     if (vet.length) req.push({ setDataValidation: { range: { sheetId: sid, startRowIndex: 1, startColumnIndex: iA + 1, endColumnIndex: iA + 2 }, rule: { condition: { type: 'ONE_OF_LIST', values: vet.map(function (v) { return { userEnteredValue: v }; }) }, strict: false, showCustomUi: true } } });
     await API.call(API.S + f.id + ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: req }) });
     await API.batchUpdate(f.id, [{ range: API.q(AwbF.TAB) + '!A1', values: [AwbF.H] }]);
+    try { await AwbF.formato(f.id, sid); } catch (e) { }
     var o = { data: d, tipo: tipo, file_id: f.id, link: f.webViewLink || ('https://docs.google.com/spreadsheets/d/' + f.id + '/edit'), id_mail: '', condiviso_con: '', creato_il: L.nowStamp(), creato_da: Auth.email };
     var r = await API.append(DB.id, 'FOGLI_AWB', [t.toRow(o)]); o._r = r; t.rows.push(o);
     API.append(DB.id, 'LOG', [App.log('FOGLIO_AWB_CREATO', 'FOGLI_AWB', f.id, { tipo: tipo, data: d })], true).catch(function () { });
     return o;
+  },
+  _fmt: {},
+  // carattere 13, colonne un po' più larghe, misure colli a capo, nascoste A (DATA), B (TIPO), E (DDT), F (PEZZI): restano nel file, l'app le usa
+  formato: async function (id, sid) {
+    if (sid === undefined) { var info = await API.call(API.S + id + '?fields=' + encodeURIComponent('sheets(properties(sheetId,title))')), sh = (info.sheets || []).map(function (x) { return x.properties; }).find(function (p) { return p.title === AwbF.TAB; }); if (!sh) return; sid = sh.sheetId; }
+    var larg = { DESTINATARIO: 240, INDIRIZZO: 300, 'MISURE COLLI': 220, AWB: 150, VETTORE: 130, 'NOTE BOLLETTAZIONE': 220, 'ID (non modificare)': 150 };
+    var req = [{ repeatCell: { range: { sheetId: sid }, cell: { userEnteredFormat: { textFormat: { fontSize: 13 }, verticalAlignment: 'MIDDLE' } }, fields: 'userEnteredFormat.textFormat.fontSize,userEnteredFormat.verticalAlignment' } }];
+    AwbF.H.forEach(function (h, j) { req.push({ updateDimensionProperties: { range: { sheetId: sid, dimension: 'COLUMNS', startIndex: j, endIndex: j + 1 }, properties: { pixelSize: Math.round((larg[h] || 95) * 1.3) }, fields: 'pixelSize' } }); });
+    var iM = AwbF.H.indexOf('MISURE COLLI'); req.push({ repeatCell: { range: { sheetId: sid, startColumnIndex: iM, endColumnIndex: iM + 1 }, cell: { userEnteredFormat: { wrapStrategy: 'WRAP' } }, fields: 'userEnteredFormat.wrapStrategy' } });   /* un collo per riga */
+    ['COLLI', 'PESO KG'].forEach(function (h) { var j = AwbF.H.indexOf(h); req.push({ repeatCell: { range: { sheetId: sid, startColumnIndex: j, endColumnIndex: j + 1 }, cell: { userEnteredFormat: { horizontalAlignment: 'CENTER' } }, fields: 'userEnteredFormat.horizontalAlignment' } }); });
+    req.push({ updateDimensionProperties: { range: { sheetId: sid, dimension: 'COLUMNS', startIndex: 0, endIndex: 2 }, properties: { hiddenByUser: true }, fields: 'hiddenByUser' } });
+    req.push({ updateDimensionProperties: { range: { sheetId: sid, dimension: 'COLUMNS', startIndex: 4, endIndex: 6 }, properties: { hiddenByUser: true }, fields: 'hiddenByUser' } });   /* E (DDT) e F (PEZZI) */
+    await API.call(API.S + id + ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: req }), quiet: true });
+    AwbF._fmt[id] = 1;
   },
   // contenuto del foglio; c(nome) = colonna (per nome: se spostano le colonne si ritrovano lo stesso)
   leggi: async function (rec) {
@@ -4466,13 +4483,14 @@ var AwbF = {
   riga: function (s) {
     var r = Ack.mailRiga(s), o = {};
     o['DATA'] = L.itDate(L.normDate(s.data)); o['TIPO'] = s.tipo === 'RMA' ? 'RMA' : 'ACK'; o['DESTINATARIO'] = r.dest; o['INDIRIZZO'] = r.ind; o['DDT'] = s.n_ddt ? String(s.n_ddt) : r.ddt;
-    o['PEZZI'] = r.pz; o['COLLI'] = r.nColli || ''; o['PESO KG'] = r.nColli ? r.peso : ''; o['MISURE COLLI'] = r.colli.join(', ');
+    o['PEZZI'] = r.pz; o['COLLI'] = r.nColli || ''; o['PESO KG'] = r.nColli ? r.peso : ''; o['MISURE COLLI'] = r.colli.join('\n');
     o['AWB'] = L.up(s.awb) === 'DA ASSEGNARE' ? '' : L.s(s.awb); o['VETTORE'] = L.s(s.vettore); o['NOTE BOLLETTAZIONE'] = ''; o['ID (NON MODIFICARE)'] = s.id_spedizione;
     return o;
   },
   // crea il foglio se manca, aggiunge le destinazioni nuove e aggiorna i dati (DDT, colli, peso) di quelle già presenti; AWB / vettore / note scritti da loro non si toccano
   sincronizza: async function (tipo, d, ids) {
     await AwbF.carica(); var rec = AwbF.rec(tipo, d) || await AwbF.crea(tipo, d);
+    if (!AwbF._fmt[rec.file_id]) { try { await AwbF.formato(rec.file_id); } catch (e) { AwbF._fmt[rec.file_id] = 1; } }   /* anche i fogli già creati prendono il nuovo formato */
     var F = await AwbF.leggi(rec), iId = F.c('ID'), riga = {};
     F.rows.forEach(function (r, i) { var id = iId >= 0 ? L.s(r[iId]) : ''; if (id) riga[id] = i + 2; });
     var upd = [], add = [], nuovi = [], q = API.q(AwbF.TAB);
@@ -4529,6 +4547,7 @@ var AwbF = {
   apri: async function (tipo) {
     var w = window.open('', '_blank'), d = AwbF.giorno(tipo);
     try {
+      try { await Busy.wrap(DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_COLLI', 'SPEDIZIONI_RIGHE'])); } catch (e) { }   /* dati freschi: colli salvati anche dai colleghi */
       var ids = AwbF.ids(tipo), rec;
       if (ids.length) rec = (await Busy.wrap(AwbF.sincronizza(tipo, d, ids))).rec; else { await AwbF.carica(); rec = AwbF.rec(tipo, d); }
       if (!rec) { if (w) w.close(); Modal.open('Foglio AWB', 'Nessuna destinazione pronta o spedita il ' + L.itDate(d) + ': il foglio si crea quando ci sono colli salvati.'); return; }
@@ -6155,6 +6174,7 @@ var Ack = {
     return { subj: subj, body: body, html: html };
   },
   inviaMail: async function (ids) {
+    try { await Busy.wrap(DB.loadTables(['SPEDIZIONI', 'SPEDIZIONI_COLLI', 'SPEDIZIONI_RIGHE'])); } catch (e) { }   /* colli, peso e AWB salvati anche dai colleghi */
     var m = Ack.mailTesto(ids); if (!m) { toast('Nessuna spedizione', 'ko'); return; }
     var s0 = Ack.byId(ids[0]);
     var all = ids.map(Ack.byId).filter(function (s) { return s && Drive.idDa(s.link_pdf); }).map(function (s) { return { id: Drive.idDa(s.link_pdf), nome: 'DDT ' + (s.tipo === 'RMA' ? 'RMA ' : 'ACK ') + s.n_ddt + ' ' + s.destinatario + '.pdf' }; });
@@ -6499,19 +6519,13 @@ var Rma = {
     var ann = Rma.attivi(true).length ? ' <button class="btn ghost sm" onclick="Rma.annullaImport()" title="Annulla i ritorni dell\'ultimo import (es. file sbagliato): poi puoi caricarne uno nuovo">🗑 Annulla import ritorni</button>' : '';
     var xr = ' <button class="btn ghost sm" onclick="Rma.excelRma()" title="Schede filtrate da far compilare al Service Desk (RMA creato e nuova destinazione), poi da reimportare">⬇ Excel RMA</button>' +
       ' <label class="btn ghost sm" style="cursor:pointer" title="Reimporta l Excel RMA compilato: anteprima e anomalie prima di confermare">⬆ Importa RMA<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Rma.importaRma(this)"></label>';
-    if (s === 'inv') return '<div class="row" style="justify-content:flex-end">' + imp + ann + xl + xr + ' <button class="btn ghost sm" onclick="Rma.pendFiltrate()" title="Mette in pending (fermi a deposito) tutti i pezzi filtrati nella tabella qui sotto">⏸ Pending filtrate</button> <button class="btn ghost sm" onclick="Rma.sbloccaFiltrate()" title="Rimette in uscita tutti i pezzi filtrati che sono in pending">▶ Sblocca filtrate</button>' + ' <button class="btn ghost sm" onclick="Rma.etichette()" title="Etichetta 10x5 solo per le schede con variazione di destino (tra le righe filtrate)">🏷 Etichette RMA</button>' + (Rma.ieri().length ? ' <button class="btn sm" onclick="Rma.associaIeri()" title="Gli RMA giacenza aperti ieri diventano RMA creato; i più vecchi li controlla il Service Desk">✓ Associa RMA di ieri (' + Rma.ieri().length + ')</button>' : '') + ' <button class="btn sm" ' + (nD ? '' : 'disabled') + ' onclick="Rma.salva()">Salva modifiche' + (nD ? ' (' + nD + ')' : '') + '</button></div>' + info;
+    if (s === 'inv') return '<div class="row" style="justify-content:flex-end;align-items:flex-end">' + Rma.qInput('inv', 'margin-right:auto') + imp + ann + xl + xr + ' <button class="btn ghost sm" onclick="Rma.pendFiltrate()" title="Mette in pending (fermi a deposito) tutti i pezzi filtrati nella tabella qui sotto">⏸ Pending filtrate</button> <button class="btn ghost sm" onclick="Rma.sbloccaFiltrate()" title="Rimette in uscita tutti i pezzi filtrati che sono in pending">▶ Sblocca filtrate</button>' + ' <button class="btn ghost sm" onclick="Rma.etichette()" title="Etichetta 10x5 solo per le schede con variazione di destino (tra le righe filtrate)">🏷 Etichette RMA</button>' + (Rma.ieri().length ? ' <button class="btn sm" onclick="Rma.associaIeri()" title="Gli RMA giacenza aperti ieri diventano RMA creato; i più vecchi li controlla il Service Desk">✓ Associa RMA di ieri (' + Rma.ieri().length + ')</button>' : '') + ' <button class="btn sm" ' + (nD ? '' : 'disabled') + ' onclick="Rma.salva()">Salva modifiche' + (nD ? ' (' + nD + ')' : '') + '</button></div>' + info;
     if (s === 'rit') return '<div class="row" style="justify-content:flex-end">' + imp + ann + xl + '</div>' + info;
     if (s === 'res') return '<div class="row" style="align-items:center"><div class="hint" style="flex:1;min-width:260px">Pezzi in reso senza RMA: escono con il DDT di <b>Uscite e DDT RMA</b> della loro destinazione (causale RESO). ✕ toglie dal reso finché il DDT non è emesso.</div>' +
       '<label style="font-size:12px;display:flex;gap:6px;align-items:center"><input type="checkbox"' + (Rma.resTutti ? ' checked' : '') + ' onchange="Rma.resTutti=this.checked;Rma.render()"> anche spediti</label>' +
       '<button class="btn sm" onclick="Reso.apri()">📤 Nuovo reso</button> <button class="btn ghost sm" onclick="Rma.excel()" title="La tabella così come la vedi (righe filtrate): non serve per creare gli RMA">⬇ Excel Tabella</button></div>';
-    if (s === 'car') return '<div class="row">' +
-      '<div class="fg" style="width:240px"><span class="fl">Seriale *</span><input class="fc mono" id="carSer" autocomplete="off" placeholder="spara il seriale" onkeydown="if(event.key===\'Enter\'){event.preventDefault();$(\'carRma\').focus()}" oninput="Rma.carInfo()"></div>' +
-      '<div class="fg" style="width:120px"><span class="fl">RMA</span><input class="fc mono" id="carRma" autocomplete="off" placeholder="anche dopo"></div>' +
-      '<div class="fg" style="width:220px"><span class="fl">Destinazione *</span><input class="fc" id="carDest" list="dlControparti" autocomplete="off"></div>' +
-      '<div class="fg" style="width:130px"><span class="fl">PO / MRN</span><input class="fc mono" id="carPo" autocomplete="off"></div>' +
-      '<div class="fg" style="width:180px"><span class="fl">Note</span><input class="fc" id="carNote" autocomplete="off" onkeydown="if(event.key===\'Enter\'){event.preventDefault();Rma.carAggiungi()}"></div>' +
-      '<button class="btn" onclick="Rma.carAggiungi()">Aggiungi</button></div>' +
-      '<div class="row" style="margin-top:8px;align-items:center"><div style="flex:1;min-width:260px"><div class="hint" id="carHint" style="color:var(--text)"></div><div class="hint" title="Excel RMA / Importa RMA: RMA e destinazione dei carichi già aperti (filtrati qui sotto), compilati dal Service Desk e reimportati. Importa Excel: colonne SERIALE, RMA, DESTINAZIONE, PO, NOTE (anche PV DESTINO, P.O, SERIAL).">Nuovi carichi: solo NEW/REUSE in giacenza, l\'RMA si può dare anche dopo · Excel RMA / Importa RMA aggiornano i carichi aperti filtrati.</div></div>' +
+    if (s === 'car') return '<div class="row" style="align-items:flex-end;gap:10px">' + Rma.qInput('car') + '<button class="btn" onclick="Rma.carPopup()" title="Aggiungi un carico NEW/REUSE: spara il seriale, destinazione, RMA (anche dopo)">+ Aggiungi</button></div>' +
+      '<div class="row" style="margin-top:8px;align-items:center"><div style="flex:1;min-width:260px"><div class="hint" title="Excel RMA / Importa RMA: RMA e destinazione dei carichi già aperti (filtrati qui sotto), compilati dal Service Desk e reimportati. Importa Excel: colonne SERIALE, RMA, DESTINAZIONE, PO, NOTE (anche PV DESTINO, P.O, SERIAL).">Nuovi carichi: solo NEW/REUSE in giacenza, l\'RMA si può dare anche dopo · Excel RMA / Importa RMA aggiornano i carichi aperti filtrati.</div></div>' +
       '<div style="display:flex;flex-wrap:wrap;gap:6px;justify-content:flex-end;margin-left:auto"><label class="btn ghost sm" style="cursor:pointer">⬆ Importa Excel<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Rma.carImporta(this)"></label>' +
       '<button class="btn ghost sm" onclick="Rma.pendFiltrate()" title="Mette in pending (fermi a deposito) tutti i carichi filtrati nella tabella qui sotto">⏸ Pending filtrate</button> <button class="btn ghost sm" onclick="Rma.sbloccaFiltrate()" title="Rimette in uscita tutti i carichi filtrati che sono in pending">▶ Sblocca filtrate</button> <button class="btn ghost sm" onclick="Rma.carModello()">Modello Excel</button> <button class="btn ghost sm" onclick="Rma.excel()" title="La tabella così come la vedi (righe filtrate): non serve per creare gli RMA">⬇ Excel Tabella</button>' + xr + '</div></div>' +
       '';
@@ -6526,7 +6540,7 @@ var Rma = {
     var keep = {}; ['carSer', 'carRma', 'carDest', 'carPo', 'carNote'].forEach(function (id) { if ($(id)) keep[id] = $(id).value; });
     Rma.calcola(); $('rmaBar').innerHTML = Rma.bar();
     Object.keys(keep).forEach(function (id) { if ($(id)) $(id).value = keep[id]; });
-    if (foc && $(foc) && /^car/.test(foc)) $(foc).focus();
+    if (foc && $(foc) && /^(car|rmaQ)/.test(foc)) { $(foc).focus(); if (foc === 'rmaQ') { var qq = $(foc); qq.setSelectionRange(qq.value.length, qq.value.length); } }
     var usc = Rma.sez === 'usc';
     $('rmaGridBox').style.display = usc ? 'none' : ''; $('rmaUsc').style.display = usc ? '' : 'none';
     if (usc) { Rma.renderUscite(); return; }
@@ -6585,7 +6599,7 @@ var Rma = {
     var base = { thead: 'rmaHead', tbody: 'rmaRows', foot: 'rmaFoot' };
     if (s === 'inv') Rma.grids.inv = new Grid('rmaInv', Object.assign({}, base, {
       empty: 'Nessun pezzo GOOD/BALANCING in giacenza',
-      rows: function () { return Rma.inventario().filter(function (u) { return (!Rma.soloVar || Rma.varia(u)) && (!Rma.soloGmr || Rma.gmrKo(u)); }).sort(function (a, b) { return ((a.tipo === 'GOOD' ? '0' : '1') + a.data_in).localeCompare((b.tipo === 'GOOD' ? '0' : '1') + b.data_in); }); },
+      rows: function () { return Rma.filtroQ(Rma.inventario(), 'inv').filter(function (u) { return (!Rma.soloVar || Rma.varia(u)) && (!Rma.soloGmr || Rma.gmrKo(u)); }).sort(function (a, b) { return ((a.tipo === 'GOOD' ? '0' : '1') + a.data_in).localeCompare((b.tipo === 'GOOD' ? '0' : '1') + b.data_in); }); },
       rowAttr: function (u) { return Rma.varia(u) ? 'class="r-var"' : ''; },
       cols: [
         { k: 'tipo', label: 'Tipo', filter: 'select', html: function (u) { return Pill.tipo(u.tipo); } },
@@ -6661,7 +6675,7 @@ var Rma = {
     }));
     if (s === 'car') Rma.grids.car = new Grid('rmaCar', Object.assign({}, base, {
       empty: 'Nessun carico aperto', sort: 'data', dir: -1,
-      rows: function () { return Rma.carichi(); },
+      rows: function () { return Rma.filtroQ(Rma.carichi(), 'car'); },
       cols: [
         { k: 'data', label: 'Data', cls: 'mono' },
         { k: 'tipo', label: 'Tipo', filter: 'select', html: function (c) { return Pill.tipo(c.tipo); } },
@@ -7136,6 +7150,33 @@ var Rma = {
     var bin = ubi ? Rma.ubiBin(ubi) : '';
     return (ubi && C.find(function (u) { var x = L.up(u.ubicazione); return x === ubi || (bin && (x === bin || Rma.ubiBin(x) === bin)); })) || C[0] || null;
   },
+  // ricerca nelle righe (più valori separati da ;): Carichi e Inventario giornaliero
+  q: {},
+  qInput: function (sez, st) {
+    return '<div class="fg" style="width:320px;' + (st || '') + '"><span class="fl">Cerca</span><input class="fc" id="rmaQ" autocomplete="off" placeholder="seriale, P/N, RMA, destinazione… · più valori con ;" value="' + esc(Rma.q[sez] || '') + '" oninput="Rma.q[\'' + sez + '\']=this.value;clearTimeout(Rma._qT);Rma._qT=setTimeout(function(){var g=Rma.grids[Rma.sez];if(g){g.render();Rma.stats();}},200)"></div>';
+  },
+  filtroQ: function (list, sez) {
+    var qm = L.qm(Rma.q[sez] || ''); if (!qm) return list;
+    return list.filter(function (r) {
+      var t = sez === 'car' ? [r.seriale, r.pn, r.material, r.rma, r.destinazione, r.po_mrn, r.posizione, r.note, r.tipo, r.id_unita]
+        : [r.seriale, r.fr, r.pn, r.mnft, r.riparatore, r.note, r.material, r.destinazione_prevista, r.rma, r.id_unita, r.ubicazione, r.nota_ddt, (Rma.varia(r) || {}).nuova, Rma.dv(r, 'dest'), Rma.dv(r, 'rma')];
+      return qm(t.map(L.s).join(' '));
+    });
+  },
+  // + Aggiungi: stesso inserimento di prima, in un popup che resta aperto per sparare più seriali (la destinazione resta)
+  carPopup: function () {
+    Modal.html('+ Aggiungi carico NEW/REUSE',
+      '<div class="hint" style="margin-bottom:10px">Spara il seriale (Invio → RMA), scrivi la destinazione e premi <b>Aggiungi</b> o Invio sulle note. Il popup resta aperto per il pezzo dopo: <b>la destinazione resta</b>, seriale e note si svuotano. Solo NEW/REUSE in giacenza; l\'RMA si può dare anche dopo.</div>' +
+      '<div class="row">' +
+      '<div class="fg" style="width:240px"><span class="fl">Seriale *</span><input class="fc mono" id="carSer" autocomplete="off" placeholder="spara il seriale" onkeydown="if(event.key===\'Enter\'){event.preventDefault();$(\'carRma\').focus()}" oninput="Rma.carInfo()"></div>' +
+      '<div class="fg" style="width:120px"><span class="fl">RMA</span><input class="fc mono" id="carRma" autocomplete="off" placeholder="anche dopo" onkeydown="if(event.key===\'Enter\'){event.preventDefault();$(\'carDest\').focus()}"></div>' +
+      '<div class="fg" style="width:230px"><span class="fl">Destinazione *</span><input class="fc" id="carDest" list="dlControparti" autocomplete="off" value="' + esc(Rma._carDest || '') + '" oninput="Rma._carDest=this.value"></div>' +
+      '<div class="fg" style="width:130px"><span class="fl">PO / MRN</span><input class="fc mono" id="carPo" autocomplete="off"></div>' +
+      '<div class="fg" style="flex:1;min-width:160px"><span class="fl">Note</span><input class="fc" id="carNote" autocomplete="off" onkeydown="if(event.key===\'Enter\'){event.preventDefault();Rma.carAggiungi()}"></div></div>' +
+      '<div class="hint" id="carHint" style="margin-top:8px;color:var(--text)"></div>',
+      [{ label: 'Chiudi', cls: 'ghost' }, { label: '+ Aggiungi', cls: 'green', keep: true, fn: function () { Rma.carAggiungi(); } }], true);
+    setTimeout(function () { if ($('carSer')) $('carSer').focus(); }, 50);
+  },
   carInfo: function () {
     var u = Rma.carUnita($('carSer').value), h = $('carHint'); if (!h) return;
     if (!L.s($('carSer').value)) { h.textContent = ''; h.className = 'hint'; return; }
@@ -7192,7 +7233,7 @@ var Rma = {
     var o = { seriale: L.s($('carSer').value), rma: Rma.rmaPulito($('carRma').value), destinazione: L.s($('carDest').value), po_mrn: L.s($('carPo').value), note: L.s($('carNote').value) };
     var v = Rma.carValida(o);
     if (v.err) { toast(v.err, 'ko'); (v.u ? (!o.rma ? $('carRma') : $('carDest')) : $('carSer')).focus(); return; }
-    if (!DB.t.CONTROPARTI.rows.some(function (c) { return L.up(c.codice) === L.up(o.destinazione); }) && !(await Modal.confirm('Destinazione non in anagrafica', '"' + o.destinazione + '" non è tra le controparti: il DDT uscirà senza indirizzo. Continuo?'))) return;
+    if (!DB.t.CONTROPARTI.rows.some(function (c) { return L.up(c.codice) === L.up(o.destinazione); }) && !confirm('"' + o.destinazione + '" non è tra le controparti: il DDT uscirà senza indirizzo. Continuo?')) return;   /* confirm semplice: il popup Aggiungi resta aperto */
     try {
       await Rma.carScrivi([Object.assign({ u: v.u }, o)]);
       Snd.ok(); toast('Carico aggiunto: ' + v.u.seriale, 'ok'); $('carSer').value = ''; $('carNote').value = ''; $('carHint').textContent = '';
@@ -7466,7 +7507,7 @@ var Rma = {
       x.pezzi = x.pezzi.filter(function (p) { return !p.manca; }).concat(x.mancanti);
       x.attivi = x.pezzi.filter(function (p) { return !p.manca && !esc0[p.u.id_unita]; });
       x.pronta = x.s && x.s.stato === 'PRONTA' && x.attivi.length > 0; return x;
-    });
+    }).filter(function (x) { return x.pezzi.length || !x.s || x.s.stato !== 'BOZZA' || L.s(x.s.n_ddt); });   /* bozza vuota (i pezzi sono andati altrove): via; torna se rientrano pezzi */
   },
   renderUscite: function () {
     var G = Rma.gruppi(), d = $('uscData').value, esc0 = Rma.escl(), nP = G.filter(function (g) { return g.pronta; }).length;
@@ -7725,6 +7766,18 @@ var Rma = {
       Ddt.apri(d, w);
       API.append(DB.id, 'LOG', [App.log('RMA_RIEPILOGO_STAMPATO', 'SPEDIZIONI', d0, { destinazioni: G.length, pezzi: tot })], true).catch(function () { });
     } catch (e) { if (w) w.close(); Modal.open('Riepilogo non creato', e.message); }
+  },
+  // destinazioni (chiave) i cui colli a video sono uguali a quelli salvati (o ancora vuoti): si possono riprendere dal database
+  colliPuliti: function () {
+    var out = [], d = $('uscData') ? $('uscData').value : L.isoToday(), n = function (c) { return [L.up(c.tipo || 'COLLO'), L.up(L.s(c.misura).replace(/\s+/g, '')), L.s(c.peso).replace(',', '.')].join('|'); };
+    var vuoto = function (col) { return col.every(function (c) { return !L.s(c.misura) && !L.s(c.peso); }); };
+    var dest = {}; try { Rma.gruppi().forEach(function (g) { dest[Ack.key(g.dest)] = g.dest; }); } catch (e) { }
+    Object.keys(Rma.colli || {}).forEach(function (k) {
+      var loc = Rma.colli[k] || [], s = dest[k] ? Rma.sped(d, dest[k]) : null;
+      var db = s ? Ack.colliDb(s.id_spedizione).map(function (c) { return { tipo: c.tipo_collo, misura: [c.lunghezza_cm, c.larghezza_cm, c.altezza_cm].join('X'), peso: c.peso_kg }; }) : [];
+      if (vuoto(loc) || loc.map(n).join(';') === db.map(n).join(';')) out.push(k);
+    });
+    return out;
   },
   ddtTutti: function () {
     var ids = Rma.gruppi().filter(function (g) { return g.s && g.s.n_ddt && g.s.stato === 'SPEDITA'; }).map(function (g) { return g.s.id_spedizione; });
@@ -8631,7 +8684,7 @@ var Sto = {
   },
   // data e ora leggibili: "13/10/2026 12:41" (i movimenti migrati hanno solo la data)
   dataOra: function (v) { v = L.s(v); var g = L.normDate(v), t = /(\d{1,2}:\d{2})/.exec(v.slice(10)); return g ? L.itDate(g) + (t ? ' ' + t[1] : '') : v; },
-  op: function (r) { return r.operatore_sigla || L.s(r.operatore).split('@')[0]; },
+  op: function (r) { if (L.s(r.operatore_sigla)) return L.up(r.operatore_sigla); var e = L.s(r.operatore); if (!e) return ''; var o = DB.t.OPERATORI.rows.find(function (x) { return L.s(x.email).toLowerCase() === e.toLowerCase(); }); return o && o.sigla ? L.up(o.sigla) : e.split('@')[0]; },   /* come la Dashboard */
   dir: function (r) { return r.direzione === 'IN' || r.direzione === 'OUT' ? r.direzione : 'INT'; },
   // movimento annullato (causale …_ANNULLATO): resta nello storico ma non conta (Easyloader, KPI, dashboard, riallineamento)
   annullato: function (r) { return /_ANNULLATO$/.test(L.s(r && r.causale)); },
@@ -10855,7 +10908,8 @@ var Dash = {
     } catch (e) { $('dashBody').innerHTML = '<div class="card empty">Errore: ' + esc(e.message) + '</div>'; }
   },
   nome: function (email, sigla) {
-    var o = DB.t.OPERATORI.rows.find(function (x) { return (email && L.s(x.email).toLowerCase() === L.s(email).toLowerCase()) || (sigla && L.up(x.sigla) === L.up(sigla)); });
+    if (L.s(sigla)) return L.up(sigla);   /* la sigla salvata sul movimento vince sull'email (account condiviso, per conto di…): come in Movimenti */
+    var o = DB.t.OPERATORI.rows.find(function (x) { return email && L.s(x.email).toLowerCase() === L.s(email).toLowerCase(); });
     return o ? (o.sigla || o.nome || o.email) : (L.up(sigla) || L.s(email).split('@')[0] || '(senza operatore)');
   },
   intervallo: function () {
