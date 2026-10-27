@@ -374,6 +374,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
   .mc-det .mc-r>span{flex:0 0 96px;font-size:10px;letter-spacing:.8px;text-transform:uppercase;color:var(--muted);padding-top:3px}
   .mc-det .mc-r>div{flex:1;min-width:0;word-break:break-word}
 }
+.chev{display:inline-block;transition:transform .15s;margin-right:4px}details[open]>summary .chev{transform:rotate(90deg)}summary::-webkit-details-marker{display:none}
 </style>
 </head>
 <body>
@@ -6893,11 +6894,11 @@ var Rma = {
   },
   pendCard: function () {
     var L0 = Rma.pendAttivi(); if (!L0.length) return '';
-    return '<div class="card" style="margin-bottom:12px;border-color:var(--amber)"><div class="row" style="align-items:center"><b>⏸ In pending · fermi a deposito (' + L0.length + ')</b><span class="hint">' + (function () { var nc = L0.filter(function (p) { return p.id_carico; }).length; return nc && nc < L0.length ? nc + ' carichi NEW/REUSE · ' + (L0.length - nc) + ' altre schede (GOOD/BALANCING) · ' : ''; })() + 'non escono finché non li rimetti in uscita</span></div>' +
+    return '<details class="card" style="margin-bottom:12px;border-color:var(--amber)"' + (Rma._pendAperto ? ' open' : '') + ' ontoggle="Rma._pendAperto=this.open"><summary class="row" style="align-items:center;cursor:pointer"><span class="chev">▸</span><b>⏸ In pending · fermi a deposito (' + L0.length + ')</b><span class="hint">' + (function () { var nc = L0.filter(function (p) { return p.id_carico; }).length; return nc && nc < L0.length ? nc + ' carichi NEW/REUSE · ' + (L0.length - nc) + ' altre schede (GOOD/BALANCING) · ' : ''; })() + 'non escono finché non li rimetti in uscita · clic per ' + (Rma._pendAperto ? 'chiudere' : 'vedere l\'elenco') + '</span></summary>' +
       '<div class="usc-lista" style="margin-top:8px">' + L0.map(function (p) {
         return '<div class="usc-p"><div class="usc-pi"><span class="mono">' + esc(p.seriale) + '</span><span class="usc-pd">· ' + esc(p.tipo) + (p.rma ? ' · RMA <b class="mono">' + esc(p.rma) + '</b>' : '') + (p.destinazione ? ' · ' + esc(p.destinazione) : '') + ' · <span style="color:var(--amber)">' + esc(p.motivo) + '</span> · ' + esc(L.s(p.messo_da).split('@')[0]) + ' ' + esc(L.itDate(p.messo_il)) + '</span></div>' +
           '<button class="btn ghost sm" onclick="Rma.pendSblocca(\'' + p.id_pending + '\')">▶ Rimetti in uscita</button>' + (Rma.pendEliminabile(p) ? ' <button class="btn ghost sm" title="' + (p.id_carico ? 'Annulla il carico' : 'Togli l RMA creato') + '" onclick="Rma.pendElimina(\'' + p.id_pending + '\')">🗑 Elimina</button>' : '') + '</div>';
-      }).join('') + '</div></div>';
+      }).join('') + '</div></details>';
   },
   // ─ EXCEL RMA per il Service Desk: scarica le schede filtrate, il SD compila RMA CREATO (e NUOVA DESTINAZIONE se cambia), poi si reimporta
   XR: ['P/N', 'MATERIAL', 'ID UNITA', 'SERIALE', 'FR', 'TIPO', 'MNFT', 'REPAIR', 'DESTINAZIONE ORIGINALE', 'DESTINAZIONE ATTUALE', 'NUOVA DESTINAZIONE', 'RMA CREATO', 'RMA GIACENZA PROPOSTO', 'DESTINAZIONE RITORNO', 'DATA OPEN', 'SCADENZA', 'NOTE SD', 'RMA AL DOWNLOAD'],
@@ -7445,7 +7446,7 @@ var Rma = {
   },
   carCard: function () {
     var L0 = Rma.carNonVisti(); if (!L0.length) return '';
-    return '<details class="hint warn" style="margin-bottom:10px"' + (Rma._carAperto ? ' open' : '') + ' ontoggle="Rma._carAperto=this.open"><summary style="cursor:pointer"><b>⚠ ' + L0.length + ' carichi NEW/REUSE aperti non compaiono nelle uscite</b> <span style="font-weight:normal">(clic per ' + (Rma._carAperto ? 'chiudere' : 'vedere l\'elenco') + ')</span></summary>' + L0.map(function (o) {
+    return '<details class="hint warn" style="margin-bottom:10px"' + (Rma._carAperto ? ' open' : '') + ' ontoggle="Rma._carAperto=this.open"><summary style="cursor:pointer;list-style:none"><span class="chev">▸</span> <b>⚠ ' + L0.length + ' carichi NEW/REUSE aperti non compaiono nelle uscite</b> <span style="font-weight:normal">(clic per ' + (Rma._carAperto ? 'chiudere' : 'vedere l\'elenco') + ')</span></summary>' + L0.map(function (o) {
       return '<div style="margin-top:4px"><span class="mono">' + esc(o.c.seriale) + '</span> · RMA ' + esc(o.c.rma || '—') + ' → ' + esc(o.c.destinazione || '—') + ': ' + esc(o.x.m) +
         (o.x.fix === 'RICOLLEGA' ? ' <button class="btn ghost sm" onclick="Rma.carRicollega(\'' + o.c.id_carico + '\')">↻ Rimetti in uscita</button>' : '') + '</div>';
     }).join('') + '</details>';
