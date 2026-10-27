@@ -2,7 +2,7 @@
 // @name         ATS FLM → VLT · Chiusure
 // @namespace    ats-spa.flm
 // @author       Daniele Izzo
-// @version      1.0.9
+// @version      1.0.10
 // @description  Chiude su VLT ingressi del giorno (op. linea), ACK, RMA e spare ferme in HUB con i dati dell'app "ATS - Fastweb FLM". Sostituisce i 4 script con i CSV.
 // @match        https://logistictoolvf.net.vodafone.it/*
 // @match        https://ats-spa.github.io/*
@@ -27,7 +27,7 @@
 */
 (function () {
   'use strict';
-  var VER = '1.0.9';
+  var VER = '1.0.10';
   var VLT_HOST = 'logistictoolvf.net.vodafone.it';
   var K = { CODA: 'ats_coda', STATO: 'ats_stato_', PEND: 'ats_esiti_pending', RICH: 'ats_richiesta', APP: 'ats_app_url', VIVO: 'ats_vlt_vivo', RUN: 'ats_run', UI: 'ats_ui', RICEVUTI: 'ats_esiti_ricevuti' };
   // esiti da consegnare = scritti da VLT (PEND) meno quelli già confermati dall'app (RICEVUTI): ognuno scrive solo la sua chiave
@@ -330,7 +330,10 @@
       if (b) b.click(); else inp.dispatchEvent(new KeyboardEvent('keydown', { key: 'Enter', keyCode: 13, bubbles: true }));
       // aspetta la risposta della ricerca e che la tabella smetta di cambiare (le risposte in ritardo ridisegnano la lista)
       await netAttendi(function (e) { return e.m === 'GET' && RX_RMA.test(e.u); }, 20000, t0);
-      var rx = new RegExp('(^|[^0-9a-z])' + String(it.rma).trim().replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^0-9a-z]|$)', 'i');
+      // l'ID su VLT è "RMA214295" e il testo della riga attacca le celle ("RMA21429527/10/2026…"): si confronta cella per cella
+      var num = String(it.rma).trim().replace(/^RMA\s*/i, '').replace(/^0+(?=\d)/, '');
+      var rx = new RegExp('(^|[^0-9])' + num.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^0-9]|$)', 'i');
+      var eRma = function (r) { return $$('td', r).some(function (td) { return String(td.textContent || '').trim().replace(/^RMA\s*/i, '').replace(/^0+(?=\d)/, '') === num; }); };
       var righe = function () { return $$('table tbody tr').filter(function (r) { return r.offsetParent && $$('td', r).length > 1; }); };
       var firma = '', stabile = 0, tr = null, fine = Date.now() + 15000;
       while (Date.now() < fine) {
@@ -339,7 +342,7 @@
         var ultimaGet = NET.reduce(function (m, e) { return e.m === 'GET' && RX_RMA.test(e.u) && e.t0 >= t0 ? Math.max(m, e.t) : m; }, 0);
         stabile = f === firma ? stabile + 1 : 0; firma = f;
         if (stabile >= 3 && Date.now() - ultimaGet > 700) {
-          tr = R.find(function (r) { return rx.test(r.textContent); }) || (R.length === 1 ? R[0] : null);
+          tr = R.find(eRma) || null;   /* solo la riga con quell'ID: VLT può restituire anche altri RMA */
           if (tr) break;
         }
         await sleep(200);
@@ -352,7 +355,7 @@
       // se dopo 5 secondi la modifica non si è aperta (riga ridisegnata nel frattempo) riclicca una volta sulla riga attuale
       var aperto = await attendi(function () { return $('select#field_rmaStatus'); }, 5000);
       if (!aperto) {
-        var tr2 = righe().find(function (r) { return rx.test(r.textContent); }) || tr, ed2 = tr2 && document.contains(tr2) ? trova(tr2) : null;
+        var tr2 = righe().find(eRma) || tr, ed2 = tr2 && document.contains(tr2) ? trova(tr2) : null;
         if (ed2) { UI.log('↻ RMA ' + it.rma + ': la modifica non si era aperta, riclicco'); ed2.click(); }
       }
       var sel = await attendi(function () { var s = $('select#field_rmaStatus'); return s && s.options.length > 1 && testoSel(s) ? s : null; }, 15000);
@@ -398,8 +401,8 @@
           await sleep(1500);
           ok = buone(); if (ok.length) return fatto(ok[ok.length - 1].u);
           // nessuna risposta intercettata: controllo lo stato sulla lista di VLT
-          var rx = new RegExp('(^|[^0-9a-z])' + String(it.rma).trim() + '([^0-9a-z]|$)', 'i');
-          var tr = await attendi(function () { return $$('table tbody tr').find(function (r) { return rx.test(r.textContent); }); }, 4000);
+          var num2 = String(it.rma).trim().replace(/^RMA\s*/i, '').replace(/^0+(?=\d)/, '');
+          var tr = await attendi(function () { return $$('table tbody tr').find(function (r) { return $$('td', r).some(function (td) { return String(td.textContent || '').trim().replace(/^RMA\s*/i, '').replace(/^0+(?=\d)/, '') === num2; }); }); }, 4000);
           if (tr && norm(tr.textContent).indexOf('shipped from cw') >= 0) return fatto('verificato dalla lista');
           UI.seriali(null); return { esito: 'SALTATO', stato_prima: S0, stato_dopo: S0, dettaglio: 'scheda chiusa senza conferma del salvataggio: controlla su VLT' };
         }
