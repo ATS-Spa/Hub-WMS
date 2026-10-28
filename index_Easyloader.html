@@ -425,7 +425,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
       <div class="blk-banner" id="blkBanner" style="display:none"></div>
       <div class="card">
         <div class="card-h"><div class="card-t">Testata ingresso</div><div class="spacer"></div>
-          <span class="pill p-amber" id="inPerConto" style="display:none"></span> <button class="btn ghost sm" onclick="Ingresso.importa()" title="Ricarica un Excel &quot;Pezzi letti&quot; scaricato dall'app (serve la password)">⬆ Importa pezzi letti</button> <button class="btn ghost sm" onclick="Ingresso.nuovo()">Nuovo ingresso</button></div>
+          <span class="pill p-amber" id="inPerConto" style="display:none"></span> <button class="btn ghost sm" id="inAttese" style="display:none" onclick="Ingresso.etichetteAttese()" title="FR attesi su VLT con lo stesso AWB (non ancora in giacenza): stampa le etichette prima di sparare">🏷 Etichette attese</button> <button class="btn ghost sm" onclick="Ingresso.importa()" title="Ricarica un Excel &quot;Pezzi letti&quot; scaricato dall'app (serve la password)">⬆ Importa pezzi letti</button> <button class="btn ghost sm" onclick="Ingresso.nuovo()">Nuovo ingresso</button></div>
         <div class="hdr">
           <div class="fg"><span class="fl">Tipo *</span>
             <select class="fc" id="inTipo" onchange="Ingresso.onTestata()">
@@ -2044,7 +2044,29 @@ var Ingresso = {
       if (!L.s($('inMittente').value)) { $('inMittente').value = (T.tipo === 'GOOD') ? App.aliasRip(first.rip) : (first.depDest || ''); Ingresso.fitMitt(); }
       if (!L.s($('inAwb').value) && T.tipo !== 'GOOD' && v1.awb_cw) { $('inAwb').value = v1.awb_cw; Ingresso.onAwbSilent(); }
     }
-    Ingresso.render();
+    Ingresso.render(); Ingresso.aggAttese();
+  },
+  // FR attesi: su VLT con lo stesso AWB (CE/123 = CE123), non Aborted/Draft/Close, non ancora schede (anche già uscite); i pezzi letti restano dentro
+  attese: function () {
+    var T = Ingresso.T(), a = AwbF.pulisci(T.awb); if (T.tipo !== 'FAULTY' || !a || a.length < 6 || !/[1-9]/.test(a) || !DB.vlt) return [];   /* niente AWB segnaposto (000000, N/A…) */
+    var gia = {}; DB.t.UNITA.rows.forEach(function (u) { if (L.s(u.fr) && u.stato !== 'ANNULLATO') gia[L.s(u.fr)] = 1; });
+    return DB.vlt.rows.filter(function (v) { return L.s(v.awb_cw) && AwbF.pulisci(v.awb_cw) === a && !Prop.escluso(v.stato) && !gia[L.s(v.fr_id)]; });
+  },
+  aggAttese: function () { var b = $('inAttese'); if (!b) return; var n = 0; try { n = Ingresso.attese().length; } catch (e) { } b.style.display = n ? '' : 'none'; b.textContent = '🏷 Etichette attese (' + n + ')'; },
+  etichetteAttese: function () {
+    var A = Ingresso.attese(), T = Ingresso.T(); if (!A.length) { toast('Nessun FR atteso con AWB ' + T.awb, 'ko'); return; }
+    var letti = {}; (Ingresso.computed || []).forEach(function (c) { if (c.fr) letti[L.s(c.fr)] = 1; });
+    Modal.html('🏷 Etichette attese · AWB ' + esc(T.awb),
+      '<div class="hint" style="margin-bottom:8px">FR su VLT con questo AWB e non ancora in giacenza: <b>' + A.length + '</b>. Etichetta FAULTY con la tua sigla (' + esc(App.chi().sigla || '—') + '); l’ubicazione si assegna al carico e qui non c’è.</div>' +
+      '<div class="tbl-wrap modal-scroll" style="max-height:55vh"><table><thead><tr><th><input type="checkbox" id="eaTutte" checked></th><th>FR</th><th>S/N</th><th>P/N</th><th>Riparatore</th><th>Stato VLT</th><th></th></tr></thead><tbody>' +
+      A.map(function (v, i) { return '<tr><td><input type="checkbox" class="eaSel" data-i="' + i + '" checked></td><td class="mono">' + esc(v.fr_id) + '</td><td class="mono">' + esc(v.f_mat_serial_no) + '</td><td class="mono">' + esc(v.f_mat_tmpn) + '</td><td>' + esc(App.normRip(v.riparatore)) + '</td><td>' + esc(v.stato) + '</td><td>' + (letti[L.s(v.fr_id)] ? '<span class="pill p-green">già letto</span>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>',
+      [{ label: 'Chiudi', cls: 'ghost' }, { label: '🏷 Stampa', cls: 'green', keep: true, fn: function () {
+        var S = [].slice.call(document.querySelectorAll('#mBody .eaSel:checked')).map(function (x) { return A[+x.getAttribute('data-i')]; }); if (!S.length) { toast('Spunta almeno un FR', 'ko'); return; }
+        var op = App.chi().sigla || '', dt = L.itDate(T.data || L.isoToday());
+        Etichette.pezzi(S.map(function (v) { return Etichette.ingresso({ tipo: 'FAULTY', fr: v.fr_id, seriale: v.f_mat_serial_no, pn: v.f_mat_tmpn, riparatore: App.normRip(v.riparatore), ubicazione: '', mittente: T.mittente, data: dt, op: op }); }), 'Etichette attese');
+        API.append(DB.id, 'LOG', [App.log('ETICHETTE_ATTESE', 'VLT', T.awb, { n: S.length, fr: S.map(function (v) { return v.fr_id; }).slice(0, 300) })], true).catch(function () { });
+      } }], true);
+    var tt = $('eaTutte'); if (tt) tt.onchange = function () { document.querySelectorAll('#mBody .eaSel').forEach(function (x) { x.checked = tt.checked; }); };
   },
   onAwbSilent: function () { var v = L.vettoreDaAwb($('inAwb').value, DB.t.VETTORI.rows); if (v && !L.s($('inVettore').value)) $('inVettore').value = v; },
   mailLink: function (c, T) {
@@ -2307,7 +2329,7 @@ var Ingresso = {
     Xls.scarica('Pezzi_letti_' + (T.tipo || ''), [{ nome: 'Pezzi letti', headers: ['#', 'Tipo', 'FR', 'RMA', 'Seriale', 'P/N', 'P/N in anagrafica', 'MNFT', 'Riparatore', 'Stato VLT', 'Nota', 'Destinazione / Ubicazione', 'Controlli', 'Mittente', 'AWB', 'DDT mittente', 'Data ingresso'],
       rows: Ingresso.computed.map(function (c, i) { return [i + 1, c.tipo, c.fr, c.rma, c.ser, c.pn, c.pnAnag === undefined ? '' : (c.pnAnag ? 'SI' : 'NO'), c.mnft, c.rip, c.statoVlt, c.nota, c.tipo === 'NEW' || c.tipo === 'REUSE' ? c.ubicazione : [c.destinazione, c.ubicazione].filter(Boolean).join(' · '), c.msgs.map(function (m) { return m[1]; }).join(' / '), T.mittente, T.awb, T.ddt, T.data]; }) }]);
   },
-  etichetteLetti: function () { var T = Ingresso.T(); if (T.tipo === 'GOOD' || T.tipo === 'SCRAP') { Modal.open('Etichette GOOD e SCRAP', 'Per GOOD e SCRAP l\'etichetta riporta l\'ID della scheda, che esiste solo dopo "Carica dati".\nCarica i pezzi e stampale da Ingressi di oggi: l\'app ricorda quelle già stampate e propone solo le nuove.'); return; } Etichette.pezzi(Ingresso.computed.map(function (c) { return Etichette.ingresso({ tipo: c.tipo, id: c.idPrev, dest: c.destinazione, fr: c.fr, po: T.po, seriale: c.ser, pn: c.pn, riparatore: c.rip, ubicazione: c.ubicazione, mittente: T.mittente }); })); },
+  etichetteLetti: function () { var T = Ingresso.T(); if (T.tipo === 'GOOD' || T.tipo === 'SCRAP') { Modal.open('Etichette GOOD e SCRAP', 'Per GOOD e SCRAP l\'etichetta riporta l\'ID della scheda, che esiste solo dopo "Carica dati".\nCarica i pezzi e stampale da Ingressi di oggi: l\'app ricorda quelle già stampate e propone solo le nuove.'); return; } Etichette.pezzi(Ingresso.computed.map(function (c) { return Etichette.ingresso({ tipo: c.tipo, id: c.idPrev, dest: c.destinazione, fr: c.fr, po: T.po, seriale: c.ser, pn: c.pn, riparatore: c.rip, ubicazione: c.ubicazione, mittente: T.mittente, op: App.chi().sigla || '' }); })); },
   excelOggi: function () {
     var U = Ingresso._oggi || [];
     Xls.scarica('Ingressi_di_oggi', [Object.assign({ nome: 'Ingressi di oggi' }, Xls.oggetti(U, [['id_unita', 'ID'], ['tipo', 'Tipo'], ['fr', 'FR'], ['rma', 'RMA'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['mnft', 'MNFT'], ['riparatore', 'Riparatore'], ['destinazione_prevista', 'Destinazione'], ['ubicazione', 'Ubicazione'], ['note', 'Nota'], ['data_in', 'Data ingresso'], ['id_mov_in', 'Movimento'], ['creato_da', 'Operatore'], ['creato_il', 'Registrato il']]))]);
@@ -2852,6 +2874,28 @@ var Reso = {
 // B) schede ancora in giacenza con un'uscita registrata dopo l'ingresso → solo segnalate (da verificare a mano).
 // Per tutti, con la password; anteprima con spunta; LOG e movimento interno RIALLINEA per ogni scheda creata.
 var Rial = {
+  // riga di filtri sotto l'intestazione di ogni lista (A, B, C, D): più valori con ; · le azioni prendono solo le righe spuntate e visibili
+  filtri: function () {
+    document.querySelectorAll('#mBody table').forEach(function (tb) {
+      var cb = tb.querySelector('tbody input[type=checkbox]'), thr = tb.querySelector('thead tr'); if (!cb || !thr) return;
+      var fr = document.createElement('tr'); fr.className = 'rl-filtri';
+      Array.prototype.forEach.call(thr.children, function (th, j) {
+        var c = document.createElement('th'); c.style.cssText = 'padding:2px 4px;position:static';
+        if (j > 0) { var i = document.createElement('input'); i.className = 'fc'; i.placeholder = 'filtra'; i.autocomplete = 'off'; i.style.cssText = 'width:100%;min-width:56px;padding:3px 6px;font-size:11px;height:auto'; i.oninput = function () { Rial.applica(tb); }; c.appendChild(i); }
+        fr.appendChild(c);
+      });
+      thr.parentNode.appendChild(fr);
+    });
+  },
+  applica: function (tb) {
+    var Q = Array.prototype.map.call(tb.querySelectorAll('thead tr.rl-filtri th'), function (th) { var i = th.querySelector('input'); return i && L.s(i.value) ? L.qm(i.value) : null; });
+    var n = 0, tot = 0;
+    tb.querySelectorAll('tbody tr').forEach(function (tr) {
+      var td = tr.children, ok = Q.every(function (q, j) { return !q || (td[j] && q(td[j].textContent)); });
+      tr.style.display = ok ? '' : 'none'; tot++; if (ok) n++;
+    });
+    var c0 = tb.querySelector('thead tr.rl-filtri th'); if (c0) { c0.textContent = Q.some(Boolean) ? n + '/' + tot : ''; c0.style.fontSize = '10px'; }
+  },
   HUB_FAULTY: ['FAILED MATERIAL SENT', 'FAILED MATERIAL RECEIVED AND VERIFY', 'PENDING SERVICE DESK', 'FAILURE REPORT SENT', 'OPEN', 'ABORTED', 'PENDING FOR REPAIRER REJECT MANAGEMENT'],
   apri: function () {
     Modal.html('🔁 Riallinea giacenza dai movimenti', '<div class="hint" style="margin-bottom:8px">Cerca i pezzi che hanno <b>l\'ingresso nei movimenti ma non la scheda in giacenza</b> (e le schede in giacenza che hanno già un\'uscita). Prima vedi l\'anteprima.</div>' +
@@ -2930,29 +2974,30 @@ var Rial = {
       (D.length ? '<div class="tbl-wrap modal-scroll" style="max-height:22vh"><table><thead><tr><th><input type="checkbox" id="rlDTutti"></th><th>Mov. IN</th><th>Data</th><th>Scheda</th><th>Stato</th><th>Tipo</th><th>FR</th><th>Seriale</th><th>P/N</th><th>Tolta il</th><th>Da</th><th style="min-width:220px">Ultima nota</th><th style="min-width:200px">Avvisi</th></tr></thead><tbody>' +
         D.map(function (x, i) { return '<tr' + (x.avv.length ? ' class="r-warn"' : '') + '><td><input type="checkbox" class="rlDSel" data-i="' + i + '"></td><td class="mono">' + esc(x.m.id_mov) + '</td><td>' + esc(L.itDate(x.m.data_ora)) + '</td><td class="mono">' + esc(x.u.id_unita) + '</td><td>' + esc(x.u.stato) + '</td><td>' + esc(x.u.tipo) + '</td><td class="mono">' + esc(x.u.fr) + '</td><td class="mono">' + esc(x.u.seriale) + '</td><td class="mono">' + esc(x.u.pn) + '</td><td>' + esc(L.vedi(L.s(x.u.modificato_il).slice(0, 16))) + '</td><td>' + esc(App.sigla(x.u.modificato_da)) + '</td><td style="font-size:11.5px">' + esc(x.ultima) + '</td><td style="font-size:11.5px">' + esc(x.avv.join(' / ')) + '</td></tr>'; }).join('') + '</tbody></table></div>' : ''),
       [{ label: 'Chiudi', cls: 'ghost' }].concat(D.length ? [{ label: '↻ Rimetti in giacenza le D spuntate', cls: 'ghost', keep: true, fn: function () {
-        var sel = Array.prototype.slice.call(document.querySelectorAll('#mBody .rlDSel')).filter(function (c) { return c.checked; }).map(function (c) { return Rial.R.D[+c.getAttribute('data-i')]; });
+        var sel = Array.prototype.slice.call(document.querySelectorAll('#mBody .rlDSel')).filter(function (c) { return c.checked && c.closest('tr').style.display !== 'none'; }).map(function (c) { return Rial.R.D[+c.getAttribute('data-i')]; });
         if (!sel.length) { toast('Spunta almeno una riga della lista D', 'ko'); return; }
         Rial.rimettiD(sel);
       } }] : []).concat(C.length ? [{ label: '↩ Togli le schede C spuntate', cls: 'red', keep: true, fn: function () {
-        var sel = Array.prototype.slice.call(document.querySelectorAll('#mBody .rlCSel')).filter(function (c) { return c.checked; }).map(function (c) { return Rial.R.C[+c.getAttribute('data-i')]; });
+        var sel = Array.prototype.slice.call(document.querySelectorAll('#mBody .rlCSel')).filter(function (c) { return c.checked && c.closest('tr').style.display !== 'none'; }).map(function (c) { return Rial.R.C[+c.getAttribute('data-i')]; });
         if (!sel.length) { toast('Spunta almeno una scheda della lista C', 'ko'); return; }
         Rial.togli(sel);
       } }] : []).concat(B.length ? [{ label: '✔ Chiudi come uscite le B spuntate', cls: 'green', keep: true, fn: function () {
-        var sel = Array.prototype.slice.call(document.querySelectorAll('#mBody .rlBSel')).filter(function (c) { return c.checked; }).map(function (c) { return Rial.R.B[+c.getAttribute('data-i')]; });
+        var sel = Array.prototype.slice.call(document.querySelectorAll('#mBody .rlBSel')).filter(function (c) { return c.checked && c.closest('tr').style.display !== 'none'; }).map(function (c) { return Rial.R.B[+c.getAttribute('data-i')]; });
         if (!sel.length) { toast('Spunta almeno una scheda della lista B', 'ko'); return; }
         Rial.chiudiB(sel);
       } }] : []).concat(A.length ? [{ label: '📥 Crea le schede spuntate', cls: 'green', keep: true, fn: function () {
-        var sel = Array.prototype.slice.call(document.querySelectorAll('#mBody .rlSel')).filter(function (c) { return c.checked; }).map(function (c) { return Rial.R.A[+c.getAttribute('data-i')]; });
+        var sel = Array.prototype.slice.call(document.querySelectorAll('#mBody .rlSel')).filter(function (c) { return c.checked && c.closest('tr').style.display !== 'none'; }).map(function (c) { return Rial.R.A[+c.getAttribute('data-i')]; });
         if (!sel.length) { toast('Spunta almeno un pezzo', 'ko'); return; }
         Rial.crea(sel);
       } }] : []), true);
+    Rial.filtri();
     $('rlRic').onclick = function () { Rial.da = $('rlDa').value || Rial.da; Rial.anteprima(); };
     $('rlXls').onclick = function () { Rial.excel(); };
     if ($('rlCMig')) $('rlCMig').onclick = function () { document.querySelectorAll('#mBody .rlCSel').forEach(function (c) { c.checked = /\(MIGRAZIONE_/.test(L.s(Rial.R.C[+c.getAttribute('data-i')].note)); }); };
-    if ($('rlBTutti')) $('rlBTutti').onchange = function () { document.querySelectorAll('#mBody .rlBSel').forEach(function (c) { c.checked = $('rlBTutti').checked; }); };
-    if ($('rlDTutti')) $('rlDTutti').onchange = function () { document.querySelectorAll('#mBody .rlDSel').forEach(function (c) { c.checked = $('rlDTutti').checked; }); };
-    if ($('rlCTutti')) $('rlCTutti').onchange = function () { document.querySelectorAll('#mBody .rlCSel').forEach(function (c) { c.checked = $('rlCTutti').checked; }); };
-    if ($('rlTutti')) $('rlTutti').onchange = function () { document.querySelectorAll('#mBody .rlSel').forEach(function (c) { c.checked = $('rlTutti').checked; }); };
+    if ($('rlBTutti')) $('rlBTutti').onchange = function () { document.querySelectorAll('#mBody .rlBSel').forEach(function (c) { if (c.closest('tr').style.display !== 'none') c.checked = $('rlBTutti').checked; }); };
+    if ($('rlDTutti')) $('rlDTutti').onchange = function () { document.querySelectorAll('#mBody .rlDSel').forEach(function (c) { if (c.closest('tr').style.display !== 'none') c.checked = $('rlDTutti').checked; }); };
+    if ($('rlCTutti')) $('rlCTutti').onchange = function () { document.querySelectorAll('#mBody .rlCSel').forEach(function (c) { if (c.closest('tr').style.display !== 'none') c.checked = $('rlCTutti').checked; }); };
+    if ($('rlTutti')) $('rlTutti').onchange = function () { document.querySelectorAll('#mBody .rlSel').forEach(function (c) { if (c.closest('tr').style.display !== 'none') c.checked = $('rlTutti').checked; }); };
   },
   // annulla le schede create per errore dal riallineamento: escono dalla giacenza (ANNULLATO), il movimento IN torna senza scheda
   togli: async function (sel) {
@@ -9294,7 +9339,7 @@ var Etichette = {
       var J = window.jspdf.jsPDF, d = new J({ unit: 'mm', format: [100, 50], orientation: 'landscape' }), logo = (Ack._lg || {}).sx;
       lista.forEach(function (e, i) {
         if (i) d.addPage([100, 50], 'landscape');
-        Etichette.testata(d, logo, e.ubi !== undefined ? e.ubi : e.riparatore);   // ingresso: in alto a destra l'ubicazione (vuoto se non c'è)
+        Etichette.testata(d, logo, e.ubi !== undefined ? e.ubi : e.riparatore, e.sig);   // ingresso: in alto a destra l'ubicazione (vuoto se non c'è)
         Etichette.riga(d, 13, e.lab || 'FR', e.fr, 20, e.qr);
         Etichette.riga(d, 27, 'S/N', e.seriale, 16);
         d.setDrawColor(200); d.line(3, 41, 97, 41);
@@ -9308,8 +9353,9 @@ var Etichette = {
     } catch (er) { if (w) w.close(); Modal.open('Etichette', er.message); }
   },
   QR: 8, // lato QR in mm (era 24-25: ridotto a 1/3)
-  testata: function (d, logo, destra) {
-    if (logo) { try { var h = 7, wl = Math.min(26, h * logo.w / logo.h); d.addImage(logo.url, 'PNG', 3, 2.5, wl, wl * logo.h / logo.w); } catch (x) { } }
+  testata: function (d, logo, destra, sig) {
+    var wl = 0; if (logo) { try { var h = 7; wl = Math.min(26, h * logo.w / logo.h); d.addImage(logo.url, 'PNG', 3, 2.5, wl, wl * logo.h / logo.w); } catch (x) { } }
+    if (L.s(sig)) { d.setTextColor(0); d.setFont('helvetica', 'bold'); Etichette.fit(d, L.up(sig), 3 + (wl || 22) + 4, 8.3, 16, 14, 9); }   /* FAULTY: chi lavora il pezzo */
     d.setTextColor(0); d.setFont('helvetica', 'bold');
     Etichette.fit(d, L.s(destra), 97, 8, 64, 13, 8, 'right');
     d.setDrawColor(160); d.line(3, 11, 97, 11);
@@ -9366,9 +9412,11 @@ var Etichette = {
       if (idS && !op) { var uE = DB.t.UNITA.rows.find(function (y) { return y.id_unita === idS; }); if (uE && uE.creato_da && uE.creato_da !== 'MIGRAZIONE') op = App.sigla(uE.creato_da); }
       return { lab: idS ? 'SCHEDA' : 'FR', fr: idS ? idS + (op ? ' / ' + L.up(op) : '') : L.s(x.fr), qr: idS || '', seriale: x.seriale, pn: x.pn, tipo: x.tipo, ubi: L.up(x.ubicazione) || L.up(x.dest), sotto: [idS && L.s(x.fr) ? 'FR ' + L.s(x.fr) : '', x.data].map(L.s).filter(Boolean).join(' · ') };
     }
-    return { lab: nr ? 'PO/MRN' : 'FR', fr: nr ? L.s(x.po) : L.s(x.fr), seriale: x.seriale, pn: x.pn, tipo: x.tipo, ubi: L.up(x.ubicazione), sotto: [x.riparatore, x.mittente, x.data].map(L.s).filter(Boolean).join(' · ') };
+    return { lab: nr ? 'PO/MRN' : 'FR', sig: x.tipo === 'FAULTY' ? (L.s(x.op) || Etichette.sigDi(x.id)) : '', fr: nr ? L.s(x.po) : L.s(x.fr), seriale: x.seriale, pn: x.pn, tipo: x.tipo, ubi: L.up(x.ubicazione), sotto: [x.riparatore, x.mittente, x.data].map(L.s).filter(Boolean).join(' · ') };
   },
-  daUnita: function (u) { if (u.tipo === 'GOOD') return Etichette.ingresso({ tipo: u.tipo, id: u.id_unita, fr: u.fr, seriale: u.seriale, pn: u.pn, ubicazione: u.ubicazione, dest: u.destinazione_prevista, data: L.itDate(u.data_in) }); return { fr: u.fr, seriale: u.seriale, riparatore: u.riparatore, pn: u.pn, tipo: u.tipo, sotto: L.s(u.data_in) }; }
+  daUnita: function (u) { if (u.tipo === 'GOOD') return Etichette.ingresso({ tipo: u.tipo, id: u.id_unita, fr: u.fr, seriale: u.seriale, pn: u.pn, ubicazione: u.ubicazione, dest: u.destinazione_prevista, data: L.itDate(u.data_in) }); return { fr: u.fr, sig: u.tipo === 'FAULTY' ? Etichette.sigDi(u.id_unita) : '', seriale: u.seriale, riparatore: u.riparatore, pn: u.pn, tipo: u.tipo, sotto: L.s(u.data_in) }; },
+  // ristampa: sigla di chi ha caricato la scheda
+  sigDi: function (id) { id = L.s(id); if (!id) return ''; var u = DB.t.UNITA.rows.find(function (y) { return y.id_unita === id; }); return u && u.creato_da && u.creato_da !== 'MIGRAZIONE' ? L.up(App.sigla(u.creato_da)) : ''; }
 };
 // ID scheda = parte numerica dell'ID unità assegnato dall'app (U0001120 → 1120), per riconoscere al volo la scheda
 Etichette.idScheda = function (u) { var id = L.s(u.id_unita), m = /^[A-Z]*0*(\d+)$/i.exec(id); return m ? m[1] : id; };
@@ -10155,7 +10203,7 @@ var Prop = {
     }).join('') + '<div class="hint" id="prErr" style="margin-top:6px"></div>';
     Prop.filtra();
   },
-  nota: function (o) { if (o.tipo === 'RIP') return 'Riparatore aggiornato da VLT il ' + L.itDate(L.isoToday()) + ' (era ' + (o.ripOld || 'vuoto') + ')'; return o.tipo === 'ABORT' ? 'FR ' + o.frOld + ' ABORTED (sostituito da ' + o.frNew + ' il ' + L.itDate(L.isoToday()) + ')' : 'FR ' + o.frNew + ' associato da VLT il ' + L.itDate(L.isoToday()) + (o.tipo === 'PEND' ? ' (era pending: ' + L.s(o.u.pending_fr) + ')' : ''); },
+  nota: function (o) { if (o.tipo === 'RIP') return 'Cambio riparatore ' + (o.ripOld || 'vuoto') + ' → ' + (o.ripNew || 'vuoto') + ' (VLT, ' + L.itDate(L.isoToday()) + ')'; return o.tipo === 'ABORT' ? 'FR ' + o.frOld + ' ABORTED (sostituito da ' + o.frNew + ' il ' + L.itDate(L.isoToday()) + ')' : 'FR ' + o.frNew + ' associato da VLT il ' + L.itDate(L.isoToday()) + (o.tipo === 'PEND' ? ' (era pending: ' + L.s(o.u.pending_fr) + ')' : ''); },
   // ricerca: nasconde le righe che non contengono il testo (in nessuna colonna); le righe nascoste non vengono confermate né scartate
   filtra: function () {
     var qq = L.qm(Prop._q || ''), box = $('propBody'); if (!box) return;
@@ -10195,7 +10243,7 @@ var Prop = {
           if (o.tipo === 'RIP') {
             var chR = { riparatore: o.ripNew, note: [L.s(u.note), nota].filter(Boolean).join(' · '), modificato_il: now, modificato_da: 'AUTO VLT', rev: (parseInt(u.rev, 10) || 1) + 1 };
             Object.keys(chR).forEach(function (h) { if (h in tU.idx) { u[h] = String(chR[h]); upd.push({ range: tU.cell(h, u._r), values: [[u[h]]] }); } });
-            if (u.id_mov_in && mr[u.id_mov_in]) { setM(mr[u.id_mov_in], { riparatore: o.ripNew }); if (movDi[u.id_mov_in]) movDi[u.id_mov_in].riparatore = o.ripNew; }
+            if (u.id_mov_in && mr[u.id_mov_in]) { var mi = movDi[u.id_mov_in], nmi = [L.s(mi && mi.note), nota].filter(Boolean).join(' · '); setM(mr[u.id_mov_in], mi ? { riparatore: o.ripNew, note: nmi } : { riparatore: o.ripNew }); if (mi) { mi.riparatore = o.ripNew; mi.note = nmi; } }
             fatti.push({ tipo: 'RIP', dove: 'SCHEDA', id: o.id, seriale: o.seriale, rip_prima: o.ripOld, rip_dopo: o.ripNew, _o: o });
             return;
           }
