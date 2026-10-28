@@ -2088,6 +2088,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
       <div style="margin-left:auto;display:flex;gap:8px">
         <button class="ba bghost" onclick="reloadConfig()">↻ Ricarica</button>
         <button class="ba bteal" onclick="savePermConfig()">💾 Salva Config</button>
+        <button class="ba bghost" onclick="logOpenSheet()" title="Apre il registro attività dell'anno in Google Sheets">📜 Log attività</button>
       </div>
     </div>
     <div class="perm-panel" id="permPanel">
@@ -3004,7 +3005,9 @@ function loadConfig(){
   var p2=loadUserConfig();
   Promise.all([p1,p2]).then(function(){
     applySigleConfig();
+    cfgSnapshot();
     applyPerm();
+    logRestoreQueue();logAccesso();
     loadAllFiles();
   }).catch(function(){
     applyPerm();
@@ -3242,6 +3245,7 @@ function adminConfirm(){
   document.getElementById('adminPw').value='';
   if(pw===ADMIN_PASS){
     adminMode=true;
+    logEvent({area:'Accesso',azione:'Modalità admin attivata'});
     var remember=document.getElementById('adminRemember').checked;
     if(remember!==wmsConfig.stayAdmin){
       wmsConfig.stayAdmin=remember;
@@ -3265,6 +3269,7 @@ function adminConfirm(){
       setTimeout(function(){ganttMonthClick(_pd.sap,_pd.mese,_pd.year);},200);
     }
   }else{
+    logEvent({area:'Accesso',azione:'Password admin errata'});
     document.getElementById('adminErr').classList.add('show');
     document.getElementById('adminPw').focus();
   }
@@ -3688,6 +3693,7 @@ function coopAeConfirm(){
     snapBase(newEmp);
     coopEmps.push(newEmp);
     mClose('moAddEmp');coopRender();
+    logEvent({area:'Anagrafica foglio',azione:'Dipendente aggiunto',sez:'Coop',dip:n,sap:empSap,mese:logMese('coop'),det:logFileName(fid)+' riga '+(rows.n+1)});
     toast('✓ '+n+' aggiunto su Drive (riga '+(rows.n+1)+')');
   }).catch(function(e){toast('✗ Dipendente NON aggiunto: '+e.message,'err');})
   .then(function(){btn.disabled=false;});
@@ -3755,12 +3761,218 @@ function cDelEmp(i){
     if(fid&&sname&&removed.sheetRows&&!removed._manual){
       toast('⏳ Rimozione da Drive…','warn');
       sheetsDeleteEmpRows(fid,sname,removed.sheetRows,coopData.nd||coopData.dates.length)
-        .then(function(){toast('✓ Rimosso da Drive');})
+        .then(function(){var E=logEmp(removed);logEvent({area:'Anagrafica foglio',azione:'Dipendente rimosso',sez:'Coop',dip:E.dip,sap:E.sap,mese:logMese('coop'),det:logFileName(fid)+' riga '+(removed.sheetRows.n+1)});toast('✓ Rimosso da Drive');})
         .catch(function(e){toast('✗ Errore rimozione: '+e.message,'err');});
     }else{
       toast('✓ Rimosso (solo locale)');
     }
   });
+}
+
+// ═══════════════════════════════════════════════════════════
+//  REGISTRO ATTIVITÀ (log)
+// ═══════════════════════════════════════════════════════════
+// Ogni azione viene accodata e scritta in blocco nel Google Sheet
+// "Log_Presenze_<anno>" (cartella JSON), un tab per mese ("10_Ottobre").
+// Si usa values:append → righe sempre in coda, nessuna sovrascrittura anche
+// con più utenti contemporanei. La coda è salvata in sessionStorage, così non
+// si perde se l'Hub ricarica la pagina prima dell'invio.
+var LOG_PREFIX='Log_Presenze_';
+var LOG_HDR=['Data/Ora','Utente','Nome','Area','Azione','Sezione','Dipendente','SAP','Mese rif.','Giorno','Campo','Prima','Dopo','Dettagli','Sessione'];
+var _logQ=[],_logT=null,_logBusy=false,_logFile={},_logTabs={};
+var _logSess=Math.random().toString(36).slice(2,8);
+function _logStr(v){
+  if(v===null||v===undefined)return '';
+  if(typeof v==='object'){try{v=JSON.stringify(v);}catch(e){v=String(v);}}
+  v=String(v);return v.length>480?v.slice(0,480)+'…':v;
+}
+function _logTs(d){
+  var p=function(n){return ('0'+n).slice(-2);};
+  return d.getFullYear()+'-'+p(d.getMonth()+1)+'-'+p(d.getDate())+' '+p(d.getHours())+':'+p(d.getMinutes())+':'+p(d.getSeconds());
+}
+function _logSaveQ(){try{sessionStorage.setItem('wmsLogQ',JSON.stringify(_logQ));}catch(e){}}
+function logEvent(o){
+  try{
+    if(!uEmail)return;
+    var now=new Date();
+    _logQ.push({t:now.toISOString(),row:[_logTs(now),uEmail,uName||'',o.area||'',o.azione||'',o.sez||'',o.dip||'',o.sap||'',
+      o.mese||'',o.giorno||'',o.campo||'',_logStr(o.prima),_logStr(o.dopo),_logStr(o.det),_logSess]});
+    _logSaveQ();
+    clearTimeout(_logT);_logT=setTimeout(logFlush,1500);
+  }catch(e){console.warn('[WMS LOG]',e);}
+}
+function _logFindFile(y){
+  if(_logFile[y])return _logFile[y];
+  var name=LOG_PREFIX+y;
+  var q='"'+FOLDER_ID_JSON+'" in parents and name="'+name+'" and mimeType="application/vnd.google-apps.spreadsheet" and trashed=false';
+  var list=function(){return gFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&orderBy=createdTime&fields=files(id)&pageSize=5').then(function(r){return r.files||[];});};
+  _logFile[y]=list().then(function(files){
+    if(files.length)return files[0].id;
+    return fetch('https://sheets.googleapis.com/v4/spreadsheets',{method:'POST',
+      headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+      body:JSON.stringify({properties:{title:name}})
+    }).then(function(r){return r.json();}).then(function(ss){
+      if(!ss.spreadsheetId)throw new Error('creazione log fallita');
+      return fetch('https://www.googleapis.com/drive/v3/files/'+ss.spreadsheetId+'?addParents='+FOLDER_ID_JSON+'&removeParents=root&fields=id',
+        {method:'PATCH',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},body:'{}'});
+    }).then(list).then(function(f2){return f2[0].id;}); // se due utenti l'hanno creato insieme, vince il più vecchio
+  });
+  _logFile[y].catch(function(){delete _logFile[y];});
+  return _logFile[y];
+}
+function _logEnsureTab(id,tab){
+  var k=id+'|'+tab;
+  if(_logTabs[k])return _logTabs[k];
+  _logTabs[k]=gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+id+'?fields=sheets.properties').then(function(meta){
+    var sh=(meta.sheets||[]).find(function(x){return x.properties.title===tab;});
+    if(sh)return;
+    return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+id+':batchUpdate',{method:'POST',
+      headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+      body:JSON.stringify({requests:[{addSheet:{properties:{title:tab,gridProperties:{frozenRowCount:1}}}}]})
+    }).then(function(r){return r.json();}).then(function(res){
+      if(res.error&&!/already exists|esiste già/i.test(res.error.message||''))throw new Error(res.error.message);
+      if(res.error)return; // creato in contemporanea da un altro utente
+      return sheetsBatchUpdate(id,[{range:tab+'!A1',values:[LOG_HDR]}]);
+    });
+  });
+  _logTabs[k].catch(function(){delete _logTabs[k];});
+  return _logTabs[k];
+}
+function _logAppend(id,tab,rows){
+  return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+id+'/values/'+encodeURIComponent(tab+'!A1')+':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS',{
+    method:'POST',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},body:JSON.stringify({values:rows})
+  }).then(function(r){if(!r.ok)throw new Error('append log '+r.status);});
+}
+function logFlush(){
+  if(_logBusy||!_logQ.length||!TOKEN)return Promise.resolve();
+  _logBusy=true;
+  var batch=_logQ.splice(0,400);_logSaveQ();
+  var groups={};
+  batch.forEach(function(e){
+    var d=new Date(e.t),y=d.getFullYear(),tab=('0'+(d.getMonth()+1)).slice(-2)+'_'+MESI[d.getMonth()];
+    var k=y+'|'+tab;(groups[k]=groups[k]||{y:y,tab:tab,items:[]}).items.push(e);
+  });
+  var failed=false;
+  return Promise.all(Object.keys(groups).map(function(k){
+    var g=groups[k];
+    return _logFindFile(g.y).then(function(id){
+      return _logEnsureTab(id,g.tab).then(function(){return _logAppend(id,g.tab,g.items.map(function(e){return e.row;}));});
+    }).catch(function(err){failed=true;console.warn('[WMS LOG]',err.message);_logQ=g.items.concat(_logQ);_logSaveQ();});
+  })).then(function(){
+    _logBusy=false;
+    if(_logQ.length){clearTimeout(_logT);_logT=setTimeout(logFlush,failed?20000:300);}
+  });
+}
+function logRestoreQueue(){
+  try{var q=JSON.parse(sessionStorage.getItem('wmsLogQ')||'[]');if(q.length){_logQ=q.concat(_logQ);setTimeout(logFlush,2000);}}catch(e){}
+}
+document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')logFlush();});
+function logOpenSheet(){
+  var y=new Date().getFullYear();
+  _logFindFile(y).then(function(id){window.open('https://docs.google.com/spreadsheets/d/'+id+'/edit','_blank');})
+    .catch(function(e){toast('✗ Log non disponibile: '+e.message,'err');});
+}
+function logMese(mode){
+  var y=document.getElementById(mode==='coop'?'cYear':'aYear'),m=document.getElementById(mode==='coop'?'cMonth':'aMonth');
+  return (m&&y)?('0'+m.value).slice(-2)+'/'+y.value:'';
+}
+function logFileName(fid){var f=(allFiles||[]).find(function(x){return x.id===fid;});return f?f.name:'';}
+function logEmp(e){return{dip:(e&&(e.nom2||e.nome))||'',sap:(e&&(e.sap||e.id))||''};}
+// Celle presenze: una riga per dipendente/giorno con i soli campi cambiati
+var _LOG_CAMPI={sigla:'Sigla',ingresso:'Ingresso',uscita:'Uscita',pausa:'Pausa'};
+function logCellChanges(sent,mode){
+  var data=mode==='coop'?coopData:atsData;var by={};
+  sent.forEach(function(x){
+    var prev=x.emp._base&&x.emp._base[x.f]?baseNorm(x.emp._base[x.f][x.di]):'';
+    if(prev===x.v)return;
+    var k=(x.emp.sap||x.emp.id||x.emp.nome)+'|'+x.di;
+    var g=(by[k]=by[k]||{emp:x.emp,di:x.di,ch:[]});
+    g.ch=g.ch.filter(function(c){return c.f!==x.f;});g.ch.push({f:x.f,a:prev,b:x.v});
+  });
+  Object.keys(by).forEach(function(k){
+    var g=by[k],d=data&&data.dates&&data.dates[g.di];
+    var a=g.ch.filter(function(c){return c.a!=='';}),b=g.ch.filter(function(c){return c.b!=='';});
+    var fmt=function(list,key){return list.map(function(c){return _LOG_CAMPI[c.f]+'='+c[key];}).join('; ');};
+    var E=logEmp(g.emp);
+    logEvent({area:'Presenze',azione:!a.length?'Inserimento':(!b.length?'Cancellazione':'Modifica'),sez:mode==='coop'?'Coop':'ATS',
+      dip:E.dip,sap:E.sap,mese:logMese(mode),giorno:d?d.day:'',campo:g.ch.map(function(c){return _LOG_CAMPI[c.f];}).join(', '),
+      prima:fmt(a,'a'),dopo:fmt(b,'b'),det:logFileName(g.emp.sheetRows&&g.emp.sheetRows.fileId)});
+  });
+}
+// Configurazione: differenze campo per campo tra la config caricata e quella salvata
+var _cfgSnap=null;
+function cfgSnapshot(){try{_cfgSnap=permConfig?JSON.parse(JSON.stringify(permConfig)):null;}catch(e){_cfgSnap=null;}}
+// chiave univoca per confrontare liste di oggetti (dipendenti per SAP, commesse per codice…)
+function _arrKey(a,b){
+  var keys=['sap','code','email','email_google','id','nome'];
+  var objs=function(arr){return arr.every(function(x){return x&&typeof x==='object'&&!Array.isArray(x);});};
+  if(!(a.length||b.length)||!objs(a)||!objs(b))return null;
+  var uniq=function(arr,k){var seen={};return arr.every(function(x){var v=x[k];if(v===undefined||v===''||seen[v])return false;seen[v]=1;return true;});};
+  for(var i=0;i<keys.length;i++){if(uniq(a,keys[i])&&uniq(b,keys[i]))return keys[i];}
+  return null;
+}
+function cfgDiff(a,b,path,out){
+  if(out.length>=80)return out;
+  if(JSON.stringify(a)===JSON.stringify(b))return out;
+  var isO=function(x){return x&&typeof x==='object'&&!Array.isArray(x);};
+  if(Array.isArray(a)&&Array.isArray(b)){
+    var prim=a.concat(b).every(function(x){return x===null||typeof x!=='object';});
+    if(prim){
+      var add=b.filter(function(x){return a.indexOf(x)===-1;}),del=a.filter(function(x){return b.indexOf(x)===-1;});
+      out.push({path:path,prima:del.length?'rimossi: '+del.join(', '):'',dopo:add.length?'aggiunti: '+add.join(', '):(del.length?'':'ordine cambiato')});
+      return out;
+    }
+    var k=_arrKey(a,b);
+    if(k){
+      var ma={},mb={};a.forEach(function(x){ma[x[k]]=x;});b.forEach(function(x){mb[x[k]]=x;});
+      Object.keys(Object.assign({},ma,mb)).forEach(function(id){
+        if(!ma[id])out.push({path:path+'['+id+']',azione:'Aggiunta',prima:'',dopo:mb[id]});
+        else if(!mb[id])out.push({path:path+'['+id+']',azione:'Rimozione',prima:ma[id],dopo:''});
+        else cfgDiff(ma[id],mb[id],path+'['+id+']',out);
+      });
+      return out;
+    }
+    out.push({path:path,prima:a,dopo:b});return out;
+  }
+  if(isO(a)&&isO(b)){
+    Object.keys(Object.assign({},a,b)).forEach(function(key){
+      if(/^_/.test(key))return;
+      var sub=path?path+'.'+key:key;
+      if(!(key in a))out.push({path:sub,azione:'Aggiunta',prima:'',dopo:b[key]});
+      else if(!(key in b))out.push({path:sub,azione:'Rimozione',prima:a[key],dopo:''});
+      else cfgDiff(a[key],b[key],sub,out);
+    });
+    return out;
+  }
+  out.push({path:path,prima:a,dopo:b});return out;
+}
+function logConfigSaved(origine){
+  if(!_cfgSnap){cfgSnapshot();return;}
+  var diffs=cfgDiff(_cfgSnap,permConfig,'',[]);
+  diffs.forEach(function(d){logEvent({area:'Configurazione',azione:d.azione||'Modifica parametro',campo:d.path,prima:d.prima,dopo:d.dopo,det:origine});});
+  if(diffs.length>=80)logEvent({area:'Configurazione',azione:'Modifiche troncate',det:'Più di 80 differenze: registrate solo le prime 80'});
+  cfgSnapshot();
+}
+// Richieste: confronto stato prima/dopo il salvataggio
+function logRichDiff(before,after){
+  var seen={};
+  (after||[]).forEach(function(r){
+    seen[r.id]=1;var p=before[r.id];
+    var det=(r.tipo||'')+' dal '+(r.data_dal||'')+' al '+(r.data_al||'')+(r.note?' — '+r.note:'');
+    var base={area:'Richieste',sez:'ATS',dip:r.dipendente_nome||'',sap:r.dipendente_sap||'',campo:'Stato'};
+    if(!p)logEvent(Object.assign(base,{azione:'Richiesta inviata',dopo:r.stato,det:det}));
+    else if(p.stato!==r.stato)logEvent(Object.assign(base,{azione:'Richiesta '+String(r.stato||'').replace('_',' '),prima:p.stato,dopo:r.stato,det:det+(r.nota_resp?' — nota resp.: '+r.nota_resp:'')}));
+  });
+  Object.keys(before).forEach(function(id){
+    if(seen[id])return;var p=before[id];
+    logEvent({area:'Richieste',sez:'ATS',azione:'Richiesta annullata',dip:p.dipendente_nome||'',sap:p.dipendente_sap||'',campo:'Stato',prima:p.stato,dopo:'eliminata',
+      det:(p.tipo||'')+' dal '+(p.data_dal||'')+' al '+(p.data_al||'')});
+  });
+}
+function logAccesso(){
+  var k='wmsLogAcc_'+uEmail+'_'+new Date().toDateString();
+  try{if(sessionStorage.getItem(k))return;sessionStorage.setItem(k,'1');}catch(e){}
+  logEvent({area:'Accesso',azione:'Apertura modulo Presenze',det:navigator.userAgent.slice(0,120)});
 }
 
 // ── Salvataggio differenziale / multi-utente ──
@@ -3825,7 +4037,7 @@ function cSave(){
     var fids=Object.keys(byFile);if(!fids.length){if(myGen===cEditGen)cBusy=false;return;}
     toast('⏳ Salvo Coop su Sheets…','warn');
     Promise.all(fids.map(function(fid){return sheetsBatchUpdate(fid,byFile[fid]);}))
-    .then(function(){commitSent(sent);toast('✓ Coop salvato');lastRefreshTimeCoop=new Date();})
+    .then(function(){logCellChanges(sent,'coop');commitSent(sent);toast('✓ Coop salvato');lastRefreshTimeCoop=new Date();})
     .catch(function(e){toast('✗ '+e.message,'err');})
     .then(function(){if(myGen===cEditGen)cBusy=false;});
   },700);
@@ -4202,6 +4414,7 @@ function aeConfirm(){
     snapBase(newEmp);
     atsEmps.push(newEmp);
     mClose('moAddEmp');atsRender();
+    logEvent({area:'Anagrafica foglio',azione:'Dipendente aggiunto',sez:'ATS',dip:n,sap:empId,mese:logMese('ats'),det:logFileName(fid)+' riga '+(rows.n+1)});
     toast('✓ '+n+' aggiunto su Drive (riga '+(rows.n+1)+')');
   }).catch(function(e){toast('✗ Dipendente NON aggiunto: '+e.message,'err');})
   .then(function(){btn.disabled=false;});
@@ -4218,7 +4431,7 @@ function aDel(i){
     if(fid&&sname&&removed.sheetRows&&!removed._manual){
       toast('⏳ Rimozione da Drive…','warn');
       sheetsDeleteEmpRows(fid,sname,removed.sheetRows,atsData.nd||atsData.dates.length)
-        .then(function(){toast('✓ Rimosso da Drive');})
+        .then(function(){var E=logEmp(removed);logEvent({area:'Anagrafica foglio',azione:'Dipendente rimosso',sez:'ATS',dip:E.dip,sap:E.sap,mese:logMese('ats'),det:logFileName(fid)+' riga '+(removed.sheetRows.n+1)});toast('✓ Rimosso da Drive');})
         .catch(function(e){toast('✗ Errore rimozione: '+e.message,'err');});
     }else{
       toast('✓ Rimosso (solo locale)');
@@ -4242,7 +4455,7 @@ function aSave(){
     var fids=Object.keys(byFile);if(!fids.length){if(myGen===aEditGen)aBusy=false;return;}
     toast('⏳ Salvo Dipendenti su Sheets…','warn');
     Promise.all(fids.map(function(fid){return sheetsBatchUpdate(fid,byFile[fid]);}))
-    .then(function(){commitSent(sent);toast('✓ Dipendenti salvato');lastRefreshTimeAts=new Date();})
+    .then(function(){logCellChanges(sent,'ats');commitSent(sent);toast('✓ Dipendenti salvato');lastRefreshTimeAts=new Date();})
     .catch(function(e){toast('✗ '+e.message,'err');})
     .then(function(){if(myGen===aEditGen)aBusy=false;});
   },800);
@@ -4672,7 +4885,12 @@ function spConfirm(){
   var _ritOld=parseInt((emp.ritardo||[])[spDi])||0;
   if(!emp.ritardo||emp.ritardo.length<nd)emp.ritardo=(emp.ritardo||[]).concat(Array(nd).fill(null)).slice(0,nd);
   emp.ritardo[spDi]=_ritNew>0?_ritNew:null;
-  if(fid3&&_ritNew!==_ritOld)saveRitardoToSheet(spMode,emp,spDi,fid3,y2,m2);
+  if(fid3&&_ritNew!==_ritOld){
+    saveRitardoToSheet(spMode,emp,spDi,fid3,y2,m2);
+    var _dR=(data&&data.dates||[])[spDi],_ER=logEmp(emp);
+    logEvent({area:'Presenze',azione:'Ritardo '+(!_ritOld?'inserito':(!_ritNew?'rimosso':'modificato')),sez:spMode==='coop'?'Coop':'ATS',dip:_ER.dip,sap:_ER.sap,
+      mese:logMese(spMode),giorno:_dR?_dR.day:'',campo:'Ritardo (min)',prima:_ritOld||'',dopo:_ritNew||''});
+  }
   mClose('moSigla');
   if(spMode==='ats'){
     // Aggiorna residuo ferie/permessi
@@ -5059,6 +5277,7 @@ function nfdSave(){
   sheetsBatchUpdate(ctx.ssId,allRows)
     .then(function(){
       toast('✅ '+totEmps+' dipendenti salvati!');
+      logEvent({area:'File',azione:'Dipendenti inseriti nel nuovo file',det:ctx.fname+' — ATS: '+((ctx.empsAts||[]).map(function(e){return e.nome;}).join(', ')||'—')+' | Coop: '+((ctx.empsCoop||[]).map(function(e){return e.nome;}).join(', ')||'—')});
       loadAllFiles();
       if(confirm('"'+ctx.fname+'" creato con '+totEmps+' dipendenti.\nAprirlo in Google Sheets?'))
         window.open('https://docs.google.com/spreadsheets/d/'+ctx.ssId+'/edit','_blank');
@@ -5110,6 +5329,7 @@ function buildAndCreateSpreadsheet(fname,resp,plant,y,m,mName,dates,extraEmps){
     ]).then(function(){return ssId;});
   }).then(function(ssId){
     toast('✅ Spreadsheet creato: '+fname);
+    logEvent({area:'File',azione:'Spreadsheet creato',sez:resp+' '+plant,mese:('0'+m).slice(-2)+'/'+y,det:fname});
     loadAllFiles();
     if(extraEmps&&extraEmps.length){
       if(confirm('"'+fname+'" creato su Drive con '+extraEmps.length+' dipendenti.\nAprirlo in Google Sheets?'))
@@ -5216,6 +5436,7 @@ function impDipConfirm(){
     return sheetsBatchUpdate(existing.id,data);
   }).then(function(){
     toast('✅ '+impDipRows.length+' dipendenti aggiunti a '+fname);
+    logEvent({area:'File',azione:'Import dipendenti',sez:sheetsToWrite.join(', '),det:fname+' — '+impDipRows.map(function(r){return r.nome||r.sap||'';}).join(', ')});
     loadAllFiles();
   }).catch(function(e){toast('✗ '+e.message,'err');});
 }
@@ -5953,6 +6174,13 @@ function saveCommesseToSheet(mode, emp, di, fileId, sheetName, y, m){
         ]);
       });
     }
+  }).then(function(){
+    var prev=(emp._commPrev||[])[di]||null;
+    if(JSON.stringify(prev)===JSON.stringify(vals))return;
+    (emp._commPrev=emp._commPrev||[])[di]=JSON.parse(JSON.stringify(vals));
+    var E=logEmp(emp),fmt=function(o){return o?Object.keys(o).map(function(k){return k+' '+o[k]+'h';}).join(', '):'';};
+    logEvent({area:'Commesse',azione:prev?'Distribuzione modificata':'Distribuzione inserita',sez:mode==='coop'?'Coop':'ATS',dip:E.dip,sap:E.sap,
+      mese:('0'+m).slice(-2)+'/'+y,giorno:d.day,campo:'Ore commessa',prima:fmt(prev),dopo:fmt(vals)});
   }).catch(function(e){console.warn('[WMS] commesse sheet error:',e.message);});
 }
 
@@ -5976,7 +6204,12 @@ function deleteCommessaRow(mode, emp, di, fileId, sheetName, y, m){
       if(!targetRow)return;
       // Sovrascrivi la riga con valori vuoti
       var emptyRow=Array(50).fill('');
-      return sheetsBatchUpdate(fileId,[{range:tabName+'!A'+targetRow,values:[emptyRow]}]);
+      return sheetsBatchUpdate(fileId,[{range:tabName+'!A'+targetRow,values:[emptyRow]}]).then(function(){
+        var prev=(emp._commPrev||[])[di]||null;if(emp._commPrev)emp._commPrev[di]=null;
+        var E=logEmp(emp);
+        logEvent({area:'Commesse',azione:'Distribuzione rimossa',sez:mode==='coop'?'Coop':'ATS',dip:E.dip,sap:E.sap,mese:('0'+m).slice(-2)+'/'+y,giorno:d.day,campo:'Ore commessa',
+          prima:prev?Object.keys(prev).map(function(k){return k+' '+prev[k]+'h';}).join(', '):'',dopo:''});
+      });
     });
   }).then(function(){toast('✓ Commesse eliminate');})
   .catch(function(e){console.warn('[WMS] deleteCommessaRow error:',e.message);});
@@ -6061,8 +6294,8 @@ function savePermConfig(){
       return fetch(url,{method:method,headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'multipart/related; boundary='+bnd},body:body});
     }).then(function(r){return r.json();});
   }
-  if(configFileId){doUpload('PATCH','https://www.googleapis.com/upload/drive/v3/files/'+configFileId+'?uploadType=multipart').then(function(){toast('✅ Config salvata');applyPerm();}).catch(function(e){toast('✗ '+e.message,'err');});}
-  else{doUpload('POST','https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart').then(function(d){configFileId=d.id;toast('✅ Config creata');applyPerm();}).catch(function(e){toast('✗ '+e.message,'err');});}
+  if(configFileId){doUpload('PATCH','https://www.googleapis.com/upload/drive/v3/files/'+configFileId+'?uploadType=multipart').then(function(){logConfigSaved('Pannello Permessi');toast('✅ Config salvata');applyPerm();}).catch(function(e){toast('✗ '+e.message,'err');});}
+  else{doUpload('POST','https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart').then(function(d){configFileId=d.id;logConfigSaved('Pannello Permessi (nuova config)');toast('✅ Config creata');applyPerm();}).catch(function(e){toast('✗ '+e.message,'err');});}
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -6718,6 +6951,8 @@ function massivoFerieRange(dip,d1,d2,fv,ing,usc,showOr,pausaH,qty,nota){
       loadAllFiles();
       setTimeout(ferieRenderOnly,300);
       toast('✓ Inserite '+totSet+' giornate per '+esc(dip.nome));
+      logEvent({area:'Presenze',azione:'Inserimento massivo',sez:'ATS',dip:dip.nome,sap:dip.sap||'',campo:'Sigla',dopo:fv||'(vuota)',
+        det:totSet+' giornate dal '+(d1&&d1.toLocaleDateString?d1.toLocaleDateString('it-IT'):d1)+' al '+(d2&&d2.toLocaleDateString?d2.toLocaleDateString('it-IT'):d2)+(nota?' — nota: '+nota:'')});
     }).catch(function(e){toast('✗ Errore: '+(e.message||e),'err');});
   };
 
@@ -6945,6 +7180,7 @@ async function generaAnnoStart(){
   }
   if(_genAbort)genLog('\u26d4 Operazione interrotta','var(--amber)');
   else genLog('\u2705 Completato! '+done+' file elaborati.','var(--teal)');
+  logEvent({area:'File',azione:'Genera anno completo',det:done+' file elaborati'});
   loadAllFiles();buildYears();
 }
 
@@ -7116,6 +7352,7 @@ function notaSave(clear){
   var emp=emps[notaRi];if(!emp)return;
   if(!emp.notes)emp.notes=[];
   var txt=clear?'':(document.getElementById('notaText').value||'').trim();
+  var _notaPrev=emp.notes[notaDi]||'';
   emp.notes[notaDi]=txt;
   mClose('moNota');
   if(!emp.sheetRows||emp.sheetRows.n===undefined){if(notaMode==='coop')coopRender();else atsRender();toast('✓ Nota salvata localmente');return;}
@@ -7137,6 +7374,11 @@ function notaSave(clear){
       }}]})
     });
   }).then(function(){
+    if(_notaPrev!==txt){
+      var _dN=(data&&data.dates||[])[notaDi],E=logEmp(emp);
+      logEvent({area:'Presenze',azione:!_notaPrev?'Nota inserita':(!txt?'Nota rimossa':'Nota modificata'),sez:notaMode==='coop'?'Coop':'ATS',
+        dip:E.dip,sap:E.sap,mese:logMese(notaMode),giorno:_dN?_dN.day:'',campo:'Nota',prima:_notaPrev,dopo:txt});
+    }
     if(notaMode==='coop')coopRender();else atsRender();
     toast(clear?'✓ Nota rimossa':'✓ Nota salvata');
   }).catch(function(e){toast('✗ '+e.message,'err');});
@@ -7199,7 +7441,10 @@ function saveConfermaToSheets(ri){
   sheetsBatchUpdate(fid,[
     {range:emp.sheetRows.sheetName+'!'+colL+'1',values:[['Confermato']]},
     {range:emp.sheetRows.sheetName+'!'+colL+(rowN+1),values:[[emp.confermato?'SI':'']]}
-  ]).then(function(){toast(emp.confermato?'✓ Confermato':'✓ Conferma rimossa');})
+  ]).then(function(){
+    var E=logEmp(emp);
+    logEvent({area:'Presenze',azione:emp.confermato?'Mese confermato':'Conferma rimossa',sez:'Coop',dip:E.dip,sap:E.sap,mese:logMese('coop'),campo:'Confermato',prima:emp.confermato?'':'SI',dopo:emp.confermato?'SI':''});
+    toast(emp.confermato?'✓ Confermato':'✓ Conferma rimossa');})
   .catch(function(e){toast('✗ '+e.message,'err');});
 }
 // CARICA NOTE DAL FOGLIO
@@ -7314,6 +7559,7 @@ function loadCommesseForEmps(emps, fileId, mode, y, m){
         if(!emp.commesse)emp.commesse=[];
         while(emp.commesse.length<=di)emp.commesse.push(null);
         emp.commesse[di]=vals;
+        (emp._commPrev=emp._commPrev||[])[di]=JSON.parse(JSON.stringify(vals)); // base per il log
       });
     }
   }).catch(function(e){console.warn('[WMS] loadCommesse error:',e.message);});
@@ -7544,6 +7790,10 @@ function calcResiduo(sap){
 function setSaldoIniziale(sap,nome,resp,plant,ferie,permessi,note){
   if(!isAdminUser){toast('Solo admin/superadmin','warn');return false;}
   if(!ferieData){toast('Carica prima il Piano Ferie','warn');return false;}
+  var _d0=(ferieData.dipendenti||[]).find(function(d){return String(d.sap||'').trim()===String(sap||'').trim();});
+  var _s0=_d0&&_d0.saldo_iniziale;
+  logEvent({area:'Residuo ferie/permessi',azione:'Saldo iniziale '+ferieData.anno,sez:'ATS',dip:nome,sap:sap,campo:'Ferie gg / Permessi h',
+    prima:_s0?_s0.ferie+' / '+_s0.permessi:'',dopo:round1(ferie)+' / '+round1(permessi),det:note||''});
   ferieQueueOp({type:'saldo',year:ferieData.anno,sap:sap,nome:nome,resp:resp,plant:plant,
     ferie:round1(ferie),permessi:round1(permessi),
     log:{data:new Date().toISOString(),by:(typeof uEmail!=='undefined'?uEmail:''),ferie_dopo:ferie,perm_dopo:permessi,note:note||''}});
@@ -7775,7 +8025,7 @@ function ferieRicalcola(){
         });
       });
     });
-  }).then(function(){return saveFerieResiduo();}).then(function(){ferieRicalcolatoAnni[year]=true;toast('\u2705 Ricalcolo completato');ferieLoad();}).catch(function(e){toast('\u2717 Errore: '+e.message,'err');document.getElementById('fRicalcBtn').disabled=false;});
+  }).then(function(){return saveFerieResiduo();}).then(function(){ferieRicalcolatoAnni[year]=true;logEvent({area:'Residuo ferie/permessi',azione:'Ricalcolo residuo',sez:'ATS',det:'Anno '+year+' — '+files.length+' file letti'});toast('\u2705 Ricalcolo completato');ferieLoad();}).catch(function(e){toast('\u2717 Errore: '+e.message,'err');document.getElementById('fRicalcBtn').disabled=false;});
 }
 
 function renderGantt(dipList,year,mDa,mA){
@@ -9053,9 +9303,10 @@ function loadRichieste(){
 // in place; dopo il salvataggio richData punta alla versione più recente.
 function richSaveChange(mutateFn){
   return loadRichieste().then(function(fresh){
+    var before={};(fresh.richieste||[]).forEach(function(r){before[r.id]={stato:r.stato,tipo:r.tipo,data_dal:r.data_dal,data_al:r.data_al,dipendente_nome:r.dipendente_nome,dipendente_sap:r.dipendente_sap};});
     mutateFn(fresh);
     richData = fresh;
-    return saveRichieste();
+    return saveRichieste().then(function(){logRichDiff(before,fresh.richieste||[]);});
   });
 }
 
@@ -9097,7 +9348,7 @@ function savePermConfigWithDips(){
     body.set(ab); body.set(bb,ab.length); body.set(cb,ab.length+bb.length);
     return fetch('https://www.googleapis.com/upload/drive/v3/files/'+configFileId+'?uploadType=multipart',
       {method:'PATCH',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'multipart/related; boundary='+bnd},body:body});
-  }).then(function(r){return r.json();});
+  }).then(function(r){return r.json();}).then(function(d){logConfigSaved('Anagrafica / Richieste');return d;});
 }
 
 // ── Identifica il profilo dell'utente loggato ───────────────────────────────
