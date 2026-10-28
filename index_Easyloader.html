@@ -1258,6 +1258,26 @@ var DB = {
   // ora del rinnovo quotidiano dei dati esterni (parametro aggiornamento_dati_ora, di base 07:20)
   oraAgg: function () { var v = '07:20'; try { v = L.s(DB.param('aggiornamento_dati_ora', '07:20')) || '07:20'; } catch (e) { } var m = /^(\d{1,2})[:.](\d{2})/.exec(v) || [0, 7, 20]; return [Math.min(23, +m[1]), Math.min(59, +m[2])]; },
   // ora dell'ultima modifica di un file su Drive (lettura leggera, senza rotellina); '' se non si riesce a leggerla
+  // esiti del backend fr_rma (foglio STATO_IMPORT del file VLT): una riga per file e per giro
+  leggiStato: async function () {
+    var fg = L.s(DB.param('vlt_foglio_stato', 'STATO_IMPORT')) || 'STATO_IMPORT';
+    try {
+      var v = (await API.batchGet(CFG.VLT_ID, [API.q(fg) + '!A1:G']))[0] || [], h = (v[0] || []).map(function (x) { return L.up(x); }), c = function (n) { return h.indexOf(n); };
+      var righe = v.slice(1).map(function (r) { return { giorno: L.normDate(r[c('GIORNO')]), file: L.s(r[c('FILE')]).toLowerCase(), esito: L.up(r[c('ESITO')]), mail: L.s(r[c('MAIL RICEVUTA')]), caricato: L.s(r[c('CARICATO IL')]), righe: L.s(r[c('RIGHE')]), dett: L.s(r[c('DETTAGLIO')]) }; }).filter(function (r) { return r.file; });
+      DB.statoImp = { ts: Date.now(), righe: righe, assente: c('FILE') < 0 };
+    } catch (e) { DB.statoImp = { ts: Date.now(), righe: [], assente: true }; }
+    return DB.statoImp;
+  },
+  // file attesi oggi: fr.csv e rma.csv nei giorni lavorativi, anche E2FR il lunedì (dopo l'ora di aggiornamento_dati_ora)
+  fileAttesi: function () {
+    var n = new Date(), oggi = L.isoToday(), lav = n.getDay() !== 0 && n.getDay() !== 6 && !(typeof Kpi !== 'undefined' && Kpi.festivo && Kpi.festivo(oggi));
+    if (!lav || n < DB.cutOggi()) return [];
+    return ['fr.csv', 'rma.csv'].concat(n.getDay() === 1 ? ['e2fr.csv'] : []);
+  },
+  mancanti: function () {
+    var S = DB.statoImp, oggi = L.isoToday(); if (!S || S.assente) return [];
+    return DB.fileAttesi().filter(function (f) { return !S.righe.some(function (r) { return r.giorno === oggi && r.file === f && r.esito === 'CARICATO'; }); });
+  },
   modTime: async function (id) { try { var js = await API.call('https://www.googleapis.com/drive/v3/files/' + id + '?supportsAllDrives=true&fields=modifiedTime'); return L.s(js && js.modifiedTime); } catch (e) { return ''; } },
   // cache vecchia ma file non cambiato: si tiene quella e si sposta solo l'ora del controllo
   invariato: async function (key, id, c) {
@@ -1370,6 +1390,7 @@ var App = {
       await DB.loadVlt(false); stepDone(s4, true, 'VLT: ' + DB.vlt.rows.length + ' FR · aggiornato ' + new Date(DB.vlt.ts).toLocaleString('it-IT'));
       App.showShell();
       DB.loadLookups(false).then(function () { App.fillLists(); App.syncInfo(); Ingresso.ricalcola(); }).catch(function (e) { toast('Anagrafiche non caricate: ' + e.message, 'ko'); });
+      DB.leggiStato().then(function () { App.syncInfo(); var m = DB.mancanti(); if (m.length) toast('⚠ Non arrivati oggi dal backend VLT: ' + m.join(', ') + ' (vedi ⓘ)', 'ko'); }).catch(function () { });
       DB.loadHuawei(false).then(function () { App.syncInfo(); Ingresso.ricalcola(); }).catch(function (e) { toast('File Huawei non leggibile (FR da seriale Huawei non disponibile): ' + e.message, 'ko'); });
     } catch (e) {
       step('Errore: ' + e.message, 'ko'); $('btnLogin').style.display = '';
@@ -1432,15 +1453,28 @@ var App = {
     if (/theme-(light|avorio|salvia|rovere|celeste|lavanda|perla|ghiaccio|sabbia|contrasto)$/.test(th)) b.add('is-light');
     lsS('theme', th);
   },
-  syncInfo: function () { $('syncInfo').textContent = 'VLT ' + (DB.vlt ? new Date(DB.vlt.ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—') + ' · Huawei ' + Object.keys(DB.huaweiFr).length + ' seriali · giacenza ' + DB.t.UNITA.rows.length + (window.Sync ? Sync.etichetta() : ''); $('syncInfo').title = window.Sync ? Sync.tooltip() : ''; var sb = $('syncBtn'); if (sb) { var st = window.Sync ? Sync.stato : ''; sb.textContent = st === 'off' ? 'ⓘ ⚠' : st === 'pausa' ? 'ⓘ ⏸' : 'ⓘ'; sb.style.color = st === 'off' ? 'var(--red)' : st === 'pausa' ? 'var(--amber)' : ''; } if ($('infoDatiBox')) $('infoDatiBox').innerHTML = App.infoDatiHtml(); },
+  syncInfo: function () { $('syncInfo').textContent = 'VLT ' + (DB.vlt ? new Date(DB.vlt.ts).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—') + ' · Huawei ' + Object.keys(DB.huaweiFr).length + ' seriali · giacenza ' + DB.t.UNITA.rows.length + (window.Sync ? Sync.etichetta() : ''); $('syncInfo').title = window.Sync ? Sync.tooltip() : ''; var sb = $('syncBtn'); if (sb) { var st = window.Sync ? Sync.stato : '', mf = DB.mancanti().length; sb.textContent = st === 'off' || mf ? 'ⓘ ⚠' : st === 'pausa' ? 'ⓘ ⏸' : 'ⓘ'; sb.style.color = st === 'off' || mf ? 'var(--red)' : st === 'pausa' ? 'var(--amber)' : ''; sb.style.borderColor = mf ? 'var(--red)' : ''; sb.title = mf ? 'Non arrivati oggi dal backend VLT: ' + DB.mancanti().join(', ') + ' (la mail con i file forse non è arrivata)' : 'Stato dei dati e dell\'aggiornamento automatico'; } if ($('infoDatiBox')) $('infoDatiBox').innerHTML = App.infoDatiHtml(); },
   infoDatiHtml: function () {
     var hm = function (d) { return d ? new Date(d).toLocaleTimeString('it-IT', { hour: '2-digit', minute: '2-digit' }) : '—'; }, S = window.Sync || {};
     var aut = S.stato === 'off' ? '<b style="color:var(--red)">⚠ spento</b> (premi ↻ Aggiorna)' : S.stato === 'pausa' ? '<b style="color:var(--amber)">⏸ in pausa</b>: ' + esc(S.motivo || 'hai una finestra aperta o modifiche non salvate') + '. Riparte da solo appena finisci (o salvi).' : '<b style="color:var(--green)">attivo</b>, ogni ' + (S.ogni || 60) + ' s';
     var R = [['Dati VLT', 'file delle ' + (DB.vlt ? hm(DB.vlt.ts) : '—')], ['Huawei', Object.keys(DB.huaweiFr || {}).length.toLocaleString('it-IT') + ' seriali'], ['Giacenza', (DB.t.UNITA ? DB.t.UNITA.rows.length : 0).toLocaleString('it-IT') + ' schede'],
-      ['Aggiornamento automatico', aut], ['Ultimo controllo modifiche', hm(S.check)], ['Ultimo ricaricamento', S.ultimo ? hm(S.ultimo) + ' (modifiche di altri operatori)' : 'nessuna modifica di altri finora'], ['Dati esterni (VLT, Huawei, TABLEAU, RMA)', 'si ricaricano da soli dalle ' + esc(DB.param('aggiornamento_dati_ora', '07:20')) + ' e poi ogni 15 min, solo se il file è cambiato']];
+].concat(App.righeImport()).concat([['Aggiornamento automatico', aut], ['Ultimo controllo modifiche', hm(S.check)], ['Ultimo ricaricamento', S.ultimo ? hm(S.ultimo) + ' (modifiche di altri operatori)' : 'nessuna modifica di altri finora'], ['Dati esterni (VLT, Huawei, TABLEAU, RMA)', 'si ricaricano da soli dalle ' + esc(DB.param('aggiornamento_dati_ora', '07:20')) + ' e poi ogni 15 min, solo se il file è cambiato']]);
     return '<table style="font-size:13px"><tbody>' + R.map(function (r) { return '<tr><td style="padding:4px 12px 4px 0;color:var(--muted);white-space:nowrap">' + r[0] + '</td><td style="padding:4px 0">' + r[1] + '</td></tr>'; }).join('') + '</tbody></table>';
   },
-  infoDati: function () { Modal.html('ⓘ Stato dei dati', '<div id="infoDatiBox">' + App.infoDatiHtml() + '</div>', [{ label: 'Chiudi', cls: 'ghost' }, { label: '↻ Aggiorna', cls: 'green', fn: function () { App.reload(); } }]); },
+  righeImport: function () {
+    var S = DB.statoImp, oggi = L.isoToday(), att = DB.fileAttesi(), hm = function (x) { return L.s(x).slice(11, 16); };
+    if (!S) return [['File dal backend VLT', '<span style="color:var(--muted)">controllo in corso…</span>']];
+    if (S.assente) return [['File dal backend VLT', '<span style="color:var(--muted)">il backend fr_rma non scrive ancora il foglio STATO_IMPORT: aggiorna fr_rma.exe sul PC del backend</span>']];
+    return ['fr.csv', 'rma.csv', 'e2fr.csv'].map(function (f) {
+      var R = S.righe.filter(function (r) { return r.file === f; }), ok = R.filter(function (r) { return r.esito === 'CARICATO'; }).pop(), last = R[R.length - 1], oggiOk = ok && ok.giorno === oggi, atteso = att.indexOf(f) >= 0;
+      var t = (oggiOk ? '<b style="color:var(--green)">✔ arrivato oggi</b> · mail delle ' + esc(hm(ok.mail)) + ', caricato alle ' + esc(hm(ok.caricato)) + (ok.righe ? ' · ' + esc(Number(ok.righe).toLocaleString('it-IT')) + ' righe' : '')
+        : (atteso ? '<b style="color:var(--red)">✖ non arrivato oggi</b>' + (last && last.giorno === oggi ? ' (' + esc(last.esito === 'ERRORE' ? 'errore di caricamento: ' + last.dett : last.dett || last.esito) + ')' : ' (nessun esito di oggi dal backend)') + ' · controlla la mail con i file VLT' : '<span style="color:var(--muted)">' + (f === 'e2fr.csv' ? 'atteso il lunedì' : 'non atteso adesso') + '</span>')) +
+        (!oggiOk && ok ? '<br><span style="color:var(--muted)">ultimo arrivato: ' + esc(L.itDate(ok.giorno)) + ' alle ' + esc(hm(ok.caricato)) + '</span>' : '');
+      return [f === 'e2fr.csv' ? 'TABLEAU (E2FR)' : f, t];
+    });
+  },
+  infoDati: function () {
+    DB.leggiStato().then(function () { App.syncInfo(); }).catch(function () { }); Modal.html('ⓘ Stato dei dati', '<div id="infoDatiBox">' + App.infoDatiHtml() + '</div>', [{ label: 'Chiudi', cls: 'ghost' }, { label: '↻ Aggiorna', cls: 'green', fn: function () { App.reload(); } }]); },
   fillLists: function () {
     var cp = DB.t.CONTROPARTI.rows.map(function (r) { return r.codice; }).filter(Boolean);
     DB.t.RIPARATORI.rows.forEach(function (r) { if (r.codice && cp.indexOf(r.codice) < 0) cp.push(r.codice); });
@@ -1468,8 +1502,9 @@ var App = {
   },
   // auto: in silenzio se non è cambiato niente. Torna l'elenco di cosa è stato riletto
   aggiornaEsterni: async function (auto) {
-    var fatto = [];
+    var fatto = [], m0 = DB.mancanti().join(',');
     try {
+      await DB.leggiStato(); if (DB.mancanti().join(',') !== m0) App.syncInfo();
       var mV = await DB.modTime(CFG.VLT_ID), mH = await DB.modTime(CFG.HUAWEI_ID);
       if (mV && DB.vlt && DB.vlt.mod !== mV) {
         await DB.loadVlt(true); fatto.push('VLT');
@@ -4485,16 +4520,37 @@ var AwbF = {
     var larg = { DESTINATARIO: 240, INDIRIZZO: 300, 'MISURE COLLI': 220, AWB: 150, VETTORE: 130, 'NOTE BOLLETTAZIONE': 220, 'ID (non modificare)': 150 };
     var req = [{ repeatCell: { range: { sheetId: sid }, cell: { userEnteredFormat: { textFormat: { fontSize: 13 }, verticalAlignment: 'MIDDLE' } }, fields: 'userEnteredFormat.textFormat.fontSize,userEnteredFormat.verticalAlignment' } }];
     AwbF.H.forEach(function (h, j) { req.push({ updateDimensionProperties: { range: { sheetId: sid, dimension: 'COLUMNS', startIndex: j, endIndex: j + 1 }, properties: { pixelSize: Math.round((larg[h] || 95) * 1.3) }, fields: 'pixelSize' } }); });
-    var iM = AwbF.H.indexOf('MISURE COLLI'); req.push({ repeatCell: { range: { sheetId: sid, startColumnIndex: iM, endColumnIndex: iM + 1 }, cell: { userEnteredFormat: { wrapStrategy: 'WRAP' } }, fields: 'userEnteredFormat.wrapStrategy' } });   /* un collo per riga */
+    ['DESTINATARIO', 'INDIRIZZO', 'MISURE COLLI'].forEach(function (h) { var iM = AwbF.H.indexOf(h); req.push({ repeatCell: { range: { sheetId: sid, startColumnIndex: iM, endColumnIndex: iM + 1 }, cell: { userEnteredFormat: { wrapStrategy: 'WRAP' } }, fields: 'userEnteredFormat.wrapStrategy' } }); });   /* un collo per riga */
     ['COLLI', 'PESO KG'].forEach(function (h) { var j = AwbF.H.indexOf(h); req.push({ repeatCell: { range: { sheetId: sid, startColumnIndex: j, endColumnIndex: j + 1 }, cell: { userEnteredFormat: { horizontalAlignment: 'CENTER' } }, fields: 'userEnteredFormat.horizontalAlignment' } }); });
     req.push({ updateDimensionProperties: { range: { sheetId: sid, dimension: 'COLUMNS', startIndex: 0, endIndex: 2 }, properties: { hiddenByUser: true }, fields: 'hiddenByUser' } });
     req.push({ updateDimensionProperties: { range: { sheetId: sid, dimension: 'COLUMNS', startIndex: 4, endIndex: 6 }, properties: { hiddenByUser: true }, fields: 'hiddenByUser' } });   /* E (DDT) e F (PEZZI) */
     await API.call(API.S + id + ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: req }), quiet: true });
     AwbF._fmt[id] = 1;
   },
+  ripara: async function (rec, conDati) {
+    var id = rec.file_id, info = await API.call(API.S + id + '?fields=' + encodeURIComponent('sheets(properties(sheetId,title),protectedRanges(protectedRangeId))'));
+    var sh = (info.sheets || []).find(function (x) { return x.properties.title === AwbF.TAB; }) || (info.sheets || [])[0], sid = sh.properties.sheetId;
+    var nC = AwbF.H.length, iA = AwbF.H.indexOf('AWB'), vet = ((DB.t.VETTORI || {}).rows || []).map(function (v) { return L.s(v.vettore); }).filter(Boolean), req = [];
+    if (conDati) req.push({ insertDimension: { range: { sheetId: sid, dimension: 'ROWS', startIndex: 0, endIndex: 1 }, inheritFromBefore: false } });
+    req.push({ updateSheetProperties: { properties: { sheetId: sid, title: AwbF.TAB, gridProperties: { frozenRowCount: 1 } }, fields: 'title,gridProperties.frozenRowCount' } });
+    req.push({ repeatCell: { range: { sheetId: sid, startRowIndex: 1, startColumnIndex: 0, endColumnIndex: nC }, cell: { userEnteredFormat: { textFormat: { bold: false, foregroundColor: { red: 0, green: 0, blue: 0 } }, backgroundColor: { red: 1, green: 1, blue: 1 } } }, fields: 'userEnteredFormat(textFormat.bold,textFormat.foregroundColor,backgroundColor)' } });
+    req.push({ repeatCell: { range: { sheetId: sid, startRowIndex: 0, endRowIndex: 1, startColumnIndex: 0, endColumnIndex: nC }, cell: { userEnteredFormat: { textFormat: { bold: true, foregroundColor: { red: 1, green: 1, blue: 1 } }, backgroundColor: { red: 0.12, green: 0.31, blue: 0.47 } } }, fields: 'userEnteredFormat(textFormat.bold,textFormat.foregroundColor,backgroundColor)' } });
+    req.push({ repeatCell: { range: { sheetId: sid, startRowIndex: 0, endRowIndex: 1, startColumnIndex: iA, endColumnIndex: iA + 2 }, cell: { userEnteredFormat: { textFormat: { bold: true, foregroundColor: { red: 0, green: 0, blue: 0 } }, backgroundColor: { red: 1, green: 0.85, blue: 0.2 } } }, fields: 'userEnteredFormat(textFormat.bold,textFormat.foregroundColor,backgroundColor)' } });
+    req.push({ repeatCell: { range: { sheetId: sid, startRowIndex: 1, startColumnIndex: iA, endColumnIndex: iA + 3 }, cell: { userEnteredFormat: { backgroundColor: { red: 1, green: 0.96, blue: 0.75 }, numberFormat: { type: 'TEXT' } } }, fields: 'userEnteredFormat(backgroundColor,numberFormat)' } });
+    req.push({ setDataValidation: { range: { sheetId: sid, startRowIndex: 0, endRowIndex: 1, startColumnIndex: iA + 1, endColumnIndex: iA + 2 } } });
+    if (vet.length) req.push({ setDataValidation: { range: { sheetId: sid, startRowIndex: 1, startColumnIndex: iA + 1, endColumnIndex: iA + 2 }, rule: { condition: { type: 'ONE_OF_LIST', values: vet.map(function (v) { return { userEnteredValue: v }; }) }, strict: false, showCustomUi: true } } });
+    (sh.protectedRanges || []).forEach(function (p) { req.push({ deleteProtectedRange: { protectedRangeId: p.protectedRangeId } }); });
+    req.push({ addProtectedRange: { protectedRange: { range: { sheetId: sid }, description: 'Si compilano solo AWB, VETTORE e NOTE BOLLETTAZIONE', warningOnly: true, unprotectedRanges: [{ sheetId: sid, startRowIndex: 1, startColumnIndex: iA, endColumnIndex: iA + 3 }] } } });
+    await API.call(API.S + id + ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: req }) });
+    await API.batchUpdate(id, [{ range: API.q(AwbF.TAB) + '!A1', values: [AwbF.H] }]);
+    try { await AwbF.formato(id, sid); } catch (e) { }
+    API.append(DB.id, 'LOG', [App.log('FOGLIO_AWB_INTESTAZIONE', 'FOGLI_AWB', id, { tipo: rec.tipo, data: rec.data, riga1_con_dati: !!conDati })], true).catch(function () { });
+  },
   // contenuto del foglio; c(nome) = colonna (per nome: se spostano le colonne si ritrovano lo stesso)
-  leggi: async function (rec) {
+  leggi: async function (rec, gia) {
     var v = (await API.batchGet(rec.file_id, [API.q(AwbF.TAB) + '!A1:Z']))[0] || [], h = (v[0] || []).map(function (x) { return L.up(x); });
+    // riga 1 senza intestazione (sovrascritta o cancellata): la rimetto sopra i dati, che restano dove sono
+    if (!gia && h.indexOf('ID (NON MODIFICARE)') < 0) { await AwbF.ripara(rec, v.length > 0 && (v[0] || []).some(function (x) { return L.s(x); })); return AwbF.leggi(rec, true); }
     var c = function (n) { n = L.up(n); var i = h.indexOf(n); if (i < 0 && n.indexOf('ID') === 0) i = h.findIndex(function (x) { return /^ID\b/.test(x); }); if (i < 0 && n.indexOf('NOTE') === 0) i = h.findIndex(function (x) { return /^NOTE/.test(x); }); return i; };
     return { h: h.length ? h : AwbF.H.map(L.up), rows: v.slice(1), c: c };
   },
