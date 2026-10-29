@@ -2,7 +2,7 @@
 // @name         ATS FLM → VLT · Chiusure
 // @namespace    ats-spa.flm
 // @author       Daniele Izzo
-// @version      1.0.12
+// @version      1.0.13
 // @description  Chiude su VLT ingressi del giorno (op. linea), ACK, RMA e spare ferme in HUB con i dati dell'app "ATS - Fastweb FLM". Sostituisce i 4 script con i CSV.
 // @match        https://logistictoolvf.net.vodafone.it/*
 // @match        https://ats-spa.github.io/*
@@ -27,7 +27,7 @@
 */
 (function () {
   'use strict';
-  var VER = '1.0.12';
+  var VER = '1.0.13';
   var VLT_HOST = 'logistictoolvf.net.vodafone.it';
   var K = { CODA: 'ats_coda', STATO: 'ats_stato_', PEND: 'ats_esiti_pending', RICH: 'ats_richiesta', APP: 'ats_app_url', VIVO: 'ats_vlt_vivo', RUN: 'ats_run', UI: 'ats_ui', RICEVUTI: 'ats_esiti_ricevuti' };
   // esiti da consegnare = scritti da VLT (PEND) meno quelli già confermati dall'app (RICEVUTI): ognuno scrive solo la sua chiave
@@ -325,6 +325,39 @@
     // RMA: semi-automatico (compila, l'operatore controlla i seriali e salva) — o automatico se spuntato
     var RX_RMA = /rmas?\b/i;
     var chiudiRma = async function (it) {
+      var num = String(it.rma).trim().replace(/^RMA\s*/i, '').replace(/^0+(?=\d)/, '');
+      var rx = new RegExp('(^|[^0-9])' + num.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^0-9]|$)', 'i');
+      // 1) apertura diretta della scheda (#/rma/<numero>/edit): non dipende dalla lista "in attesa di un tuo intervento" né dalla ricerca
+      var sel = null;
+      if (/^\d+$/.test(num)) {
+        if (/\/edit/.test(location.hash)) { location.hash = '#/rma'; await sleep(800); }
+        var t1 = Date.now();
+        location.hash = '#/rma/' + num + '/edit';
+        sel = await attendi(function () { var s = $('select#field_rmaStatus'); return s && s.options.length > 1 && testoSel(s) ? s : null; }, 12000);
+        if (!sel) {
+          var e404 = NET.find(function (e) { return e.t0 >= t1 && e.s === 404 && new RegExp('/rmas/' + num + '(\\?|/|$)').test(e.u); });
+          location.hash = '#/rma'; await sleep(900);
+          if (e404) throw Errore('RMA ' + it.rma + ' non trovato su VLT', 'NON_TROVATO');
+          UI.log('↻ RMA ' + it.rma + ': apertura diretta non riuscita, lo cerco nella lista');
+        }
+      }
+      if (!sel) sel = await cercaRma(it, num);
+      await sleep(450);
+      var S0 = testoSel(sel);
+      if (norm(S0) === 'shipped from cw') { await esciForm(); return { esito: 'GIA_FATTO', stato_prima: S0, stato_dopo: S0, dettaglio: 'già Shipped From CW' }; }
+      if (norm(S0) !== 'to ship from cw') { await esciForm(); return { esito: 'SALTATO', stato_prima: S0, stato_dopo: S0, dettaglio: 'su VLT è in stato "' + S0 + '" (non To Ship From CW): non lo chiudo, controlla su VLT' }; }
+      await scegli('select#field_rmaStatus', 'Shipped From CW');
+      var avvisi = [];
+      var form = sel.closest('form') || document.body, valori = $$('input, textarea', form).map(function (x) { return x.value; }).join(' ') + ' ' + form.textContent;
+      if (!rx.test(valori)) avvisi.push('controlla che la scheda aperta sia l\'RMA ' + it.rma);
+      var dep = await attendi(function () { return $('input[role="combobox"]'); }, 5000);
+      if (dep) { if (!(await deposito(dep))) avvisi.push('scegli tu il deposito di origine'); } else avvisi.push('campo deposito non trovato');
+      var aw = $('input#field_awb'); if (aw) scrivi(aw, it.awb || ''); else avvisi.push('campo AWB non trovato');
+      if (it.note) { var nt = $('input#field_note') || $('textarea#field_note'); if (nt) scrivi(nt, it.note); }
+      return await attendiOperatore(it, S0, avvisi);
+    };
+    // 2) riserva: ricerca nella lista RMA (come prima)
+    var cercaRma = async function (it, num) {
       if (!/^#\/rma(\?|$)/i.test(location.hash) || $('select#field_rmaStatus')) { location.hash = '#/rma'; await sleep(800); }
       var inp = await attendi(function () { return $('input#currentSearch'); }, 15000);
       if (!inp) throw Errore('Non riesco ad aprire la pagina RMA di VLT (https://' + VLT_HOST + '/#/rma): aprila tu, poi premi Riprendi', 'PAGINA');
@@ -339,8 +372,6 @@
       // aspetta la risposta della ricerca e che la tabella smetta di cambiare (le risposte in ritardo ridisegnano la lista)
       await netAttendi(function (e) { return e.m === 'GET' && RX_RMA.test(e.u); }, 20000, t0);
       // l'ID su VLT è "RMA214295" e il testo della riga attacca le celle ("RMA21429527/10/2026…"): si confronta cella per cella
-      var num = String(it.rma).trim().replace(/^RMA\s*/i, '').replace(/^0+(?=\d)/, '');
-      var rx = new RegExp('(^|[^0-9])' + num.replace(/[.*+?^${}()|[\]\\]/g, '\\$&') + '([^0-9]|$)', 'i');
       var eRma = function (r) { return $$('td', r).some(function (td) { return String(td.textContent || '').trim().replace(/^RMA\s*/i, '').replace(/^0+(?=\d)/, '') === num; }); };
       var righe = function () { return $$('table tbody tr').filter(function (r) { return r.offsetParent && $$('td', r).length > 1; }); };
       var firma = '', stabile = 0, tr = null, fine = Date.now() + 15000;
@@ -368,18 +399,7 @@
       }
       var sel = await attendi(function () { var s = $('select#field_rmaStatus'); return s && s.options.length > 1 && testoSel(s) ? s : null; }, 15000);
       if (!sel) throw Errore('La scheda RMA non si è caricata');
-      await sleep(450);
-      var S0 = testoSel(sel);
-      if (norm(S0) === 'shipped from cw') { await esciForm(); return { esito: 'GIA_FATTO', stato_prima: S0, stato_dopo: S0, dettaglio: 'già Shipped From CW' }; }
-      await scegli('select#field_rmaStatus', 'Shipped From CW');
-      var avvisi = [];
-      var form = sel.closest('form') || document.body, valori = $$('input, textarea', form).map(function (x) { return x.value; }).join(' ') + ' ' + form.textContent;
-      if (!rx.test(valori)) avvisi.push('controlla che la scheda aperta sia l\'RMA ' + it.rma);
-      var dep = await attendi(function () { return $('input[role="combobox"]'); }, 5000);
-      if (dep) { if (!(await deposito(dep))) avvisi.push('scegli tu il deposito di origine'); } else avvisi.push('campo deposito non trovato');
-      var aw = $('input#field_awb'); if (aw) scrivi(aw, it.awb || ''); else avvisi.push('campo AWB non trovato');
-      if (it.note) { var nt = $('input#field_note') || $('textarea#field_note'); if (nt) scrivi(nt, it.note); }
-      return await attendiOperatore(it, S0, avvisi);
+      return sel;
     };
     var deposito = async function (inp) {
       scrivi(inp, DEPOSITO_RMA);
