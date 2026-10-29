@@ -1163,9 +1163,12 @@ var Sync = {
 
 // ───────────────────────── Google API (con ritentativi) ─────────────────────────
 var API = {
+  _w: 0,   // scritture in corso: se ci sono, chiudere o ricaricare la pagina chiede conferma
   call: function (url, opt, attempt) {
-    var w = opt && opt.method && opt.method !== 'GET' && !attempt && !opt.quiet;   // quiet: scrittura in sottofondo, senza la rotellina che blocca
-    return w ? Busy.wrap(API._call(url, opt, attempt)) : API._call(url, opt, attempt);
+    var scr = !!(opt && opt.method && opt.method !== 'GET'), w = scr && !attempt && !opt.quiet;   // quiet: scrittura in sottofondo, senza la rotellina che blocca
+    var p = w ? Busy.wrap(API._call(url, opt, attempt)) : API._call(url, opt, attempt);
+    if (scr && !attempt) { API._w++; var giu = function () { API._w = Math.max(0, API._w - 1); }; p.then(giu, giu); }
+    return p;
   },
   _call: async function (url, opt, attempt) {
     attempt = attempt || 0; opt = opt || {};
@@ -1391,7 +1394,8 @@ var App = {
       await DB.loadVlt(false); stepDone(s4, true, 'VLT: ' + DB.vlt.rows.length + ' FR · aggiornato ' + new Date(DB.vlt.ts).toLocaleString('it-IT'));
       App.showShell();
       DB.loadLookups(false).then(function () { App.fillLists(); App.syncInfo(); Ingresso.ricalcola(); }).catch(function (e) { toast('Anagrafiche non caricate: ' + e.message, 'ko'); });
-      setTimeout(function () { Ingresso.riparaId().catch(function (e) { console.warn('ID mancanti: ' + e.message); }); }, 4000);
+      if (!App._unl) { App._unl = 1; window.addEventListener('beforeunload', function (e) { if (API._w > 0 || App._salva) { e.preventDefault(); e.returnValue = 'Salvataggio in corso: se chiudi ora i dati restano a metà'; } }); }
+      setTimeout(function () { Ingresso.riparaId().catch(function (e) { console.warn('ID mancanti: ' + e.message); }).then(function () { return Ingresso.riparaMovDaLog(); }).catch(function (e) { console.warn('Movimenti IN mancanti: ' + e.message); }); }, 4000);
       DB.leggiStato().then(function () { App.syncInfo(); var m = DB.mancanti(); if (m.length) toast('⚠ Non arrivati oggi dal backend VLT: ' + m.join(', ') + ' (vedi ⓘ)', 'ko'); }).catch(function () { });
       DB.loadHuawei(false).then(function () { App.syncInfo(); Ingresso.ricalcola(); }).catch(function (e) { toast('File Huawei non leggibile (FR da seriale Huawei non disponibile): ' + e.message, 'ko'); });
     } catch (e) {
@@ -2121,9 +2125,9 @@ var Ingresso = {
     var ok = await Modal.confirm('Carica ' + C.length + ' pezzi',
       'Tipo ' + T.tipo + ' · ' + T.mittente + ' · ' + T.data + (Ingresso.perConto ? '\n\nA nome di ' + Ingresso.perConto.sigla + ' · ' + Ingresso.perConto.nome + ' (caricato da te: resta nel LOG)' : '') + (nWarn ? '\n\n' + nWarn + ' righe hanno avvisi (gialle): verranno caricate e, se c\'è un errore seriale/TPN, aperta un\'anomalia.' : ''));
     if (!ok) return;
-    Modal.open('Caricamento in corso', 'Non chiudere la pagina.', []);
+    Modal.open('Caricamento in corso', 'Non chiudere né ricaricare la pagina.', []); App._salva = true;
     try {
-      var esito = await Ingresso.scrivi(T, C);
+      var esito; try { esito = await Ingresso.scrivi(T, C); } finally { App._salva = false; }
       Modal.close(); toast(C.length + ' pezzi caricati', 'ok');
       if ((T.tipo === 'GOOD' || T.tipo === 'SCRAP') && esito && esito.pezzi && esito.pezzi.length) {
         var nuoveU = esito.pezzi.map(function (o) { return DB.t.UNITA.rows.find(function (x) { return x.id_unita === o.id_unita; }) || o; });
@@ -2159,6 +2163,7 @@ var Ingresso = {
     if (C.some(function (c) { return c.pend; })) await DB.ensureCols('UNITA', ['pending_fr', 'fr_assegnato_il']);
     var pc = Ingresso.perConto, now = L.nowStamp(), me = pc ? pc.email : Auth.email, sigla = pc ? pc.sigla : (App.me.sigla || ''), n = C.length;
     var tU = DB.t.UNITA, H = await Ingresso.heads(), tR = H.RICEZIONI, tM = H.MOVIMENTI, tA = H.ANOMALIE, tL = H.LOG;
+    await API.append(DB.id, 'LOG', [tL.toRow({ data_ora: now, utente: me, azione: 'INGRESSO_AVVIATO', foglio: 'RICEZIONI', id_record: '', dettaglio: JSON.stringify({ tipo: T.tipo, pezzi: n, mittente: T.mittente, awb: T.awb, ddt: T.ddt, operatore: sigla, seriali: C.map(function (c) { return c.ser; }).slice(0, 400) }) })]);   /* se non si scrive nemmeno questo non parte niente */
     var mag = function (t) { return t === 'NEW' || t === 'REUSE' ? 'HUB_MAGAZZINO' : (t === 'SCRAP' ? 'SCRAP' : 'HUB_GUASTI'); };
     var rObj = { data_arrivo: T.data, mittente: T.mittente, awb: T.awb, vettore: T.vettore, ddt_mittente: T.ddt, po_mrn: T.po, tipo: T.tipo, flag_balancing: T.bal ? 'SI' : 'NO', n_pezzi: n, stato: 'CHIUSA', note: '', creato_il: now, creato_da: me };
     var uObjs = C.map(function (c) {
@@ -2248,15 +2253,66 @@ var Ingresso = {
       Object.keys(ch).forEach(function (h) { if (h in tU.idx) upd.push({ range: tU.cell(h, u._r), values: [[ch[h]]] }); });
       if (mr >= 0) [['id_mov', idM], ['id_unita', id], ['id_ricezione', idR]].forEach(function (x) { if (x[1] && x[0] in tM.idx) upd.push({ range: tM.cell(x[0], mr + 2), values: [[x[1]]] }); });
       if (rr >= 0 && 'id_ricezione' in tR.idx) upd.push({ range: tR.cell('id_ricezione', rr + 2), values: [[idR]] }), R[rr].id_ricezione = idR;
+      if (u.tipo === 'BALANCING' && DB.t.BALANCING) { var b = DB.t.BALANCING.rows.find(function (x) { return L.up(x.seriale) === L.up(u.seriale) && (L.up(x.gestito) === 'NO' || !L.s(x.gestito)); }); if (b) { var tB = DB.t.BALANCING, cb = { gestito: 'SI', data_gestione: u.creato_il, gestito_da: u.creato_da, id_unita: id }; Object.keys(cb).forEach(function (h) { if (h in tB.idx) { b[h] = cb[h]; upd.push({ range: tB.cell(h, b._r), values: [[cb[h]]] }); } }); } }
       ids[id] = 1; fatti.push({ u: u, ch: ch, mov: idM, ric: idR });
     });
     if (!fatti.length) return 0;
     await API.batchUpdate(DB.id, upd, true);
+    var senzaMov = fatti.filter(function (f) { return !f.mov; });
     fatti.forEach(function (f) { Object.keys(f.ch).forEach(function (h) { f.u[h] = f.ch[h]; }); });
+    try {   /* in attesa di FR: l'anomalia FR_MANCANTE che l'ingresso non ha scritto */
+      var att = fatti.filter(function (f) { return f.u.stato === 'IN_ATTESA' && L.s(f.u.pending_fr); });
+      if (att.length) { await DB.loadTables(['ANOMALIE']); var tA = DB.t.ANOMALIE, gA = {}; tA.rows.forEach(function (a) { gA[a.id_unita] = 1; }); var nuove = att.filter(function (f) { return !gA[f.ch.id_unita]; }).map(function (f) { return tA.toRow({ data: f.u.creato_il, tipo: 'FR_MANCANTE', id_unita: f.ch.id_unita, seriale: f.u.seriale, fr: '', descrizione: f.u.note, stato: 'APERTA', aperta_da: f.u.creato_da, rev: 1 }); });
+        if (nuove.length) { var rA = await API.append(DB.id, 'ANOMALIE', nuove, true); await API.batchUpdate(DB.id, [{ range: tA.cell('id_anomalia', rA) + ':' + tA.col('id_anomalia') + (rA + nuove.length - 1), values: nuove.map(function (x, i) { return ['A' + L.pad(DB.rid('ANOMALIE', rA + i), 6)]; }) }], true); } }
+    } catch (e) { console.warn('anomalie FR mancante: ' + e.message); }
     API.append(DB.id, 'LOG', [App.log('RIPARA_ID_MANCANTI', 'UNITA', fatti[0].ch.id_unita + (fatti.length > 1 ? '…' + fatti[fatti.length - 1].ch.id_unita : ''), { schede: fatti.map(function (f) { return { id: f.ch.id_unita, seriale: f.u.seriale, tipo: f.u.tipo, mov: f.mov, ricezione: f.ric, creato_da: f.u.creato_da, creato_il: f.u.creato_il }; }) })], true).catch(function () { });
+    if (senzaMov.length) { try { var nm = await Ingresso.creaMovIn(senzaMov.map(function (f) { return f.u; })); fatti.forEach(function (f) { if (!f.mov && f.u.id_mov_in) f.mov = f.u.id_mov_in; }); } catch (e) { console.warn('movimenti IN non creati: ' + e.message); } }
+    Sto.dati.cur = null;
     if (App.tab === 'giacenze') Giacenze.render(); if (App.tab === 'ingresso') Ingresso.renderOggi();
     toast(fatti.length + ' schede senza ID sistemate (ingresso non completato): ' + fatti.map(function (f) { return f.ch.id_unita + ' ' + f.u.seriale; }).slice(0, 5).join(', ') + (fatti.length > 5 ? '…' : ''), 'ok');
     return fatti.length;
+  },
+  // movimento IN mancante di una scheda venuta da un ingresso interrotto: prima cerca un movimento già scritto (si collega), solo se non c'è lo crea
+  creaMovIn: async function (US) {
+    var H = await Ingresso.heads(), tM = H.MOVIMENTI, tU = DB.t.UNITA, mBase = parseInt(DB.param('mov_id_base', ''), 10); if (isNaN(mBase)) throw new Error('mov_id_base mancante');
+    var M = await DB.loadCols(DB.id, 'MOVIMENTI', ['id_mov', 'id_unita', 'direzione', 'seriale']);
+    if (!DB.t.RICEZIONI) await DB.loadTables(['RICEZIONI']);
+    var RI = {}; DB.t.RICEZIONI.rows.forEach(function (r) { if (r.id_ricezione) RI[r.id_ricezione] = r; });
+    var upd = [], nuovi = [], per = [], fatti = [];
+    US.forEach(function (u) {
+      if (L.s(u.id_mov_in) || !L.s(u.id_unita)) return;
+      var i = M.findIndex(function (m) { return m.direzione === 'IN' && (m.id_unita === u.id_unita || (!L.s(m.id_mov) && L.up(m.seriale) === L.up(u.seriale))); });
+      if (i >= 0) {   // c'è già: lo collego (e gli do l'ID se non l'ha)
+        var idM = L.s(M[i].id_mov) || 'IN' + (mBase + i + 2);
+        if (!L.s(M[i].id_mov)) upd.push({ range: tM.cell('id_mov', i + 2), values: [[idM]] });
+        if (M[i].id_unita !== u.id_unita && 'id_unita' in tM.idx) upd.push({ range: tM.cell('id_unita', i + 2), values: [[u.id_unita]] });
+        u.id_mov_in = idM; upd.push({ range: tU.cell('id_mov_in', u._r), values: [[idM]] }); fatti.push({ id: u.id_unita, mov: idM, creato: false }); return;
+      }
+      var r = RI[L.s(u.id_ricezione)] || {}, d = L.normDate(u.data_in) || L.s(u.creato_il).slice(0, 10), reg = L.s(u.creato_il).slice(0, 10) || d, v = DB.vltMap[u.fr] || {};
+      nuovi.push({ data_ora: d + ' ' + (L.s(u.creato_il).slice(11) || '00:00:00'), data_registrazione_vlt: reg, posizione_note: (u.tipo === 'FAULTY' || u.tipo === 'GOOD') ? Blk.nota(d, reg) : [u.ubicazione, u.n_plt].filter(Boolean).join(' / '), direzione: 'IN', causale: 'INGRESSO',
+        seriale: u.seriale, pn: u.pn, mnft: u.mnft, tipo: u.tipo, fr: u.fr, rma: u.rma, po_mrn: r.po_mrn || '', controparte: r.mittente || '', awb: r.awb || '', vettore: r.vettore || '', ddt: r.ddt_mittente || '', riparatore: u.riparatore, ubicazione_a: u.ubicazione,
+        operatore: u.creato_da, operatore_sigla: App.sigla(u.creato_da), note: u.note, stato_vlt: v.stato || '', origine: 'APP', id_unita: u.id_unita, id_ricezione: L.s(u.id_ricezione) });
+      per.push(u);
+    });
+    if (nuovi.length) {
+      var rM = await API.append(DB.id, 'MOVIMENTI', nuovi.map(function (o) { return tM.toRow(o); }), true);
+      nuovi.forEach(function (o, i) { o.id_mov = 'IN' + (mBase + rM + i); per[i].id_mov_in = o.id_mov; upd.push({ range: tU.cell('id_mov_in', per[i]._r), values: [[o.id_mov]] }); fatti.push({ id: per[i].id_unita, mov: o.id_mov, creato: true }); });
+      upd.push({ range: tM.cell('id_mov', rM) + ':' + tM.col('id_mov') + (rM + nuovi.length - 1), values: nuovi.map(function (o) { return [o.id_mov]; }) });
+    }
+    if (upd.length) await API.batchUpdate(DB.id, upd, true);
+    if (fatti.length) { API.append(DB.id, 'LOG', [App.log('RIPARA_MOVIMENTI_IN', 'MOVIMENTI', fatti[0].mov + (fatti.length > 1 ? '…' + fatti[fatti.length - 1].mov : ''), { movimenti: fatti })], true).catch(function () { }); Sto.dati.cur = null; }
+    return fatti.length;
+  },
+  // schede già riparate (RIPARA_ID_MANCANTI) rimaste senza movimento di ingresso: dagli ultimi 3000 righe del Log
+  riparaMovDaLog: async function () {
+    var n = Sync.n || (await API.batchGet(DB.id, [API.q('LOG') + '!A1:A']))[0].length, da = Math.max(2, n - 3000);
+    var v = (await API.batchGet(DB.id, [API.q('LOG') + '!C' + da + ':F' + n]))[0] || [], ids = {};
+    v.forEach(function (r) { if (r[0] !== 'RIPARA_ID_MANCANTI') return; try { (JSON.parse(r[3] || '{}').schede || []).forEach(function (s) { if (!s.mov && s.id) ids[s.id] = 1; }); } catch (e) { } });
+    var US = DB.t.UNITA.rows.filter(function (u) { return ids[u.id_unita] && !L.s(u.id_mov_in); });
+    if (!US.length) return 0;
+    var k = await Ingresso.creaMovIn(US);
+    if (k) { toast(k + ' movimenti di ingresso ricreati per schede di un ingresso interrotto (vedi Log RIPARA_MOVIMENTI_IN)', 'ok'); if (App.tab === 'storico') Sto.render(true); }
+    return k;
   },
   // riga del movimento di ingresso ricavata dall'ID (IN + mov_id_base + riga), verificata rileggendo la cella
   rigaMov: async function (u, tM) {
