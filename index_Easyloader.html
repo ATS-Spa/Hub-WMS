@@ -7551,6 +7551,7 @@ var Rma = {
     var rows;
     try { rows = await leggiFoglio(f); } catch (e) { Modal.open('Import Excel', 'File non leggibile: ' + e.message); return; }
     if (!rows.length) { Modal.open('Import Excel', 'Il file è vuoto.'); return; }
+    if ('RMA CREATO' in rows[0] && ('ID UNITA' in rows[0] || 'RMA AL DOWNLOAD' in rows[0])) { toast('È un Excel RMA (RMA per i carichi già aperti): lo apro con ⬆ Importa RMA', 'ok'); return Rma.importaRma({ files: [f], value: '' }); }
     Rma.carAnteprima(rows, f.name);
   },
   // RMA scritto dal cliente: solo le cifre ("RMA 199788" / "rma199788" → 199788)
