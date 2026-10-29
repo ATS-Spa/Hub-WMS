@@ -1997,7 +1997,7 @@ var Ingresso = {
     var key = L.up(o.ser);
     if (ctx.serSeen[key]) { o.msgs.push(['err', 'Seriale già letto in questa lista (riga ' + ctx.serSeen[key] + ')']); o.err = true; }
     ctx.serSeen[key] = ctx.n;
-    if (o.fr) { if (ctx.frSeen[o.fr]) { o.msgs.push(['warn', 'FR già letto (riga ' + ctx.frSeen[o.fr] + ')']); o.warn = true; } ctx.frSeen[o.fr] = ctx.n; }
+    if (o.fr) { if (ctx.frSeen[o.fr]) { o.msgs.push(['err', 'FR ' + o.fr + ' già letto in questa lista (riga ' + ctx.frSeen[o.fr] + '): un FR va su un solo pezzo']); o.err = true; } ctx.frSeen[o.fr] = ctx.n; }
     var g = ctx.giac[key] || ctx.giac[L.up(L.afterSpace(o.ser))];
     if (g) {
       var mi = (Sto.dati.cur || []).find(function (m) { return m.id_mov === g.id_mov_in; }), sIn = mi ? L.s(mi.stato_vlt) : '', vg = g.fr ? DB.vltMap[g.fr] : null, sNow = vg ? L.s(vg.stato) : '';
@@ -2022,7 +2022,8 @@ var Ingresso = {
     // il FR fa fede: stesso FR già in giacenza con un altro seriale (es. Huawei che sostituisce il pezzo)
     if (o.fr && (o.tipo === 'FAULTY' || o.tipo === 'GOOD')) {
       var gf = (ctx.giacFr[o.fr] || []).filter(function (u) { return u.tipo === o.tipo && L.up(u.seriale) !== L.up(o.ser); });
-      if (gf.length) { o.msgs.push(['warn', 'FR ' + o.fr + ' già in giacenza come ' + o.tipo + ' con seriale ' + gf[0].seriale + ' (' + gf[0].id_unita + ')']); o.warn = true; }
+      if (gf.length) { o.msgs.push(['err', 'FR ' + o.fr + ' già in giacenza come ' + o.tipo + ' con seriale ' + gf[0].seriale + ' (' + gf[0].id_unita + '): se il seriale di quella scheda è sbagliato correggilo lì (Giacenze → ✎), non caricarne un\'altra']); o.err = true; }
+      else { var go = (ctx.oggiFr[o.fr] || []).filter(function (u) { return u.tipo === o.tipo && L.up(u.seriale) !== L.up(o.ser); }); if (go.length) { o.msgs.push(['err', 'FR ' + o.fr + ' già entrato oggi come ' + o.tipo + ' con seriale ' + go[0].seriale + ' (' + go[0].id_unita + ', ' + App.sigla(go[0].creato_da) + ' alle ' + L.s(go[0].creato_il).slice(11, 16) + ')']); o.err = true; } }
     }
     return o;
   },
@@ -2034,14 +2035,14 @@ var Ingresso = {
     $('hVettore').textContent = !vet ? '' : (vlist.indexOf(vet) < 0 ? 'VEDI FISICAMENTE: vettore non in elenco' : '');
     $('hVettore').className = 'hint' + (vet && vlist.indexOf(vet) < 0 ? ' warn' : '');
     // giacenza indicizzata
-    var giac = {}, giacFr = {}; DB.t.UNITA.rows.forEach(function (u) { if (Giacenze.A_MAG.indexOf(u.stato) >= 0) { giac[L.up(u.seriale)] = u; if (u.fr) (giacFr[u.fr] = giacFr[u.fr] || []).push(u); } });
+    var giac = {}, giacFr = {}, oggiFr = {}, oggiD = L.isoToday(); DB.t.UNITA.rows.forEach(function (u) { if (Giacenze.A_MAG.indexOf(u.stato) >= 0) { giac[L.up(u.seriale)] = u; if (u.fr) (giacFr[u.fr] = giacFr[u.fr] || []).push(u); } else if (u.fr && u.stato !== 'ANNULLATO' && L.s(u.creato_il).slice(0, 10) === oggiD) (oggiFr[u.fr] = oggiFr[u.fr] || []).push(u); });
     var lettera = L.up(App.me.sigla || 'X').charAt(0);
     var re = new RegExp('/ 0?(\\d+)' + lettera + '$');
     var base = 0; DB.t.UNITA.rows.forEach(function (u) { if (u.stato === 'IN_GIACENZA' && (u.tipo === 'GOOD' || u.tipo === 'BALANCING')) { var m = re.exec(L.s(u.note).split(' | ')[0]); if (m) base = Math.max(base, parseInt(m[1], 10)); } });
     var lab = base;
     var maxR = 0; DB.t.UNITA.rows.forEach(function (u) { if (u._r > maxR) maxR = u._r; });
     var uB = parseInt(DB.param('unita_id_base', '0'), 10) || 0;
-    var ctx = { serSeen: {}, frSeen: {}, giac: giac, giacFr: giacFr, n: 0, nextLabel: function () { lab++; return '0' + lab + lettera; },
+    var ctx = { serSeen: {}, frSeen: {}, giac: giac, giacFr: giacFr, oggiFr: oggiFr, n: 0, nextLabel: function () { lab++; return '0' + lab + lettera; },
       idPrev: function (n) { return maxR ? 'U' + L.pad(uB + maxR + n - 1, 7) : ''; } };
     Ingresso.computed = Ingresso.rows.map(function (r) { ctx.n++; return Ingresso.calc(r, T, ctx); });
     // proposte di testata dal primo FR
@@ -2122,6 +2123,9 @@ var Ingresso = {
     var miss = Ingresso.validaTestata(T);
     if (miss.length) { Modal.open('Testata incompleta', 'Senza questi campi non si carica:\n• ' + miss.join('\n• ')); return; }
     if (C.some(function (c) { return c.err; })) { Modal.open('Righe bloccanti', 'Correggi le righe in rosso prima di caricare.'); return; }
+    // giacenza aggiornata (un collega può aver caricato lo stesso seriale o FR nel frattempo): stessi controlli prima di scrivere
+    try { await Busy.wrap(DB.loadTables(['UNITA'])); Ingresso.ricalcola(); Ingresso.renderOggi(); C = Ingresso.computed; } catch (e) { Modal.open('Carica dati', 'Non riesco a rileggere la giacenza per il controllo dei doppi: ' + e.message + '\nRiprova tra poco.'); return; }
+    if (C.some(function (c) { return c.err; })) { Modal.open('Righe bloccanti', 'Con la giacenza aggiornata alcune righe sono diventate rosse (un collega ha appena caricato lo stesso seriale o FR): controllale prima di caricare.'); return; }
     var nWarn = C.filter(function (c) { return c.warn; }).length;
     var ok = await Modal.confirm('Carica ' + C.length + ' pezzi',
       'Tipo ' + T.tipo + ' · ' + T.mittente + ' · ' + T.data + (Ingresso.perConto ? '\n\nA nome di ' + Ingresso.perConto.sigla + ' · ' + Ingresso.perConto.nome + ' (caricato da te: resta nel LOG)' : '') + (nWarn ? '\n\n' + nWarn + ' righe hanno avvisi (gialle): verranno caricate e, se c\'è un errore seriale/TPN, aperta un\'anomalia.' : ''));
