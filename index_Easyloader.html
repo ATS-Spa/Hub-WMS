@@ -174,6 +174,7 @@ tr.r-var td:first-child{box-shadow:inset 3px 0 0 var(--violet)}
 .ico-btn:hover{color:var(--red)}
 a.mail{color:var(--blue);font-size:11.5px;text-decoration:none}
 .empty{padding:28px;text-align:center;color:var(--muted);font-size:13px}
+.ro-cell{display:inline-block;padding:4px 7px;line-height:inherit}
 .edit-cell{background:transparent;border:1px solid transparent;border-radius:5px;color:var(--text);font:inherit;padding:3px 6px;width:100%}
 .edit-cell:focus{border-color:var(--blue);background:var(--card);outline:none}
 .edit-cell.dirty{border-color:var(--amber)}
@@ -1390,6 +1391,7 @@ var App = {
       await DB.loadVlt(false); stepDone(s4, true, 'VLT: ' + DB.vlt.rows.length + ' FR · aggiornato ' + new Date(DB.vlt.ts).toLocaleString('it-IT'));
       App.showShell();
       DB.loadLookups(false).then(function () { App.fillLists(); App.syncInfo(); Ingresso.ricalcola(); }).catch(function (e) { toast('Anagrafiche non caricate: ' + e.message, 'ko'); });
+      setTimeout(function () { Ingresso.riparaId().catch(function (e) { console.warn('ID mancanti: ' + e.message); }); }, 4000);
       DB.leggiStato().then(function () { App.syncInfo(); var m = DB.mancanti(); if (m.length) toast('⚠ Non arrivati oggi dal backend VLT: ' + m.join(', ') + ' (vedi ⓘ)', 'ko'); }).catch(function () { });
       DB.loadHuawei(false).then(function () { App.syncInfo(); Ingresso.ricalcola(); }).catch(function (e) { toast('File Huawei non leggibile (FR da seriale Huawei non disponibile): ' + e.message, 'ko'); });
     } catch (e) {
@@ -2212,14 +2214,49 @@ var Ingresso = {
     var anom = [];
     C.forEach(function (c, i) { if (c.pend) anom.push(tA.toRow({ data: now, tipo: 'FR_MANCANTE', id_unita: uObjs[i].id_unita, seriale: c.ser, fr: '', descrizione: c.nota, stato: 'APERTA', aperta_da: me, rev: 1 })); });
     C.forEach(function (c, i) { if (c.anomalia) anom.push(tA.toRow({ data: now, tipo: /SERIALE/.test(c.anomalia) ? 'SERIALE_ERRATO' : 'TPN_ERRATO', id_unita: uObjs[i].id_unita, seriale: c.ser, fr: c.fr, descrizione: c.anomalia, stato: 'APERTA', aperta_da: me, rev: 1 })); });
+    try { await API.batchUpdate(DB.id, upd); }
+    catch (e2) {
+      await API.append(DB.id, 'LOG', [tL.toRow({ data_ora: now, utente: me, azione: 'ERRORE_INGRESSO_NUMERAZIONE', foglio: 'UNITA', id_record: uObjs[0].id_unita, dettaglio: JSON.stringify({ errore: e2.message, pezzi: n, seriali: C.map(function (c) { return c.ser; }) }) })]).catch(function () { });
+      uObjs.forEach(function (o) { var x = {}; tU.header.forEach(function (h) { x[h] = h === 'id_unita' || h === 'id_ricezione' || h === 'id_mov_in' ? '' : (o[h] === undefined ? '' : String(o[h])); }); x._r = o._r; tU.rows.push(x); });
+      var nr = 0; try { nr = await Ingresso.riparaId(0); } catch (e3) { }
+      throw new Error('Pezzi salvati ma la numerazione (ID scheda) non è stata scritta: ' + e2.message + (nr ? '\nRiparata subito: ' + nr + ' schede hanno ora il loro ID. Controlla in Ingressi di oggi e ristampa le etichette.' : '\nNON ricaricare i pezzi: l’app la completa da sola alla prossima apertura.'));
+    }
     await Promise.all([
-      API.batchUpdate(DB.id, upd),
+      Promise.resolve(),
       API.append(DB.id, 'LOG', [tL.toRow({ data_ora: now, utente: me, azione: 'CREA', foglio: 'RICEZIONI', id_record: idR, dettaglio: JSON.stringify(Object.assign({ tipo: T.tipo, pezzi: n, mittente: T.mittente, unita: uObjs[0].id_unita + '…' + uObjs[n - 1].id_unita }, pc ? { per_conto_di: pc.sigla, caricato_da: Auth.email } : {})) })]),
       anom.length ? API.append(DB.id, 'ANOMALIE', anom).then(function (rA) { return API.batchUpdate(DB.id, [{ range: tA.cell('id_anomalia', rA) + ':' + tA.col('id_anomalia') + (rA + anom.length - 1), values: anom.map(function (x, i) { return ['A' + L.pad(DB.rid('ANOMALIE', rA + i), 6)]; }) }]); }) : null
     ]);
     // aggiorno la giacenza in memoria
     uObjs.forEach(function (o) { var x = {}; tU.header.forEach(function (h) { x[h] = o[h] === undefined ? '' : String(o[h]); }); x._r = o._r; tU.rows.push(x); });
     return { idR: idR, pezzi: uObjs };
+  },
+  riparaId: async function (minuti) {
+    var tU = DB.t.UNITA, lim = Date.now() - (minuti === undefined ? 10 : minuti) * 60000, eta = function (s) { var d = new Date(L.s(s).replace(' ', 'T')); return isNaN(d) ? 0 : d.getTime(); };
+    var U = tU.rows.filter(function (u) { return !L.s(u.id_unita) && L.s(u.seriale) && u._r > 1 && eta(u.creato_il) && eta(u.creato_il) <= lim; });
+    if (!U.length) return 0;
+    var uBase = parseInt(DB.param('unita_id_base', '0'), 10) || 0, mBase = parseInt(DB.param('mov_id_base', ''), 10), ids = {}, upd = [], fatti = [];
+    tU.rows.forEach(function (u) { if (L.s(u.id_unita)) ids[u.id_unita] = 1; });
+    var tM = (await Ingresso.heads()).MOVIMENTI, tR = DB.t.RICEZIONI || (await DB.loadTables(['RICEZIONI']), DB.t.RICEZIONI);
+    var M = await DB.loadCols(DB.id, 'MOVIMENTI', ['id_mov', 'id_unita', 'id_ricezione', 'direzione', 'seriale', 'operatore']);
+    var R = await DB.loadCols(DB.id, 'RICEZIONI', ['id_ricezione', 'creato_il', 'creato_da']), usatiM = {};
+    U.forEach(function (u) {
+      var id = 'U' + L.pad(uBase + u._r - 1, 7); if (ids[id]) return;   // ID già preso da un'altra scheda: non tocco
+      var ch = { id_unita: id }, rr = -1, mr = -1, idR = L.s(u.id_ricezione), idM = L.s(u.id_mov_in);
+      if (!idR) { rr = R.findIndex(function (x) { return !L.s(x.id_ricezione) && x.creato_il === u.creato_il && x.creato_da === u.creato_da; }); if (rr >= 0) { idR = 'R' + L.pad(DB.rid('RICEZIONI', rr + 2), 6); ch.id_ricezione = idR; } }
+      if (!idM && !isNaN(mBase)) { mr = M.findIndex(function (m, i) { return !usatiM[i] && !L.s(m.id_mov) && m.direzione === 'IN' && L.up(m.seriale) === L.up(u.seriale) && L.s(m.operatore).toLowerCase() === L.s(u.creato_da).toLowerCase(); }); if (mr >= 0) { usatiM[mr] = 1; idM = 'IN' + (mBase + mr + 2); ch.id_mov_in = idM; } }
+      if (L.s(u.note).indexOf(' / ' + Ingresso.NR_SCHEDA) >= 0) ch.note = L.s(u.note).replace(' / ' + Ingresso.NR_SCHEDA, ' / ' + id);
+      Object.keys(ch).forEach(function (h) { if (h in tU.idx) upd.push({ range: tU.cell(h, u._r), values: [[ch[h]]] }); });
+      if (mr >= 0) [['id_mov', idM], ['id_unita', id], ['id_ricezione', idR]].forEach(function (x) { if (x[1] && x[0] in tM.idx) upd.push({ range: tM.cell(x[0], mr + 2), values: [[x[1]]] }); });
+      if (rr >= 0 && 'id_ricezione' in tR.idx) upd.push({ range: tR.cell('id_ricezione', rr + 2), values: [[idR]] }), R[rr].id_ricezione = idR;
+      ids[id] = 1; fatti.push({ u: u, ch: ch, mov: idM, ric: idR });
+    });
+    if (!fatti.length) return 0;
+    await API.batchUpdate(DB.id, upd, true);
+    fatti.forEach(function (f) { Object.keys(f.ch).forEach(function (h) { f.u[h] = f.ch[h]; }); });
+    API.append(DB.id, 'LOG', [App.log('RIPARA_ID_MANCANTI', 'UNITA', fatti[0].ch.id_unita + (fatti.length > 1 ? '…' + fatti[fatti.length - 1].ch.id_unita : ''), { schede: fatti.map(function (f) { return { id: f.ch.id_unita, seriale: f.u.seriale, tipo: f.u.tipo, mov: f.mov, ricezione: f.ric, creato_da: f.u.creato_da, creato_il: f.u.creato_il }; }) })], true).catch(function () { });
+    if (App.tab === 'giacenze') Giacenze.render(); if (App.tab === 'ingresso') Ingresso.renderOggi();
+    toast(fatti.length + ' schede senza ID sistemate (ingresso non completato): ' + fatti.map(function (f) { return f.ch.id_unita + ' ' + f.u.seriale; }).slice(0, 5).join(', ') + (fatti.length > 5 ? '…' : ''), 'ok');
+    return fatti.length;
   },
   // riga del movimento di ingresso ricavata dall'ID (IN + mov_id_base + riga), verificata rileggendo la cella
   rigaMov: async function (u, tM) {
@@ -2650,6 +2687,7 @@ var Giacenze = {
   // ─ gestione item: nota, blocco, attesa, variazione dati (tracciati in MOVIMENTI come movimenti interni + LOG)
   VAR_F: [['data_in', 'Data ingresso'], ['reg_vlt', 'Data reg. VLT (solo admin)'], ['tipo', 'Tipo'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['fr', 'FR'], ['rma', 'RMA'], ['riparatore', 'Riparatore'], ['magazzino', 'Magazzino'], ['ubicazione', 'Ubicazione'], ['destinazione_prevista', 'Destinazione']],
   gestisci: function (id) {
+    if (!L.s(id)) { toast('Scheda senza ID (ingresso non completato): la sistemo, poi riprova', 'ko'); Busy.wrap(Ingresso.riparaId(0)).then(function (n) { if (!n) Modal.open('Scheda senza ID', 'Non riesco a ricalcolare l’ID: avvisa l’admin (Log: RIPARA_ID_MANCANTI).'); Giacenze.render(); }).catch(function (e) { Modal.open('Scheda senza ID', e.message); }); return; }
     var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); if (!u) return;
     var gestibile = Giacenze.A_MAG.indexOf(u.stato) >= 0 && u.stato !== 'IN_LAVORAZIONE';
     var nota = L.s(u.note).split(' | fonte:')[0].replace(/^fonte:.*$/i, '');
@@ -6735,12 +6773,12 @@ var Rma = {
         { k: 'dest', label: 'Destinazione', filter: 'select', get: function (u) { var v = Rma.varia(u); return v ? v.nuova : Rma.dv(u, 'dest'); },
           html: function (u) {
             var v = Rma.varia(u), d = Rma.dirty[u.id_unita], on = d && d.dest !== undefined, val = v ? v.nuova : L.s(Rma.dv(u, 'dest'));
-            if (u.tipo !== 'GOOD') return esc(val);
+            if (u.tipo !== 'GOOD') return '<span class="ro-cell">' + esc(val) + '</span>';
             return '<input class="edit-cell edit-vis' + (on ? ' dirty' : '') + (v ? ' var-in' : '') + '" style="width:calc(' + Math.max(14, Math.min(44, val.length + 5)) + 'ch + 16px)" list="dlControparti" value="' + esc(val) + '" placeholder="✎ destinazione" title="Variazione destino (Service Desk): scrivi o scegli la nuova destinazione e premi Salva modifiche" onchange="Rma.set(\'' + u.id_unita + '\',\'dest\',this.value)">' +
               (v ? '<div class="var-era">⇄ era: ' + esc(v.prima || '—') + ' <small title="' + (v.da === 'SD' ? 'Variata dal Service Desk' : 'Variata da RMA ritorno in giacenza') + '">' + v.da + '</small></div>' : '');
           } },
         { k: 'rma', label: 'RMA creato (SD)', filter: 'text', get: function (u) { return Rma.dv(u, 'rma'); },
-          html: function (u) { if (u.tipo === 'BALANCING') return '<span class="mono">' + esc(u.rma) + '</span>'; var d = Rma.dirty[u.id_unita], on = d && d.rma !== undefined; return '<input class="edit-cell mono' + (on ? ' dirty' : '') + '" style="width:11ch" value="' + esc(Rma.dv(u, 'rma')) + '" placeholder="—" onchange="Rma.set(\'' + u.id_unita + '\',\'rma\',this.value)">' + Rma.eraRma(u.rma_precedente, Rma.dv(u, 'rma')); } },
+          html: function (u) { if (u.tipo === 'BALANCING') return '<span class="mono ro-cell">' + esc(u.rma) + '</span>'; var d = Rma.dirty[u.id_unita], on = d && d.rma !== undefined; return '<input class="edit-cell mono' + (on ? ' dirty' : '') + '" style="width:11ch" value="' + esc(Rma.dv(u, 'rma')) + '" placeholder="—" onchange="Rma.set(\'' + u.id_unita + '\',\'rma\',this.value)">' + Rma.eraRma(u.rma_precedente, Rma.dv(u, 'rma')); } },
         { k: 'rmag', label: 'RMA giacenza', filter: 'text', cls: 'mono', get: function (u) { var a = Rma.ritDi(u); return a ? a.rma.id_rma : ''; }, html: function (u) { var a = Rma.ritDi(u); return a ? '<span style="color:var(--green)">' + esc(a.rma.id_rma) + '</span>' : ''; } },
         { k: 'open', label: 'Data open', cls: 'mono', get: function (u) { var a = Rma.ritDi(u); return a ? a.rma.data_apertura.slice(0, 10) : ''; } },
         { k: 'scad', label: 'Scadenza', cls: 'mono', get: function (u) { var a = Rma.ritDi(u); return a ? a.rma.data_scadenza : ''; }, html: function (u) { var a = Rma.ritDi(u), sc = a ? a.rma.data_scadenza : ''; return '<span' + (sc && sc < oggi() ? ' style="color:var(--red)"' : '') + '>' + esc(L.vedi(sc)) + '</span>'; } },
