@@ -1140,6 +1140,7 @@ var Sync = {
     var ackLibero = Ack.loaded && !Ack.cur;
     if (ackLibero && T.indexOf('SPEDIZIONI') < 0) T = T.concat(['SPEDIZIONI']);
     if (ackLibero) T = T.concat(['SPEDIZIONI_RIGHE', 'ACK_PENDING']);
+    else if (Rma.loaded && !Ack.loaded) T.push('SPEDIZIONI_RIGHE');   /* con una spunta ACK aperta in questa sessione le righe non si toccano */
     if (Jun.loaded) T.push('JUNIPER');
     if (Nr.loaded) T.push('PRATICHE_NEW_REUSE');
     if (Sync.occupato()) { Sync.dovuto = true; return; }
@@ -4772,7 +4773,7 @@ var AwbF = {
       } else { add.push(F.h.map(function (h) { return h in o ? o[h] : ''; })); nuovi.push(s); }
     });
     if (upd.length) await API.batchUpdate(rec.file_id, upd);
-    if (add.length) await API.append(rec.file_id, AwbF.TAB, add);
+    if (add.length) { var da = Math.max(2, F.rows.length + 2); upd = [{ range: q + '!A' + da, values: add }]; await API.batchUpdate(rec.file_id, upd); }
     return { rec: rec, nuovi: nuovi };
   },
   inMail: function (m, rec) {
