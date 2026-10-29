@@ -8413,11 +8413,18 @@ var Bal = new Crud('bal', {
   fields: [
     { k: 'mittente', label: 'Mittente', list: 'dlControparti', req: true }, { k: 'data_inbound', label: 'Data inbound', type: 'date' }, { k: 'awb_mittente', label: 'AWB mittente', mono: true },
     { k: 'seriale', label: 'Seriale', mono: true, req: true }, { k: 'pn', label: 'P/N', mono: true }, { k: 'rma', label: 'RMA', mono: true, req: true },
-    { k: 'destinatario', label: 'Destinatario', list: 'dlControparti', req: true }, { k: 'conferma_pn', label: 'Conferma P/N', mono: true }, { k: 'info_extra', label: 'Info extra magazzino', wide: true }, { k: 'note', label: 'Note', wide: true }
+    { k: 'destinatario', label: 'Destinatario', list: 'dlControparti', req: true }, { k: 'conferma_pn', label: 'Conferma P/N', mono: true }, { k: 'info_extra', label: 'Info extra magazzino', wide: true }, { k: 'note', label: 'Note', wide: true },
+    { k: 'gestito', label: 'Gestito', type: 'select', opts: ['NO', 'SI'] }
   ],
   nuovo: function () { return { gestito: 'NO', data_inbound: L.isoToday() }; },
-  puoModificare: function (r) { return L.up(r.gestito) !== 'SI'; },
+  // gestita dall'ingresso (scheda collegata) o annullata: non si tocca; gestita a mano: si può rimettere NO
+  puoModificare: function (r) { return L.up(r.gestito) !== 'ANNULLATA' && !(L.up(r.gestito) === 'SI' && L.s(r.id_unita)); },
   prima: function (o, id) {
+    var r0 = id ? DB.t.BALANCING.rows.find(function (x) { return x.id_balancing === id; }) : null, g0 = r0 ? L.up(r0.gestito) : 'NO';
+    o.gestito = L.up(o.gestito) === 'SI' ? 'SI' : 'NO';
+    if (r0 && L.s(r0.id_unita) && g0 === 'SI' && o.gestito !== 'SI') return 'Arrivata con l’ingresso (scheda ' + r0.id_unita + '): non può tornare non gestita';
+    if (o.gestito !== g0) { if (o.gestito === 'SI') { o.data_gestione = L.nowStamp(); o.gestito_da = Auth.email; } else { o.data_gestione = ''; o.gestito_da = ''; } }
+    if (o.gestito === 'SI') return '';
     var d = DB.t.BALANCING.rows.find(function (x) { return x.id_balancing !== id && L.up(x.seriale) === L.up(o.seriale) && L.up(x.gestito) === 'NO'; });
     return d ? 'Seriale già presente in una balancing aperta (' + d.id_balancing + ')' : '';
   },
@@ -8427,7 +8434,7 @@ var Bal = new Crud('bal', {
   filtriIniziali: {},
   grid: {
     empty: 'Nessuna balancing', sort: 'data_inbound', dir: -1,
-    rowAttr: function (r) { return L.up(r.gestito) === 'SI' || L.up(r.gestito) === 'ANNULLATA' ? 'class="r-off"' : 'class="r-edit" onclick="Bal.apri(\'' + r.id_balancing + '\')" title="Clicca per modificare"'; },
+    rowAttr: function (r) { var sp = L.up(r.gestito) === 'ANNULLATA' || (L.up(r.gestito) === 'SI' && L.s(r.id_unita)); return sp ? 'class="r-off"' + (L.s(r.id_unita) ? ' title="Arrivata con l’ingresso (scheda ' + esc(r.id_unita) + '): non modificabile"' : '') : 'class="r-edit' + (L.up(r.gestito) === 'SI' ? ' r-off' : '') + '" onclick="Bal.apri(\'' + r.id_balancing + '\')" title="Clicca per modificare' + (L.up(r.gestito) === 'SI' ? ' (gestita a mano: puoi rimetterla NO)' : '') + '"'; },
     cols: [
       { k: 'id_balancing', label: 'ID', cls: 'mono' }, { k: 'mittente', label: 'Mittente', filter: 'select' }, { k: 'data_inbound', label: 'Data inbound', cls: 'mono', filter: 'date', get: function (r) { return L.normDate(r.data_inbound); } },
       { k: 'awb_mittente', label: 'AWB', filter: 'text', cls: 'mono' }, { k: 'seriale', label: 'Seriale', filter: 'text', cls: 'mono' }, { k: 'pn', label: 'P/N', filter: 'select', cls: 'mono' },
