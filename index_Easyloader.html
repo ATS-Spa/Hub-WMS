@@ -3943,11 +3943,13 @@ var Admin = {
     if (!t) { $('admRows').innerHTML = '<tr><td class="empty">Carico…</td></tr>'; Chi.load().then(Admin.render).catch(function (e) { toast(e.message, 'ko'); }); return; }
     document.querySelectorAll('.subtab').forEach(function (e) { e.classList.toggle('active', e.id === 'adm-' + Admin.sez); });
     $('admTitle').textContent = c.title; $('admHint').textContent = c.hint;
-    $('admHead').innerHTML = '<tr>' + c.cols.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr>';
+    if (Admin._delS !== Admin.sez) { Admin.del = {}; Admin._delS = Admin.sez; }
+    $('admHead').innerHTML = '<tr>' + c.cols.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '<th></th></tr>';
     var q = L.qm($('admQ').value);
     $('admRows').innerHTML = t.rows.map(function (r, i) {
       if (q && !Admin.dirty[i] && !c.cols.some(function (h) { return q(r[h]); })) return '';
-      return '<tr>' + c.cols.map(function (h) {
+      var dl = !!(Admin.del || {})[i];
+      return '<tr' + (dl ? ' style="opacity:.45;text-decoration:line-through" title="Da eliminare: premi Salva modifiche"' : '') + '>' + c.cols.map(function (h) {
         var d = Admin.dirty[i] && Admin.dirty[i][h] !== undefined;
         var v = d ? Admin.dirty[i][h] : r[h];
         var op = Admin.opz(h);
@@ -3955,8 +3957,37 @@ var Admin = {
         if (op) { var lst = op.indexOf(L.s(v)) < 0 && L.s(v) ? [L.s(v)].concat(op) : op;
           return '<td><select class="edit-cell' + (d ? ' dirty' : '') + '" onchange="Admin.set(' + i + ',\'' + h + '\',this.value)">' + (L.s(v) ? '' : '<option value=""></option>') + lst.map(function (x) { return '<option' + (x === L.s(v) ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></td>'; }
         return '<td><input class="edit-cell' + (d ? ' dirty' : '') + '" value="' + esc(v) + '" onchange="Admin.set(' + i + ',\'' + h + '\',this.value)"></td>';
-      }).join('') + '</tr>';
+      }).join('') + '<td style="text-decoration:none"><button class="ico-btn" title="' + (dl ? 'Annulla l’eliminazione' : 'Elimina la riga (al Salva modifiche, con la password eliminazione)') + '" onclick="Admin.togDel(' + i + ')">' + (dl ? '↩' : '🗑') + '</button></td></tr>';
     }).join('');
+  },
+  del: {},
+  togDel: function (i) {
+    var t = DB.t[Admin.sez], r = t && t.rows[i]; if (!r) return; Admin.del = Admin.del || {};
+    if (!Admin.del[i] && Admin.sez === 'OPERATORI') {
+      if (L.s(r.email).toLowerCase() === L.s(Auth.email).toLowerCase()) { toast('Non puoi eliminare te stesso', 'ko'); return; }
+      if (L.up(r.ruolo) === 'ADMIN' && !App.isOwner) { toast('Solo il super admin può togliere un admin', 'ko'); return; }
+    }
+    if (!Admin.del[i] && Admin.sez === 'CONTROPARTI') {
+      var k = L.up(r.codice), car = ((DB.t.CARICHI_RMA || {}).rows || []).filter(function (c) { return c.stato === 'APERTO' && L.up(c.destinazione) === k; }).length, sp = ((DB.t.SPEDIZIONI || {}).rows || []).filter(function (s) { return s.stato !== 'SPEDITA' && s.stato !== 'ANNULLATA' && L.up(s.destinatario) === k; }).length;
+      if (car || sp) toast('⚠ ' + r.codice + ' è in uso (' + [car ? car + ' carichi aperti' : '', sp ? sp + ' spedizioni non partite' : ''].filter(Boolean).join(', ') + '): eliminandola quei DDT escono senza indirizzo', 'ko');
+    }
+    if (Admin.del[i]) delete Admin.del[i]; else Admin.del[i] = true;
+    Admin.render(); if (Admin.del[i]) toast('Riga segnata da eliminare: premi Salva modifiche', 'ok');
+  },
+  // password eliminazione, chiesta una volta per tutte le righe segnate
+  chiediPwd: function (D) {
+    var t = DB.t[Admin.sez], h0 = t.header.slice(0, 3);
+    Modal.html('🗑 Elimina ' + D.length + ' righe · ' + Admin.CONF[Admin.sez].title,
+      '<div class="hint" style="margin-bottom:8px">Le righe vengono tolte dal foglio <b>' + esc(t.name) + '</b>; il contenuto resta nel Log (ADMIN_RIGA_ELIMINATA).</div><div class="tbl-wrap modal-scroll" style="max-height:40vh"><table><thead><tr>' + h0.map(function (h) { return '<th>' + esc(h) + '</th>'; }).join('') + '</tr></thead><tbody>' +
+      D.map(function (r) { return '<tr>' + h0.map(function (h) { return '<td>' + esc(r[h]) + '</td>'; }).join('') + '</tr>'; }).join('') + '</tbody></table></div>' +
+      '<div class="fg" style="margin-top:10px"><span class="fl">Password eliminazione</span><input class="fc" type="password" id="admPwd" autocomplete="new-password"></div><div class="hint" id="admPwdE"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: '🗑 Elimina e salva', cls: 'red', keep: true, fn: async function () {
+        var pw = $('admPwd').value, par = L.s(DB.param('password_eliminazione', ''));
+        var ok = par ? (/^sha256:/i.test(par) ? (await Nr.sha(pw)) === par.slice(7).toLowerCase() : pw === par) : (await Nr.sha(pw)) === Nr.PWD;
+        if (!ok) { $('admPwdE').textContent = 'Password errata'; $('admPwdE').className = 'hint err'; return; }
+        Modal.close(); Admin.save(true);
+      } }], true);
+    setTimeout(function () { if ($('admPwd')) $('admPwd').focus(); }, 50);
   },
   // KPI storico (BPR) da Excel: chiave kpi + mese, aggiorna o aggiunge
   importaKpi: async function (inp) {
@@ -3982,9 +4013,15 @@ var Admin = {
   },
   set: function (i, h, v) { Admin.dirty[i] = Admin.dirty[i] || {}; Admin.dirty[i][h] = L.s(v); Admin.render(); },
   addRow: function () { var t = DB.t[Admin.sez]; var o = { _r: null, _new: true }; t.header.forEach(function (h) { o[h] = ''; }); if (Admin.sez === 'OPERATORI') { o.ruolo = 'OPERATORE'; o.attivo = 'SI'; } t.rows.push(o); Admin.dirty[t.rows.length - 1] = {}; Admin.render(); },
-  save: async function () {
-    var t = DB.t[Admin.sez], keys = Object.keys(Admin.dirty);
-    if (!keys.length) { toast('Nessuna modifica'); return; }
+  save: async function (pwOk) {
+    var t = DB.t[Admin.sez], dels = Object.keys(Admin.del || {}).filter(function (k) { return Admin.del[k] && t.rows[k]; }), keys = Object.keys(Admin.dirty).filter(function (k) { return !(Admin.del || {})[k]; });
+    if (!keys.length && !dels.length) { toast('Nessuna modifica'); return; }
+    if (Admin.sez === 'OPERATORI' && !App.isOwner) {   /* ruolo ADMIN: lo dà o lo toglie solo il super admin */
+      var badR = keys.some(function (k) { var r = t.rows[k], d = Admin.dirty[k]; if (!('ruolo' in d)) return false; var pr = r._new ? '' : L.up(r.ruolo), dp = L.up(d.ruolo); return pr !== dp && (pr === 'ADMIN' || dp === 'ADMIN'); });
+      if (badR) { toast('Solo il super admin può dare o togliere il ruolo ADMIN', 'ko'); return; }
+      if (dels.some(function (k) { return L.up(t.rows[k].ruolo) === 'ADMIN'; })) { toast('Solo il super admin può togliere un admin', 'ko'); return; }
+    }
+    if (dels.length && pwOk !== true) { var D0 = dels.map(function (k) { return t.rows[k]; }).filter(function (r) { return !r._new; }); if (D0.length) { Admin.chiediPwd(D0); return; } }
     if (Admin.sez === 'CHIUSURE') {   // id automatico, date e campi controllati
       for (var ck = 0; ck < keys.length; ck++) { var rc = Object.assign({}, t.rows[keys[ck]], Admin.dirty[keys[ck]]), er = Chi.valida(rc);
         if (er) { toast('Chiusura riga ' + (+keys[ck] + 1) + ': ' + er, 'ko'); return; }
@@ -3999,6 +4036,15 @@ var Admin = {
           if (!/^\d{4,6}$/.test(dp.pin)) { toast('PIN di ' + (t.rows[keys[pk]].sigla || 'riga ' + (+keys[pk] + 1)) + ': servono da 4 a 6 cifre', 'ko'); return; }
           dp.pin = 'sha256:' + (await Nr.sha(dp.pin));
         } }
+    }
+    // le righe da scrivere o eliminare sono ancora al loro posto? (un collega può aver eliminato righe nel frattempo)
+    var ver = keys.concat(dels).map(function (k) { return t.rows[k]; }).filter(function (r) { return r && !r._new && r._r; });
+    if (ver.length) {
+      try {
+        var vv = await API.batchGet(DB.id, ver.map(function (r) { return API.q(t.name) + '!A' + r._r + ':' + L.colLetter(Math.min(1, t.header.length - 1)) + r._r; }));
+        var spost = ver.filter(function (r, j) { var row = (vv[j] && vv[j][0]) || []; return L.s(row[0]) !== L.s(r[t.header[0]]) || (t.header.length > 1 && L.s(row[1]) !== L.s(r[t.header[1]])); });
+        if (spost.length) { await DB.loadTables([t.name]); Admin.dirty = {}; Admin.del = {}; Admin.render(); Modal.open('Tabella cambiata', 'Nel frattempo un collega ha modificato o eliminato righe di ' + t.name + ': ho ricaricato la tabella senza salvare niente. Rifai le modifiche.'); return; }
+      } catch (e) { toast('Controllo righe non riuscito: ' + e.message, 'ko'); return; }
     }
     try {
       var upd = [], nuove = [], logs = [];
@@ -4017,10 +4063,18 @@ var Admin = {
       }
       if (upd.length) await API.batchUpdate(DB.id, upd);
       if (nuove.length) { var rr = await API.append(DB.id, t.name, nuove.map(function (r) { return t.toRow(r); })); nuove.forEach(function (r, i) { r._r = rr + i; delete r._new; }); }
-      await API.append(DB.id, 'LOG', logs);
+      if (logs.length) await API.append(DB.id, 'LOG', logs);
+      var D = dels.map(function (k) { return t.rows[k]; }).filter(function (r) { return r && !r._new && r._r > 1; }).sort(function (a, b) { return b._r - a._r; });
+      if (D.length) {   /* dal basso verso l'alto: le righe sopra non si spostano */
+        var inf = await API.call(API.S + DB.id + '?fields=' + encodeURIComponent('sheets(properties(sheetId,title))')), sh = (inf.sheets || []).map(function (x) { return x.properties; }).find(function (p) { return p.title === t.name; });
+        if (!sh) throw new Error('foglio ' + t.name + ' non trovato');
+        await API.call(API.S + DB.id + ':batchUpdate', { method: 'POST', body: JSON.stringify({ requests: D.map(function (r) { return { deleteDimension: { range: { sheetId: sh.sheetId, dimension: 'ROWS', startIndex: r._r - 1, endIndex: r._r } } }; }) }) });
+        await API.append(DB.id, 'LOG', D.map(function (r) { var o = {}; t.header.forEach(function (h) { if (h !== 'pin') o[h] = r[h]; }); return App.log('ADMIN_RIGA_ELIMINATA', t.name, r[t.header[0]], { riga: r._r, contenuto: o }); }));
+      }
+      if (D.length || dels.length) { await DB.loadTables([t.name]); }
       if (Admin.sez === 'OPERATORI') { var pn = keys.filter(function (k) { return 'pin' in Admin.dirty[k]; }).map(function (k) { return t.rows[k]; });
         if (pn.length) await Pin.registra(pn.map(function (r) { return { email: r.email, sigla: r.sigla, pin: r.pin }; })).catch(function (e) { toast('PIN salvato in Operatori ma non nello storico PIN: ' + e.message, 'ko'); }); }
-      Admin.dirty = {}; Admin.render(); App.fillLists(); toast('Salvato', 'ok');
+      Admin.dirty = {}; Admin.del = {}; Admin.render(); App.fillLists(); toast(dels.length ? 'Salvato · ' + dels.length + ' righe eliminate' : 'Salvato', 'ok');
       if (Admin.sez === 'CHIUSURE') Chi.dopo();
     } catch (e) { toast('Errore salvataggio: ' + Prot.msg(e), 'ko'); }
   }
@@ -11326,7 +11380,7 @@ var Spz = {
         else { var last = 0; vals.forEach(function (row, k) { if (row.some(function (c) { return L.s(c) !== ''; })) last = k + 1; }); x.s.uRig += last; }
       });
     }
-    sh.forEach(function (s) { s.uRig = Math.min(s.uRig, s.righe); s.uCol = Math.min(s.uCol, s.col); s.celle = s.righe * s.col; s.usate = s.uRig * s.uCol; s.libere = Math.max(0, s.celle - s.usate); });
+    sh.forEach(function (s) { s.uRig = Math.min(Math.max(s.uRig, 1) + 1, s.righe); s.uCol = Math.min(Math.max(s.uCol, 1), s.col); s.celle = s.righe * s.col; s.usate = s.uRig * s.uCol; s.libere = Math.max(0, s.celle - s.usate); });
     return { f: f, sh: sh, tot: sh.reduce(function (a, s) { return a + s.celle; }, 0), usate: sh.reduce(function (a, s) { return a + s.usate; }, 0) };
   },
   carica: async function () {
@@ -11663,6 +11717,7 @@ var Accessi = {
     }).join('') + '<tr><td colspan="5"><div class="row"><input class="fc mono" id="accEmail" placeholder="nuova email admin (es. nome@gmail.com)" style="width:320px"><input class="fc" id="accNome" placeholder="nome" style="width:180px"><button class="btn sm" onclick="Accessi.aggiungi()">Dai accesso admin</button></div></td></tr>';
   },
   setEmail: async function (em, on) {
+    if (!App.isOwner && !(!on && em === Auth.email)) { toast('Solo il super admin può dare o togliere l’accesso admin', 'ko'); Accessi.render(); return; }
     if (!on && em === Auth.email && !confirm('Ti stai togliendo l\'accesso admin: confermi?')) { Accessi.render(); return; }
     try { await Prot.setAdmin(em, on); await API.append(DB.id, 'LOG', [App.log('ACCESSO_ADMIN', 'PROTEZIONE', em, { admin: on })]); toast((on ? 'Admin: ' : 'Non più admin: ') + em, 'ok'); } catch (e) { toast('Errore: ' + Prot.msg(e), 'ko'); }
     Accessi.render();
@@ -11713,11 +11768,13 @@ var Accessi = {
   },
   set: async function (i, on) {
     var o = DB.t.OPERATORI.rows[i];
+    if (!App.isOwner && !(!on && L.s(o.email).toLowerCase() === Auth.email)) { toast('Solo il super admin può dare o togliere l’accesso admin', 'ko'); Accessi.render(); return; }
     if (!on && L.s(o.email).toLowerCase() === Auth.email && !confirm('Ti stai togliendo l\'accesso admin: confermi?')) { Accessi.render(); return; }
     try { await Accessi.scrivi(o, on ? 'ADMIN' : 'OPERATORE'); toast((on ? 'Admin: ' : 'Non più admin: ') + o.email, 'ok'); } catch (e) { toast('Errore: ' + Prot.msg(e), 'ko'); }
     Accessi.render();
   },
   aggiungi: async function () {
+    if (!App.isOwner) { toast('Solo il super admin può aggiungere un admin', 'ko'); return; }
     var em = L.s($('accEmail').value).toLowerCase(), nome = L.s($('accNome').value), t = DB.t.OPERATORI;
     if (!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)) { toast('Email non valida', 'ko'); return; }
     var o = t.rows.find(function (x) { return L.s(x.email).toLowerCase() === em; });
