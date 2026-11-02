@@ -1276,8 +1276,9 @@ var DB = {
   // file attesi oggi: fr.csv e rma.csv nei giorni lavorativi, anche E2FR il lunedì (dopo l'ora di aggiornamento_dati_ora)
   fileAttesi: function () {
     var n = new Date(), oggi = L.isoToday(), lav = n.getDay() !== 0 && n.getDay() !== 6 && !(typeof Kpi !== 'undefined' && Kpi.festivo && Kpi.festivo(oggi));
-    if (!lav || n < DB.cutOggi()) return [];
-    return ['fr.csv', 'rma.csv'].concat(n.getDay() === 1 ? ['e2fr.csv'] : []);
+    var ora = function (k, d) { var m = /^(\d{1,2})[:.](\d{2})/.exec(L.s(DB.param(k, d))) || /^(\d{1,2})[:.](\d{2})/.exec(d); return new Date(n.getFullYear(), n.getMonth(), n.getDate(), +m[1], +m[2], 0); };
+    if (!lav) return [];
+    return (n >= ora('vlt_file_entro', '08:10') ? ['fr.csv', 'rma.csv'] : []).concat(n.getDay() === 1 && n >= ora('vlt_e2fr_entro', '17:00') ? ['e2fr.csv'] : []);
   },
   mancanti: function () {
     var S = DB.statoImp, oggi = L.isoToday(); if (!S || S.assente) return [];
@@ -1563,6 +1564,8 @@ var App = {
       ['kpi12_data_fine', 'VLT', 'KPI 1 e 2: data di FINE del calcolo (l’inizio è sempre la data in hub). VLT (di base, come la macro check_FLM) = colonna DATA RECEIVED AND VERIFY (REGISTRAZIONE VLT) dei movimenti, cioè il giorno in cui l’operatore ha registrato il pezzo su VLT. TABLEAU = data dello stato VLT preso dal foglio TABLEAU (export E2FR): KPI 1 FAULTY = DATA_FAILED_MATERIAL_RECEIVED_AND_VERIFY, KPI 2 GOOD = DATA_GOOD_MATERIAL_RECEIVED, cioè quando lo stato è cambiato davvero su VLT; dove manca o è prima della data in hub resta la registrazione VLT. Il KPI 3 usa sempre la registrazione VLT'],
       ['kpi5_data_inizio', 'DATA_OUT', 'KPI 5 (uscite GOOD/NEW/REUSE/BALANCING): data di INIZIO del calcolo (la fine è la consegna del Suite). DATA_OUT (di base, come la macro check_FLM) = giorno in cui la scheda è uscita dall’hub (colonna data out). CREAZIONE_RMA = se la colonna RMA è compilata parte dalla data di creazione dell’RMA su VLT (Data Apertura del foglio RMA, colonna DATA CREAZIONE RMA dell’Easyloader), quindi conta anche l’attesa in hub prima dell’uscita; senza RMA o senza data resta la data out. Il mese del KPI resta quello della data out'],
       ['aggiornamento_dati_ora', '07:20', 'Ora (HH:MM) del controllo quotidiano dei dati esterni (VLT, TABLEAU, date RMA, file Huawei, ritorni RMA). Al primo accesso del giorno, a quest’ora e ogni 15 minuti l’app guarda solo se i file su Drive sono cambiati: se sì li rilegge in sottofondo, se no non rilegge niente'],
+      ['vlt_file_entro', '08:10', 'Ora (HH:MM) entro cui fr.csv e rma.csv devono essere caricati dal backend fr_rma (orario nel config.ini + tolleranza): dopo, se mancano, il pulsante ⓘ diventa rosso'],
+      ['vlt_e2fr_entro', '17:00', 'Il lunedì: ora (HH:MM) entro cui il Tableau (E2FR) deve essere caricato dal backend fr_rma: dopo, se manca, il pulsante ⓘ diventa rosso'],
       ['kpi_periodo', '1-21', 'KPI: periodo di fatturazione, dal giorno-al giorno di ogni mese (di base 1-21 = dal 1 al 21 del mese). Se il primo è più grande del secondo il periodo parte nel mese prima (22-21 = dal 22 del mese prima al 21). I pezzi fuori periodo non si contano. Nel tab KPI si può cambiare al volo'],
       ['kpi_giorni_esclusi', '', 'KPI: giorni esclusi dal conteggio dei giorni lavorativi (aaaa-mm-gg separati da virgola). Si scelgono dal tab KPI → Giorni esclusi dai KPI'],
       ['carichi_dest_in_giacenza', 'MADDALONI', 'Carichi NEW/REUSE con queste destinazioni (separate da ;) restano in giacenza (HUB_MAGAZZINO)']];
