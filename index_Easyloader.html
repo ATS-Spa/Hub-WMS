@@ -973,7 +973,7 @@ var CFG = {
   RMA_GID: 745113444,          // foglio RMA scritto dal backend fr_rma
   HUAWEI_ID: '1oorvMVY8DIfBfVl2Bdi4EmL7C3swNgijOdP9sOEFskQ',
   ASSETS: 'https://ats-spa.github.io/Hub-WMS/',   // loghi del DDT: stessa repository dell'Hub
-  HUAWEI_RANGE: "'CERCA FR HUAWEI ASSOCIATO'!F2:I",   // F = seriale, I = FR (come la funzione con nome del prototipo)
+  HUAWEI_RANGE: "'CERCA FR HUAWEI ASSOCIATO'!F2:K",   // F = seriale, I = FR, K = ReceivedTime (più righe per seriale: vince la più recente)   // F = seriale, I = FR (come la funzione con nome del prototipo)
 };
 var TIPI = ['FAULTY', 'GOOD', 'REUSE', 'NEW', 'BALANCING', 'RESO', 'SCRAP'];
 
@@ -1326,12 +1326,14 @@ var DB = {
   },
   loadHuawei: async function (force) {
     var c = force ? null : await DB.cacheGet('huawei');
+    if (c && c.v !== 2) c = null;   /* cache del formato vecchio (vinceva l'ultima riga del foglio) */
     if (!c || (Date.now() - c.ts) > 3 * 3600 * 1000 || DB.vltStale(c.ts)) if (!(await DB.invariato('huawei', CFG.HUAWEI_ID, c))) {
       var modH = await DB.modTime(CFG.HUAWEI_ID);
       var v = (await API.batchGet(CFG.HUAWEI_ID, [CFG.HUAWEI_RANGE]))[0] || [];
       var m = {};
-      v.forEach(function (r) { var sn = L.up(r[0]), fr = L.s(r[3]).replace(/^FR/i, '').replace(/^0+(?=\d)/, ''); if (sn && fr) m[sn] = fr; });
-      c = { ts: Date.now(), map: m, mod: modH }; await DB.cacheSet('huawei', c);
+      var quando = {}, tempo = function (x) { x = L.s(x); var d = L.normDate(x); return d ? d + (x.match(/\d{1,2}:\d{2}(:\d{2})?/) || [''])[0].padStart(8, '0') : ''; };
+      v.forEach(function (r, i) { var sn = L.up(r[0]), fr = L.s(r[3]).replace(/^FR/i, '').replace(/^0+(?=\d)/, ''); if (!sn || !fr) return; var t = tempo(r[5]) || ''; if (!m[sn] || t > quando[sn] || (t === quando[sn])) { m[sn] = fr; quando[sn] = t; } });
+      c = { ts: Date.now(), map: m, mod: modH, v: 2 }; await DB.cacheSet('huawei', c);
     }
     DB.huaweiFr = c.map; DB.huaweiTs = c.ts;
   },
@@ -10276,13 +10278,15 @@ var Prop = {
     if (Prop.scartate === null) { try { Prop.scartate = {}; var v = (await API.batchGet(DB.id, [API.q('PROPOSTE_SCARTATE') + '!A2:A']))[0] || []; v.forEach(function (x) { if (x && x[0]) Prop.scartate[L.s(x[0])] = 1; }); } catch (e) { Prop.scartate = {}; } }
     var out = [], visti = {};
     var add = function (o) { o.k = [o.tipo, o.dove, o.id, o.tipo === 'RIP' ? o.ripNew : o.frNew].join('|'); if (Prop.scartate[o.k] || visti[o.k]) return; visti[o.k] = 1; out.push(o); };
-    // 1. FR in Aborted: schede in magazzino e movimenti IN/OUT
+    // 1. FR in Aborted: schede in magazzino e movimenti IN/OUT (gli IN di una scheda già proposta vanno con lei)
+    var schAb = {};
     DB.t.UNITA.rows.forEach(function (u) {
       if (Giacenze.A_MAG.indexOf(u.stato) < 0 || !u.fr) return; var v = DB.vltMap[u.fr]; if (!v || L.up(v.stato) !== 'ABORTED') return;
-      var n = Prop.nuovoDopoAbort(u.seriale, v); if (n) add({ tipo: 'ABORT', dove: 'SCHEDA', id: u.id_unita, seriale: u.seriale, pn: u.pn, tip: u.tipo, frOld: u.fr, frNew: n.fr_id, statoNew: n.stato, ripNew: n.riparatore, ripOld: L.s(u.riparatore), u: u });
+      var n = Prop.nuovoDopoAbort(u.seriale, v); if (n) schAb[u.id_unita + '|' + u.fr] = 1; if (n) add({ tipo: 'ABORT', dove: 'SCHEDA', id: u.id_unita, seriale: u.seriale, pn: u.pn, tip: u.tipo, frOld: u.fr, frNew: n.fr_id, statoNew: n.stato, ripNew: n.riparatore, ripOld: L.s(u.riparatore), u: u });
     });
     (Sto.dati.cur || []).forEach(function (m) {
       if ((m.direzione !== 'IN' && m.direzione !== 'OUT') || !m.fr || Sto.annullato(m)) return; var v = DB.vltMap[m.fr]; if (!v || L.up(v.stato) !== 'ABORTED') return;
+      if (m.direzione === 'IN' && schAb[L.s(m.id_unita) + '|' + m.fr]) return;
       var n = Prop.nuovoDopoAbort(m.seriale, v); if (n) add({ tipo: 'ABORT', dove: m.direzione, id: m.id_mov, seriale: m.seriale, pn: m.pn, tip: m.tipo, frOld: m.fr, frNew: n.fr_id, statoNew: n.stato, ripNew: n.riparatore, ripOld: L.s(m.riparatore), m: m });
     });
     // 2. in attesa di FR  3. in giacenza senza FR (FAULTY): stesse regole delle pending
@@ -10396,7 +10400,8 @@ var Prop = {
       var tU = DB.t.UNITA, U = {}; tU.rows.forEach(function (u) { U[u.id_unita] = u; });
       var H = await Ingresso.heads(), tM = H.MOVIMENTI, mr = await Spec.righe(tM), now = L.nowStamp(), upd = [], fatti = [], saltati = [];
       var setM = function (row, o) { Object.keys(o).forEach(function (h) { if (h in tM.idx) upd.push({ range: tM.cell(h, row), values: [[L.s(o[h])]] }); }); };
-      var movDi = {}; (Sto.dati.cur || []).forEach(function (m) { movDi[m.id_mov] = m; });
+      if (S.some(function (o) { return o.tipo === 'ABORT' && o.dove === 'SCHEDA'; })) await Spec.mov();
+      var movDi = {}, abSch = []; (Sto.dati.cur || []).forEach(function (m) { movDi[m.id_mov] = m; });
       S.forEach(function (o) {
         var nota = Prop.nota(o), v = DB.vltMap[o.frNew] || {};
         if (o.dove === 'SCHEDA') {
@@ -10412,6 +10417,8 @@ var Prop = {
           if (o.tipo === 'PEND') { ch.stato = 'IN_GIACENZA'; ch.pending_fr = ''; ch.fr_assegnato_il = now; }
           if (o.tipo === 'NOFR') ch.fr_assegnato_il = now;
           Object.keys(ch).forEach(function (h) { if (h in tU.idx) { u[h] = String(ch[h]); upd.push({ range: tU.cell(h, u._r), values: [[u[h]]] }); } });
+          // Aborted: l'FR nuovo e la nota anche sui movimenti IN della scheda con l'FR vecchio (gli OUT restano proposte a parte)
+          if (o.tipo === 'ABORT') { (Sto.dati.cur || []).forEach(function (m) { if (m.id_unita === u.id_unita && m.direzione === 'IN' && L.s(m.fr) === L.s(o.frOld) && mr[m.id_mov] && !Sto.annullato(m)) { var nm2 = [L.s(m.note), nota].filter(Boolean).join(' · '); setM(mr[m.id_mov], { fr: o.frNew, note: nm2 }); m.fr = o.frNew; m.note = nm2; } }); abSch.push({ id: u.id_unita, old: o.frOld, nu: o.frNew }); }
           // il movimento di ingresso della scheda prende lo stesso FR (pending / senza FR); per gli Aborted i movimenti hanno le loro proposte
           if (o.tipo !== 'ABORT' && u.id_mov_in && mr[u.id_mov_in]) { setM(mr[u.id_mov_in], { fr: o.frNew, riparatore: ch.riparatore, stato_vlt: v.stato || '' }); if (movDi[u.id_mov_in]) { movDi[u.id_mov_in].fr = o.frNew; movDi[u.id_mov_in].riparatore = ch.riparatore; } }
         } else {
@@ -10420,6 +10427,7 @@ var Prop = {
         }
         fatti.push({ tipo: o.tipo, dove: o.dove, id: o.id, seriale: o.seriale, fr_prima: o.frOld, fr_dopo: o.frNew, _o: o });
       });
+      for (var ia = 0; ia < abSch.length; ia++) { try { var ss = await Spec.spedizioni(abSch[ia].id, { fr: [abSch[ia].old, abSch[ia].nu] }); upd = upd.concat(ss.upd); Spec.applica(ss.loc); } catch (e) { } }   /* righe di spedizione con l'FR vecchio */
       if (upd.length) await API.batchUpdate(DB.id, upd);
       // anomalie FR mancante chiuse per le schede che hanno preso l'FR
       try {
