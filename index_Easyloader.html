@@ -3737,7 +3737,7 @@ var MovEd = {
 // ─ BONIFICA DEI MOVIMENTI FILTRATI (tab Movimenti): come il ✎ di un movimento, ma su tutte le righe IN/OUT che vedi.
 //   Motivo, password e anteprima; seriale, P/N, MNFT, tipo, FR, RMA e riparatore si riflettono su scheda, altri movimenti e righe di spedizione.
 var MovBon = {
-  CAMPI: [['tipo', 'Tipo'], ['fr', 'FR'], ['rma', 'RMA'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['mnft', 'MNFT'], ['riparatore', 'Riparatore'], ['po_mrn', 'PO / MRN'], ['controparte', 'Mittente / destino'], ['awb', 'AWB'], ['vettore', 'Vettore'], ['ddt', 'DDT'], ['posizione_note', 'Posizione e note new/reuse (IN)'], ['anomalia', 'Anomalia (IN)'], ['note', 'Note']],
+  CAMPI: [['tipo', 'Tipo'], ['fr', 'FR'], ['rma', 'RMA'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['mnft', 'MNFT'], ['riparatore', 'Riparatore'], ['po_mrn', 'PO / MRN'], ['controparte', 'Mittente / destino'], ['awb', 'AWB'], ['vettore', 'Vettore'], ['ddt', 'DDT'], ['posizione_note', 'Posizione e note new/reuse (IN)'], ['anomalia', 'Anomalia (IN)'], ['note', 'Note'], ['data_ora', 'Data movimento (data in hub / data out)'], ['data_registrazione_vlt', 'Data registrazione VLT (IN)'], ['data_creazione_rma', 'Data creazione RMA (OUT)']],
   nome: function (k) { var f = MovBon.CAMPI.find(function (x) { return x[0] === k; }); return f ? f[1] : k; },
   apri: function () {
     var M = (Sto.grid(Sto.sez).visibili || []).filter(function (m) { return (m.direzione === 'IN' || m.direzione === 'OUT') && !Sto.annullato(m) && L.s(m.id_mov); });
@@ -3772,14 +3772,21 @@ var MovBon = {
       if (it.u) it.rev = L.s(it.u.rev);
       C.forEach(function (c) {
         var k = c[0], v = c[2] ? c[2][iM] : c[1];
-        if ((k === 'posizione_note' || k === 'anomalia') && m.direzione !== 'IN') return;
+        if ((k === 'posizione_note' || k === 'anomalia' || k === 'data_registrazione_vlt') && m.direzione !== 'IN') return;
+        if (k === 'data_creazione_rma' && m.direzione !== 'OUT') return;
+        if (/^data_/.test(k)) {   /* gg/mm/aaaa o aaaa-mm-gg; la data movimento tiene l'ora che aveva */
+          var dn = L.normDate(v); if (v && !dn) { it.err = MovBon.nome(k) + ': data "' + v + '" non valida (usa gg/mm/aaaa)'; return; }
+          if (k === 'data_ora') { if (!dn) { it.err = 'La data movimento non si può svuotare'; return; } v = dn + (L.s(m.data_ora).slice(10) || ' ' + L.nowStamp().slice(11)); } else v = dn;
+        }
         if (/^(seriale|pn|tipo|mnft|awb|ddt)$/.test(k)) v = L.up(v);
         if (k === 'fr' && v) v = L.frKey(v);
         if (k === 'note' && coda && v) v = L.s(m.note) ? L.s(m.note) + ' · ' + v : v;
         if (v !== L.s(m[k])) it.ch[k] = v;
       });
       var ch = it.ch;
+      if (it.err) return it;
       if (ch.tipo && TIPI.indexOf(ch.tipo) < 0) { it.err = 'Tipo "' + ch.tipo + '" non valido'; return it; }
+      if (ch.data_ora) it.avv.push('cambio data ' + L.itDate(L.s(m.data_ora).slice(0, 10)) + ' → ' + L.itDate(ch.data_ora.slice(0, 10)) + ' (KPI ed export Easyloader)');
       if (ch.fr && !/^\d+$/.test(ch.fr)) { it.err = 'FR "' + ch.fr + '" non è un numero'; return it; }
       if (ch.fr && !DB.vltMap[ch.fr]) it.avv.push('FR ' + ch.fr + ' non trovato su VLT');
       if (ch.fr && DB.vltMap[ch.fr]) { var vs = L.up(DB.vltMap[ch.fr].f_mat_serial_no), ss = L.up(ch.seriale || m.seriale); if (vs && vs !== ss && L.up(L.afterSpace(vs)) !== L.up(L.afterSpace(ss))) it.avv.push('seriale su VLT ' + DB.vltMap[ch.fr].f_mat_serial_no); }
@@ -3822,6 +3829,7 @@ var MovBon = {
         var uCh = {};
         if (u) {
           Object.keys(cambi).forEach(function (k) { if ((k in tU.idx) && L.s(u[k]) === cambi[k][0]) uCh[k] = cambi[k][1]; });
+          if (ch.data_ora && u.id_mov_in === m.id_mov && ('data_in' in tU.idx) && L.normDate(u.data_in) !== ch.data_ora.slice(0, 10)) uCh.data_in = ch.data_ora.slice(0, 10);   /* data d'ingresso della scheda */
           if ('note' in ch && u.id_mov_in === m.id_mov) { var cl = Spec.pulita(u.note); if (!cl || cl === L.s(m.note)) uCh.note = ch.note + Spec.fonte(u.note); }
           if (Object.keys(uCh).length) {
             Object.assign(uCh, { modificato_il: now, modificato_da: me, rev: String((parseInt(u.rev, 10) || 1) + 1) });
