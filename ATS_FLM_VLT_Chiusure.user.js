@@ -2,7 +2,7 @@
 // @name         ATS FLM → VLT · Chiusure
 // @namespace    ats-spa.flm
 // @author       Daniele Izzo
-// @version      1.0.13
+// @version      1.0.14
 // @description  Chiude su VLT ingressi del giorno (op. linea), ACK, RMA e spare ferme in HUB con i dati dell'app "ATS - Fastweb FLM". Sostituisce i 4 script con i CSV.
 // @match        https://logistictoolvf.net.vodafone.it/*
 // @match        https://ats-spa.github.io/*
@@ -27,7 +27,7 @@
 */
 (function () {
   'use strict';
-  var VER = '1.0.13';
+  var VER = '1.0.14';
   var VLT_HOST = 'logistictoolvf.net.vodafone.it';
   var K = { CODA: 'ats_coda', STATO: 'ats_stato_', PEND: 'ats_esiti_pending', RICH: 'ats_richiesta', APP: 'ats_app_url', VIVO: 'ats_vlt_vivo', RUN: 'ats_run', UI: 'ats_ui', RICEVUTI: 'ats_esiti_ricevuti' };
   // esiti da consegnare = scritti da VLT (PEND) meno quelli già confermati dall'app (RICEVUTI): ognuno scrive solo la sua chiave
@@ -179,6 +179,8 @@
       var bin = await attendi(function () { return $('#field_scrapBin'); }, 6000);
       scrivi(bin, 'Scrap'); scrivi($('#field_scrapNote'), 'Non Riparabile');
     };
+    // avviso rosso di VLT sulla scheda FR: materiale non riparabile
+    var nonRiparabile = function () { return /materiale\s+non\s+(è|e'|e)\s*riparabile/i.test(String(document.body.innerText || '')); };
     var esciForm = async function () {
       var b = $$('button').find(function (x) { return /annulla|indietro|back/i.test(x.textContent.trim()) && x.offsetParent; });
       if (b) b.click(); else history.back();
@@ -296,7 +298,16 @@
       } else if (s !== 'failed material received and verify') {
         // nessun passo 1 previsto: resto sulla scheda già aperta
       }
-      // passo 2
+      // passo 2 · materiale non riparabile: VLT scrive "Il Materiale non è riparabile inviare in deposito centrale predisposto"
+      // e non offre Pending Service Desk / Failure Report Sent ma solo Close for Scrap material → si chiude come scrap
+      if (!scrap) {
+        var selP = $('#field_frStatus'), meta = note ? 'Pending Service Desk' : 'Failure Report Sent';
+        if (selP && !opzione(selP, meta) && nonRiparabile() && opzione(selP, 'Close for Scrap material')) {
+          await scegli('#field_frStatus', 'Close for Scrap material'); await campiScrap();
+          if (note) scrivi($('#field_note'), note);
+          await salva(RX_FR); return esitoOk(S0, 'Close for Scrap material', 'materiale non riparabile su VLT: chiuso come scrap');
+        }
+      }
       if (scrap) {
         await scegli('#field_frStatus', 'Close for Scrap material'); await campiScrap();
         if (note) scrivi($('#field_note'), note);
