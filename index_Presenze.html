@@ -3477,13 +3477,26 @@ function renderSection(sec, emps, data, opts){
     h+='<td class="sf ca1" style="font-size:10px;color:var(--green);font-family:var(--ffc);font-weight:700;padding-left:6px">Ore Ord.</td>';
     h+='<td class="sf ca2" style="font-size:11px;color:var(--green);font-family:var(--ffc);font-weight:700">ORD</td>';
     dates.forEach(function(d,di){var w=d.weekday===0||d.weekday===6;var og=oreGiorno[di];
-      var bk=og&&og.bucket,tot=og?(og.ord||0)+(og.str||0):0;
-      // domenica/festivo: ore totali del giorno in viola (DOM) o rosso (FEST), non sommate in ORD
-      var v=bk?(tot>0?fmtOre(tot):''):(og&&og.ord>0?fmtOre(og.ord):'');
+      var bk=og&&og.bucket;
+      // domenica/festivo: stessa suddivisione 8h ord / resto str, ma in viola (DOM) o rosso (FEST)
+      var v=og&&og.ord>0?fmtOre(og.ord):'';
       var col=bk==='dom'?'var(--purple)':(bk==='fest'?'var(--red)':'var(--green)');
-      var ttl=bk&&v?' title="'+(bk==='dom'?'Domenica: '+v+'h conteggiate in DOM':'Festivo: '+v+'h conteggiate in FEST')+'"':'';
+      var ttl=bk&&v?' title="'+(bk==='dom'?'Domenica: conteggiate in DOM':'Festivo: conteggiate in FEST')+'"':'';
       h+='<td class="dc'+(w?' we':'')+(d.day===_todayDay?' today':'')+rngCls[di]+(v?' ':' emp')+'" style="font-size:11px;'+(v?'color:'+col:'')+'"'+ttl+'>'+( v||(!w?'·':''))+'</td>';});
-    h+='<td colspan="'+NCOLS_TOT+'" style="background:rgba(36,48,72,.1)">'+(fmtOre(tots.ord)?'<span style="font-family:var(--ffm);font-size:11px;color:var(--green);padding:0 8px">'+fmtOre(tots.ord)+'h tot.</span>':'')+'</td>';
+    // Totale riga ORD: ordinarie verdi + ore di domenica (viola) e festivi (rosso) mostrate nella stessa riga
+    var _bk={dom:{ord:0,str:0},fest:{ord:0,str:0}};
+    oreGiorno.forEach(function(og){if(og&&og.bucket){_bk[og.bucket].ord+=og.ord||0;_bk[og.bucket].str+=og.str||0;}});
+    var _totLbl=function(base,key,colBase){
+      if(!base&&!_bk.dom[key]&&!_bk.fest[key])return '';
+      var sp=function(c,t){return '<span style="color:'+c+'">'+t+'</span>';};
+      var parts=[sp(colBase,(fmtOre(base)||'0')+'h')];
+      if(_bk.dom[key])parts.push(sp('var(--purple)',fmtOre(_bk.dom[key])+'h'));
+      if(_bk.fest[key])parts.push(sp('var(--red)',fmtOre(_bk.fest[key])+'h'));
+      return parts.join(' + ')+' tot.';
+    };
+    var _ordLbl=_totLbl(tots.ord,'ord','var(--green)');
+    var _strLbl=_totLbl(tots.str,'str','var(--amber)');
+    h+='<td colspan="'+NCOLS_TOT+'" style="background:rgba(36,48,72,.1)">'+(_ordLbl?'<span style="font-family:var(--ffm);font-size:11px;color:var(--subtle);padding:0 8px;white-space:nowrap">'+_ordLbl+'</span>':'')+'</td>';
     if(adminMode)h+='<td></td>';
     h+='</tr>';
 
@@ -3491,9 +3504,11 @@ function renderSection(sec, emps, data, opts){
     h+='<td class="sf ca0"></td>';
     h+='<td class="sf ca1" style="font-size:10px;color:var(--amber);font-family:var(--ffc);font-weight:700;padding-left:6px">Ore Str.</td>';
     h+='<td class="sf ca2" style="font-size:11px;color:var(--amber);font-family:var(--ffc);font-weight:700">STR</td>';
-    dates.forEach(function(d,di){var w=d.weekday===0||d.weekday===6;var og=oreGiorno[di];var v=og&&!og.bucket&&og.str>0?fmtOre(og.str):'';
-      h+='<td class="dc'+(w?' we':'')+(d.day===_todayDay?' today':'')+rngCls[di]+(v?' ':' emp')+'" style="font-size:11px;'+(v?'color:var(--amber)':'')+'">'+( v||(!w?'·':''))+'</td>';});
-    h+='<td colspan="'+NCOLS_TOT+'" style="background:rgba(36,48,72,.1)">'+(fmtOre(tots.str)?'<span style="font-family:var(--ffm);font-size:11px;color:var(--amber);padding:0 8px">'+fmtOre(tots.str)+'h tot.</span>':'')+'</td>';
+    dates.forEach(function(d,di){var w=d.weekday===0||d.weekday===6;var og=oreGiorno[di];var v=og&&og.str>0?fmtOre(og.str):'';
+      var bk=og&&og.bucket,col=bk==='dom'?'var(--purple)':(bk==='fest'?'var(--red)':'var(--amber)');
+      var ttl=bk&&v?' title="'+(bk==='dom'?'Domenica: conteggiate in DOM':'Festivo: conteggiate in FEST')+'"':'';
+      h+='<td class="dc'+(w?' we':'')+(d.day===_todayDay?' today':'')+rngCls[di]+(v?' ':' emp')+'" style="font-size:11px;'+(v?'color:'+col:'')+'"'+ttl+'>'+( v||(!w?'·':''))+'</td>';});
+    h+='<td colspan="'+NCOLS_TOT+'" style="background:rgba(36,48,72,.1)">'+(_strLbl?'<span style="font-family:var(--ffm);font-size:11px;color:var(--subtle);padding:0 8px;white-space:nowrap">'+_strLbl+'</span>':'')+'</td>';
     if(adminMode)h+='<td></td>';
     h+='</tr>';
   });
