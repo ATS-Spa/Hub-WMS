@@ -1119,6 +1119,12 @@ var Sync = {
     if (Ack.q && (Ack.q.length || Ack.qA.length)) return 'spunte ACK da salvare';
     return '';
   },
+  // ridisegno che non fa saltare la vista: rimette lo scorrimento delle tabelle e della pagina
+  conScroll: function (fn) {
+    var W = [].slice.call(document.querySelectorAll('.tbl-wrap')).map(function (w) { return [w, w.scrollTop, w.scrollLeft]; }), y = window.scrollY;
+    fn();
+    W.forEach(function (x) { if (document.contains(x[0])) { x[0].scrollTop = x[1]; x[0].scrollLeft = x[2]; } }); window.scrollTo(window.scrollX, y);
+  },
   occupato: function () { Sync.motivo = Sync.perche(); return !!Sync.motivo; },
   giro: async function () {
     if (!DB.id || !Auth.token) return;
@@ -1146,19 +1152,21 @@ var Sync = {
     if (Jun.loaded) T.push('JUNIPER');
     if (Nr.loaded) T.push('PRATICHE_NEW_REUSE');
     if (Sync.occupato()) { Sync.dovuto = true; return; }
+    var gG = App.tab === 'giacenze' ? Giacenze.grid() : null, fG = null, fS = null;
+    try { if (gG) fG = gG.firma(); if (App.tab === 'storico' && Sto.fonte === 'cur' && Sto.dati.cur) fS = Sto.grid(Sto.sez).firma(); } catch (e) { }
     var puliti = Rma.loaded ? Rma.colliPuliti() : [];   /* colli non toccati a video: si riprendono dal database (salvati da un collega) */
     await DB.loadTables(T);
     puliti.forEach(function (k) { delete Rma.colli[k]; });
-    if (Sto.dati.cur) { Sto.dati.cur = null; Giacenze._miN = -1; }
+    if (Sto.dati.cur && App.tab !== 'storico') { Sto.dati.cur = null; Giacenze._miN = -1; }
     Ingresso._heads = null; Sync.ultimo = new Date(); App.syncInfo();
     var t = App.tab;
     if (t === 'ingresso') { Ingresso.ricalcola(); Ingresso.renderOggi(); }
-    if (t === 'giacenze') Giacenze.render();
+    if (t === 'giacenze') { var fG2 = null; try { fG2 = gG.firma(); } catch (e) { } if (fG === null || fG2 !== fG) Sync.conScroll(function () { Giacenze.render(); }); }
     if (t === 'rma') Rma.render();
     if (t === 'ack' && ackLibero) Ack.render();
     if (t === 'balancing' && Bal.loaded) Bal.render();
     if (t === 'juniper' && Jun.loaded) Jun.render();
-    if (t === 'storico') Sto.ricarica();
+    if (t === 'storico') Sto.ricaricaPiano(fS);
     if (t === 'newreuse') Nr.render();
     toast('Dati aggiornati: modifiche di altri operatori', 'ok');
   }
@@ -5154,6 +5162,15 @@ Grid.alta = function (wr) {
   if (gap > 4) wr.style.minHeight = Math.min(mx, wr.offsetHeight + gap - 4) + 'px';
 };
 window.addEventListener('resize', function () { clearTimeout(Grid._rz); Grid._rz = setTimeout(function () { document.querySelectorAll('.main .tbl-wrap').forEach(function (w) { if (w._fissa === false) Grid.alta(w); }); }, 150); });
+// impronta delle righe che si vedono (filtri, ricerca, ordinamento e colonne attuali): serve a non ridisegnare se non cambia niente
+Grid.prototype.firma = function () {
+  var self = this, o = this.o, all = o.rows(), qq = o.cerca ? L.qm(o.cerca()) : null;
+  if (qq) all = all.filter(function (r) { return o.cols.some(function (c) { return !c.noXls && qq(self.val(c, r)); }); });
+  var list = all.filter(function (r) { return self.match(r); }), sc = this.sort && o.cols.find(function (x) { return x.k === self.sort; });
+  if (sc) list = list.slice().sort(function (a, b) { return self.dir * self.cmp(self.val(sc, a), self.val(sc, b)); });
+  var vis = this.vc();
+  return list.length + '|' + list.slice(0, this.limit).map(function (r) { return vis.map(function (c) { try { return c.html ? c.html(r) : self.val(c, r); } catch (e) { return ''; } }).join('\u0001'); }).join('\u0002');
+};
 Grid.prototype.render = function (rifaiTesta) {
   var self = this, o = this.o, all = o.rows(), th = $(o.thead), tb = $(o.tbody);
   if (!th || !tb) return;
@@ -9286,6 +9303,15 @@ var Sto = {
   cambia: function (f) { Sto.fonte = f; Object.keys(Sto.grids).forEach(function (k) { Sto.grids[k].f = {}; }); if (f !== 'cur') { $('stoDa').value = f + '-01-01'; $('stoA').value = f + '-12-31'; } Sto.show(); },
   cerca: function () { clearTimeout(Sto._t); Sto._t = setTimeout(function () { Sto.render(); }, 250); },
   ricarica: async function () { try { await Sto.carica(true); Sto.render(); } catch (e) { toast(e.message, 'ko'); } },
+  // dall'aggiornamento automatico: legge in sottofondo e ridisegna solo se le righe filtrate sono cambiate (stessa posizione di scorrimento)
+  ricaricaPiano: async function (f0) {
+    try {
+      var nuovi = await Sto.colsSafe(DB.id, 'MOVIMENTI'); if (App.tab !== 'storico' || Sto.fonte !== 'cur') { Sto.dati.cur = nuovi; return; }
+      Sto.dati.cur = nuovi; var g = Sto.grid(Sto.sez);
+      if (f0 !== null && f0 !== undefined && g.firma() === f0) { Sto.tabs(); return; }
+      Sync.conScroll(function () { g.render(); Sto.tabs(); });
+    } catch (e) { console.warn('Movimenti non riletti: ' + e.message); }
+  },
   colonneScegli: function () { Sto.grid(Sto.sez).scegli(); },
   excelVista: function () { var p = Sto.periodo(); Sto.grid(Sto.sez).excel('Movimenti_' + Sto.sez + '_' + p[0] + '_' + p[1]); },
   // Excel come l'Easyloader: foglio INBOUND e foglio OUTBOUND con le colonne originali, per il periodo scelto
