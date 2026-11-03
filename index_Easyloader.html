@@ -482,6 +482,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
       <div class="card" id="pendCard">
         <div class="card-h"><div class="card-t" style="cursor:pointer;user-select:none" onclick="Ingresso.pendApri()" title="Apri / chiudi l'elenco"><span id="pendCar">▸</span> ⏳ In attesa di FR</div><span class="pill p-amber" id="pendN" style="cursor:pointer" onclick="Ingresso.pendApri()">0</span>
           <span class="hint" id="pendHint">FAULTY/GOOD entrate senza FR: in giacenza ma ferme (non vanno in ACK, RMA, export) finché non si assegna l'FR</span><div class="spacer"></div>
+          <button class="btn ghost sm" onclick="Ingresso.senzaFrApri()" title="Pezzi che non riceveranno mai un FR: restano a magazzino con un FR fittizio NOFR-0001, NOFR-0002… (fuori da chiusure VLT, ACK ed export FR da chiudere)">📦 Tieni a magazzino senza FR</button>
           <button class="btn ghost sm" onclick="Ingresso.mailPend()" title="Una mail al Service Desk con l'elenco completo dei pezzi senza FR">✉ Mail Service Desk (elenco completo)</button>
           <button class="btn ghost sm" onclick="Ingresso.excelPend()">⬇ Excel</button></div>
         <div class="tbl-wrap" id="pendBody" style="max-height:40vh"><table>
@@ -867,6 +868,7 @@ L.misura = function (m) { var x = /^\s*(\d+(?:[.,]\d+)?)\s*[xX*]\s*(\d+(?:[.,]\d
 L.isBan = function (note) { var n = L.up(note); return n.indexOf('BAN') === 0 || n.indexOf('RMA') === 0; };
 // FR digitato/sparato → numero pulito
 // FR000129686 / *FR 0129686* / 000129686 → 129686 (via simboli ai lati, prefisso FR e zeri iniziali)
+L.frFinto = function (fr) { return /^NOFR-/i.test(L.s(fr)); };
 L.frKey = function (x) { return L.s(x).replace(/^[^0-9A-Za-z]+|[^0-9A-Za-z]+$/g, '').replace(/^FR[\s\-_:\/]*/i, '').replace(/^0+(?=\d)/, ''); };
 // CSV di VLT: separatore riconosciuto dalla prima riga (; , | tab), campi tra virgolette
 L.parseCsv = function (txt) {
@@ -2572,12 +2574,64 @@ var Ingresso = {
         await API.batchUpdate(DB.id, upd);
         await API.append(DB.id, 'LOG', [App.log('PENDING_FR_ASSEGNATO', 'UNITA', id, { fr: fr, seriale: u.seriale, prima: prima, movimento: rM ? u.id_mov_in : 'non trovato', avvisi: avv })]);
         if (!rM) toast('Movimento di ingresso non trovato: aggiornalo da Movimenti', 'ko');
+        try { if (Jun.eGood(u)) { var pj = Jun.pratica(u); if (pj && !L.s(pj.fr)) await Jun.aggiorna([{ r: pj, ch: { fr: fr, note: Jun.nota(pj, 'FR ' + fr + ' assegnato alla GOOD ' + u.id_unita + ' (era in attesa di FR) il ' + L.itDate(L.isoToday())) } }], 'JUNIPER_FR_GOOD'); } } catch (e) { toast('Pratica Juniper non aggiornata: ' + e.message, 'ko'); }
         Export.scrivi().catch(function () { });
       })());
       toast('FR ' + fr + ' assegnato a ' + u.seriale, 'ok'); Ingresso.renderOggi(); App.syncInfo();
     } catch (e) { Modal.open('Errore', e.message); }
   },
   // mail al Service Desk con l'elenco completo (dopo il caricamento: solo quelli appena entrati; dal pulsante: tutti i pending)
+  senzaFrApri: function () {
+    var P = Ingresso.pendenti(); if (!P.length) { toast('Nessun pezzo in attesa di FR', 'ok'); return; }
+    Modal.html('📦 Tieni a magazzino senza FR',
+      '<div class="hint" style="margin-bottom:8px">I pezzi spuntati tornano <b>IN GIACENZA</b> con un <b>FR fittizio</b> progressivo (<span class="mono">NOFR-0001</span>, <span class="mono">NOFR-0002</span>…): restano a magazzino, compaiono nei Movimenti e nell’export Easyloader con quell’FR, ma <b>non</b> vanno nelle chiusure VLT, negli ACK, nell’export FR da chiudere e nelle proposte. Se un giorno arriva l’FR vero si cambia dalla scheda (Giacenze → ✎).</div>' +
+      '<div class="fg" style="margin-bottom:8px"><span class="fl">Motivo * (uguale per tutti)</span><input class="fc" id="nfMot" autocomplete="off" placeholder="es. FR mai emesso dal cliente"></div>' +
+      '<div class="tbl-wrap modal-scroll" style="max-height:45vh"><table><thead><tr><th><input type="checkbox" id="nfTutti"></th><th>ID</th><th>Tipo</th><th>Seriale</th><th>P/N</th><th>Entrata</th><th>Motivo attesa</th></tr></thead><tbody>' +
+      P.map(function (u) { return '<tr><td><input type="checkbox" class="nfSel" value="' + esc(u.id_unita) + '"></td><td class="mono">' + esc(u.id_unita) + '</td><td>' + esc(u.tipo) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td class="mono">' + esc(L.itDate(u.data_in)) + '</td><td>' + esc(u.pending_fr) + '</td></tr>'; }).join('') + '</tbody></table></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: '📦 Metti in giacenza con FR fittizio', cls: 'green', keep: true, fn: function () {
+        var ids = [].slice.call(document.querySelectorAll('#mBody .nfSel:checked')).map(function (x) { return x.value; }), mot = L.s($('nfMot').value);
+        if (!ids.length) { toast('Spunta almeno un pezzo', 'ko'); return; }
+        if (!mot) { toast('Scrivi il motivo', 'ko'); $('nfMot').focus(); return; }
+        Ingresso.senzaFrSalva(ids, mot);
+      } }], true);
+    var tt = $('nfTutti'); if (tt) tt.onchange = function () { document.querySelectorAll('#mBody .nfSel').forEach(function (x) { x.checked = tt.checked; }); };
+  },
+  senzaFrSalva: async function (ids, mot) {
+    try {
+      await Busy.wrap((async function () {
+        await DB.loadTables(['UNITA', 'PARAMETRI']); await DB.ensureCols('UNITA', ['pending_fr', 'fr_assegnato_il']);
+        var tU = DB.t.UNITA, set = {}; ids.forEach(function (i) { set[i] = 1; });
+        var U = tU.rows.filter(function (u) { return set[u.id_unita] && u.stato === 'IN_ATTESA' && L.s(u.pending_fr); });
+        if (!U.length) throw new Error('i pezzi scelti non sono più in attesa di FR (li ha già sistemati un collega?)');
+        // numerazione: il più alto tra il parametro e gli NOFR già usati, così non si ripete mai
+        var n0 = parseInt(DB.param('nofr_prossimo', '1'), 10) || 1;
+        tU.rows.forEach(function (u) { var m = /^NOFR-(\d+)$/i.exec(L.s(u.fr)); if (m && +m[1] >= n0) n0 = +m[1] + 1; });
+        var now = L.nowStamp(), me = Auth.email, sg = App.chi().sigla || me.split('@')[0], tM = (await Ingresso.heads()).MOVIMENTI, upd = [], logs = [], fatti = [];
+        for (var i = 0; i < U.length; i++) {
+          var u = U[i], fr = 'NOFR-' + L.pad(n0 + i, 4), prima = { stato: u.stato, motivo: u.pending_fr, nota: u.note };
+          var nota = L.s(u.note).replace(/PENDING FR: [^·|]*/, '').replace(/^\s*[·|]\s*/, '').trim();
+          nota = [nota, 'senza FR: ' + mot + ' (' + L.itDate(L.isoToday()) + ', ' + sg + ', era pending: ' + u.pending_fr + ')'].filter(Boolean).join(' · ');
+          var ch = { fr: fr, stato: 'IN_GIACENZA', pending_fr: '', fr_assegnato_il: now, note: nota, modificato_il: now, modificato_da: me, rev: (parseInt(u.rev, 10) || 1) + 1 };
+          Object.keys(ch).forEach(function (h) { if (h in tU.idx) { u[h] = String(ch[h]); upd.push({ range: tU.cell(h, u._r), values: [[u[h]]] }); } });
+          var rM = await Ingresso.rigaMov(u, tM);
+          if (rM) [['fr', fr], ['note', nota]].forEach(function (x) { if (x[0] in tM.idx) upd.push({ range: tM.cell(x[0], rM), values: [[x[1]]] }); });
+          logs.push(App.log('SENZA_FR_FITTIZIO', 'UNITA', u.id_unita, { fr: fr, seriale: u.seriale, motivo: mot, prima: prima, movimento: rM ? u.id_mov_in : 'non trovato' }));
+          fatti.push(u);
+        }
+        await DB.loadTables(['ANOMALIE']); var tA = DB.t.ANOMALIE, F = {}; fatti.forEach(function (u) { F[u.id_unita] = u.fr; });
+        tA.rows.forEach(function (a) { if (F[a.id_unita] && a.tipo === 'FR_MANCANTE' && a.stato === 'APERTA') [['stato', 'RISOLTA'], ['risolta_il', now], ['risolta_da', me], ['nota_risoluzione', 'tenuto a magazzino senza FR (' + F[a.id_unita] + '): ' + mot], ['fr', F[a.id_unita]]].forEach(function (x) { if (x[0] in tA.idx) { a[x[0]] = x[1]; upd.push({ range: tA.cell(x[0], a._r), values: [[x[1]]] }); } }); });
+        var tP = DB.t.PARAMETRI, pr = tP.rows.find(function (r) { return r.chiave === 'nofr_prossimo'; }), prox = String(n0 + U.length);
+        if (pr) upd.push({ range: tP.cell('valore', pr._r), values: [[prox]] });
+        await API.batchUpdate(DB.id, upd);
+        if (!pr) { await API.append(DB.id, 'PARAMETRI', [tP.toRow({ chiave: 'nofr_prossimo', valore: prox, descrizione: 'Prossimo numero dell’FR fittizio NOFR-0001… (pezzi tenuti a magazzino senza FR): si aggiorna da solo' })]), tP.rows.push({ chiave: 'nofr_prossimo', valore: prox }); }
+        else pr.valore = prox;
+        await API.append(DB.id, 'LOG', logs);
+        Sto.dati.cur = null; Export.scrivi().catch(function () { });
+        Modal.close(); toast(fatti.length + ' pezzi in giacenza senza FR: ' + fatti.map(function (u) { return u.fr; }).join(', '), 'ok');
+        Ingresso.renderOggi(); if (Ingresso.renderPend) Ingresso.renderPend(); App.syncInfo();
+      })());
+    } catch (e) { Modal.open('Non salvato', e.message); }
+  },
   mailPend: async function (ids, T) {
     var P = Ingresso.pendenti().filter(function (u) { return !ids || ids.indexOf(u.id_unita) >= 0; });
     if (!P.length) { toast('Nessun pezzo in attesa di FR', 'ok'); return; }
@@ -4281,7 +4335,7 @@ var Chv = {
       DB.t.UNITA.rows.forEach(function (u) {
         var ricoda = L.s(u.vlt_ricoda).slice(0, 10) === giorno && u.stato !== 'ANNULLATO';   // GOOD rimesse in coda dal controllo Good Material Received
         if (!ricoda && ((L.s(u.creato_il).slice(0, 10) !== giorno && L.s(u.fr_assegnato_il).slice(0, 10) !== giorno) || u.creato_da === 'MIGRAZIONE' || u.stato === 'ANNULLATO' || Ingresso.nonIngresso(u))) return;
-        if (!L.s(u.fr) || ['NEW', 'REUSE', 'BALANCING'].indexOf(u.tipo) >= 0) return;
+        if (!L.s(u.fr) || L.frFinto(u.fr) || ['NEW', 'REUSE', 'BALANCING'].indexOf(u.tipo) >= 0) return;
         var v = DB.vltMap[u.fr];
         add({ k: 'IN:' + u.fr, fr: u.fr, tipo: u.tipo, note: Chv.nota(u.note), stato_file: v ? v.stato : '', conf_serial: u.seriale, conf_tmpn: u.pn, seriale: u.seriale });
       });
@@ -5439,7 +5493,7 @@ var Ack = {
   giacLista: function (cod) {
     var k = L.up(App.aliasRip(cod));
     return DB.t.UNITA.rows.filter(function (u) {
-      if (u.tipo !== 'FAULTY' || Giacenze.A_MAG.indexOf(u.stato) < 0) return false;
+      if (u.tipo !== 'FAULTY' || Giacenze.A_MAG.indexOf(u.stato) < 0 || L.frFinto(u.fr)) return false;
       var v = u.fr && DB.vltMap[u.fr], rip = v && L.s(v.riparatore) ? v.riparatore : L.s(u.riparatore);
       return L.up(App.aliasRip(rip)) === k || L.up(App.normRip(rip)) === k;
     });
