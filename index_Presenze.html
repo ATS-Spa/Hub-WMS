@@ -3314,7 +3314,7 @@ function renderSection(sec, emps, data, opts){
   sigleCustom().forEach(function(c){T[c.code]=0;});
   var T_rngMin=0;
   emps.forEach(function(e){
-    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
+    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,pausaArr(e,dates),dates,m,y);
     Object.keys(T).forEach(function(k){T[k]+=(t[k]||0);});
     T_rngMin+=rngTotMin(e);
   });
@@ -3374,18 +3374,26 @@ function renderSection(sec, emps, data, opts){
   var allEmps=isAts?atsEmps:coopEmps;
   emps.forEach(function(emp,ei){
     var ri=allEmps.indexOf(emp);
-    var tots=calcTots(emp.sigla||[],emp.ingresso,emp.uscita,emp.pausa,dates,m,y);
+    var tots=calcTots(emp.sigla||[],emp.ingresso,emp.uscita,pausaArr(emp,dates),dates,m,y);
     var _rngTot=rngTotMin(emp);
     tots.rng=fmtRng(_rngTot);
     var rngCls=dates.map(function(d,di){return rngMin(emp,di)?' rng':'';});
     var empId=(isAts?'emp_':'cemp_')+ri;
 
+    // Stessa logica di calcTots(): le ore di domenica vanno in DOM e quelle dei
+    // festivi in FEST, non in ORD/STR. Prima le righe giornaliere le mostravano
+    // come ordinarie/straordinarie e la somma a vista non tornava con i totali.
     var oreGiorno=dates.map(function(d,di){
       var sg=xSig((emp.sigla||[])[di]||'');
       var ing=(emp.ingresso||[])[di]||'',usc2=(emp.uscita||[])[di]||'';
       var ph=getPausaDip(emp,di);
+      var isDom=d.weekday===0,isFest=isHoliday(d.day,m,y);
       if(SIGLE_ORARIO.indexOf(sg)!==-1){
-        return ing&&usc2?calcOreGiorno(ing,usc2,ph):null;
+        if((!ing||!usc2)&&isFest){ing=wmsConfig.ingresso||'08:00';usc2=wmsConfig.uscita||'18:00';}
+        if(!ing||!usc2)return null;
+        var o1=calcOreGiorno(ing,usc2,ph);
+        o1.bucket=isFest?'fest':(isDom?'dom':'');
+        return o1;
       } else if(SIGLE_ORE.indexOf(sg)!==-1){
         // Usa orari reali o default
         var i2=ing||wmsConfig.ingresso||'08:00';
@@ -3394,7 +3402,7 @@ function renderSection(sec, emps, data, opts){
         var qty2=parseFloat(sigRaw.match(/^[\d.]*/)[0])||1;
         var o2=calcOreGiorno(i2,u2,ph);
         var restante2=Math.max(0,o2.eff-qty2);
-        return{ord:Math.min(8,restante2),str:Math.max(0,restante2-8),eff:restante2};
+        return{ord:Math.min(8,restante2),str:Math.max(0,restante2-8),eff:restante2,bucket:isDom?'dom':''};
       }
       return null;
     });
@@ -3468,8 +3476,13 @@ function renderSection(sec, emps, data, opts){
     h+='<td class="sf ca0"></td>';
     h+='<td class="sf ca1" style="font-size:10px;color:var(--green);font-family:var(--ffc);font-weight:700;padding-left:6px">Ore Ord.</td>';
     h+='<td class="sf ca2" style="font-size:11px;color:var(--green);font-family:var(--ffc);font-weight:700">ORD</td>';
-    dates.forEach(function(d,di){var w=d.weekday===0||d.weekday===6;var og=oreGiorno[di];var v=og&&og.ord>0?fmtOre(og.ord):'';
-      h+='<td class="dc'+(w?' we':'')+(d.day===_todayDay?' today':'')+rngCls[di]+(v?' ':' emp')+'" style="font-size:11px;'+(v?'color:var(--green)':'')+'">'+( v||(!w?'·':''))+'</td>';});
+    dates.forEach(function(d,di){var w=d.weekday===0||d.weekday===6;var og=oreGiorno[di];
+      var bk=og&&og.bucket,tot=og?(og.ord||0)+(og.str||0):0;
+      // domenica/festivo: ore totali del giorno in viola (DOM) o rosso (FEST), non sommate in ORD
+      var v=bk?(tot>0?fmtOre(tot):''):(og&&og.ord>0?fmtOre(og.ord):'');
+      var col=bk==='dom'?'var(--purple)':(bk==='fest'?'var(--red)':'var(--green)');
+      var ttl=bk&&v?' title="'+(bk==='dom'?'Domenica: '+v+'h conteggiate in DOM':'Festivo: '+v+'h conteggiate in FEST')+'"':'';
+      h+='<td class="dc'+(w?' we':'')+(d.day===_todayDay?' today':'')+rngCls[di]+(v?' ':' emp')+'" style="font-size:11px;'+(v?'color:'+col:'')+'"'+ttl+'>'+( v||(!w?'·':''))+'</td>';});
     h+='<td colspan="'+NCOLS_TOT+'" style="background:rgba(36,48,72,.1)">'+(fmtOre(tots.ord)?'<span style="font-family:var(--ffm);font-size:11px;color:var(--green);padding:0 8px">'+fmtOre(tots.ord)+'h tot.</span>':'')+'</td>';
     if(adminMode)h+='<td></td>';
     h+='</tr>';
@@ -3478,7 +3491,7 @@ function renderSection(sec, emps, data, opts){
     h+='<td class="sf ca0"></td>';
     h+='<td class="sf ca1" style="font-size:10px;color:var(--amber);font-family:var(--ffc);font-weight:700;padding-left:6px">Ore Str.</td>';
     h+='<td class="sf ca2" style="font-size:11px;color:var(--amber);font-family:var(--ffc);font-weight:700">STR</td>';
-    dates.forEach(function(d,di){var w=d.weekday===0||d.weekday===6;var og=oreGiorno[di];var v=og&&og.str>0?fmtOre(og.str):'';
+    dates.forEach(function(d,di){var w=d.weekday===0||d.weekday===6;var og=oreGiorno[di];var v=og&&!og.bucket&&og.str>0?fmtOre(og.str):'';
       h+='<td class="dc'+(w?' we':'')+(d.day===_todayDay?' today':'')+rngCls[di]+(v?' ':' emp')+'" style="font-size:11px;'+(v?'color:var(--amber)':'')+'">'+( v||(!w?'·':''))+'</td>';});
     h+='<td colspan="'+NCOLS_TOT+'" style="background:rgba(36,48,72,.1)">'+(fmtOre(tots.str)?'<span style="font-family:var(--ffm);font-size:11px;color:var(--amber);padding:0 8px">'+fmtOre(tots.str)+'h tot.</span>':'')+'</td>';
     if(adminMode)h+='<td></td>';
@@ -4120,7 +4133,7 @@ function coopExport(){
   var repHdr=['Ext SAP','Nominativo','Resp.','Plant'].concat(COOP_REP.map(function(c){return c.l;}));
   var repRows=[repHdr];
   coopEmps.forEach(function(e){
-    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);t.rng=rngXlsCell(rngTotMin(e));
+    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,pausaArr(e,dates),dates,m,y);t.rng=rngXlsCell(rngTotMin(e));
     var row=[e.sap||e.id||'',e.nom2||e.nome||'',e.resp||'',e.plant||''];
     COOP_REP.forEach(function(c){row.push(c.k==='ord'||c.k==='str'||c.k==='fest'?fmtOre(t[c.k])||0:t[c.k]||0);});
     repRows.push(row);
@@ -4132,7 +4145,7 @@ function coopExport(){
   var repHdrC=['Ext SAP','Nominativo','Resp.','Plant','Confermato'].concat(COOP_REP_C.map(function(c){return c.l;}));
   var repRowsC=[repHdrC];
   coopEmps.forEach(function(e){
-    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);t.rng=rngXlsCell(rngTotMin(e));
+    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,pausaArr(e,dates),dates,m,y);t.rng=rngXlsCell(rngTotMin(e));
     var row=[e.sap||e.id||'',e.nom2||e.nome||'',e.resp||'',e.plant||'',e.confermato?'SI':''];
     COOP_REP_C.forEach(function(c){
       if(c.k.indexOf('__comm_')===0){
@@ -4175,7 +4188,7 @@ function coopPrint(){
   dates.forEach(function(d){h+='<th'+(d.weekday===0||d.weekday===6?' class="we"':'')+'>'+d.day+'</th>';});
   h+='<th>ORD</th><th>STR</th></tr></thead><tbody>';
   coopEmps.forEach(function(e){
-    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
+    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,pausaArr(e,dates),dates,m,y);
     h+='<tr><td class="nc" rowspan="3">'+esc(e.nom2||e.nome||'')+'</td><td rowspan="3">'+esc(e.sap||e.id||'')+'</td>';
     h+='<td style="color:#14b8a6;font-weight:700">S</td>';
     dates.forEach(function(d,di){h+='<td'+(d.weekday===0||d.weekday===6?' class="we"':'')+'>'+esc((e.sigla||[])[di]||'')+'</td>';});
@@ -4488,7 +4501,7 @@ function atsExport(){
   var atsRepHdr=['Ext SAP','Nominativo','Resp.','Plant'].concat(ATS_REP.map(function(c){return c.l;}));
   var repRows=[atsRepHdr];
   atsEmps.forEach(function(e){
-    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);t.rng=rngXlsCell(rngTotMin(e));
+    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,pausaArr(e,dates),dates,m,y);t.rng=rngXlsCell(rngTotMin(e));
     var row=[e.id||'',e.nome,e.resp||'',e.plant||''];
     ATS_REP.forEach(function(c){row.push(c.k==='ord'||c.k==='str'||c.k==='fest'?fmtOre(t[c.k])||0:t[c.k]||0);});
     repRows.push(row);
@@ -4502,7 +4515,7 @@ function atsExport(){
   var atsRepHdr2=['Ext SAP','Nominativo','Resp.','Plant'].concat(ATS_REP.map(function(c){return c.l;}));
   var repRows2=[atsRepHdr2];
   atsEmps.forEach(function(e){
-    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);t.rng=rngXlsCell(rngTotMin(e));
+    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,pausaArr(e,dates),dates,m,y);t.rng=rngXlsCell(rngTotMin(e));
     var row=[e.id||'',e.nome,e.resp||'',e.plant||''];
     ATS_REP.forEach(function(c){
       if(c.k.indexOf('__comm_')===0){
@@ -4546,7 +4559,7 @@ function atsPrint(){
   dates.forEach(function(d){h+='<th'+(d.weekday===0||d.weekday===6?' class="we"':'')+'>'+d.day+'</th>';});
   h+='<th>ORD</th><th>STR</th></tr></thead><tbody>';
   atsEmps.forEach(function(e){
-    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,e.pausa,dates,m,y);
+    var t=calcTots(e.sigla||[],e.ingresso,e.uscita,pausaArr(e,dates),dates,m,y);
     h+='<tr><td class="nc" rowspan="3">'+esc(e.nome)+'</td><td rowspan="3">'+esc(e.id||'')+'</td>';
     h+='<td style="color:#14b8a6;font-weight:700">S</td>';
     dates.forEach(function(d,di){h+='<td'+(d.weekday===0||d.weekday===6?' class="we"':'')+'>'+esc((e.sigla||[])[di]||'')+'</td>';});
@@ -5539,6 +5552,9 @@ function fmtOre(h){if(!h)return '';var i=Math.floor(h),f=h-i;return i+(f===0.5?'
 
 // Sigle che indicano presenza giornaliera (anche parziale)
 var PRESENCE_CODES=['X','HP','H104','104','HPE','PE','CP','SW','TFS','Lutto','PLT','HPVM'];
+// Pausa di ogni giorno risolta come nella griglia: valore della cella, altrimenti
+// pausa predefinita del dipendente (anagrafica), altrimenti quella globale.
+function pausaArr(emp,dates){return (dates||[]).map(function(d,di){return getPausaDip(emp,di);});}
 function calcTots(sig,ingresso,uscita,pause,dates,month,year){
   var r={X:0,'1/2F':0,F:0,M:0,HP:0,H104:0,'104':0,CP:0,HPE:0,PE:0,SW:0,Lutto:0,TFS:0,PLT:0,PLT_ore:0,R:0,HPVM:0,ord:0,str:0,fest:0,week:0,P:0};
   sigleCustom().forEach(function(c){if(!r.hasOwnProperty(c.code))r[c.code]=0;});
