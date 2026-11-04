@@ -6050,7 +6050,7 @@ function renderCommesseGrid(){
     var _savedDisp=calcOreDisponibili((emp.sigla||[])[spDi]||'',(emp.ingresso||[])[spDi]||'',(emp.uscita||[])[spDi]||'',getPausaDip(emp,spDi),null);
     var _keys=Object.keys(existing),_sum=0,_maxK=null;
     _keys.forEach(function(k){var v=parseFloat(existing[k])||0;_sum+=v;if(_maxK===null||v>(parseFloat(existing[_maxK])||0))_maxK=k;});
-    if(_savedDisp>0&&_maxK!==null&&Math.abs(_sum-_savedDisp)<=0.1*_keys.length)existing[_maxK]=0;
+    if(_savedDisp>0&&_maxK!==null&&(Math.abs(_sum-_savedDisp)<=0.1*_keys.length||_sum>_savedDisp))existing[_maxK]=0;
   }
   if(!Object.keys(existing).length){var _def=wmsConfig.bulkCommesse||{};if(Object.keys(_def).length)existing=_def;}
   grid.innerHTML='';
@@ -6156,6 +6156,26 @@ function saveCommesse(returnOnly){
   emp.commesse[spDi]=Object.keys(vals).length?vals:null;
 }
 
+// Riadatta una distribuzione commesse salvata quando cambiano le ore disponibili
+// del giorno (es. permesso orario approvato su una presenza già compilata).
+// - se la distribuzione copriva tutte le vecchie ore (o le supera), la commessa
+//   con più ore assorbe la differenza ("resto"), le altre restano fisse;
+// - se anche così si sfora, si riduce tutto in proporzione.
+function rescaleCommesse(vals,oldDisp,newDisp){
+  var keys=Object.keys(vals||{});if(!keys.length)return null;
+  var r1=function(n){return Math.round(n*10)/10;};
+  var sum=keys.reduce(function(a,k){return a+(parseFloat(vals[k])||0);},0);
+  var out={};keys.forEach(function(k){out[k]=parseFloat(vals[k])||0;});
+  var copriva=Math.abs(sum-oldDisp)<=0.1*keys.length||sum>oldDisp;
+  if(copriva||sum>newDisp){
+    var maxK=keys.reduce(function(a,k){return out[k]>out[a]?k:a;},keys[0]);
+    var altri=sum-out[maxK];
+    if(newDisp-altri>=0){out[maxK]=r1(newDisp-altri);}
+    else{var f=sum>0?newDisp/sum:0;keys.forEach(function(k){out[k]=r1(out[k]*f);});}
+  }
+  keys.forEach(function(k){if(!(out[k]>0))delete out[k];});
+  return Object.keys(out).length?out:null;
+}
 function saveCommesseToSheet(mode, emp, di, fileId, sheetName, y, m){
   if(!fileId||!emp||!emp.commesse||emp.commesse[di]===null)return Promise.resolve();
   var commesse=getCommesse(emp.plant||'');
@@ -6164,7 +6184,7 @@ function saveCommesseToSheet(mode, emp, di, fileId, sheetName, y, m){
   var sap=emp.sap||emp.id||'';
   var data=mode==='ats'?atsData:coopData;
   var dates=data?data.dates:[];
-  var d=dates[di];if(!d)return Promise.resolve();
+  var d=dates[di]||{day:di+1};
   var tabName=(MESI[m-1]||m)+'_'+(mode==='ats'?'ATS':'Coop')+'_Commesse';
   var vals=emp.commesse[di]||{};
   // Build header row
@@ -6219,7 +6239,7 @@ function deleteCommessaRow(mode, emp, di, fileId, sheetName, y, m){
   var nome=emp.nom2||emp.nome||'';
   var data=mode==='ats'?atsData:coopData;
   var dates=data?data.dates:[];
-  var d=dates[di];if(!d)return;
+  var d=dates[di]||{day:di+1};
   var tabName=(MESI[m-1]||m)+'_'+(mode==='ats'?'ATS':'Coop')+'_Commesse';
   // Leggi tutte le righe, trova quella di questo dipendente+giorno e svuotala
   gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties')
@@ -10188,6 +10208,36 @@ function parseLocalDate(s){
   if(p.length===3) return new Date(parseInt(p[0]),parseInt(p[1])-1,parseInt(p[2]));
   return new Date(s);
 }
+// Dopo l'approvazione la sigla del giorno cambia (es. X → 2HP): la distribuzione
+// commesse già salvata va riportata alle nuove ore disponibili, oppure tolta se
+// la nuova sigla non ammette commesse (F, M…). Prima restava quella vecchia
+// (es. FLM 9h con sole 7h lavorate).
+function richAdattaCommesse(emp, fileId, sname, info, d, sigla){
+  var y=info.year,m=info.month;
+  return loadCommesseForEmps([emp],fileId,'ats',y,m).then(function(){
+    var ops=[];
+    info.giorni.forEach(function(giorno){
+      var di=d.dates.findIndex(function(dt){return dt.day===giorno;});
+      if(di<0||!emp.commesse||!emp.commesse[di])return;
+      var old=emp.commesse[di];
+      var ing=(emp.ingresso||[])[di]||'',usc=(emp.uscita||[])[di]||'',ps=getPausaDip(emp,di);
+      if(SIGLE_COMMESSE.indexOf(xSig(sigla))===-1){
+        emp.commesse[di]=null;ops.push(function(){return deleteCommessaRow('ats',emp,di,fileId,sname,y,m);});
+      } else {
+        var oldDisp=calcOreDisponibili((emp.sigla||[])[di]||'',ing,usc,ps,null);
+        var newDisp=calcOreDisponibili(sigla,ing,usc,ps,null);
+        var nv=rescaleCommesse(old,oldDisp,newDisp);
+        if(JSON.stringify(nv)===JSON.stringify(old))return;
+        emp.commesse[di]=nv;
+        ops.push(nv?function(){return saveCommesseToSheet('ats',emp,di,fileId,sname,y,m);}:function(){return deleteCommessaRow('ats',emp,di,fileId,sname,y,m);});
+      }
+      // allinea anche il dipendente a video, se è lo stesso mese caricato
+      var vis=(atsEmps||[]).find(function(e){return e.sheetRows&&e.sheetRows.fileId===fileId&&e.sheetRows.n===emp.sheetRows.n;});
+      if(vis&&atsData&&atsData.sheetName===sname){if(!vis.commesse)vis.commesse=[];vis.commesse[di]=emp.commesse[di];}
+    });
+    return ops.reduce(function(p,fn){return p.then(fn);},Promise.resolve());
+  }).catch(function(e){console.warn('[WMS RICH] commesse non riadattate:',e.message);toast('⚠ Distribuzione commesse da verificare: '+e.message,'warn');});
+}
 function richScriviSuDrive(req){
   // Scrive la nota della richiesta come commento nativo sulle celle dei
   // giorni interessati — stesso meccanismo di notaSave() (updateCells con
@@ -10334,6 +10384,8 @@ function richScriviSuDrive(req){
         if(!updates.length) return;
         return sheetsBatchUpdate(f.id, updates).then(function(){
           return scriviNoteSuCelle(f.id, sname, emp.sheetRows.n, colIdxs, req.note);
+        }).then(function(){
+          return richAdattaCommesse(emp, f.id, sname, info, d, sigla);
         });
       }).catch(function(e){console.warn('[WMS RICH] errore lettura '+f.name+':',e.message);return tryFile(idx+1);});
     };
