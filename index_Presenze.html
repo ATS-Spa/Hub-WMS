@@ -1835,6 +1835,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
       <button class="ba bghost" id="cMassBtn" onclick="openMassivo('coop')" disabled style="border-color:rgba(59,130,246,.4);color:var(--blue)">📅 Inserimento Massivo</button>
       <button class="ba bghost am" id="cExp" onclick="coopExport()" disabled>⬇ Excel</button>
       <button class="ba bghost pu" id="cPrt" onclick="coopPrint()" disabled>🖨 Stampa</button>
+      <button class="ba bghost" id="cCompBtn" onclick="compattaFogli('coop')" style="display:none" title="Solo super utenti: elimina le righe vuote dai file del mese caricato">🧹 Compatta</button>
       <button class="ore-toggle" id="coopOreToggleBtn" onclick="toggleCoopOreRows()">▸ ORD/STR</button>
       <button class="ore-toggle" id="coopTotToggleBtn" onclick="toggleCoopTotCols()" style="background:rgba(59,130,246,.07);border-color:rgba(59,130,246,.2);color:var(--blue)">⊟ Totali</button>
       <span class="refresh-badge" id="cRefBadge">—</span>
@@ -1865,6 +1866,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
       <button class="ba bghost" id="aMassBtn" onclick="openMassivo('ats')" disabled style="border-color:rgba(59,130,246,.4);color:var(--blue)">📅 Inserimento Massivo</button>
       <button class="ba bghost am" id="aExp" onclick="atsExport()" disabled>⬇ Excel</button>
       <button class="ba bghost pu" id="aPrt" onclick="atsPrint()" disabled>🖨 Stampa</button>
+      <button class="ba bghost" id="aCompBtn" onclick="compattaFogli('ats')" style="display:none" title="Solo super utenti: elimina le righe vuote dai file del mese caricato">🧹 Compatta</button>
       <button class="ore-toggle" id="oreToggleBtn" onclick="toggleOreRows()">▸ ORD/STR</button>
       <button class="ore-toggle" id="totToggleBtn" onclick="toggleTotCols()" style="background:rgba(59,130,246,.07);border-color:rgba(59,130,246,.2);color:var(--blue)">⊟ Totali</button>
       <span class="refresh-badge" id="aRefBadge">—</span>
@@ -3069,6 +3071,7 @@ function applyPerm(){
     document.getElementById('permBadge').className='pbadge is-super';
     document.getElementById('snPerm').style.display='';
     var snLogS=document.getElementById('snLog');if(snLogS)snLogS.style.display='';
+    ['cCompBtn','aCompBtn'].forEach(function(id){var b=document.getElementById(id);if(b)b.style.display='';});
     document.getElementById('snFile').style.display='';
     document.getElementById('snFerie').style.display='';
     var snAnagS=document.getElementById('snAnag');if(snAnagS)snAnagS.style.display='';
@@ -3108,6 +3111,7 @@ function applyPerm(){
   }
   document.getElementById('snPerm').style.display='none';
   var snLogH=document.getElementById('snLog');if(snLogH)snLogH.style.display='none';
+  ['cCompBtn','aCompBtn'].forEach(function(id){var b=document.getElementById(id);if(b)b.style.display='none';});
   document.getElementById('snCoop').style.display=userSecs.indexOf('coop')!==-1?'':'none';
   document.getElementById('snAts').style.display=userSecs.indexOf('ats')!==-1?'':'none';
   document.getElementById('snFile').style.display=userSecs.indexOf('file')!==-1?'':'none';
@@ -7595,6 +7599,109 @@ function sheetsDeleteEmpRows(fileId,sheetName,sheetRows,nd){
   return sheetsBatchUpdate(fileId,data);
 }
 
+// ═══════════════════════════════════════════════════════════
+//  COMPATTA FOGLIO (solo super utenti, una tantum)
+// ═══════════════════════════════════════════════════════════
+// Elimina le righe vuote lasciate dai dipendenti rimossi, sia nel foglio
+// presenze del mese (<Mese>_ATS o _Coop) sia nei tab Commesse e Ritardi.
+// Usa la cancellazione vera delle righe (deleteDimension): note, formati e
+// "Confermato" si spostano insieme alla riga, niente viene riscritto.
+// Nel foglio presenze resta una riga vuota di separazione tra un dipendente e
+// l'altro; le prime due righe (intestazione) non vengono mai toccate.
+// Le righe dei dipendenti cambiano posizione: chi ha il mese aperto deve ricaricarlo.
+function _isEmptyRow(r){return !r||!r.length||r.every(function(c){return c===''||c===null||c===undefined;});}
+function _emptyRunsMain(vals){
+  var out=[],i=2;
+  while(i<vals.length){
+    if(!_isEmptyRow(vals[i])){i++;continue;}
+    var st=i;while(i<vals.length&&_isEmptyRow(vals[i]))i++;
+    if(i>=vals.length)break;                       // righe in fondo: non contano
+    if(st===2)out.push({start:2,end:i});            // prima del primo dipendente: via tutte
+    else if(i-st>1)out.push({start:st+1,end:i});    // tra due dipendenti: ne resta una
+  }
+  return out;
+}
+function _emptyRunsList(vals){
+  var out=[],i=1;
+  while(i<vals.length){
+    if(!_isEmptyRow(vals[i])){i++;continue;}
+    var st=i;while(i<vals.length&&_isEmptyRow(vals[i]))i++;
+    if(i<vals.length)out.push({start:st,end:i});
+  }
+  return out;
+}
+function compattaFile(fileId,tabs,mainTab){
+  return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties').then(function(meta){
+    var jobs=[];
+    tabs.forEach(function(t){
+      var sh=(meta.sheets||[]).find(function(x){return x.properties.title===t;});
+      if(sh)jobs.push({title:t,id:sh.properties.sheetId,main:t===mainTab});
+    });
+    return Promise.all(jobs.map(function(j){return sheetsRead(fileId,j.title+'!A1:AZ5000').then(function(v){j.vals=v||[];return j;});}));
+  }).then(function(jobs){
+    var reqs=[],det=[];
+    jobs.forEach(function(j){
+      var runs=(j.main?_emptyRunsMain(j.vals):_emptyRunsList(j.vals)).sort(function(a,b){return b.start-a.start;});
+      var n=0;
+      runs.forEach(function(r){reqs.push({deleteDimension:{range:{sheetId:j.id,dimension:'ROWS',startIndex:r.start,endIndex:r.end}}});n+=r.end-r.start;});
+      if(n)det.push(j.title+': '+n);
+    });
+    if(!reqs.length)return det;
+    return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+':batchUpdate',{method:'POST',
+      headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({requests:reqs})
+    }).then(function(r){if(!r.ok)return r.json().then(function(e){throw new Error((e.error&&e.error.message)||r.statusText);});return det;});
+  });
+}
+// altri utenti attivi negli ultimi N minuti (dal registro attività)
+function _altriAttivi(min){
+  var now=new Date(),y=now.getFullYear(),tab=('0'+(now.getMonth()+1)).slice(-2)+'_'+MESI[now.getMonth()];
+  return _logFindFile(y).then(function(id){
+    return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+id+'?fields=sheets.properties').then(function(meta){
+      if(!(meta.sheets||[]).some(function(x){return x.properties.title===tab;}))return [];
+      return sheetsRead(id,tab+'!A:C');
+    });
+  }).then(function(rows){
+    var lim=_logTs(new Date(now.getTime()-min*60000)),set={};
+    (rows||[]).slice(1).forEach(function(r){if(r[0]>=lim&&r[1]&&r[1]!==uEmail&&r[1]!=='controllo automatico')set[r[2]||r[1]]=1;});
+    return Object.keys(set);
+  }).catch(function(){return [];});
+}
+function compattaFogli(mode){
+  if(!isSuperUser){toast('Solo super utenti','err');return;}
+  var data=mode==='ats'?atsData:coopData;
+  if(!data){toast('Carica prima il mese','warn');return;}
+  if(aBusy||cBusy||_saveFail.ats||_saveFail.coop){toast('Ci sono salvataggi in corso o in attesa: riprova tra poco','warn');return;}
+  var px=mode==='ats'?'a':'c';
+  var y=parseInt(document.getElementById(px+'Year').value),m=parseInt(document.getElementById(px+'Month').value);
+  var files=findAllFiles(document.getElementById(px+'Resp').value||'',document.getElementById(px+'Plant').value||'',y,m)
+    .filter(function(f){return !/\.xlsx$/i.test(f.name);});
+  if(!files.length){toast('Nessun file Google Sheets da compattare','warn');return;}
+  var sez=mode==='ats'?'ATS':'Coop',main=MESI[m-1]+'_'+sez;
+  var tabs=[main,main+'_Commesse',main+'_Ritardi'];
+  toast('⏳ Controllo attività recenti…','warn');
+  logFlush().then(function(){return _altriAttivi(15);}).then(function(altri){
+    showConf('🧹 Compatta foglio',
+      'Elimino le righe vuote da '+files.length+' file ('+main+', Commesse, Ritardi). '
+      +'I dipendenti cambiano riga: chi ha questo mese aperto deve ricaricarlo prima di modificare. '
+      +(altri.length?'⚠ ATTENZIONE: negli ultimi 15 minuti hanno lavorato nel tool: '+altri.join(', ')+'. Meglio avvisarli o aspettare. ':'Nessun altro utente attivo negli ultimi 15 minuti. ')
+      +'In caso di problemi ogni file si ripristina da Google Sheets → Cronologia versioni.',
+      function(){
+        var tot=[],err=[];
+        toast('⏳ Compattazione in corso…','warn');
+        files.reduce(function(pr,f){
+          return pr.then(function(){
+            return compattaFile(f.id,tabs,main).then(function(det){
+              if(det.length){tot.push(f.name+' ('+det.join(', ')+')');logEvent({area:'File',azione:'Compattazione foglio',sez:sez,mese:('0'+m).slice(-2)+'/'+y,det:f.name+' — righe eliminate: '+det.join(', ')});}
+            }).catch(function(e){err.push(f.name+': '+e.message);});
+          });
+        },Promise.resolve()).then(function(){
+          if(err.length){toast('✗ Errori: '+err.join(' | '),'err');logEvent({area:'Errore',azione:'Compattazione fallita',sez:sez,det:err.join(' | ')});}
+          toast(tot.length?'✓ Compattati '+tot.length+' file — ricarico il mese':'✓ Nessuna riga vuota da eliminare');
+          if(tot.length){if(mode==='ats')atsRefresh();else coopRefresh();}
+        });
+      });
+  });
+}
 function colToLetter(col){var s='';col++;while(col>0){col--;s=String.fromCharCode(65+(col%26))+s;col=Math.floor(col/26);}return s;}
 
 // ═══════════════════════════════════════════════════════════
