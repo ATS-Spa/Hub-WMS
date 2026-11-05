@@ -602,10 +602,10 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
         <div class="fg" style="flex:1;min-width:240px"><span class="fl">Cerca</span><input class="fc mono" id="ferQ" placeholder="FR, seriale, P/N, scheda, riparatore, note" oninput="clearTimeout(Fer._qt);Fer._qt=setTimeout(function(){Fer.render()},200)"></div>
         <div class="fg"><span class="fl">Stato SD</span><select class="fc" id="ferSd" onchange="Fer.render()"><option value="">Tutti</option><option value="DA">Da lavorare</option><option value="IN_LAVORAZIONE">In lavorazione</option><option value="SISTEMATO">Sistemato su VLT</option></select></div>
         <div class="spacer"></div>
-        <button class="btn ghost sm" onclick="Fer.mailMag()" title="Mail al magazzino con le FAULTY che il Service Desk ha sistemato (tra le righe filtrate): avanzare lo stato su VLT">✉ Mail magazzino (sistemate)</button>
+        <button class="btn ghost sm" onclick="Fer.mailMag()" title="Mail al magazzino con le novità (da controllare, sistemate dal SD, già in ACK, risolte) e, prima, il sollecito in risposta alla mail precedente per le FR ancora non risolte">✉ Mail magazzino</button>
         <button class="btn ghost sm" onclick="Fer.grid && Fer.grid.excel('Spare ferme in HUB')">⬇ Excel</button>
-      </div><div class="row" style="margin-top:8px;gap:6px"><button class="btn sm" id="ferT_FERME" onclick="Fer.vai('FERME')">🧊 Ferme in hub</button><button class="btn ghost sm" id="ferT_ACK" onclick="Fer.vai('ACK')">✅ Passate in ACK / risolte</button></div>
-      <div class="hint" id="ferInfo" style="margin-top:6px">Gli <b>spare false</b> letti nelle spunte ACK: in <b>Ferme in hub</b> quelli ancora fermi (stato VLT non da ACK o riparatore diverso), in <b>Passate in ACK / risolte</b> quelli passati in Repairer Ack Received, usciti con un ACK o con l'anomalia risolta, con tutte le note (SD, pending, risoluzione). Clicca una riga per lo stato e la nota del Service Desk.</div></div>
+      </div><div class="row" style="margin-top:8px;gap:6px"><button class="btn sm" id="ferT_FERME" onclick="Fer.vai('FERME')">🧊 Ferme in hub</button><button class="btn ghost sm" id="ferT_CONTROLLA" onclick="Fer.vai('CONTROLLA')">🔍 Da controllare</button><button class="btn ghost sm" id="ferT_ACK" onclick="Fer.vai('ACK')">✅ In ACK su VLT</button><button class="btn ghost sm" id="ferT_RISOLTE" onclick="Fer.vai('RISOLTE')">✔ Risolte</button></div>
+      <div class="hint" id="ferInfo" style="margin-top:6px">Gli <b>spare false</b> letti nelle spunte ACK (Aborted esclusi): <b>Ferme in hub</b> da sistemare su VLT (Service Desk) · <b>Da controllare</b> fisicamente dal magazzino (Close for Scrap, Good Material Received, Failed Material Sent to Repairer) · <b>In ACK su VLT</b> (partono con il prossimo ACK) · <b>Risolte</b> (uscite, anomalia chiusa, controllo con esito risolto). Clicca una riga per stato SD, esito del magazzino e note.</div></div>
       <div class="stats" id="ferStats"></div>
       <div class="tbl-wrap"><table><thead id="ferHead"></thead><tbody id="ferRows"></tbody></table></div><div class="hint" id="ferFoot" style="margin-top:6px"></div>
     </div>
@@ -9098,15 +9098,21 @@ var Nr = {
 // spare false letti nelle spunte ACK: "Ferme in hub" (ancora da sistemare) e "Passate in ACK / risolte" (stato ACK su VLT, uscite, anomalia risolta).
 // Il Service Desk segna stato e nota (foglio SPARE_FERME, una riga per FR/seriale); la riga sparisce da sola quando il pezzo esce o la condizione non c'è più.
 var Fer = {
-  H: ['chiave', 'fr', 'seriale', 'id_unita', 'stato_sd', 'nota_sd', 'aggiornato_il', 'aggiornato_da', 'mail_magazzino_il', 'mail_magazzino_da'],
+  H: ['chiave', 'fr', 'seriale', 'id_unita', 'stato_sd', 'nota_sd', 'aggiornato_il', 'aggiornato_da', 'mail_magazzino_il', 'mail_magazzino_da', 'esito_mag', 'nota_mag', 'esito_il', 'esito_da', 'mail_id', 'mail_oggetto', 'mail_cat', 'sollecito_il'],
   SD: { '': ['p-amber', 'Da lavorare'], IN_LAVORAZIONE: ['p-violet', 'In lavorazione'], SISTEMATO: ['p-green', 'Sistemato su VLT'] },
+  // esito del controllo fisico del magazzino (tab Da controllare): ok = risolto, va in Risolte
+  ESITI: { '': ['p-amber', 'Da controllare', false], GOOD_SPOSTATA: ['p-green', 'È una GOOD: spostata tra le GOOD', true], FR_SBAGLIATO: ['p-violet', 'FAULTY con FR sbagliato: da correggere', false], NON_TROVATA: ['p-red', 'Non trovata a scaffale', false], RISOLTO: ['p-green', 'Risolto (vedi nota)', true] },
+  SEZ: { FERME: '🧊 Ferme in hub', CONTROLLA: '🔍 Da controllare', ACK: '✅ In ACK su VLT', RISOLTE: '✔ Risolte' },
+  CAT: { CONTROLLA: 'Da controllare fisicamente', SISTEMATA: 'Sistemate dal Service Desk: avanzare lo stato su VLT', IN_ACK: 'Già in ACK su VLT: partono con il prossimo ACK', RISOLTA: 'Risolte' },
   loaded: false, _R: [], sez: 'FERME',
-  vai: function (s) { Fer.sez = s; ['FERME', 'ACK'].forEach(function (k) { var b = $('ferT_' + k); if (b) b.className = 'btn sm' + (k === s ? '' : ' ghost'); }); Fer.render(); },
+  vai: function (s) { Fer.sez = s; Object.keys(Fer.SEZ).forEach(function (k) { var b = $('ferT_' + k); if (b) b.className = 'btn sm' + (k === s ? '' : ' ghost'); }); Fer.render(); },
   show: async function () {
     try {
       if (!Ack.loaded) { $('ferFoot').textContent = 'Carico spunte e anomalie…'; await Ack.load(); }
       if (!DB.t.SPARE_FERME || !DB.t.SPARE_FERME.header.length) await DB.ensureSheet('SPARE_FERME', Fer.H);
+      else if (Fer.H.some(function (h) { return !(h in DB.t.SPARE_FERME.idx); })) await DB.ensureCols('SPARE_FERME', Fer.H);
       if (!DB.t.ACK_PENDING && Ack.ensurePending) await Ack.ensurePending();
+      if (!DB.t.CODA_MAIL) await Mail.carica();
       Fer.loaded = true; Fer.render();
     } catch (e) { $('ferFoot').textContent = 'Errore: ' + e.message; }
   },
@@ -9114,11 +9120,13 @@ var Fer = {
   sd: function (k) { var R = DB.t.SPARE_FERME ? DB.t.SPARE_FERME.rows : [], o = null; R.forEach(function (r) { if (r.chiave === k) o = r; }); return o; },
   giorni: function (d) { d = L.normDate(L.s(d).slice(0, 10)); if (!/^\d{4}-\d{2}-\d{2}$/.test(d)) return ''; return Math.max(0, Math.round((new Date(L.isoToday() + 'T00:00:00') - new Date(d + 'T00:00:00')) / 86400000)); },
   rk: function (x) { return App._k(App.ripNoto(x) || x); },
+  nst: function (x) { return L.up(x).replace(/\s+/g, ' '); },
+  stati: function (k, def) { var o = {}; L.s(DB.param(k, def)).split(';').forEach(function (x) { if (L.s(x)) o[Fer.nst(x)] = 1; }); return o; },
   righe: function () {
-    var c = Ack.cfg(), stAck = L.up(c.statoAck), chiud = {}, out = {}, ord = [];
-    L.s(DB.param('vlt_stati_fr_da_chiudere', '')).split(';').forEach(function (x) { if (L.s(x)) chiud[L.up(x)] = 1; });
+    var c = Ack.cfg(), stAck = Fer.nst(c.statoAck), out = {}, ord = [];
+    var chiud = Fer.stati('vlt_stati_fr_da_chiudere', ''), escl = Fer.stati('ferme_stati_esclusi', 'Aborted'), ctrl = Fer.stati('ferme_stati_controllo', 'Close for Scrap material;Good Material Received;Failed Material Sent to Repairer');
     var mag = {}, perFr = {}, perId = {};
-    DB.t.UNITA.rows.forEach(function (u) { if (u.tipo !== 'FAULTY') return; perId[u.id_unita] = u; if (Giacenze.A_MAG.indexOf(u.stato) >= 0) { if (u.fr) mag['F' + u.fr] = u; mag['S' + L.up(u.seriale)] = u; } if (u.fr) perFr[u.fr] = u; });
+    DB.t.UNITA.rows.forEach(function (u) { perId[u.id_unita] = u; if (Giacenze.A_MAG.indexOf(u.stato) >= 0) { if (u.fr) mag['F' + u.fr] = u; mag['S' + L.up(u.seriale)] = u; } if (u.fr && u.tipo === 'FAULTY') perFr[u.fr] = u; });
     var pend = {}; (DB.t.ACK_PENDING ? DB.t.ACK_PENDING.rows : []).forEach(function (p) { if (p.fr) pend[p.fr] = p; });
     // spare false (aperti e risolti), il più recente per FR/seriale
     (DB.t.ANOMALIE ? DB.t.ANOMALIE.rows : []).filter(function (a) { return a.tipo === 'SPARE_FALSE'; })
@@ -9128,50 +9136,61 @@ var Fer = {
         if (!out[k]) { out[k] = { k: k, fr: fr, ser: L.s(a.seriale) || (u ? u.seriale : ''), u: u, sf: a, sp: Ack.byId(a.id_spedizione), n: 0, aperte: 0 }; ord.push(k); }
         out[k].n++; if (a.stato === 'APERTA') out[k].aperte++;
       });
-    return ord.map(function (k, i) {
-      var o = out[k], u = o.u, v = o.fr && DB.vltMap[o.fr], ripRif = o.sp ? o.sp.destinatario : (u ? u.riparatore : ''), ripV = v ? L.s(v.riparatore) : '';
+    var R = [];
+    ord.forEach(function (k) {
+      var o = out[k], u = o.u, v = o.fr && DB.vltMap[o.fr], stV = v ? Fer.nst(v.stato) : '', ripRif = o.sp ? o.sp.destinatario : (u ? u.riparatore : ''), ripV = v ? L.s(v.riparatore) : '';
+      if (stV && escl[stV]) return;   // es. Aborted: fuori dal tab
+      var r = Fer.sd(k) || {}, es0 = Fer.ESITI[L.s(r.esito_mag)] || Fer.ESITI[''];
       var inHub = u && Giacenze.A_MAG.indexOf(u.stato) >= 0, usc = u && u.stato === 'USCITO' && L.s(u.data_out) >= L.normDate(L.s(o.sf.data).slice(0, 10)), spU = usc ? Ack.byId(u.id_spedizione) : null;
-      var ripOk = !ripV || !ripRif || Fer.rk(ripV) === Fer.rk(ripRif), inAck = v && L.up(v.stato) === stAck && ripOk;
-      var sez = o.aperte && !usc && !inAck && (inHub || !u) ? 'FERME' : 'ACK';
-      var pr = sez === 'ACK' ? (usc ? 'Uscita' : (inAck ? 'In ACK su VLT' : (o.aperte ? 'Non più in giacenza' : 'Anomalia risolta')))
-        : (!o.fr ? 'Senza FR' : (!v ? 'FR non trovato su VLT' : (!ripOk ? 'Riparatore su VLT diverso' : (chiud[L.up(v.stato)] ? 'Da chiudere su VLT (spare ferma)' : 'Stato VLT non da ACK'))));
-      var fare = sez === 'ACK' ? '' : { 'Senza FR': 'trovare o assegnare l\'FR', 'FR non trovato su VLT': 'verificare l\'FR su VLT', 'Riparatore su VLT diverso': 'correggere il riparatore su VLT (' + ripV + ' → ' + ripRif + ') o metterlo in pending', 'Da chiudere su VLT (spare ferma)': 'chiudere su VLT (Chiusure VLT · FERME)', 'Stato VLT non da ACK': 'sistemare lo stato su VLT ("' + (v ? v.stato : '') + '") perché possa partire con l\'ACK' }[pr];
+      var ripOk = !ripV || !ripRif || Fer.rk(ripV) === Fer.rk(ripRif), inAck = v && stV === stAck && ripOk, aperta = o.aperte && !usc && (inHub || !u);
+      var sez = !aperta || es0[2] ? 'RISOLTE' : (inAck ? 'ACK' : (ctrl[stV] ? 'CONTROLLA' : 'FERME'));
+      var pr = sez === 'RISOLTE' ? (usc ? 'Uscita' : (es0[2] ? 'Controllata: ' + es0[1] : (o.aperte ? 'Non più in giacenza' : 'Anomalia risolta'))) : (sez === 'ACK' ? 'In ACK su VLT' : (sez === 'CONTROLLA' ? 'Da controllare: su VLT "' + v.stato + '"'
+        : (!o.fr ? 'Senza FR' : (!v ? 'FR non trovato su VLT' : (!ripOk ? 'Riparatore su VLT diverso' : (chiud[stV] ? 'Da chiudere su VLT (spare ferma)' : 'Stato VLT non da ACK'))))));
+      var fare = sez === 'CONTROLLA' ? (stV === 'GOOD MATERIAL RECEIVED' ? 'controllare a scaffale: è una GOOD letta tra le FAULTY o una FAULTY con un FR vecchio?' : (stV.indexOf('SCRAP') >= 0 ? 'controllare a scaffale: su VLT è rottamata ma il pezzo è in hub' : 'controllare a scaffale: su VLT risulta già spedita al riparatore'))
+        : (sez === 'FERME' ? { 'Senza FR': 'trovare o assegnare l\'FR', 'FR non trovato su VLT': 'verificare l\'FR su VLT', 'Riparatore su VLT diverso': 'correggere il riparatore su VLT (' + ripV + ' → ' + ripRif + ') o metterlo in pending', 'Da chiudere su VLT (spare ferma)': 'chiudere su VLT (Chiusure VLT · FERME)', 'Stato VLT non da ACK': 'sistemare lo stato su VLT ("' + (v ? v.stato : '') + '") perché possa partire con l\'ACK' }[pr] : '');
       var p = o.fr && pend[o.fr], es = [];
       if (usc) es.push('uscito con ' + (spU ? spU.id_spedizione + ' ' + spU.destinatario + (spU.n_ddt ? ' DDT ' + spU.n_ddt : '') : L.s(u.id_spedizione)) + ' il ' + L.itDate(u.data_out));
       else if (inAck) es.push('in "' + v.stato + '" su VLT: parte con il prossimo ACK di ' + (ripV || ripRif));
+      if (L.s(r.esito_mag)) es.push('controllo magazzino: ' + es0[1] + (L.s(r.esito_il) ? ' il ' + L.vedi(L.s(r.esito_il).slice(0, 16)) : '') + (L.s(r.nota_mag) ? ' (' + L.s(r.nota_mag) + ')' : ''));
       if (o.sf.stato === 'RISOLTA') es.push('anomalia risolta' + (L.s(o.sf.risolta_il) ? ' il ' + L.vedi(L.s(o.sf.risolta_il).slice(0, 16)) : '') + (L.s(o.sf.nota_risoluzione) ? ': ' + L.s(o.sf.nota_risoluzione) : ''));
       if (p) es.push(p.stato === 'APERTO' ? 'pending dal ' + L.itDate(L.s(p.data).slice(0, 10)) + ': ' + L.s(p.motivo) : 'pending ' + L.s(p.stato).toLowerCase() + (L.s(p.risolto_il) ? ' il ' + L.vedi(L.s(p.risolto_il).slice(0, 16)) : '') + (L.s(p.nota_risoluzione) ? ': ' + L.s(p.nota_risoluzione) : '') + (L.s(p.motivo) ? ' (motivo: ' + L.s(p.motivo) + ')' : ''));
       if (u && !inHub && !usc) es.push('scheda ' + u.id_unita + ' ' + L.s(u.stato).toLowerCase());
-      var r = Fer.sd(k) || {};
-      return { _i: i, k: k, sez: sez, problema: pr, fare: fare, esito: es.join(' · '), fr: o.fr, seriale: o.ser, pn: (u && u.pn) || (v && v.f_mat_tmpn) || '', stato_vlt: v ? v.stato : '', rip_vlt: ripV, rip_rif: ripRif,
-        nota_vlt: v ? L.s(v.note) : '', id_unita: u ? u.id_unita : '', stato_scheda: u ? u.stato : 'senza scheda', ubicazione: u && inHub ? u.ubicazione : '', entrata: u ? L.normDate(L.s(u.data_in).slice(0, 10)) : '', giorni: u && inHub ? Fer.giorni(u.data_in) : '',
+      // categoria per la mail al magazzino (FERME non sistemate: lavoro del SD, non vanno in mail)
+      var cat = sez === 'CONTROLLA' ? 'CONTROLLA' : (sez === 'ACK' ? 'IN_ACK' : (sez === 'RISOLTE' ? 'RISOLTA' : (L.s(r.stato_sd) === 'SISTEMATO' ? 'SISTEMATA' : '')));
+      R.push({ _i: R.length, k: k, sez: sez, cat: cat, problema: pr, fare: fare, esito: es.join(' · '), fr: o.fr, seriale: o.ser, pn: (u && u.pn) || (v && v.f_mat_tmpn) || '', stato_vlt: v ? v.stato : '', rip_vlt: ripV, rip_rif: ripRif,
+        nota_vlt: v ? L.s(v.note) : '', id_unita: u ? u.id_unita : '', tipo: u ? u.tipo : '', stato_scheda: u ? u.stato : 'senza scheda', ubicazione: u && inHub ? u.ubicazione : '', entrata: u ? L.normDate(L.s(u.data_in).slice(0, 10)) : '', giorni: u && inHub ? Fer.giorni(u.data_in) : '',
         nota_scheda: u ? (typeof Spec !== 'undefined' && Spec.pulita ? Spec.pulita(u.note) : L.s(u.note)) : '', letto_il: L.s(o.sf.data).slice(0, 16), letto_da: L.s(o.sf.aperta_da), ack: o.sp ? o.sp.id_spedizione + ' · ' + o.sp.destinatario + ' ' + L.itDate(o.sp.data) : L.s(o.sf.id_spedizione), letture: o.n,
-        stato_sd: L.s(r.stato_sd), nota_sd: L.s(r.nota_sd), sd_il: L.s(r.aggiornato_il).slice(0, 16), sd_da: L.s(r.aggiornato_da), mail_il: L.s(r.mail_magazzino_il).slice(0, 16), _sd: r._r ? r : null };
+        stato_sd: L.s(r.stato_sd), nota_sd: L.s(r.nota_sd), sd_il: L.s(r.aggiornato_il).slice(0, 16), sd_da: L.s(r.aggiornato_da), esito_mag: L.s(r.esito_mag), nota_mag: L.s(r.nota_mag), esito_il: L.s(r.esito_il).slice(0, 16), esito_da: L.s(r.esito_da),
+        mail_il: L.s(r.mail_magazzino_il).slice(0, 16), mail_cat: L.s(r.mail_cat), mail_id: L.s(r.mail_id), mail_oggetto: L.s(r.mail_oggetto), sollecito_il: L.s(r.sollecito_il), _sd: r._r ? r : null });
     });
+    return R;
   },
   render: function () {
     if (!Fer.loaded) return;
     Fer._R = Fer.righe();
-    var pill = function (st) { var s = Fer.SD[st] || ['', st]; return '<span class="pill ' + s[0] + '">' + esc(s[1]) + '</span>'; };
+    var pill = function (M, st) { var s = M[st] || ['', st]; return '<span class="pill ' + s[0] + '">' + esc(s[1]) + '</span>'; };
     if (!Fer.grid) Fer.grid = new Grid('ferme', {
-      thead: 'ferHead', tbody: 'ferRows', foot: 'ferFoot', sort: 'giorni', dir: -1, empty: 'Nessuna spare ferma in hub con questi filtri',
+      thead: 'ferHead', tbody: 'ferRows', foot: 'ferFoot', sort: 'giorni', dir: -1, empty: 'Nessuna riga con questi filtri',
       rows: function () { var f = $('ferSd').value; return Fer._R.filter(function (r) { return r.sez === Fer.sez && (!f || (f === 'DA' ? !r.stato_sd : r.stato_sd === f)); }); },
       cerca: function () { return $('ferQ').value; },
-      rowAttr: function (r) { return 'class="' + (r.sez === 'ACK' ? (r.problema === 'In ACK su VLT' ? 'r-ok' : '') : (r.stato_sd === 'SISTEMATO' ? 'r-var' : (r.problema === 'Riparatore su VLT diverso' ? 'r-warn' : ''))) + '" style="cursor:pointer" title="Clicca per stato e nota del Service Desk" onclick="Fer.apri(' + r._i + ')"'; },
+      rowAttr: function (r) { return 'class="' + (r.sez === 'ACK' ? 'r-ok' : (r.sez === 'CONTROLLA' ? (r.esito_mag ? 'r-var' : 'r-warn') : (r.stato_sd === 'SISTEMATO' ? 'r-var' : (r.problema === 'Riparatore su VLT diverso' ? 'r-warn' : '')))) + '" style="cursor:pointer" title="Clicca per lo stato del Service Desk e l\'esito del controllo" onclick="Fer.apri(' + r._i + ')"'; },
       cols: [
-        { k: 'problema', label: 'Problema / esito', filter: 'select', html: function (r) { return r.problema === 'In ACK su VLT' ? '<b style="color:var(--green)">✓ In ACK su VLT</b>' : esc(r.problema); } },
+        { k: 'problema', label: 'Problema / esito', filter: 'select', html: function (r) { return r.sez === 'ACK' ? '<b style="color:var(--green)">✓ In ACK su VLT</b>' : esc(r.problema); } },
         { k: 'fare', label: 'Cosa fare', filter: 'text' },
-        { k: 'esito', label: 'Storia (uscita, risoluzione, pending)', filter: 'text' },
+        { k: 'esito', label: 'Storia (uscita, controllo, risoluzione, pending)', filter: 'text' },
         { k: 'fr', label: 'FR', cls: 'mono', filter: 'text' },
         { k: 'seriale', label: 'Seriale', cls: 'mono', filter: 'text' },
+        { k: 'tipo', label: 'Tipo scheda', filter: 'select' },
         { k: 'pn', label: 'P/N', cls: 'mono', filter: 'select' },
         { k: 'stato_vlt', label: 'Stato VLT', filter: 'select' },
         { k: 'rip_vlt', label: 'Riparatore VLT', filter: 'select' },
         { k: 'rip_rif', label: 'Riparatore hub/ACK', filter: 'select' },
         { k: 'nota_vlt', label: 'Nota VLT', filter: 'text' },
-        { k: 'stato_sd', label: 'Stato SD', filter: 'select', get: function (r) { return (Fer.SD[r.stato_sd] || ['', r.stato_sd])[1]; }, html: function (r) { return r.sez === 'ACK' && !r.stato_sd ? '' : pill(r.stato_sd); } },
+        { k: 'esito_mag', label: 'Esito magazzino', filter: 'select', get: function (r) { return r.esito_mag ? (Fer.ESITI[r.esito_mag] || ['', r.esito_mag])[1] : ''; }, html: function (r) { return r.sez === 'CONTROLLA' || r.esito_mag ? pill(Fer.ESITI, r.esito_mag) : ''; } },
+        { k: 'nota_mag', label: 'Nota magazzino', filter: 'text' },
+        { k: 'stato_sd', label: 'Stato SD', filter: 'select', get: function (r) { return (Fer.SD[r.stato_sd] || ['', r.stato_sd])[1]; }, html: function (r) { return r.sez !== 'FERME' && !r.stato_sd ? '' : pill(Fer.SD, r.stato_sd); } },
         { k: 'nota_sd', label: 'Nota SD', filter: 'text' },
-        { k: 'sd_il', label: 'SD aggiornato', cls: 'mono nw', filter: 'date', get: function (r) { return r.sd_il; } },
+        { k: 'sd_il', label: 'SD aggiornato', cls: 'mono nw', filter: 'date' },
         { k: 'sd_da', label: 'SD da', filter: 'select' },
         { k: 'mail_il', label: 'Mail magazzino', cls: 'mono nw', filter: 'date' },
         { k: 'id_unita', label: 'Scheda', cls: 'mono', filter: 'text' },
@@ -9185,26 +9204,31 @@ var Fer = {
         { k: 'letto_da', label: 'Letto da', filter: 'select' },
         { k: 'letture', label: 'Letture', cls: 'mono' }
       ],
-      hidden: ['letto_da', 'sd_da', 'nota_scheda', 'stato_scheda'], vis: { v: 2, mostra: ['esito'] }
+      hidden: ['letto_da', 'sd_da', 'nota_scheda', 'stato_scheda'], vis: { v: 3, mostra: ['esito', 'tipo', 'esito_mag', 'nota_mag'] }
     });
     var vis = Fer.grid.render() || [];
     var n = function (fn) { return Fer._R.filter(fn).length; };
-    var fe = function (fn) { return n(function (r) { return r.sez === 'FERME' && fn(r); }); }, nA = n(function (r) { return r.sez === 'ACK'; });
-    $('ferT_FERME').textContent = '🧊 Ferme in hub (' + fe(function () { return true; }) + ')'; $('ferT_ACK').textContent = '✅ Passate in ACK / risolte (' + nA + ')';
-    $('ferStats').innerHTML = [['Ferme in hub', fe(function () { return true; })], ['Da lavorare', fe(function (r) { return !r.stato_sd; })], ['In lavorazione', fe(function (r) { return r.stato_sd === 'IN_LAVORAZIONE'; })], ['Sistemate su VLT', fe(function (r) { return r.stato_sd === 'SISTEMATO'; })],
-      ['In ACK su VLT', n(function (r) { return r.sez === 'ACK' && r.problema === 'In ACK su VLT'; })], ['Uscite', n(function (r) { return r.problema === 'Uscita'; })]]
+    Object.keys(Fer.SEZ).forEach(function (s) { var b = $('ferT_' + s); if (b) b.textContent = Fer.SEZ[s] + ' (' + n(function (r) { return r.sez === s; }) + ')'; });
+    var fe = function (fn) { return n(function (r) { return r.sez === 'FERME' && fn(r); }); };
+    var m = Fer.daMandare();
+    $('ferStats').innerHTML = [['Da lavorare (SD)', fe(function (r) { return !r.stato_sd; })], ['In lavorazione (SD)', fe(function (r) { return r.stato_sd === 'IN_LAVORAZIONE'; })], ['Sistemate su VLT', fe(function (r) { return r.stato_sd === 'SISTEMATO'; })],
+      ['Da controllare', n(function (r) { return r.sez === 'CONTROLLA' && !r.esito_mag; })], ['Da mandare al magazzino', m.nuove.length], ['Da sollecitare', m.soll.length]]
       .map(function (x) { return '<div class="stat"><b>' + x[1] + '</b><span>' + esc(x[0]) + '</span></div>'; }).join('');
     return vis;
   },
-  // stato e nota del Service Desk sulla riga
+  // stato e nota del Service Desk / esito del controllo del magazzino
   apri: function (i) {
     var r = Fer._R[i]; if (!r) return;
+    var ctl = r.sez === 'CONTROLLA' || r.esito_mag;
     Modal.html('Spare ferma · ' + esc(r.fr || r.seriale),
-      '<div style="font-size:13px;line-height:1.6"><b>' + esc(r.problema) + '</b>' + (r.fare ? ' · ' + esc(r.fare) : '') + (r.esito ? '<br><span class="hint">' + esc(r.esito) + '</span>' : '') + '<br>' + esc(r.seriale) + ' · ' + esc(r.pn) + ' · VLT: <b>' + esc(r.stato_vlt || '—') + '</b>' + (r.rip_vlt ? ' · ' + esc(r.rip_vlt) : '') + (r.id_unita ? ' · ' + esc(r.id_unita) + (r.ubicazione ? ' (' + esc(r.ubicazione) + ')' : '') : '') + '</div>' +
-      '<div class="fg" style="margin-top:10px"><span class="fl">Stato Service Desk</span><select class="fc" id="ferSt">' + Object.keys(Fer.SD).map(function (k) { return '<option value="' + k + '"' + (k === r.stato_sd ? ' selected' : '') + '>' + Fer.SD[k][1] + '</option>'; }).join('') + '</select></div>' +
-      '<div class="fg" style="margin-top:8px"><span class="fl">Nota SD</span><textarea class="fc" id="ferNota" rows="3" maxlength="500">' + esc(r.nota_sd) + '</textarea></div>' +
-      (r.sd_il ? '<div class="hint" style="margin-top:6px">Ultimo aggiornamento ' + esc(r.sd_il) + ' · ' + esc(r.sd_da) + (r.mail_il ? ' · mail al magazzino ' + esc(r.mail_il) : '') + '</div>' : ''),
-      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Salva', cls: 'green', keep: true, fn: function () { Fer.salva(r, $('ferSt').value, L.s($('ferNota').value)); } }]);
+      '<div style="font-size:13px;line-height:1.6"><b>' + esc(r.problema) + '</b>' + (r.fare ? ' · ' + esc(r.fare) : '') + (r.esito ? '<br><span class="hint">' + esc(r.esito) + '</span>' : '') + '<br>' + esc(r.seriale) + ' · ' + esc(r.pn) + (r.tipo ? ' · scheda <b>' + esc(r.tipo) + '</b>' : '') + ' · VLT: <b>' + esc(r.stato_vlt || '—') + '</b>' + (r.rip_vlt ? ' · ' + esc(r.rip_vlt) : '') + (r.id_unita ? ' · ' + esc(r.id_unita) + (r.ubicazione ? ' (' + esc(r.ubicazione) + ')' : '') : '') + '</div>' +
+      (ctl ? '<div class="card" style="padding:8px 10px;margin-top:10px"><b>Controllo del magazzino</b><div class="fg" style="margin-top:6px"><span class="fl">Esito</span><select class="fc" id="ferEs">' + Object.keys(Fer.ESITI).map(function (k) { return '<option value="' + k + '"' + (k === r.esito_mag ? ' selected' : '') + '>' + Fer.ESITI[k][1] + (Fer.ESITI[k][2] ? ' ✔' : '') + '</option>'; }).join('') + '</select></div>' +
+        '<div class="fg" style="margin-top:6px"><span class="fl">Nota magazzino</span><textarea class="fc" id="ferNm" rows="2" maxlength="500">' + esc(r.nota_mag) + '</textarea></div>' + (r.esito_il ? '<div class="hint">Esito del ' + esc(r.esito_il) + ' · ' + esc(r.esito_da) + '</div>' : '') + '<div class="hint">Con ✔ la riga va in Risolte.</div></div>' : '') +
+      '<div class="card" style="padding:8px 10px;margin-top:10px"><b>Service Desk</b><div class="fg" style="margin-top:6px"><span class="fl">Stato SD</span><select class="fc" id="ferSt">' + Object.keys(Fer.SD).map(function (k) { return '<option value="' + k + '"' + (k === r.stato_sd ? ' selected' : '') + '>' + Fer.SD[k][1] + '</option>'; }).join('') + '</select></div>' +
+      '<div class="fg" style="margin-top:6px"><span class="fl">Nota SD</span><textarea class="fc" id="ferNota" rows="2" maxlength="500">' + esc(r.nota_sd) + '</textarea></div>' +
+      (r.sd_il ? '<div class="hint">Ultimo aggiornamento ' + esc(r.sd_il) + ' · ' + esc(r.sd_da) + '</div>' : '') + '</div>' +
+      (r.mail_il ? '<div class="hint" style="margin-top:6px">Mandata al magazzino il ' + esc(r.mail_il) + (r.sollecito_il ? ' · sollecito il ' + esc(L.s(r.sollecito_il).slice(0, 16)) : '') + '</div>' : ''),
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Salva', cls: 'green', keep: true, fn: function () { Fer.salva(r, $('ferSt').value, L.s($('ferNota').value), ctl ? $('ferEs').value : null, ctl ? L.s($('ferNm').value) : null); } }]);
   },
   scrivi: async function (r, ch) {
     var t = DB.t.SPARE_FERME, o = r._sd || Fer.sd(r.k);
@@ -9213,36 +9237,76 @@ var Fer = {
       return o;
     }
     var n = Object.assign({ chiave: r.k, fr: r.fr, seriale: r.seriale, id_unita: r.id_unita }, ch), rr = await API.append(DB.id, 'SPARE_FERME', [t.toRow(n)]);
-    var x = {}; t.header.forEach(function (h) { x[h] = n[h] === undefined ? '' : String(n[h]); }); x._r = rr; t.rows.push(x); return x;
+    var x = {}; t.header.forEach(function (h) { x[h] = n[h] === undefined ? '' : String(n[h]); }); x._r = rr; t.rows.push(x); r._sd = x; return x;
   },
-  salva: async function (r, st, nota) {
+  salva: async function (r, st, nota, esito, notaMag) {
     Modal.close();
     try {
-      var chi = App.chi(), prima = { stato_sd: r.stato_sd, nota_sd: r.nota_sd };
-      await Fer.scrivi(r, { stato_sd: st, nota_sd: nota, aggiornato_il: L.nowStamp(), aggiornato_da: chi.email });
-      API.append(DB.id, 'LOG', [App.log('SPARE_FERME_SD', 'SPARE_FERME', r.k, { fr: r.fr, seriale: r.seriale, prima: prima, dopo: { stato_sd: st, nota_sd: nota } })]).catch(function () { });
+      var chi = App.chi(), now = L.nowStamp(), ch = {}, prima = {};
+      if (st !== r.stato_sd || nota !== r.nota_sd) { ch.stato_sd = st; ch.nota_sd = nota; ch.aggiornato_il = now; ch.aggiornato_da = chi.email; prima.stato_sd = r.stato_sd; prima.nota_sd = r.nota_sd; }
+      if (esito !== null && (esito !== r.esito_mag || notaMag !== r.nota_mag)) { ch.esito_mag = esito; ch.nota_mag = notaMag; ch.esito_il = now; ch.esito_da = chi.email; prima.esito_mag = r.esito_mag; prima.nota_mag = r.nota_mag; }
+      if (!Object.keys(ch).length) { toast('Nessuna modifica', 'ok'); return; }
+      await Fer.scrivi(r, ch);
+      API.append(DB.id, 'LOG', [App.log(ch.esito_mag !== undefined ? 'SPARE_FERME_ESITO' : 'SPARE_FERME_SD', 'SPARE_FERME', r.k, { fr: r.fr, seriale: r.seriale, prima: prima, dopo: ch })]).catch(function () { });
       toast('Salvato', 'ok'); Fer.render();
     } catch (e) { Modal.open('Non salvato', e.message); }
   },
-  // mail al magazzino: le FAULTY che il SD ha sistemato (tra le righe filtrate), per avanzare lo stato su VLT
-  mailMag: function () {
-    if (!Fer.grid) return;
-    var R = (Fer.grid.visibili || Fer.grid.render() || []).filter(function (r) { return r.stato_sd === 'SISTEMATO'; });
-    if (!R.length) { toast('Nessuna riga "Sistemato su VLT" tra quelle filtrate', 'ko'); return; }
-    var subj = 'Spare ferme in HUB - FAULTY sistemate dal Service Desk: avanzare lo stato su VLT (' + R.length + ')';
-    var intro = 'Ciao Ragazzi,\n\nabbiamo sistemato su VLT queste FAULTY ferme in hub: potete avanzare lo stato su VLT?\n\n';
-    var body = intro + R.map(function (x) { return x.fr + ' | ' + x.seriale + ' | ' + x.pn + ' | VLT: ' + x.stato_vlt + ' | ' + x.rip_vlt + (x.id_unita ? ' | ' + x.id_unita : '') + (x.ubicazione ? ' | ' + x.ubicazione : '') + (x.nota_sd ? ' | ' + x.nota_sd : ''); }).join('\n') + '\n\nGrazie';
+  // cosa va al magazzino: nuove = categoria mai comunicata (o cambiata); soll = già mandate, ancora non risolte, non sollecitate oggi
+  daMandare: function () {
+    var oggi = L.isoToday(), nuove = [], soll = [];
+    Fer._R.forEach(function (r) {
+      if (!r.cat) return;
+      if (r.cat === 'RISOLTA') { if (r.mail_cat && r.mail_cat !== 'RISOLTA') nuove.push(r); return; }   // risolte: solo quelle già segnalate
+      if (r.mail_cat !== r.cat) { nuove.push(r); return; }
+      if ((r.cat === 'CONTROLLA' || r.cat === 'SISTEMATA') && L.s(r.mail_il).slice(0, 10) < oggi && L.s(r.sollecito_il).slice(0, 10) < oggi) soll.push(r);
+    });
+    return { nuove: nuove, soll: soll };
+  },
+  mailHtml: function (intro, gruppi) {
     var e = function (x) { return String(x == null ? '' : x).replace(/&/g, '&amp;').replace(/</g, '&lt;').replace(/>/g, '&gt;'); };
     var th = 'style="background:#1f4e79;color:#fff;padding:5px 8px;border:1px solid #8ea9c1;text-align:left"', td = 'style="padding:5px 8px;border:1px solid #b7c7d6;vertical-align:top"';
-    var html = '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">' + e(intro).replace(/\n/g, '<br>') + '<table style="border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:10pt;margin:4px 0 14px"><tr>' +
-      ['#', 'FR', 'Seriale', 'P/N', 'Stato VLT', 'Riparatore VLT', 'Scheda', 'Ubicazione', 'Nota SD'].map(function (h) { return '<th ' + th + '>' + h + '</th>'; }).join('') + '</tr>' +
-      R.map(function (x, i) { return '<tr' + (i % 2 ? ' style="background:#f2f6fa"' : '') + '>' + [i + 1, '<b>' + e(x.fr) + '</b>', e(x.seriale), e(x.pn), e(x.stato_vlt), e(x.rip_vlt), e(x.id_unita), e(x.ubicazione), e(x.nota_sd)].map(function (v) { return '<td ' + td + '>' + v + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>Grazie</div>';
-    Mail.apri('ferme', subj, body, async function () {
-      var now = L.nowStamp(), me = App.chi().email;
-      for (var i = 0; i < R.length; i++) { try { await Fer.scrivi(R[i], { mail_magazzino_il: now, mail_magazzino_da: me }); } catch (x) { } }
-      API.append(DB.id, 'LOG', [App.log('SPARE_FERME_MAIL_MAGAZZINO', 'SPARE_FERME', '', { pezzi: R.length, fr: R.map(function (x) { return x.fr; }) })]).catch(function () { });
-      Fer.render();
-    }, html);
+    var H = ['#', 'FR', 'Seriale', 'P/N', 'Tipo', 'Stato VLT', 'Riparatore VLT', 'Scheda', 'Ubicazione', 'Note', 'Cosa chiediamo'];
+    var riga = function (x) { return [x.fr, x.seriale, x.pn, x.tipo, x.stato_vlt, x.rip_vlt, x.id_unita, x.ubicazione, [x.nota_sd ? 'SD: ' + x.nota_sd : '', x.esito].filter(Boolean).join(' · '), x.fare || x.problema]; };
+    var body = intro + gruppi.map(function (g) { return g[0].toUpperCase() + ' (' + g[1].length + ')\n' + g[1].map(function (x) { return riga(x).filter(Boolean).join(' | '); }).join('\n') + '\n\n'; }).join('') + 'Grazie';
+    var html = '<div style="font-family:Calibri,Arial,sans-serif;font-size:11pt">' + e(intro).replace(/\n/g, '<br>') + gruppi.map(function (g) {
+      return '<b style="color:#1f4e79">' + e(g[0]) + ' (' + g[1].length + ')</b><table style="border-collapse:collapse;font-family:Calibri,Arial,sans-serif;font-size:10pt;margin:4px 0 14px"><tr>' + H.map(function (h) { return '<th ' + th + '>' + h + '</th>'; }).join('') + '</tr>' +
+        g[1].map(function (x, i) { return '<tr' + (i % 2 ? ' style="background:#f2f6fa"' : '') + '>' + [i + 1].concat(riga(x)).map(function (v, j) { return '<td ' + td + '>' + (j === 1 ? '<b>' + e(v) + '</b>' : e(v)) + '</td>'; }).join('') + '</tr>'; }).join('') + '</table>'; }).join('') + 'Grazie</div>';
+    return { body: body, html: html };
+  },
+  // ✉ Mail magazzino: 1) sollecito in risposta alla mail già mandata (FR ancora non risolti) 2) mail nuova con le novità, divisa per sezioni
+  mailMag: async function () {
+    if (!Fer.loaded) return;
+    Fer._R = Fer.righe();
+    var m = Fer.daMandare();
+    if (!m.nuove.length && !m.soll.length) { toast('Niente di nuovo da mandare al magazzino', 'ok'); return; }
+    var me = function () { return App.chi().email; };
+    var nuova = function () {
+      if (!m.nuove.length) return;
+      var G = ['CONTROLLA', 'SISTEMATA', 'IN_ACK', 'RISOLTA'].map(function (c) { return [Fer.CAT[c], m.nuove.filter(function (r) { return r.cat === c; })]; }).filter(function (g) { return g[1].length; });
+      var subj = 'Spare ferme in HUB - ' + L.itDate(L.isoToday()) + ' - ' + G.map(function (g) { return g[1].length + ' ' + g[0].split(':')[0].toLowerCase(); }).join(', ');
+      var x = Fer.mailHtml('Ciao Ragazzi,\n\nqui gli aggiornamenti sulle spare ferme in HUB (spare false letti nelle spunte ACK).\n\n', G), idm = '';
+      Mail.apri('ferme', subj, x.body, async function () {
+        var now = L.nowStamp();
+        for (var i = 0; i < m.nuove.length; i++) { var r = m.nuove[i], ch = { mail_cat: r.cat, mail_magazzino_il: now, mail_magazzino_da: me(), sollecito_il: '' }; if (r.cat !== 'RISOLTA') { ch.mail_id = idm; ch.mail_oggetto = subj; } try { await Fer.scrivi(r, ch); } catch (e) { } }
+        API.append(DB.id, 'LOG', [App.log('SPARE_FERME_MAIL_MAGAZZINO', 'SPARE_FERME', idm, { pezzi: m.nuove.length, fr: m.nuove.map(function (r) { return r.fr; }) })]).catch(function () { });
+        Fer.render();
+      }, x.html, { dopoCoda: function (id) { idm = id; } });
+    };
+    if (!m.soll.length) { nuova(); return; }
+    // sollecito: in risposta all'ultima mail che conteneva questi FR
+    var ids = {}, last = null; m.soll.forEach(function (r) { if (r.mail_id) ids[r.mail_id] = 1; });
+    if (!DB.t.CODA_MAIL) await Mail.carica();
+    (DB.t.CODA_MAIL ? DB.t.CODA_MAIL.rows : []).forEach(function (q) { if (ids[q.id_mail] && L.up(q.stato) === 'INVIATA' && L.s(q.message_id) && (!last || L.s(q.inviata_il) > L.s(last.inviata_il))) last = q; });
+    var og = last ? L.s(last.oggetto) : (m.soll.map(function (r) { return r.mail_oggetto; }).filter(Boolean).sort().pop() || 'Spare ferme in HUB');
+    var G2 = ['CONTROLLA', 'SISTEMATA'].map(function (c) { return [Fer.CAT[c] + ' - ancora da risolvere', m.soll.filter(function (r) { return r.cat === c; })]; }).filter(function (g) { return g[1].length; });
+    var y = Fer.mailHtml('Ciao Ragazzi,\n\nqueste FR della mail precedente risultano ancora non risolte: ci date un riscontro?\n\n', G2), sOgg = 'Re: ' + og.replace(/^\s*(re|r)\s*:\s*/i, '');
+    var opz = last ? { rispondi: { message_id: last.message_id, quando: L.vedi(L.s(last.inviata_il).slice(0, 16)), oggetto: sOgg, body: y.body, html: y.html } } : {};
+    Mail.apri('ferme', sOgg, y.body, async function () {
+      var now = L.nowStamp();
+      for (var i = 0; i < m.soll.length; i++) { try { await Fer.scrivi(m.soll[i], { sollecito_il: now }); } catch (e) { } }
+      API.append(DB.id, 'LOG', [App.log('SPARE_FERME_SOLLECITO_MAGAZZINO', 'SPARE_FERME', last ? last.id_mail : '', { pezzi: m.soll.length, fr: m.soll.map(function (r) { return r.fr; }) })]).catch(function () { });
+      Fer.render(); setTimeout(nuova, 400);
+    }, y.html, opz);
   }
 };
 
