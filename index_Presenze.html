@@ -5903,6 +5903,7 @@ function renderPermPanel(){
     h += '<div style="font-family:var(--ffc);font-size:11px;font-weight:700;letter-spacing:1px;color:var(--amber);text-transform:uppercase;padding:0 0 12px">✉ Modulo Richieste Ferie — Anagrafica</div>';
     h += richRenderAnagPanel();
     h += '</div>';
+    h += renderControlliSection();
   }
   document.getElementById('permPanel').innerHTML=h;
   // Forza il valore del select responsabile via DOM (match normalizzato: trim + case-insensitive,
@@ -6134,6 +6135,36 @@ function delSigla(code){
     applySigleConfig();renderPermPanel();
     toast('✓ Sigla rimossa — premi Salva Config');
   });
+}
+// ═══ CONTROLLI AUTOMATICI (letti da ATS Ticket Service in config_presenze.json) ═══
+// permConfig.controlli = {attivo, prova, cc_sempre:[...], riepilogo:[...], escludi_sap:[...]}
+// L'orario (17:30) e i giorni si impostano nel configuratore del servizio.
+function _ctrlCfg(){
+  if(!permConfig.controlli)permConfig.controlli={attivo:true,prova:true,cc_sempre:[],riepilogo:[],escludi_sap:[]};
+  return permConfig.controlli;
+}
+function _ctrlList(v){return String(v||'').split(/[,;\n]/).map(function(x){return x.trim();}).filter(Boolean);}
+function renderControlliSection(){
+  var c=permConfig.controlli||{attivo:true,prova:true,cc_sempre:[],riepilogo:[],escludi_sap:[]};
+  var ta='class="mi" rows="2" style="width:100%;resize:vertical;font-family:var(--ffm);font-size:12px"';
+  var h='<div class="perm-section" style="margin-top:14px"><div class="perm-section-header"><div class="perm-section-title">🔔 Controlli automatici — presenze mancanti</div></div><div class="perm-section-body">';
+  h+='<div style="font-size:11px;color:var(--muted);margin-bottom:10px">Ogni giorno lavorativo (orario impostato nel servizio, default 17:30) ogni responsabile riceve l\'elenco dei suoi dipendenti con i giorni del mese senza nessuna sigla. Le modifiche valgono dopo <b>💾 Salva Config</b>.</div>';
+  h+='<div style="display:flex;gap:18px;flex-wrap:wrap;margin-bottom:10px;font-size:13px">'
+    +'<label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="conf-cb" '+(c.attivo!==false?'checked':'')+' onchange="ctrlSet(\'attivo\',this.checked)"> Controllo attivo</label>'
+    +'<label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="checkbox" class="conf-cb" '+(c.prova!==false?'checked':'')+' onchange="ctrlSet(\'prova\',this.checked)"> Modalità prova <span style="color:var(--muted);font-size:11px">(mail solo ai destinatari del riepilogo)</span></label></div>';
+  h+='<div class="fg" style="margin-bottom:8px"><div class="fl">Sempre in CC a ogni mail ai responsabili</div><textarea '+ta+' placeholder="es. mmorgillo@atsgruppo.eu" onchange="ctrlSet(\'cc_sempre\',_ctrlList(this.value))">'+esc((c.cc_sempre||[]).join('\n'))+'</textarea></div>';
+  h+='<div class="fg" style="margin-bottom:8px"><div class="fl">Riepilogo giornaliero a</div><textarea '+ta+' placeholder="vuoto = indirizzo impostato nel servizio" onchange="ctrlSet(\'riepilogo\',_ctrlList(this.value))">'+esc((c.riepilogo||[]).join('\n'))+'</textarea></div>';
+  h+='<div class="fg"><div class="fl">SAP da non segnalare mai (separati da virgola)</div><input class="mi" style="width:100%;font-family:var(--ffm)" value="'+esc((c.escludi_sap||[]).join(', '))+'" onchange="ctrlSet(\'escludi_sap\',_ctrlList(this.value))"></div>';
+  h+='</div></div>';
+  return h;
+}
+function ctrlSet(k,v){
+  var c=_ctrlCfg();
+  if(k==='cc_sempre'||k==='riepilogo'){
+    var bad=v.filter(function(e){return !/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(e);});
+    if(bad.length){toast('Email non valida: '+bad.join(', '),'err');return;}
+  }
+  c[k]=v;toast('✓ Controlli aggiornati — premi Salva Config');
 }
 function getCommesse(plant){
   var all=(permConfig&&permConfig.commesse)||[];
