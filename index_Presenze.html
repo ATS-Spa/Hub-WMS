@@ -321,6 +321,7 @@ body{background:var(--bg);color:var(--text);font-family:var(--ff);font-size:14px
 .sndot.ferie{background:var(--ferie-color)}
 .sndot.anag{background:var(--purple)}
 .snb.on.anag{color:var(--purple);border-bottom-color:var(--purple)}
+.snb.on.log{color:var(--red);border-bottom-color:var(--red)}
 .sec-chip.anag{background:rgba(139,92,246,.1);border:1px solid rgba(139,92,246,.25);color:var(--purple)}
 /* Anagrafica View (sola lettura) */
 .anagv-wrap{flex:1;overflow:auto;min-height:0}
@@ -1809,6 +1810,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
     <button class="snb ferie" id="snFerie" onclick="switchSec('ferie')" style="display:none"><span class="sndot ferie"></span>Piano Ferie</button>
     <button class="snb anag" id="snAnag" onclick="switchSec('anag')" style="display:none"><span class="sndot anag"></span>Anagrafica</button>
     <button class="snb perm" id="snPerm" onclick="switchSec('perm')" style="display:none"><span class="sndot perm"></span>Permessi</button>
+    <button class="snb log" id="snLog" onclick="switchSec('log')" style="display:none"><span class="sndot" style="background:var(--red)"></span>Log</button>
     <button class="snb rich" id="snRich" onclick="switchSec('rich')" style="display:none"><span class="sndot" style="background:var(--amber)"></span>Richieste<span id="snRichBadge" style="display:none;margin-left:5px;background:var(--amber);color:#000;border-radius:8px;font-size:9px;font-weight:700;padding:1px 5px">0</span></button>
   </nav>
 
@@ -2097,6 +2099,18 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
   </div>
 
   <!-- ══ ANAGRAFICA DIPENDENTI (sola lettura) ══ -->
+  <div class="sec" id="secLog">
+    <div class="filters">
+      <div class="fg"><div class="fl">Mese</div><input id="logPeriodo" class="fc" type="month" style="min-width:150px" onchange="logViewLoad()"></div>
+      <div class="fg"><div class="fl">Utente</div><select id="logFUser" class="fc" style="min-width:170px" onchange="logViewRender()"><option value="">— Tutti —</option></select></div>
+      <div class="fg"><div class="fl">Area</div><select id="logFArea" class="fc" style="min-width:140px" onchange="logViewRender()"><option value="">— Tutte —</option></select></div>
+      <div class="fg"><div class="fl">Cerca</div><input id="logFSearch" class="fc" style="min-width:200px" type="text" placeholder="Dipendente, azione, valore…" autocomplete="off" oninput="logViewRender()"></div>
+      <button class="ba bteal" onclick="logViewLoad()">↻ Aggiorna</button>
+      <button class="ba bghost" onclick="logOpenSheet()">📜 Apri in Google Sheets</button>
+      <div class="finfo" id="logCount"></div>
+    </div>
+    <div class="anagv-wrap" id="logContent"></div>
+  </div>
   <div class="sec" id="secAnag">
     <div class="filters">
       <div class="fg"><div class="fl">Cerca</div>
@@ -2737,7 +2751,7 @@ function loadUserConfig(){
       if(!files.length){wmsConfigFileId=null;return;}
       wmsConfigFileId=files[0].id;
       return fetch('https://www.googleapis.com/drive/v3/files/'+wmsConfigFileId+'?alt=media',
-        {headers:{Authorization:'Bearer '+TOKEN}})
+        {headers:{Authorization:'Bearer '+getToken()}})
         .then(function(r){return r.json();})
         .then(function(cfg){
           if(cfg.ingresso) wmsConfig.ingresso=cfg.ingresso;
@@ -2771,7 +2785,7 @@ function saveUserConfig(){
   return blob.arrayBuffer().then(function(buf){
     var ab=enc.encode(pre),bb=new Uint8Array(buf),cb=enc.encode(post);
     var body=new Uint8Array(ab.length+bb.length+cb.length);body.set(ab);body.set(bb,ab.length);body.set(cb,ab.length+bb.length);
-    return fetch(url,{method:method,headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'multipart/related; boundary='+bnd},body:body});
+    return fetch(url,{method:method,headers:{Authorization:'Bearer '+getToken(),'Content-Type':'multipart/related; boundary='+bnd},body:body});
   }).then(function(r){return r.json();})
     .then(function(d){if(d.id)wmsConfigFileId=d.id;});
 }
@@ -2993,7 +3007,7 @@ function loadConfig(){
       return;
     }
     configFileId=files[0].id;
-    return fetch('https://www.googleapis.com/drive/v3/files/'+configFileId+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}})
+    return fetch('https://www.googleapis.com/drive/v3/files/'+configFileId+'?alt=media',{headers:{Authorization:'Bearer '+getToken()}})
     .then(function(r){return r.text();}).then(function(t){
       try{permConfig=JSON.parse(t);}catch(e){permConfig={super_users:[SUPER_USER],admins:[],users:{},default:{sections:['coop','ats']}};}
       _pausaCache=null;
@@ -3007,7 +3021,7 @@ function loadConfig(){
     applySigleConfig();
     cfgSnapshot();
     applyPerm();
-    logRestoreQueue();logAccesso();
+    logRestoreQueue();logAccesso();_lastHubTok=window._HUB_TOKEN||null;
     loadAllFiles();
   }).catch(function(){
     applyPerm();
@@ -3054,6 +3068,7 @@ function applyPerm(){
     document.getElementById('permBadge').textContent='SUPER';
     document.getElementById('permBadge').className='pbadge is-super';
     document.getElementById('snPerm').style.display='';
+    var snLogS=document.getElementById('snLog');if(snLogS)snLogS.style.display='';
     document.getElementById('snFile').style.display='';
     document.getElementById('snFerie').style.display='';
     var snAnagS=document.getElementById('snAnag');if(snAnagS)snAnagS.style.display='';
@@ -3092,6 +3107,7 @@ function applyPerm(){
     document.getElementById('permBadge').className='pbadge';
   }
   document.getElementById('snPerm').style.display='none';
+  var snLogH=document.getElementById('snLog');if(snLogH)snLogH.style.display='none';
   document.getElementById('snCoop').style.display=userSecs.indexOf('coop')!==-1?'':'none';
   document.getElementById('snAts').style.display=userSecs.indexOf('ats')!==-1?'':'none';
   document.getElementById('snFile').style.display=userSecs.indexOf('file')!==-1?'':'none';
@@ -3188,7 +3204,9 @@ var curSec='coop';
 function switchSec(s){
   // Anagrafica contiene email: raggiungibile solo col flag (anche da restore UI state)
   if(s==='anag'&&userSecs.indexOf('anag')===-1)return;
+  if(s==='log'&&!isSuperUser)return;
   curSec=s;
+  if(s==='log'){var lp=document.getElementById('logPeriodo');if(lp&&!lp.value){var _n=new Date();lp.value=_n.getFullYear()+'-'+('0'+(_n.getMonth()+1)).slice(-2);}logViewLoad();}
   // Inizializza filtri Piano Ferie al primo accesso
   if(s==='ferie'){
     var fd=document.getElementById('fMeseDa'),fa2=document.getElementById('fMeseA');
@@ -3203,7 +3221,7 @@ function switchSec(s){
   if(s==='anag'){
     anagViewRender();
   }
-  ['coop','ats','file','perm','ferie','rich','anag'].forEach(function(x){
+  ['coop','ats','file','perm','ferie','rich','anag','log'].forEach(function(x){
     var nb=document.getElementById('sn'+x.charAt(0).toUpperCase()+x.slice(1));
     var sc=document.getElementById('sec'+x.charAt(0).toUpperCase()+x.slice(1));
     if(nb)nb.className='snb'+(s===x?' on '+x:'');
@@ -3649,7 +3667,7 @@ function coopLoad(){
     loadNotesForEmpsMulti(coopEmps,merged.sheetName,merged.dayStart||3,merged.nd||merged.dates.length,_coopFileForComm)
     .then(function(){return loadCommesseForEmpsMulti(coopEmps,'coop',y,m,_coopFileForComm);})
     .then(function(){return loadRitardiForEmpsMulti(coopEmps,'coop',y,m,_coopFileForComm);})
-    .then(function(){coopRender();});
+    .then(function(){pendingRestore('coop');coopRender();updateSaveBanner();});
     ['cRef','cExp','cPrt','cBulkBtn','cMassBtn'].forEach(function(id){document.getElementById(id).disabled=false;});
     document.getElementById('cInfo').textContent=MESI[m-1]+' '+y+' · '+merged.employees.length+' dip.'+(files.length>1?' ('+files.length+' file)':'');
     lastRefreshTimeCoop=new Date();updateRefreshBadges();
@@ -3837,12 +3855,12 @@ function _logFindFile(y){
   _logFile[y]=list().then(function(files){
     if(files.length)return files[0].id;
     return fetch('https://sheets.googleapis.com/v4/spreadsheets',{method:'POST',
-      headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+      headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},
       body:JSON.stringify({properties:{title:name}})
     }).then(function(r){return r.json();}).then(function(ss){
       if(!ss.spreadsheetId)throw new Error('creazione log fallita');
       return fetch('https://www.googleapis.com/drive/v3/files/'+ss.spreadsheetId+'?addParents='+FOLDER_ID_JSON+'&removeParents=root&fields=id',
-        {method:'PATCH',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},body:'{}'});
+        {method:'PATCH',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:'{}'});
     }).then(list).then(function(f2){return f2[0].id;}); // se due utenti l'hanno creato insieme, vince il più vecchio
   });
   _logFile[y].catch(function(){delete _logFile[y];});
@@ -3855,7 +3873,7 @@ function _logEnsureTab(id,tab){
     var sh=(meta.sheets||[]).find(function(x){return x.properties.title===tab;});
     if(sh)return;
     return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+id+':batchUpdate',{method:'POST',
-      headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+      headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},
       body:JSON.stringify({requests:[{addSheet:{properties:{title:tab,gridProperties:{frozenRowCount:1}}}}]})
     }).then(function(r){return r.json();}).then(function(res){
       if(res.error&&!/already exists|esiste già/i.test(res.error.message||''))throw new Error(res.error.message);
@@ -3868,7 +3886,7 @@ function _logEnsureTab(id,tab){
 }
 function _logAppend(id,tab,rows){
   return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+id+'/values/'+encodeURIComponent(tab+'!A1')+':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS',{
-    method:'POST',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},body:JSON.stringify({values:rows})
+    method:'POST',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({values:rows})
   }).then(function(r){if(!r.ok)throw new Error('append log '+r.status);});
 }
 function logFlush(){
@@ -3895,6 +3913,53 @@ function logRestoreQueue(){
   try{var q=JSON.parse(sessionStorage.getItem('wmsLogQ')||'[]');if(q.length){_logQ=q.concat(_logQ);setTimeout(logFlush,2000);}}catch(e){}
 }
 document.addEventListener('visibilitychange',function(){if(document.visibilityState==='hidden')logFlush();});
+// ── Vista Log (tab per super utenti) ──
+var _logRows=[];
+function logViewLoad(){
+  var v=(document.getElementById('logPeriodo')||{}).value;if(!v)return;
+  var y=parseInt(v.slice(0,4)),m=parseInt(v.slice(5,7)),tab=('0'+m).slice(-2)+'_'+MESI[m-1];
+  setEl('logContent',spinH('Caricamento registro attività…'));
+  logFlush().then(function(){return _logFindFile(y);}).then(function(id){
+    return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+id+'?fields=sheets.properties').then(function(meta){
+      if(!(meta.sheets||[]).some(function(x){return x.properties.title===tab;}))return [];
+      return sheetsRead(id,tab+'!A:O');
+    });
+  }).then(function(rows){
+    _logRows=(rows||[]).slice(1).filter(function(r){return r&&r[0];}).reverse();
+    var fill=function(id,idx){
+      var sel=document.getElementById(id),cur=sel.value,set={};
+      _logRows.forEach(function(r){if(r[idx])set[r[idx]]=1;});
+      sel.innerHTML='<option value="">— Tutti —</option>'+Object.keys(set).sort().map(function(x){return '<option value="'+esc(x)+'">'+esc(x)+'</option>';}).join('');
+      if(set[cur])sel.value=cur;
+    };
+    fill('logFUser',1);fill('logFArea',3);
+    logViewRender();
+  }).catch(function(e){setEl('logContent','<div class="state"><div class="state-ico">⚠️</div><div class="state-title">Log non disponibile</div><div style="color:var(--muted)">'+esc(e.message)+'</div></div>');});
+}
+function logViewRender(){
+  var fu=document.getElementById('logFUser').value,fa=document.getElementById('logFArea').value;
+  var q=(document.getElementById('logFSearch').value||'').trim().toLowerCase(),toks=q?q.split(/\s+/):[];
+  var list=_logRows.filter(function(r){
+    if(fu&&r[1]!==fu)return false;if(fa&&r[3]!==fa)return false;
+    if(!toks.length)return true;var hay=r.join(' ').toLowerCase();
+    return toks.every(function(t){return hay.indexOf(t)!==-1;});
+  });
+  document.getElementById('logCount').textContent=list.length+' / '+_logRows.length+' operazioni';
+  if(!list.length){setEl('logContent','<div class="state"><div class="state-ico">📜</div><div class="state-title">Nessuna operazione</div></div>');return;}
+  var MAX=1500,c=function(v){return v===undefined||v===null||v===''?'<span style="color:var(--muted)">—</span>':esc(v);};
+  var colArea={Errore:'var(--red)',Accesso:'var(--amber)',Configurazione:'var(--purple)',Richieste:'var(--blue)',Commesse:'var(--teal)'};
+  var h='<div class="anag-panel"><table class="anag-table"><thead><tr><th>Data/Ora</th><th>Utente</th><th>Area</th><th>Azione</th><th>Sez.</th><th>Dipendente</th><th>Giorno</th><th>Campo</th><th>Prima</th><th>Dopo</th><th>Dettagli</th></tr></thead><tbody>';
+  list.slice(0,MAX).forEach(function(r){
+    var giorno=r[9]?(r[9]+'/'+String(r[8]||'').split('/')[0]):'';
+    h+='<tr><td class="mono" style="white-space:nowrap">'+c(r[0])+'</td><td title="'+esc(r[1])+'">'+c(r[2]||r[1])+'</td>'
+      +'<td style="color:'+(colArea[r[3]]||'var(--text)')+';font-weight:700">'+c(r[3])+'</td><td>'+c(r[4])+'</td><td>'+c(r[5])+'</td>'
+      +'<td>'+c(r[6])+(r[7]?' <span style="color:var(--muted);font-size:10px">#'+esc(r[7])+'</span>':'')+'</td><td class="mono">'+c(giorno)+'</td>'
+      +'<td>'+c(r[10])+'</td><td class="mono" style="color:var(--red)">'+c(r[11])+'</td><td class="mono" style="color:var(--green)">'+c(r[12])+'</td>'
+      +'<td style="max-width:320px;font-size:11px;color:var(--subtle)">'+c(r[13])+'</td></tr>';
+  });
+  h+='</tbody></table>'+(list.length>MAX?'<div style="padding:10px;color:var(--muted);font-size:12px">Mostrate le ultime '+MAX+' operazioni: restringi con i filtri o apri il foglio Google.</div>':'')+'</div>';
+  setEl('logContent',h);
+}
 function logOpenSheet(){
   var y=new Date().getFullYear();
   _logFindFile(y).then(function(id){window.open('https://docs.google.com/spreadsheets/d/'+id+'/edit','_blank');})
@@ -4003,6 +4068,121 @@ function logAccesso(){
   logEvent({area:'Accesso',azione:'Apertura modulo Presenze',det:navigator.userAgent.slice(0,120)});
 }
 
+// ═══════════════════════════════════════════════════════════
+//  SESSIONE GOOGLE + SALVATAGGI SICURI
+// ═══════════════════════════════════════════════════════════
+// - Le chiamate usano sempre il token più recente passato dall'Hub (getToken).
+// - Ogni 3 minuti si verifica che la sessione Google sia valida; se è scaduta
+//   compare un avviso rosso con "Riaccedi".
+// - Le modifiche non ancora salvate su Drive restano copiate su questo PC
+//   (localStorage) e vengono recuperate alla riapertura dello stesso mese,
+//   solo se nel frattempo nessuno ha cambiato quella cella.
+// - Se un salvataggio fallisce si riprova da soli ogni 20 secondi.
+var _authBad=false,_lastHubTok=null,_saveFail={ats:false,coop:false},_saveRetryT={ats:null,coop:null};
+function _isAuthErr(e){return /401|invalid authentication|UNAUTHENTICATED|Invalid Credentials|No token|login required|invalid_token/i.test(String((e&&e.message)||e||''));}
+function authCheckError(e){if(_isAuthErr(e))authSetBad(true);}
+function authSetBad(bad){
+  if(bad&&!_authBad)logEvent({area:'Accesso',azione:'Sessione Google scaduta',det:'Salvataggi sospesi'});
+  _authBad=!!bad;updateSaveBanner();
+}
+function authPing(){
+  if(!getToken())return Promise.resolve();
+  return gFetch('https://www.googleapis.com/drive/v3/about?fields=user(emailAddress)').then(function(){
+    if(_authBad){_authBad=false;updateSaveBanner();toast('✓ Sessione Google ripristinata — riprendo i salvataggi');retryPendingSaves();}
+  }).catch(function(e){if(_isAuthErr(e))authSetBad(true);});
+}
+setInterval(authPing,3*60*1000);
+setInterval(function(){ // l'Hub ha passato un token nuovo: se eravamo bloccati, ricontrolla subito
+  var t=window._HUB_TOKEN||null;
+  if(t&&t!==_lastHubTok){_lastHubTok=t;if(_authBad)authPing();}
+},10000);
+function authRelogin(){
+  pendingSnapshot('ats');pendingSnapshot('coop');
+  try{window.top.location.reload();}catch(e){location.reload();}
+}
+function pendKey(mode){return 'wmsPend_'+mode+'_'+logMese(mode);}
+// copia locale delle celle modificate e non ancora confermate da Drive
+function pendingSnapshot(mode){
+  var emps=mode==='ats'?atsEmps:coopEmps,data=mode==='ats'?atsData:coopData;
+  if(!data)return 0;
+  var nd=data.dates.length,list=[];
+  (emps||[]).forEach(function(e){
+    if(!e.sheetRows||e._manual||!e._base)return;
+    var k=(e.sap||e.id||'')+'|'+(e.nom2||e.nome||'');
+    BASE_FIELDS.forEach(function(f){
+      var b=e._base[f]||[];
+      for(var di=0;di<nd;di++){
+        var v=baseNorm((e[f]||[])[di]),o=baseNorm(b[di]);
+        if(v!==o)list.push({fid:e.sheetRows.fileId,k:k,f:f,di:di,o:o,v:v});
+      }
+    });
+  });
+  try{
+    if(list.length)localStorage.setItem(pendKey(mode),JSON.stringify({t:Date.now(),items:list}));
+    else localStorage.removeItem(pendKey(mode));
+  }catch(e){}
+  return list.length;
+}
+function pendingCount(mode){try{var r=JSON.parse(localStorage.getItem(pendKey(mode))||'null');return r&&r.items?r.items.length:0;}catch(e){return 0;}}
+function pendingRestore(mode){
+  var raw=null;try{raw=JSON.parse(localStorage.getItem(pendKey(mode))||'null');}catch(e){}
+  if(!raw||!raw.items||!raw.items.length)return;
+  if(Date.now()-raw.t>7*86400000){try{localStorage.removeItem(pendKey(mode));}catch(e){}return;}
+  var emps=mode==='ats'?atsEmps:coopEmps,ok=0,conf=0;
+  raw.items.forEach(function(it){
+    var e=(emps||[]).find(function(x){return x.sheetRows&&x.sheetRows.fileId===it.fid&&((x.sap||x.id||'')+'|'+(x.nom2||x.nome||''))===it.k;});
+    if(!e){conf++;return;}
+    var cur=baseNorm((e[it.f]||[])[it.di]);
+    if(cur===it.v)return;            // già arrivato su Drive
+    if(cur!==it.o){conf++;return;}   // modificato da altri nel frattempo: vince il foglio
+    if(!e[it.f])e[it.f]=[];
+    e[it.f][it.di]=it.f==='pausa'?(it.v===''?null:parseFloat(it.v)):it.v;ok++;
+  });
+  if(ok){
+    toast('↺ Recuperate '+ok+' modifiche non salvate — salvataggio in corso…','warn');
+    logEvent({area:'Presenze',azione:'Recupero modifiche non salvate',sez:mode==='coop'?'Coop':'ATS',mese:logMese(mode),det:ok+' celle'+(conf?', '+conf+' scartate perché modificate da altri':'')});
+    if(mode==='ats')aSave();else cSave();
+  } else {try{localStorage.removeItem(pendKey(mode));}catch(e){}}
+}
+function saveOk(mode){
+  _saveFail[mode]=false;clearTimeout(_saveRetryT[mode]);
+  pendingSnapshot(mode);updateSaveBanner();
+}
+function saveFailed(mode,e){
+  _saveFail[mode]=true;
+  var n=pendingSnapshot(mode);
+  toast('✗ Modifiche NON salvate su Drive ('+n+'): '+e.message,'err');
+  logEvent({area:'Errore',azione:'Salvataggio presenze fallito',sez:mode==='coop'?'Coop':'ATS',mese:logMese(mode),det:n+' celle in attesa — '+e.message});
+  authCheckError(e);
+  clearTimeout(_saveRetryT[mode]);
+  if(!_authBad)_saveRetryT[mode]=setTimeout(function(){if(mode==='ats')aSave();else cSave();},20000);
+  updateSaveBanner();
+}
+function retryPendingSaves(){
+  if(atsData&&(_saveFail.ats||pendingCount('ats')))aSave();
+  if(coopData&&(_saveFail.coop||pendingCount('coop')))cSave();
+}
+function updateSaveBanner(){
+  var b=document.getElementById('saveBanner');
+  if(!b){b=document.createElement('div');b.id='saveBanner';
+    b.style.cssText='position:fixed;top:0;left:0;right:0;z-index:9999;background:#b91c1c;color:#fff;font-family:var(--ffc);font-size:13px;font-weight:700;padding:8px 16px;display:none;align-items:center;gap:12px;justify-content:center;box-shadow:0 2px 8px rgba(0,0,0,.4)';
+    document.body.appendChild(b);}
+  var n=pendingCount('ats')+pendingCount('coop');
+  if(_authBad){
+    b.innerHTML='⚠ Sessione Google scaduta: le modifiche non arrivano su Drive'+(n?' ('+n+' in attesa, conservate su questo PC)':'')
+      +' <button onclick="authRelogin()" style="background:#fff;color:#b91c1c;border:none;border-radius:6px;padding:4px 12px;font-weight:800;cursor:pointer">Riaccedi</button>';
+    b.style.display='flex';
+  } else if(_saveFail.ats||_saveFail.coop){
+    b.innerHTML='⚠ Salvataggio non riuscito'+(n?' ('+n+' modifiche in attesa)':'')+' — nuovo tentativo automatico tra pochi secondi'
+      +' <button onclick="retryPendingSaves()" style="background:#fff;color:#b91c1c;border:none;border-radius:6px;padding:4px 12px;font-weight:800;cursor:pointer">Riprova ora</button>';
+    b.style.display='flex';
+  } else b.style.display='none';
+}
+window.addEventListener('beforeunload',function(ev){
+  // salvataggio in corso o fallito: avvisa prima di uscire (la copia locale resta comunque)
+  var busy=(typeof aBusy!=='undefined'&&aBusy)||(typeof cBusy!=='undefined'&&cBusy)||_saveFail.ats||_saveFail.coop;
+  if(busy){pendingSnapshot('ats');pendingSnapshot('coop');ev.preventDefault();ev.returnValue='';}
+});
 // ── Salvataggio differenziale / multi-utente ──
 // emp._base contiene l'ultimo stato noto su Sheets. Si scrivono solo le celle
 // in cui il valore locale differisce dalla baseline, così un client con dati
@@ -4051,6 +4231,7 @@ var cBusy=false, cEditGen=0;
 
 var cST=null;
 function cSave(){
+  pendingSnapshot('coop');
   cEditGen++;cBusy=true;
   clearTimeout(cST);cST=setTimeout(function(){
     var myGen=cEditGen;
@@ -4062,11 +4243,11 @@ function cSave(){
       var ups=buildEmpDiff(emp,coopData.sheetName,DST,nd,sent);
       if(ups.length)byFile[fid]=(byFile[fid]||[]).concat(ups);
     });
-    var fids=Object.keys(byFile);if(!fids.length){if(myGen===cEditGen)cBusy=false;return;}
+    var fids=Object.keys(byFile);if(!fids.length){if(myGen===cEditGen)cBusy=false;saveOk('coop');return;}
     toast('⏳ Salvo Coop su Sheets…','warn');
     Promise.all(fids.map(function(fid){return sheetsBatchUpdate(fid,byFile[fid]);}))
-    .then(function(){logCellChanges(sent,'coop');commitSent(sent);toast('✓ Coop salvato');lastRefreshTimeCoop=new Date();})
-    .catch(function(e){toast('✗ '+e.message,'err');})
+    .then(function(){logCellChanges(sent,'coop');commitSent(sent);saveOk('coop');toast('✓ Coop salvato');lastRefreshTimeCoop=new Date();})
+    .catch(function(e){saveFailed('coop',e);})
     .then(function(){if(myGen===cEditGen)cBusy=false;});
   },700);
 }
@@ -4277,7 +4458,7 @@ function atsLoad(){
     loadNotesForEmpsMulti(atsEmps,merged.sheetName,merged.dayStart||3,merged.nd||merged.dates.length,_atsFileForComm)
     .then(function(){return loadCommesseForEmpsMulti(atsEmps,'ats',y,m,_atsFileForComm);})
     .then(function(){return loadRitardiForEmpsMulti(atsEmps,'ats',y,m,_atsFileForComm);})
-    .then(function(){atsRender();});
+    .then(function(){pendingRestore('ats');atsRender();updateSaveBanner();});
     ['aRef','aExp','aPrt','aBulkBtn','aMassBtn'].forEach(function(id){document.getElementById(id).disabled=false;});
     document.getElementById('aInfo').textContent=MESI[m-1]+' '+y+' · '+merged.employees.length+' dip.'+(files.length>1?' ('+files.length+' file)':'');
     lastRefreshTimeAts=new Date();updateRefreshBadges();
@@ -4470,6 +4651,7 @@ function aDel(i){
 var aST=null;
 function aSave(){
   if(!atsData)return;
+  pendingSnapshot('ats');
   aEditGen++;aBusy=true;
   clearTimeout(aST);aST=setTimeout(function(){
     var myGen=aEditGen;
@@ -4480,11 +4662,11 @@ function aSave(){
       var ups=buildEmpDiff(emp,atsData.sheetName,DST,nd,sent);
       if(ups.length)byFile[fid]=(byFile[fid]||[]).concat(ups);
     });
-    var fids=Object.keys(byFile);if(!fids.length){if(myGen===aEditGen)aBusy=false;return;}
+    var fids=Object.keys(byFile);if(!fids.length){if(myGen===aEditGen)aBusy=false;saveOk('ats');return;}
     toast('⏳ Salvo Dipendenti su Sheets…','warn');
     Promise.all(fids.map(function(fid){return sheetsBatchUpdate(fid,byFile[fid]);}))
-    .then(function(){logCellChanges(sent,'ats');commitSent(sent);toast('✓ Dipendenti salvato');lastRefreshTimeAts=new Date();})
-    .catch(function(e){toast('✗ '+e.message,'err');})
+    .then(function(){logCellChanges(sent,'ats');commitSent(sent);saveOk('ats');toast('✓ Dipendenti salvato');lastRefreshTimeAts=new Date();})
+    .catch(function(e){saveFailed('ats',e);})
     .then(function(){if(myGen===aEditGen)aBusy=false;});
   },800);
 }
@@ -5339,7 +5521,7 @@ function buildAndCreateSpreadsheet(fname,resp,plant,y,m,mName,dates,extraEmps){
 
   fetch('https://sheets.googleapis.com/v4/spreadsheets',{
     method:'POST',
-    headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+    headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},
     body:JSON.stringify({
       properties:{title:fname},
       sheets:[{properties:{title:mName+'_Coop'}},{properties:{title:mName+'_ATS'}},{properties:{title:'Leggenda'}}]
@@ -5347,7 +5529,7 @@ function buildAndCreateSpreadsheet(fname,resp,plant,y,m,mName,dates,extraEmps){
   }).then(function(r){return r.json();}).then(function(ss){
     var ssId=ss.spreadsheetId;if(!ssId)throw new Error('Errore creazione');
     return fetch('https://www.googleapis.com/drive/v3/files/'+ssId+'?addParents='+FOLDER_ID+'&removeParents=root&fields=id',{
-      method:'PATCH',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},body:JSON.stringify({})
+      method:'PATCH',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({})
     }).then(function(){return ssId;});
   }).then(function(ssId){
     return sheetsBatchUpdate(ssId,[
@@ -6176,63 +6358,97 @@ function rescaleCommesse(vals,oldDisp,newDisp){
   keys.forEach(function(k){if(!(out[k]>0))delete out[k];});
   return Object.keys(out).length?out:null;
 }
-function saveCommesseToSheet(mode, emp, di, fileId, sheetName, y, m){
-  if(!fileId||!emp||!emp.commesse||emp.commesse[di]===null)return Promise.resolve();
-  var commesse=getCommesse(emp.plant||'');
-  if(!commesse.length)return Promise.resolve();
-  var nome=emp.nom2||emp.nome||'';
-  var sap=emp.sap||emp.id||'';
-  var data=mode==='ats'?atsData:coopData;
-  var dates=data?data.dates:[];
-  var d=dates[di]||{day:di+1};
+// ═══ TAB <Mese>_<sez>_Commesse ═══
+// Prima: ogni salvataggio riscriveva l'intestazione con le sole commesse del
+// plant del dipendente. Con plant diversi nello stesso file l'intestazione
+// cambiava ordine/lunghezza e restavano colonne duplicate (es. due "SME_h"):
+// alla lettura veniva presa la colonna sbagliata (vuota) e la distribuzione
+// "spariva". In più si leggevano solo le prime 500 righe.
+// Ora l'intestazione esistente non viene mai riordinata: le commesse mancanti
+// si aggiungono in coda, la riga viene scritta per nome di colonna, e la
+// lettura prende il primo valore presente tra eventuali colonne duplicate.
+function _commHeaderPlan(hdr){
+  hdr=(hdr||[]).map(function(h){return String(h==null?'':h).trim();});
+  if(!hdr.length||hdr[0]!=='Nominativo')hdr=['Nominativo','Ext SAP','Giorno'];
+  var changed=false;
+  ((permConfig&&permConfig.commesse)||[]).forEach(function(c){
+    if(hdr.indexOf(c.code+'_h')===-1){hdr.push(c.code);hdr.push(c.code+'_h');changed=true;}
+  });
+  var col={};hdr.forEach(function(h,i){if(h&&col[h]===undefined)col[h]=i;});
+  return{hdr:hdr,col:col,changed:changed};
+}
+function _commRow(plan,nome,sap,day,vals){
+  var row=Array(plan.hdr.length).fill('');
+  row[0]=nome;row[1]=sap;row[2]=day;
+  Object.keys(vals||{}).forEach(function(code){
+    var ch=plan.col[code+'_h'];if(ch===undefined)return;
+    row[ch]=vals[code]||'';
+    if(plan.col[code]!==undefined)row[plan.col[code]]=vals[code]?'✓':'';
+  });
+  return row;
+}
+// items: [{emp, di, vals}] tutti dello stesso file
+function commesseWriteFile(mode,fileId,y,m,items){
   var tabName=(MESI[m-1]||m)+'_'+(mode==='ats'?'ATS':'Coop')+'_Commesse';
-  var vals=emp.commesse[di]||{};
-  // Build header row
-  var hdr=['Nominativo','Ext SAP','Giorno'];
-  commesse.forEach(function(c){hdr.push(c.code);hdr.push(c.code+'_h');});
-  // Build data row
-  var row=[nome,sap,d.day];
-  commesse.forEach(function(c){row.push(vals[c.code]?'✓':'');row.push(vals[c.code]||'');});
-  // Find or create sheet, then append/update row
   return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties')
   .then(function(meta){
-    var sheets=meta.sheets||[];
-    var sh=sheets.find(function(s){return s.properties.title===tabName;});
-    if(sh){
-      // Sheet exists: always refresh header + find/update row
-      return sheetsRead(fileId,tabName+'!A:C').then(function(rows){
-        var targetRow=null;
-        (rows||[]).forEach(function(r,ri){
-          if(ri===0)return; // skip header
-          if(String(r[0]||'').trim()===nome&&String(r[2]||'').trim()===String(d.day))targetRow=ri+1;
-        });
-        var ops=[{range:tabName+'!A1',values:[hdr]}]; // aggiorna sempre header
-        if(targetRow){
-          ops.push({range:tabName+'!A'+targetRow,values:[row]});
-          return sheetsBatchUpdate(fileId,ops);
-        } else {
-          return sheetsBatchUpdate(fileId,ops).then(function(){
-            return sheetsAppend(fileId,tabName,row);
-          });
-        }
+    var has=(meta.sheets||[]).some(function(x){return x.properties.title===tabName;});
+    return has?sheetsRead(fileId,tabName+'!A:C').then(function(abc){
+      return sheetsRead(fileId,tabName+'!1:1').then(function(h){return{abc:abc,hdr:(h&&h[0])||[]};});
+    }):createSheetTab(fileId,tabName).then(function(){return{abc:[],hdr:[]};});
+  }).then(function(cur){
+    var plan=_commHeaderPlan(cur.hdr);
+    var rowOf={};
+    (cur.abc||[]).forEach(function(r,ri){if(ri===0)return;var k=String(r[0]||'').trim()+'|'+String(r[2]||'').trim();if(r[0])rowOf[k]=ri+1;});
+    var ops=[],appendRows=[];
+    if(plan.changed||!cur.hdr.length)ops.push({range:tabName+'!A1',values:[plan.hdr]});
+    items.forEach(function(it){
+      var nome=it.emp.nom2||it.emp.nome||'',sap=it.emp.sap||it.emp.id||'',day=it.di+1;
+      var row=_commRow(plan,nome,sap,day,it.vals);
+      var tr=rowOf[nome+'|'+day];
+      if(tr)ops.push({range:tabName+'!A'+tr,values:[row]});
+      else{appendRows.push(row);rowOf[nome+'|'+day]=-1;}
+    });
+    var p=ops.length?sheetsBatchUpdate(fileId,ops):Promise.resolve();
+    return p.then(function(){
+      if(!appendRows.length)return;
+      return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'/values/'+encodeURIComponent(tabName+'!A1')+':append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS',{
+        method:'POST',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({values:appendRows})
+      }).then(function(r){if(!r.ok)throw new Error('append commesse '+r.status);});
+    });
+  });
+}
+function _logCommItem(mode,emp,di,vals,y,m){
+  var prev=(emp._commPrev||[])[di]||null;
+  if(JSON.stringify(prev)===JSON.stringify(vals))return;
+  (emp._commPrev=emp._commPrev||[])[di]=JSON.parse(JSON.stringify(vals));
+  var E=logEmp(emp),fmt=function(o){return o?Object.keys(o).map(function(k){return k+' '+o[k]+'h';}).join(', '):'';};
+  logEvent({area:'Commesse',azione:prev?'Distribuzione modificata':'Distribuzione inserita',sez:mode==='coop'?'Coop':'ATS',dip:E.dip,sap:E.sap,
+    mese:('0'+m).slice(-2)+'/'+y,giorno:di+1,campo:'Ore commessa',prima:fmt(prev),dopo:fmt(vals)});
+}
+function saveCommesseToSheet(mode, emp, di, fileId, sheetName, y, m){
+  if(!fileId||!emp||!emp.commesse||emp.commesse[di]===null)return Promise.resolve();
+  var vals=emp.commesse[di]||{};
+  return commesseWriteFile(mode,fileId,y,m,[{emp:emp,di:di,vals:vals}])
+  .then(function(){_logCommItem(mode,emp,di,vals,y,m);})
+  .catch(function(e){
+    console.warn('[WMS] commesse sheet error:',e.message);
+    toast('✗ Distribuzione commesse NON salvata: '+e.message,'err');
+    logEvent({area:'Errore',azione:'Salvataggio commesse fallito',sez:mode==='coop'?'Coop':'ATS',dip:emp.nom2||emp.nome||'',giorno:di+1,det:e.message});
+    authCheckError(e);
+  });
+}
+// Salvataggio di più dipendenti/giorni insieme (Presenza a Tutti, massivo): una lettura e una scrittura per file
+function saveCommesseMany(mode,items,y,m){
+  var byFile={};
+  items.forEach(function(it){var fid=it.emp.sheetRows&&it.emp.sheetRows.fileId;if(fid)(byFile[fid]=byFile[fid]||[]).push(it);});
+  return Object.keys(byFile).reduce(function(pr,fid){
+    return pr.then(function(){
+      return commesseWriteFile(mode,fid,y,m,byFile[fid]).then(function(){
+        byFile[fid].forEach(function(it){_logCommItem(mode,it.emp,it.di,it.vals,y,m);});
       });
-    } else {
-      // Create sheet then write header + row
-      return createSheetTab(fileId,tabName).then(function(){
-        return sheetsBatchUpdate(fileId,[
-          {range:tabName+'!A1',values:[hdr]},
-          {range:tabName+'!A2',values:[row]}
-        ]);
-      });
-    }
-  }).then(function(){
-    var prev=(emp._commPrev||[])[di]||null;
-    if(JSON.stringify(prev)===JSON.stringify(vals))return;
-    (emp._commPrev=emp._commPrev||[])[di]=JSON.parse(JSON.stringify(vals));
-    var E=logEmp(emp),fmt=function(o){return o?Object.keys(o).map(function(k){return k+' '+o[k]+'h';}).join(', '):'';};
-    logEvent({area:'Commesse',azione:prev?'Distribuzione modificata':'Distribuzione inserita',sez:mode==='coop'?'Coop':'ATS',dip:E.dip,sap:E.sap,
-      mese:('0'+m).slice(-2)+'/'+y,giorno:d.day,campo:'Ore commessa',prima:fmt(prev),dopo:fmt(vals)});
-  }).catch(function(e){console.warn('[WMS] commesse sheet error:',e.message);});
+    });
+  },Promise.resolve());
 }
 
 function deleteCommessaRow(mode, emp, di, fileId, sheetName, y, m){
@@ -6269,7 +6485,7 @@ function deleteCommessaRow(mode, emp, di, fileId, sheetName, y, m){
 function createSheetTab(fileId, title){
   return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+':batchUpdate',{
     method:'POST',
-    headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+    headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},
     body:JSON.stringify({requests:[{addSheet:{properties:{title:title}}}]})
   }).then(function(r){return r.json();});
 }
@@ -6277,7 +6493,7 @@ function createSheetTab(fileId, title){
 function sheetsAppend(fileId, sheetName, row){
   return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'/values/'+encodeURIComponent(sheetName)+'!A1:append?valueInputOption=USER_ENTERED&insertDataOption=INSERT_ROWS',{
     method:'POST',
-    headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+    headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},
     body:JSON.stringify({values:[row]})
   }).then(function(r){return r.json();});
 }
@@ -6342,7 +6558,7 @@ function savePermConfig(){
     return blob.arrayBuffer().then(function(buf){
       var ab=enc.encode(pre),bb=new Uint8Array(buf),cb=enc.encode(post);
       var body=new Uint8Array(ab.length+bb.length+cb.length);body.set(ab);body.set(bb,ab.length);body.set(cb,ab.length+bb.length);
-      return fetch(url,{method:method,headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'multipart/related; boundary='+bnd},body:body});
+      return fetch(url,{method:method,headers:{Authorization:'Bearer '+getToken(),'Content-Type':'multipart/related; boundary='+bnd},body:body});
     }).then(function(r){return r.json();});
   }
   if(configFileId){doUpload('PATCH','https://www.googleapis.com/upload/drive/v3/files/'+configFileId+'?uploadType=multipart').then(function(){logConfigSaved('Pannello Permessi');toast('✅ Config salvata');applyPerm();}).catch(function(e){toast('✗ '+e.message,'err');});}
@@ -6588,6 +6804,16 @@ function bulkConfirm(){
   mClose('moBulk');
   if(mode==='ats'){atsRender();aSave();}else{coopRender();cSave();}
   toast('✓ Presenza impostata per '+visible.length+' dipendenti');
+  // Prima la distribuzione commesse restava solo in memoria e si perdeva ricaricando la pagina
+  if(commVals&&Object.keys(commVals).length){
+    var _yB=parseInt(document.getElementById(mode==='ats'?'aYear':'cYear').value),_mB=parseInt(document.getElementById(mode==='ats'?'aMonth':'cMonth').value);
+    var _items=visible.filter(function(e){return e.sheetRows&&e.commesse&&e.commesse[di];}).map(function(e){return{emp:e,di:di,vals:e.commesse[di]};});
+    if(_items.length){
+      toast('⏳ Salvo distribuzione commesse ('+_items.length+')…','warn');
+      saveCommesseMany(mode,_items,_yB,_mB).then(function(){toast('✓ Distribuzione commesse salvata');})
+        .catch(function(e){toast('✗ Commesse NON salvate: '+e.message,'err');logEvent({area:'Errore',azione:'Salvataggio commesse fallito',det:'Presenza a Tutti: '+e.message});authCheckError(e);});
+    }
+  }
 }
 
 // ═══════════════════════════════════════════════════════════
@@ -7039,7 +7265,7 @@ function massivoSaveNote(fileId,sname,emp,dates,d1,d2,DST,nota,y,m){
     if(!requests.length)return;
     return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+':batchUpdate',{
       method:'POST',
-      headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+      headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},
       body:JSON.stringify({requests:requests})
     });
   }).catch(function(e){console.warn('[WMS] massivoSaveNote:',e.message);});
@@ -7062,12 +7288,12 @@ function massivoCreateAndWrite(dip,y,m,fname,d1,d2,fv,ing,usc,showOr,pausaH){
   var n=sigRow.filter(function(v,i){return i>3&&v!=='';}).length;
   var legRows=[['SIGLA','DESCRIZIONE','NOTE']];SIGLE.forEach(function(s){legRows.push([s.code,s.label,s.hasQty?'Es. 1'+s.code:'']);});
   return fetch('https://sheets.googleapis.com/v4/spreadsheets',{
-    method:'POST',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+    method:'POST',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},
     body:JSON.stringify({properties:{title:fname},sheets:[{properties:{title:mName+'_Coop'}},{properties:{title:mName+'_ATS'}},{properties:{title:'Leggenda'}}]})
   }).then(function(r){return r.json();}).then(function(ss){
     var ssId=ss.spreadsheetId;if(!ssId)throw new Error('Errore creazione '+fname);
     return fetch('https://www.googleapis.com/drive/v3/files/'+ssId+'?addParents='+FOLDER_ID+'&removeParents=root&fields=id',{
-      method:'PATCH',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},body:JSON.stringify({})
+      method:'PATCH',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({})
     }).then(function(){return ssId;});
   }).then(function(ssId){
     return sheetsBatchUpdate(ssId,[
@@ -7259,12 +7485,12 @@ async function generaUnFile(fname,resp,plant,anno,mese,emps,coopEmps){
   var legRows=[['SIGLA','DESCRIZIONE','NOTE']];
   SIGLE.forEach(function(s){legRows.push([s.code,s.label,s.hasQty?'Es. 1'+s.code:'']);});
   var ss=await fetch('https://sheets.googleapis.com/v4/spreadsheets',{
-    method:'POST',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+    method:'POST',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},
     body:JSON.stringify({properties:{title:fname},sheets:[{properties:{title:mName+'_Coop'}},{properties:{title:mName+'_ATS'}},{properties:{title:'Leggenda'}}]})
   }).then(function(r){return r.json();});
   if(!ss.spreadsheetId)throw new Error('Creazione fallita');
   await fetch('https://www.googleapis.com/drive/v3/files/'+ss.spreadsheetId+'?addParents='+FOLDER_ID+'&removeParents=root&fields=id',{
-    method:'PATCH',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},body:JSON.stringify({})
+    method:'PATCH',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({})
   });
   await sheetsBatchUpdate(ss.spreadsheetId,[
     {range:mName+'_Coop!A1',values:coopRows},
@@ -7309,7 +7535,7 @@ var RL=(function(){
   };
 })();
 function listFiles(q){return gFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name,mimeType)&pageSize=200').then(function(r){return r.files||[];});}
-function downloadFile(id){return RL.acquire().then(function(){return fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}});}).then(function(r){if(!r.ok)throw new Error('Download fallito: '+r.status);RL.reportSuccess();return r.blob();});}
+function downloadFile(id){return RL.acquire().then(function(){return fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media',{headers:{Authorization:'Bearer '+getToken()}});}).then(function(r){if(!r.ok)throw new Error('Download fallito: '+r.status);RL.reportSuccess();return r.blob();});}
 function gFetch(url,_retryCount){
   var tok=getToken();
   if(!tok)return Promise.reject(new Error('No token'));
@@ -7352,7 +7578,7 @@ function sheetsRead(spreadsheetId,range){
 }
 function sheetsBatchUpdate(spreadsheetId,data){
   return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+spreadsheetId+'/values:batchUpdate',{
-    method:'POST',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+    method:'POST',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},
     body:JSON.stringify({valueInputOption:'USER_ENTERED',data:data})
   }).then(function(r){if(!r.ok)return r.json().then(function(e){throw new Error((e.error&&e.error.message)||r.statusText);});return r.json();});
 }
@@ -7418,7 +7644,7 @@ function notaSave(clear){
     if(!sh)throw new Error('Foglio non trovato');
     return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+fid+':batchUpdate',{
       method:'POST',
-      headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+      headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},
       body:JSON.stringify({requests:[{updateCells:{
         range:{sheetId:sh.properties.sheetId,startRowIndex:rowIdx,endRowIndex:rowIdx+1,startColumnIndex:col,endColumnIndex:col+1},
         rows:[{values:[{note:txt}]}],fields:'note'
@@ -7566,13 +7792,13 @@ function loadCommesseForEmps(emps, fileId, mode, y, m){
   var tabName=(MESI[m-1]||m)+'_'+(mode==='ats'?'ATS':'Coop')+'_Commesse';
   var commesse=(permConfig&&permConfig.commesse)||[];
   if(!commesse.length)return Promise.resolve();
-  return sheetsRead(fileId,tabName+'!A1:AZ500')
+  return sheetsRead(fileId,tabName+'!A:ZZ')
   .then(function(rows){
     if(!rows||rows.length<2)return;
     var hdr=rows[0]||[];
-    // Mappa nome_colonna -> indice
-    var colIdx={};
-    hdr.forEach(function(h,i){if(h)colIdx[String(h).trim()]=i;});
+    // Mappa nome_colonna -> indice (prima occorrenza) + tutte le occorrenze per i duplicati
+    var colIdx={},colAll={};
+    hdr.forEach(function(h,i){if(!h)return;var k=String(h).trim();if(colIdx[k]===undefined)colIdx[k]=i;(colAll[k]=colAll[k]||[]).push(i);});
     var nomeIdx=colIdx['Nominativo']!==undefined?colIdx['Nominativo']:0;
     var giornIdx=colIdx['Giorno']!==undefined?colIdx['Giorno']:2;
     // Indici ore per ogni commessa: colonna "<CODE>_h"
@@ -7602,8 +7828,8 @@ function loadCommesseForEmps(emps, fileId, mode, y, m){
       if(di<0||di>=nd)continue;
       var vals={};
       Object.keys(commCols).forEach(function(code){
-        var v=parseFloat(row[commCols[code]]);
-        if(v>0)vals[code]=v;
+        var cols=colAll[code+'_h']||[commCols[code]];
+        for(var ci=0;ci<cols.length;ci++){var v=parseFloat(row[cols[ci]]);if(v>0){vals[code]=v;break;}}
       });
       if(!Object.keys(vals).length)continue;
       empList.forEach(function(emp){
@@ -7671,14 +7897,14 @@ function loadFerieResiduo(year){
   var prevPromise=listFiles('"'+FOLDER_ID_JSON+'" in parents and name="'+ferieResiduoFname(year-1)+'" and trashed=false')
     .then(function(files){
       if(!files.length)return null;
-      return fetch('https://www.googleapis.com/drive/v3/files/'+files[0].id+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}}).then(function(r){return r.json();});
+      return fetch('https://www.googleapis.com/drive/v3/files/'+files[0].id+'?alt=media',{headers:{Authorization:'Bearer '+getToken()}}).then(function(r){return r.json();});
     }).catch(function(){return null;});
   prevPromise.then(function(d){feriePrevData=d;}).catch(function(){feriePrevData=null;});
   return listFiles('"'+FOLDER_ID_JSON+'" in parents and name="'+fname+'" and trashed=false')
     .then(function(files){
       if(!files.length){ferieFileId=null;ferieData={anno:year,dipendenti:[]};return ferieData;}
       ferieFileId=files[0].id;
-      return fetch('https://www.googleapis.com/drive/v3/files/'+ferieFileId+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}})
+      return fetch('https://www.googleapis.com/drive/v3/files/'+ferieFileId+'?alt=media',{headers:{Authorization:'Bearer '+getToken()}})
         .then(function(r){return r.json();}).then(function(d){
           ferieData=d;
           // modifiche locali non ancora salvate: restano visibili dopo il ricaricamento
@@ -7712,7 +7938,7 @@ function _ferieFetchRaw(year){
   return listFiles('"'+FOLDER_ID_JSON+'" in parents and name="'+ferieResiduoFname(year)+'" and trashed=false')
     .then(function(files){
       if(!files.length)return{id:null,data:{anno:year,dipendenti:[]}};
-      return fetch('https://www.googleapis.com/drive/v3/files/'+files[0].id+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}})
+      return fetch('https://www.googleapis.com/drive/v3/files/'+files[0].id+'?alt=media',{headers:{Authorization:'Bearer '+getToken()}})
         .then(function(r){if(!r.ok)throw new Error('Lettura residuo fallita: '+r.status);return r.json();})
         .then(function(d){if(!d.dipendenti)d.dipendenti=[];return{id:files[0].id,data:d};});
     });
@@ -7728,7 +7954,7 @@ function _ferieWriteRaw(year,fileId,data){
   return blob.arrayBuffer().then(function(buf){
     var ab=enc.encode(pre),bb=new Uint8Array(buf),cb=enc.encode(post);
     var body=new Uint8Array(ab.length+bb.length+cb.length);body.set(ab);body.set(bb,ab.length);body.set(cb,ab.length+bb.length);
-    return fetch(url,{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'multipart/related; boundary='+bnd},body:body});
+    return fetch(url,{method:fileId?'PATCH':'POST',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'multipart/related; boundary='+bnd},body:body});
   }).then(function(r){if(!r.ok)throw new Error('Salvataggio residuo fallito: '+r.status);return r.json();})
     .then(function(d){return d.id||fileId;});
 }
@@ -8709,12 +8935,12 @@ function ganttCellCreateFile(dip,year,mese,giorno,di){
   var legRows=[['SIGLA','DESCRIZIONE','NOTE']];SIGLE.forEach(function(s){legRows.push([s.code,s.label,s.hasQty?'Es. 1'+s.code:'']);});
 
   fetch('https://sheets.googleapis.com/v4/spreadsheets',{
-    method:'POST',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+    method:'POST',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},
     body:JSON.stringify({properties:{title:fname},sheets:[{properties:{title:mName+'_Coop'}},{properties:{title:mName+'_ATS'}},{properties:{title:'Leggenda'}}]})
   }).then(function(r){return r.json();}).then(function(ss){
     var ssId=ss.spreadsheetId;if(!ssId)throw new Error('Errore creazione');
     return fetch('https://www.googleapis.com/drive/v3/files/'+ssId+'?addParents='+FOLDER_ID+'&removeParents=root&fields=id',{
-      method:'PATCH',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},body:JSON.stringify({})
+      method:'PATCH',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({})
     }).then(function(){return ssId;});
   }).then(function(ssId){
     return sheetsBatchUpdate(ssId,[
@@ -9310,7 +9536,7 @@ function richEnsureResiduo(year){
   richResiduoPromise=listFiles('"'+FOLDER_ID_JSON+'" in parents and name="'+ferieResiduoFname(year)+'" and trashed=false')
     .then(function(files){
       if(!files.length){richResiduoData={anno:year,dipendenti:[]};return richResiduoData;}
-      return fetch('https://www.googleapis.com/drive/v3/files/'+files[0].id+'?alt=media',{headers:{Authorization:'Bearer '+TOKEN}})
+      return fetch('https://www.googleapis.com/drive/v3/files/'+files[0].id+'?alt=media',{headers:{Authorization:'Bearer '+getToken()}})
         .then(function(r){return r.json();}).then(function(d){richResiduoData=d;return d;});
     }).catch(function(){richResiduoData={anno:year,dipendenti:[]};return richResiduoData;});
   return richResiduoPromise;
@@ -9338,7 +9564,7 @@ function loadRichieste(){
     }
     richFileId=files[0].id;
     return fetch('https://www.googleapis.com/drive/v3/files/'+richFileId+'?alt=media',
-      {headers:{Authorization:'Bearer '+TOKEN}})
+      {headers:{Authorization:'Bearer '+getToken()}})
     .then(function(r){return r.json();})
     .then(function(d){richData=d;return d;});
   }).catch(function(){richData={richieste:[]};return richData;});
@@ -9380,7 +9606,7 @@ function saveRichieste(){
     var ab=enc.encode(pre), bb=new Uint8Array(buf), cb=enc.encode(post);
     var body=new Uint8Array(ab.length+bb.length+cb.length);
     body.set(ab); body.set(bb,ab.length); body.set(cb,ab.length+bb.length);
-    return fetch(url,{method:method,headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'multipart/related; boundary='+bnd},body:body});
+    return fetch(url,{method:method,headers:{Authorization:'Bearer '+getToken(),'Content-Type':'multipart/related; boundary='+bnd},body:body});
   }).then(function(r){return r.json();}).then(function(d){if(d.id)richFileId=d.id;});
 }
 
@@ -9398,7 +9624,7 @@ function savePermConfigWithDips(){
     var body=new Uint8Array(ab.length+bb.length+cb.length);
     body.set(ab); body.set(bb,ab.length); body.set(cb,ab.length+bb.length);
     return fetch('https://www.googleapis.com/upload/drive/v3/files/'+configFileId+'?uploadType=multipart',
-      {method:'PATCH',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'multipart/related; boundary='+bnd},body:body});
+      {method:'PATCH',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'multipart/related; boundary='+bnd},body:body});
   }).then(function(r){return r.json();}).then(function(d){logConfigSaved('Anagrafica / Richieste');return d;});
 }
 
@@ -10257,7 +10483,7 @@ function richScriviSuDrive(req){
           }};
         });
         return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+':batchUpdate',{
-          method:'POST',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+          method:'POST',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},
           body:JSON.stringify({requests:requests})
         });
       }).catch(function(e){console.warn('[WMS RICH] nota non scritta su '+sheetName+':',e.message);});
@@ -10315,7 +10541,7 @@ function richScriviSuDrive(req){
       var usc2=[req.dipendente_sap||'',nome,'Uscita'];dates2.forEach(function(){usc2.push('');});
       return fetch('https://sheets.googleapis.com/v4/spreadsheets',{
         method:'POST',
-        headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},
+        headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},
         body:JSON.stringify({properties:{title:fname2},sheets:[
           {properties:{title:mName2+'_Coop'}},
           {properties:{title:mName2+'_ATS'}},
@@ -10325,7 +10551,7 @@ function richScriviSuDrive(req){
         var ssId=ss.spreadsheetId;
         if(!ssId) throw new Error('Errore creazione '+fname2);
         return fetch('https://www.googleapis.com/drive/v3/files/'+ssId+'?addParents='+FOLDER_ID+'&removeParents=root&fields=id',{
-          method:'PATCH',headers:{Authorization:'Bearer '+TOKEN,'Content-Type':'application/json'},body:JSON.stringify({})
+          method:'PATCH',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({})
         }).then(function(){return ssId;});
       }).then(function(ssId){
         return sheetsBatchUpdate(ssId,[
