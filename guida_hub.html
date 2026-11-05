@@ -3092,7 +3092,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
   <div class="chapter-header">
     <div class="ch-tag purple">Introduzione · Passo 1 di 20</div>
     <h1 class="ch-title">ATS - Fastweb FLM</h1>
-    <p class="ch-desc"><span style="display:inline-block;font-size:12px;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:2px 8px;margin-bottom:8px">📅 Guida aggiornata al 05/11/2026 11:01</span><br>ATS - Fastweb FLM è il modulo dell'Hub che gestisce tutto il magazzino FLM: ingressi, uscite ACK verso i riparatori, uscite RMA verso le ASP, balancing, pratiche Juniper, giacenza e chiusure su VLT. Sostituisce i vecchi fogli Easyloader, Inventario giornaliero, RMA giornalieri e ACK: i dati sono in un unico database Google (DB_EASYLOADER).</p>
+    <p class="ch-desc"><span style="display:inline-block;font-size:12px;color:var(--muted);border:1px solid var(--border);border-radius:6px;padding:2px 8px;margin-bottom:8px">📅 Guida aggiornata al 05/11/2026 11:44</span><br>ATS - Fastweb FLM è il modulo dell'Hub che gestisce tutto il magazzino FLM: ingressi, uscite ACK verso i riparatori, uscite RMA verso le ASP, balancing, pratiche Juniper, giacenza e chiusure su VLT. Sostituisce i vecchi fogli Easyloader, Inventario giornaliero, RMA giornalieri e ACK: i dati sono in un unico database Google (DB_EASYLOADER).</p>
   </div>
   <div class="steps">
     <div class="step">
@@ -3867,25 +3867,25 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
   <div class="chapter-header">
     <div class="ch-tag purple">Altre gestioni · Passo 13 di 20</div>
     <h1 class="ch-title">Spare Ferme in HUB</h1>
-    <p class="ch-desc">Le FAULTY fisicamente in hub che non partono, in un tab visibile a tutti: il Service Desk le lavora direttamente dal tool.</p>
+    <p class="ch-desc">Gli spare false letti nelle spunte ACK, in un tab visibile a tutti: il Service Desk li lavora direttamente dal tool.</p>
   </div>
   <div class="steps">
     <div class="step">
       <div class="step-header">
         <span class="step-num purple">1</span>
         <div>
-          <div class="step-title">Cosa c’è nel tab</div>
+          <div class="step-title">Due sotto tab</div>
           <div class="step-body">Nel tab <strong>Spare ferme</strong>:</div>
         </div>
       </div>
-      <div class="step-detail"><ul class="checklist "><li><span>gli <strong>spare false</strong> ancora aperti di tutte le spunte ACK (letti in hub ma non nella lista ACK), con ACK, data e chi li ha letti e quante volte;</span></li><li><span>le <strong>FAULTY in giacenza</strong> da almeno <strong>N giorni</strong> (campo <em>Ferme da almeno</em>, di base il parametro <code>ferme_giorni</code> = 7) con uno stato VLT <strong>diverso da ACK</strong>, anche se nessuno le ha mai lette in spunta.</span></li></ul></div>
+      <div class="step-detail"><ul class="checklist "><li><span><strong>🧊 Ferme in hub</strong>: gli spare false ancora aperti, con il pezzo in hub e uno stato VLT che non lo fa partire (o il riparatore su VLT diverso da quello dell’ACK);</span></li><li><span><strong>✅ Passate in ACK / risolte</strong>: quelli passati in <em>Repairer Ack Received</em> con il riparatore giusto (partono con il prossimo ACK), quelli usciti con un ACK (con spedizione, DDT e data) e quelli con l’anomalia risolta. Una riga passa da sola da Ferme a qui appena VLT si aggiorna.</span></li></ul></div>
     </div>
     <div class="step">
       <div class="step-header">
         <span class="step-num purple">2</span>
         <div>
-          <div class="step-title">Problema e cosa fare</div>
-          <div class="step-body">Ogni riga dice il <strong>problema</strong> e <strong>cosa fare</strong>: riparatore su VLT diverso, stato VLT non da ACK, da chiudere su VLT (spare ferma), FR non trovato su VLT, senza FR. Con FR, seriale, P/N, stato e riparatore VLT, nota VLT, scheda, ubicazione, entrata e <strong>giorni in hub</strong>. Filtri per colonna, ⚙ colonne e ⬇ Excel come nelle altre tabelle.</div>
+          <div class="step-title">Problema, cosa fare, storia</div>
+          <div class="step-body">Ogni riga ha il <strong>problema</strong> e <strong>cosa fare</strong> (riparatore su VLT diverso, stato VLT non da ACK, da chiudere su VLT, FR non trovato, senza FR) e la <strong>storia</strong>: uscita, anomalia risolta il giorno… con la nota, pending (aperto dal… con il motivo, o risolto il…). Con FR, seriale, P/N, stato e riparatore VLT, nota VLT, scheda, ubicazione, giorni in hub, ACK in cui è stato letto, da chi e quante volte. Filtri per colonna, ⚙ colonne e ⬇ Excel.</div>
         </div>
       </div>
     </div>
@@ -3894,7 +3894,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
         <span class="step-num purple">3</span>
         <div>
           <div class="step-title">Lavoro del Service Desk</div>
-          <div class="step-body">Clicca una riga: <strong>Stato SD</strong> (Da lavorare / In lavorazione / Sistemato su VLT) e <strong>Nota SD</strong>, salvati con utente e data (foglio SPARE_FERME e Log). Quando VLT si aggiorna e il FR è in ACK con il riparatore giusto la riga diventa verde <strong>✓ Pronta per ACK</strong>; quando il pezzo esce (o non è più fermo) la riga sparisce da sola.</div>
+          <div class="step-body">Clicca una riga: <strong>Stato SD</strong> (Da lavorare / In lavorazione / Sistemato su VLT) e <strong>Nota SD</strong>, salvati con utente e data (foglio SPARE_FERME e Log). Le note SD restano anche quando la riga passa in <em>Passate in ACK / risolte</em>.</div>
         </div>
       </div>
     </div>
@@ -3903,7 +3903,7 @@ kbd{font-family:var(--ffm);background:var(--card);border:1px solid var(--border)
         <span class="step-num purple">4</span>
         <div>
           <div class="step-title">Mail al magazzino</div>
-          <div class="step-body"><strong>✉ Mail magazzino (sistemate)</strong> manda al magazzino le righe filtrate in stato <em>Sistemato su VLT</em>, chiedendo di avanzare lo stato su VLT. Destinatari in Admin → ✉ Mail (riga <em>Spare ferme in HUB</em>, parametro <code>mail_ferme_a</code>; di base <code>mail_magazzino</code>). Data e autore dell’invio restano nella colonna <em>Mail magazzino</em>.</div>
+          <div class="step-body"><strong>✉ Mail magazzino (sistemate)</strong> manda al magazzino le righe filtrate in stato <em>Sistemato su VLT</em>, chiedendo di avanzare lo stato su VLT. Destinatari in Admin → ✉ Mail (riga <em>Spare ferme in HUB</em>). Data e autore dell’invio restano nella colonna <em>Mail magazzino</em>.</div>
         </div>
       </div>
     </div>
