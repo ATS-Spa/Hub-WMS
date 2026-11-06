@@ -9153,7 +9153,9 @@ var Fer = {
       });
     var R = [];
     ord.forEach(function (k) {
-      var o = out[k], u = o.u, v = o.fr && DB.vltMap[o.fr], stV = v ? Fer.nst(v.stato) : '', ripRif = o.sp ? o.sp.destinatario : (u ? u.riparatore : ''), ripV = v ? L.s(v.riparatore) : '';
+      var o = out[k], u = o.u;
+      if (u) { if (L.s(u.fr)) o.fr = L.s(u.fr); if (L.s(u.seriale)) o.ser = u.seriale; }   // dati attuali della scheda (FR / seriale corretti in Giacenze)
+      var v = o.fr && DB.vltMap[o.fr], stV = v ? Fer.nst(v.stato) : '', ripRif = o.sp ? o.sp.destinatario : (u ? u.riparatore : ''), ripV = v ? L.s(v.riparatore) : '';
       if (stV && escl[stV]) return;   // es. Aborted: fuori dal tab
       var r = Fer.sd(k) || {}, es0 = Fer.ESITI[L.s(r.esito_mag)] || Fer.ESITI[''];
       var inHub = u && Giacenze.A_MAG.indexOf(u.stato) >= 0, usc = u && u.stato === 'USCITO' && L.s(u.data_out) >= L.normDate(L.s(o.sf.data).slice(0, 10)), spU = usc ? Ack.byId(u.id_spedizione) : null;
@@ -9162,7 +9164,7 @@ var Fer = {
       var pr = sez === 'RISOLTE' ? (usc ? 'Uscita' : (es0[2] ? 'Controllata: ' + es0[1] : (o.aperte ? 'Non più in giacenza' : 'Anomalia risolta'))) : (sez === 'ACK' ? 'In ACK su VLT' : (sez === 'ATTESA' ? 'In attesa: su VLT "' + v.stato + '"' : (sez === 'CONTROLLA' ? (v ? 'Da controllare: su VLT "' + v.stato + '"' : 'Letto ma non riconosciuto (barcode: ' + o.ser + ')')
         : (!o.fr ? 'Senza FR' : (!v ? 'FR non trovato su VLT' : (!ripOk ? 'Riparatore su VLT diverso' : (chiud[stV] ? 'Da chiudere su VLT (spare ferma)' : 'Stato VLT non da ACK')))))));
       var fare = sez === 'CONTROLLA' ? (!v ? 'nessuna scheda e nessun FR VLT: probabile etichetta sbagliata, rileggere il pezzo (se è un errore: esito «Lettura errata»; se è un pezzo vero, FR giusto nella nota)' : stV === 'GOOD MATERIAL RECEIVED' ? 'controllare a scaffale: è una GOOD letta tra le FAULTY o una FAULTY con un FR vecchio?' : (stV.indexOf('SCRAP') >= 0 ? 'controllare a scaffale: su VLT è rottamata ma il pezzo è in hub' : 'controllare a scaffale: su VLT risulta già spedita al riparatore'))
-        : (sez === 'FERME' ? { 'Senza FR': 'trovare o assegnare l\'FR', 'FR non trovato su VLT': 'verificare l\'FR su VLT', 'Riparatore su VLT diverso': 'correggere il riparatore su VLT (' + ripV + ' → ' + ripRif + ') o metterlo in pending', 'Da chiudere su VLT (spare ferma)': 'chiudere su VLT (Chiusure VLT · FERME)', 'Stato VLT non da ACK': 'sistemare lo stato su VLT ("' + (v ? v.stato : '') + '") perché possa partire con l\'ACK' }[pr] : '');
+        : (sez === 'FERME' ? { 'Senza FR': (function () { var c = (DB.vltBySer && DB.vltBySer[L.up(o.ser)]) || [], b = c.slice().sort(function (x, y) { return (+y.fr_id || 0) - (+x.fr_id || 0); })[0]; return b ? 'su VLT il seriale ha l\'FR ' + b.fr_id + ' (' + b.stato + '): assegnalo alla scheda (Giacenze → Varia i dati)' : 'trovare o assegnare l\'FR'; })(), 'FR non trovato su VLT': 'verificare l\'FR su VLT', 'Riparatore su VLT diverso': 'correggere il riparatore su VLT (' + ripV + ' → ' + ripRif + ') o metterlo in pending', 'Da chiudere su VLT (spare ferma)': 'chiudere su VLT (Chiusure VLT · FERME)', 'Stato VLT non da ACK': 'sistemare lo stato su VLT ("' + (v ? v.stato : '') + '") perché possa partire con l\'ACK' }[pr] : '');
       var p = o.fr && pend[o.fr], es = [];
       if (usc) es.push('uscito con ' + (spU ? spU.id_spedizione + ' ' + spU.destinatario + (spU.n_ddt ? ' DDT ' + spU.n_ddt : '') : L.s(u.id_spedizione)) + ' il ' + L.itDate(u.data_out));
       else if (inAck) es.push('in "' + v.stato + '" su VLT: parte con il prossimo ACK di ' + (ripV || ripRif));
