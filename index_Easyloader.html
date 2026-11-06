@@ -604,8 +604,8 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
         <div class="spacer"></div>
         <button class="btn ghost sm" onclick="Fer.mailMag()" title="Mail al magazzino con le novità (da controllare, sistemate dal SD, già in ACK, risolte) e, prima, il sollecito in risposta alla mail precedente per le FR ancora non risolte">✉ Mail magazzino</button>
         <button class="btn ghost sm" onclick="Fer.grid && Fer.grid.excel('Spare ferme in HUB')">⬇ Excel</button>
-      </div><div class="row" style="margin-top:8px;gap:6px"><button class="btn sm" id="ferT_FERME" onclick="Fer.vai('FERME')">🧊 Ferme in hub</button><button class="btn ghost sm" id="ferT_CONTROLLA" onclick="Fer.vai('CONTROLLA')">🔍 Da controllare</button><button class="btn ghost sm" id="ferT_ACK" onclick="Fer.vai('ACK')">✅ In ACK su VLT</button><button class="btn ghost sm" id="ferT_RISOLTE" onclick="Fer.vai('RISOLTE')">✔ Risolte</button></div>
-      <div class="hint" id="ferInfo" style="margin-top:6px">Gli <b>spare false</b> letti nelle spunte ACK (Aborted esclusi): <b>Ferme in hub</b> da sistemare su VLT (Service Desk) · <b>Da controllare</b> fisicamente dal magazzino (Close for Scrap, Good Material Received, Failed Material Sent to Repairer) · <b>In ACK su VLT</b> (partono con il prossimo ACK) · <b>Risolte</b> (uscite, anomalia chiusa, controllo con esito risolto). Clicca una riga per stato SD, esito del magazzino e note.</div></div>
+      </div><div class="row" style="margin-top:8px;gap:6px"><button class="btn sm" id="ferT_FERME" onclick="Fer.vai('FERME')">🧊 Ferme in hub</button><button class="btn ghost sm" id="ferT_CONTROLLA" onclick="Fer.vai('CONTROLLA')">🔍 Da controllare</button><button class="btn ghost sm" id="ferT_ATTESA" onclick="Fer.vai('ATTESA')">⏳ In attesa (Rejected)</button><button class="btn ghost sm" id="ferT_ACK" onclick="Fer.vai('ACK')">✅ In ACK su VLT</button><button class="btn ghost sm" id="ferT_RISOLTE" onclick="Fer.vai('RISOLTE')">✔ Risolte</button></div>
+      <div class="hint" id="ferInfo" style="margin-top:6px">Gli <b>spare false</b> letti nelle spunte ACK (Aborted esclusi): <b>Ferme in hub</b> da sistemare su VLT (Service Desk) · <b>Da controllare</b> fisicamente dal magazzino (Close for Scrap, Good Material Received, Failed Material Sent to Repairer) · <b>In attesa</b> (Close for Rejected: si spostano da sole quando cambia lo stato) · <b>In ACK su VLT</b> (partono con il prossimo ACK) · <b>Risolte</b> (uscite, anomalia chiusa, controllo con esito risolto). Clicca una riga per stato SD, esito del magazzino e note.</div></div>
       <div class="stats" id="ferStats"></div>
       <div class="tbl-wrap"><table><thead id="ferHead"></thead><tbody id="ferRows"></tbody></table></div><div class="hint" id="ferFoot" style="margin-top:6px"></div>
     </div>
@@ -1655,7 +1655,9 @@ var Ingresso = {
   },
   nuovo: function (silent) {
     if (!silent && Ingresso.rows.length && !confirm('Ci sono ' + Ingresso.rows.length + ' pezzi non caricati. Scartarli?')) return;
+    var tp0 = Ingresso.T().tipo;
     Ingresso.rows = []; Ingresso.setPerConto(null); Ingresso.setTestata({ data: L.isoToday() }); Ingresso.save(); Ingresso.ricalcola(); $('scFr').value = ''; $('scBc').value = ''; $('scUbi').value = '';
+    if (tp0 === 'NEW' || tp0 === 'REUSE') { $('scPlt').value = ''; lsS('ubi_fissa', ''); lsS('plt_fisso', ''); }
   },
   // IMPORT una tantum dell'Excel "Pezzi letti" (⬇ Excel della lettura): password → file → anteprima → torna nella lettura con i controlli di sempre
   importa: function () {
@@ -2101,21 +2103,34 @@ var Ingresso = {
     var gia = {}; DB.t.UNITA.rows.forEach(function (u) { if (L.s(u.fr) && u.stato !== 'ANNULLATO') gia[L.s(u.fr)] = 1; });
     return DB.vlt.rows.filter(function (v) { return L.s(v.awb_cw) && AwbF.pulisci(v.awb_cw) === a && !Prop.escluso(v.stato) && !gia[L.s(v.fr_id)]; });
   },
-  aggAttese: function () { var b = $('inAttese'); if (!b) return; var n = 0; try { n = Ingresso.attese().length; } catch (e) { } b.style.display = n ? '' : 'none'; b.textContent = '🏷 Etichette attese (' + n + ')'; },
+  // FR in OPEN su VLT del deposito del mittente (Anagrafiche → Depositi VLT), non ancora in giacenza e non già nella lista per AWB
+  openMitt: function () {
+    var T = Ingresso.T(); if (T.tipo !== 'FAULTY' || !L.s(T.mittente) || !DB.vlt || !DB.t.DEPOT_VLT) return [];
+    var km = App._k(T.mittente), dep = {}; DB.t.DEPOT_VLT.rows.forEach(function (d) { if (L.s(d.depot_vlt) && App._k(d.destinazione) === km) dep[L.up(d.depot_vlt)] = 1; });
+    if (!Object.keys(dep).length) return [];
+    var st = {}; L.s(DB.param('etichette_stati_open', 'Open')).split(';').forEach(function (x) { if (L.s(x)) st[L.up(x)] = 1; });
+    var gia = {}; DB.t.UNITA.rows.forEach(function (u) { if (L.s(u.fr) && u.stato !== 'ANNULLATO') gia[L.s(u.fr)] = 1; });
+    var awb = {}; Ingresso.attese().forEach(function (v) { awb[L.s(v.fr_id)] = 1; });
+    return DB.vlt.rows.filter(function (v) { return st[L.up(v.stato)] && dep[L.up(v.depot_origine)] && L.s(v.fr_id) && !gia[L.s(v.fr_id)] && !awb[L.s(v.fr_id)]; })
+      .sort(function (a, b) { return L.s(b.data_apertura).localeCompare(L.s(a.data_apertura)); });
+  },
+  aggAttese: function () { var b = $('inAttese'); if (!b) return; var n = 0, o = 0; try { n = Ingresso.attese().length; o = Ingresso.openMitt().length; } catch (e) { } b.style.display = n + o ? '' : 'none'; b.textContent = '🏷 Etichette attese (' + (n ? n + ' AWB' : '') + (n && o ? ' + ' : '') + (o ? o + ' OPEN' : '') + ')'; },
   etichetteAttese: function () {
-    var A = Ingresso.attese(), T = Ingresso.T(); if (!A.length) { toast('Nessun FR atteso con AWB ' + T.awb, 'ko'); return; }
+    var T = Ingresso.T(), A1 = Ingresso.attese(), A2 = Ingresso.openMitt(), A = A1.concat(A2), nA = A1.length; if (!A.length) { toast('Nessun FR atteso (AWB ' + (T.awb || '—') + ' o OPEN di ' + (T.mittente || '—') + ')', 'ko'); return; }
     var letti = {}; (Ingresso.computed || []).forEach(function (c) { if (c.fr) letti[L.s(c.fr)] = 1; });
-    Modal.html('🏷 Etichette attese · AWB ' + esc(T.awb),
-      '<div class="hint" style="margin-bottom:8px">FR su VLT con questo AWB e non ancora in giacenza: <b>' + A.length + '</b>. Etichetta FAULTY con la tua sigla (' + esc(App.chi().sigla || '—') + '); l’ubicazione si assegna al carico e qui non c’è.</div>' +
-      '<div class="tbl-wrap modal-scroll" style="max-height:55vh"><table><thead><tr><th><input type="checkbox" id="eaTutte" checked></th><th>FR</th><th>S/N</th><th>P/N</th><th>Riparatore</th><th>Stato VLT</th><th></th></tr></thead><tbody>' +
-      A.map(function (v, i) { return '<tr><td><input type="checkbox" class="eaSel" data-i="' + i + '" checked></td><td class="mono">' + esc(v.fr_id) + '</td><td class="mono">' + esc(v.f_mat_serial_no) + '</td><td class="mono">' + esc(v.f_mat_tmpn) + '</td><td>' + esc(App.normRip(v.riparatore)) + '</td><td>' + esc(v.stato) + '</td><td>' + (letti[L.s(v.fr_id)] ? '<span class="pill p-green">già letto</span>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>',
+    Modal.html('🏷 Etichette attese · ' + esc(T.mittente || '') + (T.awb ? ' · AWB ' + esc(T.awb) : ''),
+      '<div class="hint" style="margin-bottom:8px">FR non ancora in giacenza: <b>' + nA + '</b> su VLT con questo AWB (già spuntati) e <b>' + A2.length + '</b> in OPEN del deposito di ' + esc(T.mittente || '—') + ' (senza AWB: spunta tu quelli da stampare). Etichetta FAULTY con la tua sigla (' + esc(App.chi().sigla || '—') + '); l’ubicazione si assegna al carico e qui non c’è.</div>' +
+      (A2.length ? '<div class="fg" style="margin-bottom:6px"><input class="fc mono" id="eaQ" placeholder="filtra FR, S/N, P/N, riparatore" autocomplete="off"></div>' : '') +
+      '<div class="tbl-wrap modal-scroll" style="max-height:55vh"><table><thead><tr><th><input type="checkbox" id="eaTutte"' + (nA ? ' checked' : '') + '></th><th>Da</th><th>FR</th><th>S/N</th><th>P/N</th><th>Riparatore</th><th>Stato VLT</th><th></th></tr></thead><tbody>' +
+      A.map(function (v, i) { return '<tr class="eaR"><td><input type="checkbox" class="eaSel" data-i="' + i + '"' + (i < nA ? ' checked' : '') + '></td><td>' + (i < nA ? 'AWB' : '<span class="pill p-amber">OPEN</span>' + (L.s(v.data_apertura) ? ' <span class="hint">' + esc(L.itDate(L.s(v.data_apertura).slice(0, 10))) + '</span>' : '')) + '</td><td class="mono">' + esc(v.fr_id) + '</td><td class="mono">' + esc(v.f_mat_serial_no) + '</td><td class="mono">' + esc(v.f_mat_tmpn) + '</td><td>' + esc(App.normRip(v.riparatore)) + '</td><td>' + esc(v.stato) + '</td><td>' + (letti[L.s(v.fr_id)] ? '<span class="pill p-green">già letto</span>' : '') + '</td></tr>'; }).join('') + '</tbody></table></div>',
       [{ label: 'Chiudi', cls: 'ghost' }, { label: '🏷 Stampa', cls: 'green', keep: true, fn: function () {
         var S = [].slice.call(document.querySelectorAll('#mBody .eaSel:checked')).map(function (x) { return A[+x.getAttribute('data-i')]; }); if (!S.length) { toast('Spunta almeno un FR', 'ko'); return; }
         var op = App.chi().sigla || '', dt = L.itDate(T.data || L.isoToday());
         Etichette.pezzi(S.map(function (v) { return Etichette.ingresso({ tipo: 'FAULTY', fr: v.fr_id, seriale: v.f_mat_serial_no, pn: v.f_mat_tmpn, riparatore: App.normRip(v.riparatore), ubicazione: '', mittente: T.mittente, data: dt, op: op }); }), 'Etichette attese');
-        API.append(DB.id, 'LOG', [App.log('ETICHETTE_ATTESE', 'VLT', T.awb, { n: S.length, fr: S.map(function (v) { return v.fr_id; }).slice(0, 300) })], true).catch(function () { });
+        API.append(DB.id, 'LOG', [App.log('ETICHETTE_ATTESE', 'VLT', T.awb || T.mittente, { n: S.length, open: S.filter(function (v) { return A2.indexOf(v) >= 0; }).length, fr: S.map(function (v) { return v.fr_id; }).slice(0, 300) })], true).catch(function () { });
       } }], true);
-    var tt = $('eaTutte'); if (tt) tt.onchange = function () { document.querySelectorAll('#mBody .eaSel').forEach(function (x) { x.checked = tt.checked; }); };
+    var tt = $('eaTutte'); if (tt) tt.onchange = function () { document.querySelectorAll('#mBody .eaR').forEach(function (tr) { if (tr.style.display !== 'none') tr.querySelector('.eaSel').checked = tt.checked; }); };
+    var eq = $('eaQ'); if (eq) eq.oninput = function () { var q = L.up(eq.value); document.querySelectorAll('#mBody .eaR').forEach(function (tr) { tr.style.display = !q || L.up(tr.textContent).indexOf(q) >= 0 ? '' : 'none'; }); };
   },
   onAwbSilent: function () { var v = L.vettoreDaAwb($('inAwb').value, DB.t.VETTORI.rows); if (v && !L.s($('inVettore').value)) $('inVettore').value = v; },
   mailLink: function (c, T) {
@@ -9102,7 +9117,7 @@ var Fer = {
   SD: { '': ['p-amber', 'Da lavorare'], IN_LAVORAZIONE: ['p-violet', 'In lavorazione'], SISTEMATO: ['p-green', 'Sistemato su VLT'] },
   // esito del controllo fisico del magazzino (tab Da controllare): ok = risolto, va in Risolte
   ESITI: { '': ['p-amber', 'Da controllare', false], GOOD_SPOSTATA: ['p-green', 'È una GOOD: spostata tra le GOOD', true], FR_SBAGLIATO: ['p-violet', 'FAULTY con FR sbagliato: da correggere', false], NON_TROVATA: ['p-red', 'Non trovata a scaffale', false], RISOLTO: ['p-green', 'Risolto (vedi nota)', true] },
-  SEZ: { FERME: '🧊 Ferme in hub', CONTROLLA: '🔍 Da controllare', ACK: '✅ In ACK su VLT', RISOLTE: '✔ Risolte' },
+  SEZ: { FERME: '🧊 Ferme in hub', CONTROLLA: '🔍 Da controllare', ATTESA: '⏳ In attesa (Rejected)', ACK: '✅ In ACK su VLT', RISOLTE: '✔ Risolte' },
   CAT: { CONTROLLA: 'Da controllare fisicamente', SISTEMATA: 'Sistemate dal Service Desk: avanzare lo stato su VLT', IN_ACK: 'Già in ACK su VLT: partono con il prossimo ACK', RISOLTA: 'Risolte' },
   loaded: false, _R: [], sez: 'FERME',
   vai: function (s) { Fer.sez = s; Object.keys(Fer.SEZ).forEach(function (k) { var b = $('ferT_' + k); if (b) b.className = 'btn sm' + (k === s ? '' : ' ghost'); }); Fer.render(); },
@@ -9124,7 +9139,7 @@ var Fer = {
   stati: function (k, def) { var o = {}; L.s(DB.param(k, def)).split(';').forEach(function (x) { if (L.s(x)) o[Fer.nst(x)] = 1; }); return o; },
   righe: function () {
     var c = Ack.cfg(), stAck = Fer.nst(c.statoAck), out = {}, ord = [];
-    var chiud = Fer.stati('vlt_stati_fr_da_chiudere', ''), escl = Fer.stati('ferme_stati_esclusi', 'Aborted'), ctrl = Fer.stati('ferme_stati_controllo', 'Close for Scrap material;Good Material Received;Failed Material Sent to Repairer');
+    var chiud = Fer.stati('vlt_stati_fr_da_chiudere', ''), escl = Fer.stati('ferme_stati_esclusi', 'Aborted'), ctrl = Fer.stati('ferme_stati_controllo', 'Close for Scrap material;Good Material Received;Failed Material Sent to Repairer'), att = Fer.stati('ferme_stati_attesa', 'Close for Rejected');
     var mag = {}, perFr = {}, perId = {};
     DB.t.UNITA.rows.forEach(function (u) { perId[u.id_unita] = u; if (Giacenze.A_MAG.indexOf(u.stato) >= 0) { if (u.fr) mag['F' + u.fr] = u; mag['S' + L.up(u.seriale)] = u; } if (u.fr && u.tipo === 'FAULTY') perFr[u.fr] = u; });
     var pend = {}; (DB.t.ACK_PENDING ? DB.t.ACK_PENDING.rows : []).forEach(function (p) { if (p.fr) pend[p.fr] = p; });
@@ -9143,9 +9158,9 @@ var Fer = {
       var r = Fer.sd(k) || {}, es0 = Fer.ESITI[L.s(r.esito_mag)] || Fer.ESITI[''];
       var inHub = u && Giacenze.A_MAG.indexOf(u.stato) >= 0, usc = u && u.stato === 'USCITO' && L.s(u.data_out) >= L.normDate(L.s(o.sf.data).slice(0, 10)), spU = usc ? Ack.byId(u.id_spedizione) : null;
       var ripOk = !ripV || !ripRif || Fer.rk(ripV) === Fer.rk(ripRif), inAck = v && stV === stAck && ripOk, aperta = o.aperte && !usc && (inHub || !u);
-      var sez = !aperta || es0[2] ? 'RISOLTE' : (inAck ? 'ACK' : (ctrl[stV] ? 'CONTROLLA' : 'FERME'));
-      var pr = sez === 'RISOLTE' ? (usc ? 'Uscita' : (es0[2] ? 'Controllata: ' + es0[1] : (o.aperte ? 'Non più in giacenza' : 'Anomalia risolta'))) : (sez === 'ACK' ? 'In ACK su VLT' : (sez === 'CONTROLLA' ? 'Da controllare: su VLT "' + v.stato + '"'
-        : (!o.fr ? 'Senza FR' : (!v ? 'FR non trovato su VLT' : (!ripOk ? 'Riparatore su VLT diverso' : (chiud[stV] ? 'Da chiudere su VLT (spare ferma)' : 'Stato VLT non da ACK'))))));
+      var sez = !aperta || es0[2] ? 'RISOLTE' : (inAck ? 'ACK' : (att[stV] ? 'ATTESA' : (ctrl[stV] ? 'CONTROLLA' : 'FERME')));
+      var pr = sez === 'RISOLTE' ? (usc ? 'Uscita' : (es0[2] ? 'Controllata: ' + es0[1] : (o.aperte ? 'Non più in giacenza' : 'Anomalia risolta'))) : (sez === 'ACK' ? 'In ACK su VLT' : (sez === 'ATTESA' ? 'In attesa: su VLT "' + v.stato + '"' : (sez === 'CONTROLLA' ? 'Da controllare: su VLT "' + v.stato + '"'
+        : (!o.fr ? 'Senza FR' : (!v ? 'FR non trovato su VLT' : (!ripOk ? 'Riparatore su VLT diverso' : (chiud[stV] ? 'Da chiudere su VLT (spare ferma)' : 'Stato VLT non da ACK')))))));
       var fare = sez === 'CONTROLLA' ? (stV === 'GOOD MATERIAL RECEIVED' ? 'controllare a scaffale: è una GOOD letta tra le FAULTY o una FAULTY con un FR vecchio?' : (stV.indexOf('SCRAP') >= 0 ? 'controllare a scaffale: su VLT è rottamata ma il pezzo è in hub' : 'controllare a scaffale: su VLT risulta già spedita al riparatore'))
         : (sez === 'FERME' ? { 'Senza FR': 'trovare o assegnare l\'FR', 'FR non trovato su VLT': 'verificare l\'FR su VLT', 'Riparatore su VLT diverso': 'correggere il riparatore su VLT (' + ripV + ' → ' + ripRif + ') o metterlo in pending', 'Da chiudere su VLT (spare ferma)': 'chiudere su VLT (Chiusure VLT · FERME)', 'Stato VLT non da ACK': 'sistemare lo stato su VLT ("' + (v ? v.stato : '') + '") perché possa partire con l\'ACK' }[pr] : '');
       var p = o.fr && pend[o.fr], es = [];
