@@ -596,6 +596,29 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
       <div class="tbl-wrap"><table><thead id="junHead"></thead><tbody id="junRows"></tbody></table></div><div class="hint" id="junFoot" style="margin-top:6px"></div>
     </div>
 
+    <!-- SCRAP -->
+    <div class="view" id="view-scrap">
+      <div class="card">
+        <div class="row" style="gap:10px;align-items:flex-end">
+          <div class="fg"><span class="fl">Bancale</span><select class="fc mono" id="scrBanc" style="min-width:260px" onchange="Scr.scegli(this.value)"></select></div>
+          <div class="fg"><span class="fl">Ubicazione nuovo bancale *</span><input class="fc mono" id="scrUbi" list="dlUbicazioni" autocomplete="off" placeholder="spara o scrivi l'ubicazione" onkeydown="if(event.key==='Enter'){event.preventDefault();Scr.nuovo()}"></div>
+          <button class="btn green sm" onclick="Scr.nuovo()">🆕 Nuovo bancale</button>
+          <div class="spacer"></div>
+          <button class="btn ghost sm" id="scrChiudi" onclick="Scr.chiudi()">✔ Chiudi bancale</button>
+          <button class="btn ghost sm" id="scrEtB" onclick="Scr.etBanc()" title="Etichetta per mettere a dimora: ubicazione in grande e numero bancale">🏷 Etichetta bancale</button>
+          <button class="btn ghost sm" id="scrPack" onclick="Scr.pack()" title="Packing list del bancale (PDF)">📋 Packing list</button>
+          <button class="btn ghost sm" onclick="Scr.packXls()" title="Packing list del bancale in Excel">⬇ Excel</button>
+          <button class="btn ghost sm" id="scrEt" onclick="Scr.et()" title="Etichette 10×5 dei pezzi del bancale, come le FAULTY">🏷 Etichette 10×5</button>
+        </div>
+        <div id="scrInfo" style="margin-top:8px"></div>
+        <div class="fg" style="max-width:560px;margin-top:8px"><span class="fl">Spara seriale o FR</span><input class="fc scan-big" id="scrBc" autocomplete="off" placeholder="seriale / FR" onkeydown="if(event.key==='Enter'||event.key==='Tab'){event.preventDefault();var v=this.value;this.value='';Scr.leggi(v)}"><div class="fb" id="scrFb"></div></div>
+        <div class="row" style="margin-top:8px;gap:6px"><button class="btn sm" id="scrT_LISTA" onclick="Scr.vai('LISTA')">📋 Da ubicare</button><button class="btn ghost sm" id="scrT_BANC" onclick="Scr.vai('BANC')">📦 Bancale</button><button class="btn ghost sm" id="scrT_TUTTI" onclick="Scr.vai('TUTTI')">🗂 Bancali</button>
+          <div class="spacer"></div><input class="fc" id="scrQ" style="max-width:280px" placeholder="cerca FR, seriale, P/N, riparatore" oninput="clearTimeout(Scr._qt);Scr._qt=setTimeout(function(){Scr.render()},200)"><button class="btn green sm" id="scrMetti" onclick="Scr.mettiSel()">➕ Metti sul bancale le spuntate</button></div>
+        <div class="hint" style="margin-top:6px">Le schede <b>SCRAP</b> in giacenza senza ubicazione. Spara seriale o FR (o spunta dalla lista) per metterle sul bancale aperto: cambiano solo ubicazione e pallet della scheda e l'ubicazione del suo movimento di ingresso. Un pezzo non in lista chiede conferma (diventa SCRAP ovunque; senza scheda la crea). Con stato VLT diverso da Close for Scrap la scheda va nelle Chiusure VLT (Ingressi del giorno).</div>
+      </div>
+      <div class="tbl-wrap"><table id="scrTab"></table></div><div class="hint" id="scrFoot" style="margin-top:6px"></div>
+    </div>
+
     <!-- SPARE FERME IN HUB -->
     <div class="view" id="view-ferme">
       <div class="card"><div class="row">
@@ -1391,7 +1414,7 @@ var DB = {
 var TABS = [
   { k: 'ingresso', label: 'Ingresso' },
   { k: 'ack', label: 'ACK' }, { k: 'rma', label: 'RMA' }, { k: 'balancing', label: 'Balancing' },
-  { k: 'newreuse', label: 'Pratiche Carichi NEW/REUSE' }, { k: 'juniper', label: 'Juniper' }, { k: 'giacenze', label: 'Giacenze' }, { k: 'ferme', label: 'Spare ferme' }, { k: 'vlt', label: 'VLT' }, { k: 'chiusure', label: 'Chiusure VLT' },
+  { k: 'newreuse', label: 'Pratiche Carichi NEW/REUSE' }, { k: 'juniper', label: 'Juniper' }, { k: 'giacenze', label: 'Giacenze' }, { k: 'scrap', label: 'Scrap' }, { k: 'ferme', label: 'Spare ferme' }, { k: 'vlt', label: 'VLT' }, { k: 'chiusure', label: 'Chiusure VLT' },
   { k: 'storico', label: 'Movimenti' }, { k: 'dashboard', label: 'Dashboard', admin: true }, { k: 'kpi', label: 'KPI', admin: true }, { k: 'log', label: 'Log', admin: true }, { k: 'anagrafiche', label: 'Anagrafiche' }, { k: 'admin', label: 'Admin', admin: true }
 ];
 var App = {
@@ -1474,6 +1497,7 @@ var App = {
     if (t.k === 'juniper') Jun.show();
     if (t.k === 'vlt') Vlt.show();
     if (t.k === 'ferme') Fer.show();
+    if (t.k === 'scrap') Scr.show();
     if (t.k === 'chiusure') Chv.show();
     if (t.k === 'storico') Sto.show();
     if (t.k === 'dashboard') Dash.show();
@@ -4388,7 +4412,8 @@ var Chv = {
         if (!ricoda && ((L.s(u.creato_il).slice(0, 10) !== giorno && L.s(u.fr_assegnato_il).slice(0, 10) !== giorno) || u.creato_da === 'MIGRAZIONE' || u.stato === 'ANNULLATO' || Ingresso.nonIngresso(u))) return;
         if (!L.s(u.fr) || L.frFinto(u.fr) || ['NEW', 'REUSE', 'BALANCING'].indexOf(u.tipo) >= 0) return;
         var v = DB.vltMap[u.fr];
-        add({ k: 'IN:' + u.fr, fr: u.fr, tipo: u.tipo, note: Chv.nota(u.note), stato_file: v ? v.stato : '', conf_serial: u.seriale, conf_tmpn: u.pn, seriale: u.seriale });
+        var nt = Chv.nota(u.note); if (u.tipo === 'SCRAP' && !/scrap/i.test(nt)) nt = 'SCRAP';
+        add({ k: 'IN:' + u.fr, fr: u.fr, tipo: u.tipo, note: nt, stato_file: v ? v.stato : '', conf_serial: u.seriale, conf_tmpn: u.pn, seriale: u.seriale });
       });
     } else if (proc === 'FERME') {
       // nota VLT con "OK" = bonificata dal Service Desk: la nota si ignora e la scheda si chiude normalmente (Failure Report Sent)
@@ -9109,6 +9134,282 @@ var Nr = {
   }
 };
 
+// ───────────────────────── SCRAP (bancali di scrap a magazzino) ─────────────────────────
+// Lista: schede SCRAP in giacenza senza ubicazione. Si spuntano (seriale / FR / selezione) su un bancale SCRAP-AAAAMMGG-NN con la sua
+// ubicazione (obbligatoria, dalla lista ubicazioni). Cambiano solo ubicazione e pallet della scheda e l'ubicazione del suo movimento IN.
+// Pezzo fuori lista: avviso + conferma → tipo SCRAP ovunque (scheda e movimenti); senza scheda la crea (dal movimento IN o con rettifica).
+// Stato VLT diverso da Close for Scrap material → la scheda va nelle Chiusure VLT (Ingressi del giorno, nota SCRAP).
+var Scr = {
+  H: ['codice', 'data', 'ubicazione', 'stato', 'creato_il', 'creato_da', 'chiuso_il', 'chiuso_da', 'note'],
+  ST_OK: 'CLOSE FOR SCRAP MATERIAL',
+  loaded: false, cur: '', sez: 'LISTA', _sel: {},
+  show: async function () {
+    try {
+      if (!Scr.loaded) $('scrFb').textContent = 'Carico bancali e movimenti…';
+      if (!DB.t.SCRAP_BANCALI || !DB.t.SCRAP_BANCALI.header.length) await DB.ensureSheet('SCRAP_BANCALI', Scr.H);
+      if (!Sto.dati.cur) Sto.dati.cur = await Sto.colsSafe(DB.id, 'MOVIMENTI');
+      if (!('vlt_ricoda' in DB.t.UNITA.idx)) await DB.ensureCols('UNITA', ['vlt_ricoda']);   // coda delle Chiusure VLT
+      if (!Scr.loaded) { Scr.cur = L.s(lsG('scr_cur')); Scr.loaded = true; $('scrFb').textContent = ''; }
+      if (Scr.cur && !Scr.banc(Scr.cur)) Scr.cur = '';
+      Scr.render();
+      setTimeout(function () { var i = $('scrBc'); if (i) i.focus(); }, 50);
+    } catch (e) { $('scrFb').textContent = 'Errore: ' + e.message; }
+  },
+  bancali: function () { return (DB.t.SCRAP_BANCALI ? DB.t.SCRAP_BANCALI.rows : []).filter(function (b) { return L.s(b.codice); }); },
+  banc: function (c) { return Scr.bancali().find(function (b) { return b.codice === c; }) || null; },
+  pezzi: function (c) { return DB.t.UNITA.rows.filter(function (u) { return L.s(u.n_plt) === c && Giacenze.A_MAG.indexOf(u.stato) >= 0; }); },
+  lista: function () { return DB.t.UNITA.rows.filter(function (u) { return u.tipo === 'SCRAP' && Giacenze.A_MAG.indexOf(u.stato) >= 0 && !L.s(u.ubicazione); }); },
+  vlt: function (u) { return u && u.fr ? DB.vltMap[u.fr] : null; },
+  stOk: function (u) { var v = Scr.vlt(u); return !!v && L.up(v.stato).replace(/\s+/g, ' ') === Scr.ST_OK; },
+  ubiNorm: function (x) { x = L.up(x); var b = Rma.ubiBin(x); return b || x; },
+  ubiOk: function (x) { var s = {}; (DB.ubicazioni || []).forEach(function (u) { s[L.up(u)] = 1; }); return !!s[L.up(x)]; },
+  fb: function (t, c) { if (c === 'ok') Snd.ok(); else if (c === 'warn') Snd.warn(); else if (c === 'err') Snd.err(); var e = $('scrFb'); if (e) { e.textContent = t; e.className = 'fb ' + (c || ''); } },
+  vai: function (s) { Scr.sez = s; ['LISTA', 'BANC', 'TUTTI'].forEach(function (k) { var b = $('scrT_' + k); if (b) b.className = 'btn sm' + (k === s ? '' : ' ghost'); }); Scr.render(); },
+  render: function () {
+    if (!Scr.loaded) return;
+    var b = Scr.banc(Scr.cur), P = b ? Scr.pezzi(b.codice) : [], Ls = Scr.lista(), A = Scr.bancali();
+    $('scrBanc').innerHTML = '<option value="">— nessun bancale —</option>' + A.filter(function (x) { return x.stato !== 'CHIUSO' || x.codice === Scr.cur; }).sort(function (x, y) { return L.s(y.creato_il).localeCompare(L.s(x.creato_il)); })
+      .map(function (x) { return '<option value="' + esc(x.codice) + '"' + (x.codice === Scr.cur ? ' selected' : '') + '>' + esc(x.codice) + ' · ' + esc(x.ubicazione) + (x.stato === 'CHIUSO' ? ' (chiuso)' : '') + '</option>'; }).join('');
+    $('scrInfo').innerHTML = b ? '<b style="font-size:16px">' + esc(b.codice) + '</b> · ubicazione <b>' + esc(b.ubicazione) + '</b> · <b>' + P.length + '</b> pezzi' + (b.stato === 'CHIUSO' ? ' · <span class="pill p-red">CHIUSO</span>' : ' · <span class="pill p-green">APERTO</span>') : '<span class="hint">Crea un bancale (🆕) o scegline uno aperto: serve l’ubicazione prima di spuntare.</span>';
+    ['scrChiudi', 'scrEtB', 'scrPack', 'scrEt'].forEach(function (id) { var e = $(id); if (e) e.disabled = !b; });
+    if ($('scrChiudi')) $('scrChiudi').textContent = b && b.stato === 'CHIUSO' ? '↺ Riapri bancale' : '✔ Chiudi bancale';
+    $('scrT_LISTA').textContent = '📋 Da ubicare (' + Ls.length + ')'; $('scrT_BANC').textContent = '📦 Bancale ' + (b ? b.codice : '') + ' (' + P.length + ')'; $('scrT_TUTTI').textContent = '🗂 Bancali (' + A.length + ')';
+    var q = L.up($('scrQ').value), cerca = function (u) { return !q || L.up([u.fr, u.seriale, u.pn, u.riparatore, u.id_unita, u.n_plt, u.ubicazione].join(' ')).indexOf(q) >= 0; };
+    var vSt = function (u) { var v = Scr.vlt(u); return v ? (Scr.stOk(u) ? '<span style="color:var(--green)">' + esc(v.stato) + '</span>' : '<b style="color:var(--amber)">⚠ ' + esc(v.stato) + '</b>') : '<span class="hint">' + (u.fr ? 'FR non su VLT' : 'senza FR') + '</span>'; };
+    var h = '', foot = '';
+    if (Scr.sez === 'TUTTI') {
+      h = '<thead><tr><th>Bancale</th><th>Data</th><th>Ubicazione</th><th>Pezzi</th><th>Stato</th><th>Creato da</th><th>Chiuso</th><th></th></tr></thead><tbody>' +
+        A.slice().sort(function (x, y) { return L.s(y.creato_il).localeCompare(L.s(x.creato_il)); }).filter(function (x) { return !q || L.up(x.codice + ' ' + x.ubicazione).indexOf(q) >= 0; }).map(function (x) {
+          return '<tr><td class="mono"><b>' + esc(x.codice) + '</b></td><td class="mono nw">' + esc(L.itDate(x.data)) + '</td><td class="mono">' + esc(x.ubicazione) + '</td><td class="mono">' + Scr.pezzi(x.codice).length + '</td><td>' + (x.stato === 'CHIUSO' ? '<span class="pill p-red">CHIUSO</span>' : '<span class="pill p-green">APERTO</span>') + '</td><td>' + esc(App.sigla(x.creato_da) || x.creato_da) + '</td><td class="mono nw">' + esc(L.s(x.chiuso_il).slice(0, 16)) + '</td><td><button class="btn ghost sm" onclick="Scr.scegli(\'' + esc(x.codice) + '\')">Apri</button></td></tr>';
+        }).join('') + '</tbody>';
+    } else {
+      var R = (Scr.sez === 'LISTA' ? Ls : P).filter(cerca).sort(function (x, y) { return L.s(x.data_in).localeCompare(L.s(y.data_in)); });
+      var lista = Scr.sez === 'LISTA';
+      h = '<thead><tr>' + (lista ? '<th><input type="checkbox" id="scrTutte" onchange="Scr.tutte(this.checked)"></th>' : '') + '<th>ID</th><th>FR</th><th>Seriale</th><th>P/N</th><th>Riparatore</th><th>Entrata</th><th>Stato VLT</th>' + (lista ? '' : '<th>Ubicazione</th><th></th>') + '</tr></thead><tbody>' +
+        R.slice(0, 1500).map(function (u) {
+          return '<tr>' + (lista ? '<td><input type="checkbox" class="scrSel" data-id="' + esc(u.id_unita) + '"' + (Scr._sel[u.id_unita] ? ' checked' : '') + ' onchange="Scr._sel[this.getAttribute(\'data-id\')]=this.checked"></td>' : '') +
+            '<td class="mono">' + esc(u.id_unita) + '</td><td class="mono">' + esc(u.fr) + '</td><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.riparatore) + '</td><td class="mono nw">' + esc(L.itDate(u.data_in)) + '</td><td>' + vSt(u) + '</td>' +
+            (lista ? '' : '<td class="mono">' + esc(u.ubicazione) + '</td><td>' + (b && b.stato !== 'CHIUSO' ? '<button class="btn ghost sm" title="Togli dal bancale: torna senza ubicazione" onclick="Scr.togli(\'' + esc(u.id_unita) + '\')">✕</button>' : '') + '</td>') + '</tr>';
+        }).join('') + '</tbody>';
+      foot = R.length + ' pezzi' + (R.length > 1500 ? ' (mostrati i primi 1500: usa la ricerca)' : '') + (lista ? ' · spunta e premi «➕ Metti sul bancale», oppure spara seriale / FR' : ' · ⚠ = stato VLT diverso da Close for Scrap: va nelle Chiusure VLT (Ingressi del giorno)');
+    }
+    $('scrTab').innerHTML = h; $('scrFoot').textContent = foot;
+    $('scrMetti').style.display = Scr.sez === 'LISTA' ? '' : 'none';
+  },
+  tutte: function (on) { document.querySelectorAll('#scrTab .scrSel').forEach(function (c) { c.checked = on; Scr._sel[c.getAttribute('data-id')] = on; }); },
+  scegli: function (c) { Scr.cur = c; lsS('scr_cur', c); Scr.vai('BANC'); },
+  // nuovo bancale: progressivo del giorno atomico (riga aggiunta al registro, numero = posizione tra quelle di oggi)
+  nuovo: async function () {
+    var ubi = Scr.ubiNorm($('scrUbi').value);
+    if (!ubi) { $('scrUbi').focus(); toast('Scrivi o spara l\'ubicazione del bancale', 'ko'); return; }
+    if (!Scr.ubiOk(ubi)) { $('scrUbi').focus(); toast('Ubicazione ' + ubi + ' non è nella lista delle ubicazioni', 'ko'); return; }
+    if (Scr._busy) return; Scr._busy = true;
+    try {
+      var t = DB.t.SCRAP_BANCALI, oggi = L.isoToday(), now = L.nowStamp(), me = App.chi().email;
+      var r = await API.append(DB.id, 'SCRAP_BANCALI', [t.toRow({ data: oggi, ubicazione: ubi, stato: 'APERTO', creato_il: now, creato_da: me })]);
+      var col = (await API.batchGet(DB.id, [API.q('SCRAP_BANCALI') + '!' + t.col('data') + '2:' + t.col('data') + r]))[0] || [], n = 0;
+      col.forEach(function (x) { if (L.normDate(L.s(x && x[0])) === oggi) n++; });
+      var cod = 'SCRAP-' + oggi.replace(/-/g, '') + '-' + L.pad(Math.max(n, 1), 2);
+      await API.batchUpdate(DB.id, [{ range: t.cell('codice', r), values: [[cod]] }]);
+      var x = {}; t.header.forEach(function (h) { x[h] = ''; }); Object.assign(x, { codice: cod, data: oggi, ubicazione: ubi, stato: 'APERTO', creato_il: now, creato_da: me, _r: r }); t.rows.push(x);
+      API.append(DB.id, 'LOG', [App.log('SCRAP_BANCALE_NUOVO', 'SCRAP_BANCALI', cod, { ubicazione: ubi })]).catch(function () { });
+      $('scrUbi').value = ''; Scr.scegli(cod); Scr.fb('🆕 Bancale ' + cod + ' in ' + ubi + ': spara i pezzi', 'ok'); toast('Bancale ' + cod, 'ok');
+      setTimeout(function () { $('scrBc').focus(); }, 50);
+    } catch (e) { toast('Bancale non creato: ' + e.message, 'ko'); }
+    finally { Scr._busy = false; }
+  },
+  chiudi: async function () {
+    var b = Scr.banc(Scr.cur); if (!b) return;
+    var chiudo = b.stato !== 'CHIUSO', t = DB.t.SCRAP_BANCALI, now = L.nowStamp(), me = App.chi().email;
+    if (chiudo && !(await Modal.confirm('Chiudi bancale', b.codice + ' · ' + Scr.pezzi(b.codice).length + ' pezzi in ' + b.ubicazione + '. Dopo non si aggiungono più pezzi (si può riaprire).'))) return;
+    try {
+      var ch = chiudo ? { stato: 'CHIUSO', chiuso_il: now, chiuso_da: me } : { stato: 'APERTO', chiuso_il: '', chiuso_da: '' };
+      await API.batchUpdate(DB.id, Object.keys(ch).filter(function (h) { return h in t.idx; }).map(function (h) { b[h] = ch[h]; return { range: t.cell(h, b._r), values: [[ch[h]]] }; }));
+      API.append(DB.id, 'LOG', [App.log(chiudo ? 'SCRAP_BANCALE_CHIUSO' : 'SCRAP_BANCALE_RIAPERTO', 'SCRAP_BANCALI', b.codice, { pezzi: Scr.pezzi(b.codice).length, ubicazione: b.ubicazione })]).catch(function () { });
+      toast(b.codice + (chiudo ? ' chiuso' : ' riaperto'), 'ok'); Scr.render();
+    } catch (e) { Modal.open('Errore', e.message); }
+  },
+  // scrive le modifiche delle schede (e dei loro movimenti: ubicazione del movimento IN, tipo su tutti i movimenti IN/OUT); niente movimenti nuovi
+  applica: async function (items, azione) {
+    if (!items.length) return;
+    if (!Sto.dati.cur) Sto.dati.cur = await Sto.colsSafe(DB.id, 'MOVIMENTI');   // servono per il tipo sui movimenti
+    var tU = DB.t.UNITA, H = await Ingresso.heads(), tM = H.MOVIMENTI, mr = await Spec.righe(tM), now = L.nowStamp(), me = App.chi().email, upd = [], loc = [], logs = [];
+    if (items.some(function (it) { return 'vlt_ricoda' in it.ch; }) && !('vlt_ricoda' in tU.idx)) tU = (await DB.ensureCols('UNITA', ['vlt_ricoda'])) || DB.t.UNITA;
+    if (tU !== DB.t.UNITA || items.some(function (it) { return tU.rows.indexOf(it.u) < 0; })) { tU = DB.t.UNITA; items.forEach(function (it) { var n = tU.rows.find(function (x) { return x.id_unita === it.u.id_unita; }); if (n) it.u = n; }); }   // tabella riletta: stesse schede, righe nuove
+    items.forEach(function (it) {
+      var u = it.u, prima = {}, ch = Object.assign({}, it.ch, { modificato_il: now, modificato_da: me, rev: (parseInt(u.rev, 10) || 1) + 1 });
+      if ('tipo' in it.ch) {   // tipo su tutti i movimenti IN/OUT della scheda (stessa logica delle bonifiche)
+        var mv = Spec.movimenti(tM, mr, u.id_unita, { tipo: [L.s(u.tipo), it.ch.tipo] }); upd = upd.concat(mv.upd); loc = loc.concat(mv.loc);
+      }
+      Object.keys(ch).forEach(function (h) { if (h in tU.idx) { prima[h] = u[h]; upd.push({ range: tU.cell(h, u._r), values: [[String(ch[h])]] }); } });
+      var r = u.id_mov_in && mr[u.id_mov_in], mi = (Sto.dati.cur || []).find(function (m) { return m.id_mov === u.id_mov_in; });
+      if (r && 'ubicazione' in it.ch && ('ubicazione_a' in tM.idx)) { upd.push({ range: tM.cell('ubicazione_a', r), values: [[it.ch.ubicazione]] }); if (mi) loc.push([mi, 'ubicazione_a', it.ch.ubicazione]); }
+      logs.push(App.log(azione, 'UNITA', u.id_unita, { seriale: u.seriale, fr: u.fr, bancale: it.ch.n_plt !== undefined ? it.ch.n_plt : u.n_plt, prima: prima, dopo: it.ch, movimento_in: r ? u.id_mov_in : '' }));
+      Object.keys(ch).forEach(function (h) { if (h in tU.idx) u[h] = String(ch[h]); });
+    });
+    for (var k = 0; k < upd.length; k += 400) await API.batchUpdate(DB.id, upd.slice(k, k + 400));
+    Spec.applica(loc);
+    await API.append(DB.id, 'LOG', logs);
+    Export.scrivi().catch(function () { });
+  },
+  // cosa cambia mettendo la scheda sul bancale (tipo SCRAP se confermato; in coda alle Chiusure VLT se lo stato non è Close for Scrap)
+  ch: function (u, b, conferma) {
+    var ch = { ubicazione: b.ubicazione, n_plt: b.codice };
+    if (conferma && u.tipo !== 'SCRAP') { ch.tipo = 'SCRAP'; ch.magazzino = 'SCRAP'; ch.note = [L.s(u.note), 'confermata SCRAP (era ' + u.tipo + ') nel bancale ' + b.codice + ' il ' + L.itDate(L.isoToday()) + ' da ' + (App.chi().sigla || App.chi().email)].filter(Boolean).join(' | '); }
+    if (u.fr && !L.frFinto(u.fr) && !Scr.stOk(u)) ch.vlt_ricoda = L.nowStamp();
+    return ch;
+  },
+  apertoOk: function () {
+    var b = Scr.banc(Scr.cur);
+    if (!b) { Scr.fb('⛔ Prima crea o scegli un bancale (con ubicazione)', 'err'); return null; }
+    if (b.stato === 'CHIUSO') { Scr.fb('⛔ Il bancale ' + b.codice + ' è chiuso: riaprilo o creane uno nuovo', 'err'); return null; }
+    if (!L.s(b.ubicazione)) { Scr.fb('⛔ Il bancale ' + b.codice + ' non ha l\'ubicazione', 'err'); return null; }
+    return b;
+  },
+  mettiSel: async function () {
+    var b = Scr.apertoOk(); if (!b) return;
+    var U = Scr.lista().filter(function (u) { return Scr._sel[u.id_unita]; });
+    if (!U.length) { toast('Spunta almeno un pezzo della lista', 'ko'); return; }
+    if (!(await Modal.confirm('Metti sul bancale', U.length + ' pezzi su ' + b.codice + ' (ubicazione ' + b.ubicazione + ').'))) return;
+    Modal.open('Bancale ' + b.codice, 'Aggiorno ' + U.length + ' schede…', []);
+    try {
+      await Scr.applica(U.map(function (u) { return { u: u, ch: Scr.ch(u, b, false) }; }), 'SCRAP_BANCALE');
+      U.forEach(function (u) { delete Scr._sel[u.id_unita]; });
+      var ko = U.filter(function (u) { return u.fr && !Scr.stOk(u); }).length;
+      Modal.close(); Scr.fb('✓ ' + U.length + ' pezzi su ' + b.codice + (ko ? ' · ⚠ ' + ko + ' con stato VLT diverso da Close for Scrap: vanno nelle Chiusure VLT' : ''), ko ? 'warn' : 'ok'); Scr.render();
+    } catch (e) { Modal.close(); Modal.open('Errore', e.message); }
+  },
+  togli: async function (id) {
+    var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); if (!u) return;
+    try { await Scr.applica([{ u: u, ch: { ubicazione: '', n_plt: '' } }], 'SCRAP_BANCALE_TOLTO'); Scr.fb('↩ ' + u.seriale + ' tolto dal bancale: torna da ubicare', 'warn'); Scr.render(); }
+    catch (e) { Modal.open('Errore', e.message); }
+  },
+  // sparo di seriale o FR
+  leggi: async function (raw) {
+    raw = L.s(raw); if (!raw) return;
+    var b = Scr.apertoOk(); if (!b) return;
+    var k = L.frKey(raw), ser = L.up(raw.indexOf(';') > 0 ? Ingresso.pulisci(raw, '').ser : L.estraiSeriale(raw, Ingresso.regole()));
+    var inM = DB.t.UNITA.rows.filter(function (u) { return Giacenze.A_MAG.indexOf(u.stato) >= 0; });
+    var u = inM.find(function (x) { return x.fr && x.fr === k; }) || inM.find(function (x) { return L.up(x.seriale) === ser || L.up(x.seriale) === L.up(raw); }) || null;
+    if (u) {
+      if (Giacenze.bloccato(u.id_unita)) { Scr.fb('⛔ ' + u.seriale + ' è ' + u.stato + ' in giacenza: sbloccalo prima', 'err'); return; }
+      if (L.s(u.n_plt) === b.codice) { Scr.fb('Già su ' + b.codice + ': ' + u.seriale, 'warn'); return; }
+      var v = Scr.vlt(u), stV = v ? v.stato : (u.fr ? 'FR non su VLT' : 'senza FR'), avv = [];
+      if (u.tipo !== 'SCRAP') avv.push('tipo <b>' + esc(u.tipo) + '</b> (non SCRAP)' + (u.tipo === 'GOOD' || u.tipo === 'NEW' || u.tipo === 'REUSE' ? ' ⚠ è un pezzo buono!' : ''));
+      if (L.s(u.ubicazione)) avv.push('già ubicato in <b>' + esc(u.ubicazione) + '</b>' + (L.s(u.n_plt) ? ' (pallet ' + esc(u.n_plt) + ')' : ''));
+      if (!Scr.stOk(u)) avv.push('stato VLT <b>' + esc(stV) + '</b>: andrà nelle Chiusure VLT come Close for Scrap');
+      if (avv.length && (u.tipo !== 'SCRAP' || L.s(u.ubicazione))) {
+        Snd.warn();
+        var ok = await Modal.confirm('⚠ ' + (u.tipo !== 'SCRAP' ? 'Non è nella lista SCRAP' : 'Già ubicato'), u.seriale + ' · FR ' + (u.fr || '—') + ' · ' + u.id_unita + '\n' + avv.map(function (x) { return '• ' + x.replace(/<[^>]+>/g, ''); }).join('\n') + '\n\nConfermi che è SCRAP e lo metti su ' + b.codice + '?');
+        if (!ok) { Scr.fb('Annullato: ' + u.seriale + ' non messo sul bancale', 'warn'); return; }
+      }
+      try {
+        await Scr.applica([{ u: u, ch: Scr.ch(u, b, true) }], u.tipo !== 'SCRAP' ? 'SCRAP_CONFERMATO' : 'SCRAP_BANCALE');
+        Scr.fb('✓ ' + u.seriale + ' · FR ' + (u.fr || '—') + ' su ' + b.codice + (Scr.stOk(u) ? '' : ' · ⚠ VLT "' + stV + '": in coda alle Chiusure VLT'), Scr.stOk(u) ? 'ok' : 'warn');
+        Scr.render();
+      } catch (e) { Scr.fb('Errore: ' + e.message, 'err'); }
+      return;
+    }
+    // nessuna scheda in giacenza: la creo (dal movimento IN se c'è, altrimenti con rettifica e i dati di VLT)
+    if (!Sto.dati.cur) { try { Sto.dati.cur = await Sto.colsSafe(DB.id, 'MOVIMENTI'); } catch (e) { Scr.fb('Movimenti non caricati: ' + e.message, 'err'); return; } }
+    var vf = DB.vltMap[k] || null, vs = (DB.vltBySer && (DB.vltBySer[ser] || DB.vltBySer[L.up(raw)])) || [];
+    var v2 = vf || vs.slice().sort(function (x, y) { return (+y.fr_id || 0) - (+x.fr_id || 0); })[0] || null;
+    var fr = v2 ? L.s(v2.fr_id) : '', sr = v2 ? L.up(v2.f_mat_serial_no) : ser;
+    var stessa = function (o) { return (fr && L.s(o.fr) === fr) || (sr && L.up(o.seriale) === sr); };
+    var M = (Sto.dati.cur || []).filter(function (m) { return (m.direzione === 'IN' || m.direzione === 'OUT') && !Sto.annullato(m) && stessa(m); }).sort(function (x, y) { return L.s(x.data_ora).localeCompare(L.s(y.data_ora)); });
+    var ins = M.filter(function (m) { return m.direzione === 'IN'; }), mi = ins[ins.length - 1] || null, outDopo = mi && M.some(function (m) { return m.direzione === 'OUT' && L.s(m.data_ora) > L.s(mi.data_ora); });
+    if (!v2 && !mi) { Scr.fb('⛔ ' + raw + ': nessuna scheda in giacenza, nessun FR su VLT e nessun ingresso. Etichetta giusta?', 'err'); return; }
+    Snd.warn();
+    var come = mi && !outDopo ? 'creo la scheda dal movimento di ingresso ' + mi.id_mov + ' del ' + L.itDate(L.s(mi.data_ora).slice(0, 10)) : 'aggiungo la scheda con rettifica (dati VLT' + (outDopo ? ': l\'ultimo ingresso è già uscito' : ', nessun ingresso') + ')';
+    var ok2 = await Modal.confirm('⚠ Senza scheda in giacenza', raw + (fr ? ' · FR ' + fr : '') + (v2 ? ' · VLT "' + v2.stato + '"' : '') + '\nNon è in giacenza: ' + come + ', come SCRAP su ' + b.codice + '.' + (v2 && L.up(v2.stato) !== Scr.ST_OK ? '\nStato VLT diverso da Close for Scrap: andrà nelle Chiusure VLT.' : '') + '\n\nConfermi?');
+    if (!ok2) { Scr.fb('Annullato: ' + raw, 'warn'); return; }
+    try {
+      var nu = null;
+      if (mi && !outDopo) {
+        await Rial.crea([{ m: mi, tipo: 'SCRAP', v: v2, avv: [] }], true);
+        nu = DB.t.UNITA.rows.find(function (x) { return x.id_mov_in === mi.id_mov && Giacenze.A_MAG.indexOf(x.stato) >= 0; });
+      } else {
+        var tU = DB.t.UNITA, H = await Ingresso.heads(), now = L.nowStamp(), chi = App.chi(), pn = L.up(v2.f_mat_tmpn);
+        var ob = { seriale: sr, pn: pn, mnft: DB.artPn[pn] || '', material: L.s(v2.f_mat_material), tipo: 'SCRAP', fr: fr, riparatore: App.ripNoto(v2.riparatore) || L.s(v2.riparatore), magazzino: 'SCRAP', ubicazione: '', stato: 'IN_GIACENZA', data_in: L.isoToday(),
+          note: 'RETTIFICA (aggiunto): presente nel bancale scrap ' + b.codice + ' (nessuna scheda in giacenza)', rev: 1, creato_il: now, creato_da: chi.email };
+        var rU = await API.append(DB.id, 'UNITA', [tU.toRow(ob)]), uBase = parseInt(DB.param('unita_id_base', '0'), 10) || 0;
+        ob.id_unita = 'U' + L.pad(uBase + rU - 1, 7);
+        await API.batchUpdate(DB.id, [{ range: tU.cell('id_unita', rU), values: [[ob.id_unita]] }]);
+        nu = {}; tU.header.forEach(function (h) { nu[h] = ob[h] === undefined ? '' : String(ob[h]); }); nu._r = rU; tU.rows.push(nu);
+        await Spec.traccia(H, nu, 'RETTIFICA INVENTARIO · aggiunto in giacenza: bancale scrap ' + b.codice, { seriale: ob.seriale, fr: fr, tipo: 'SCRAP', pn: pn, bancale: b.codice }, 'RETTIFICA_AGGIUNTO', 'UNITA', ob.id_unita, 'RETTIFICA_IN');
+      }
+      if (!nu) throw new Error('scheda non creata');
+      await Scr.applica([{ u: nu, ch: Scr.ch(nu, b, true) }], 'SCRAP_BANCALE');
+      Scr.fb('✓ ' + nu.seriale + ' (' + nu.id_unita + ', scheda creata) su ' + b.codice + (Scr.stOk(nu) ? '' : ' · ⚠ in coda alle Chiusure VLT'), 'warn'); Scr.render();
+    } catch (e) { Scr.fb('Errore: ' + e.message, 'err'); }
+  },
+  // ── stampe ──
+  // etichetta per mettere a dimora (A4 orizzontale): ubicazione in grande, bancale, pezzi, data
+  etBanc: async function () {
+    var b = Scr.banc(Scr.cur); if (!b) return;
+    var w = window.open('', '_blank');
+    try {
+      await Ack.loghi(); await Lib.qr();
+      var J = window.jspdf.jsPDF, d = new J({ unit: 'mm', format: 'a4', orientation: 'landscape' }), logo = (Ack._lg || {}).sx, P = Scr.pezzi(b.codice);
+      if (logo) { try { d.addImage(logo.url, 'PNG', 12, 10, 40, 40 * logo.h / logo.w); } catch (x) { } }
+      d.setTextColor(0); d.setFont('helvetica', 'bold'); d.setFontSize(26); d.text('SCRAP', 285, 22, { align: 'right' });
+      d.setFontSize(12); d.setFont('helvetica', 'normal'); d.text('UBICAZIONE', 12, 52);
+      d.setFont('helvetica', 'bold'); Etichette.fit(d, b.ubicazione, 12, 92, 230, 110, 40);
+      Etichette.qr(d, b.ubicazione, 250, 58, 36);
+      d.setDrawColor(120); d.line(12, 104, 285, 104);
+      d.setFont('helvetica', 'normal'); d.setFontSize(12); d.text('BANCALE', 12, 116);
+      d.setFont('helvetica', 'bold'); Etichette.fit(d, b.codice, 12, 146, 230, 56, 24);
+      Etichette.qr(d, b.codice, 250, 114, 36);
+      d.setFont('helvetica', 'normal'); d.setFontSize(18);
+      d.text('Pezzi: ' + P.length + '   ·   ' + L.itDate(b.data) + (b.stato === 'CHIUSO' ? '   ·   chiuso il ' + L.vedi(L.s(b.chiuso_il).slice(0, 16)) : ''), 12, 172);
+      d.setFontSize(10); d.text('Creato da ' + (App.sigla(b.creato_da) || b.creato_da) + ' · stampato il ' + L.vedi(L.nowStamp().slice(0, 16)), 12, 198);
+      Ddt.apri(d, w);
+      API.append(DB.id, 'LOG', [App.log('SCRAP_ETICHETTA_BANCALE', 'SCRAP_BANCALI', b.codice, { pezzi: P.length })], true).catch(function () { });
+    } catch (e) { if (w) w.close(); Modal.open('Etichetta bancale', e.message); }
+  },
+  // packing list del bancale (A4 verticale)
+  pack: async function () {
+    var b = Scr.banc(Scr.cur); if (!b) return;
+    var P = Scr.pezzi(b.codice).slice().sort(function (x, y) { return L.s(x.fr).localeCompare(L.s(y.fr)); });
+    if (!P.length) { toast('Il bancale è vuoto', 'ko'); return; }
+    var w = window.open('', '_blank');
+    try {
+      await Ack.loghi();
+      var J = window.jspdf.jsPDF, d = new J({ unit: 'mm', format: 'a4' }), logo = (Ack._lg || {}).sx, y = 0, pag = 1;
+      var C = [['#', 8], ['FR', 18], ['Seriale', 44], ['P/N', 34], ['Riparatore', 30], ['Scheda', 20], ['Stato VLT', 32]];
+      var testa = function () {
+        if (logo) { try { d.addImage(logo.url, 'PNG', 10, 8, 30, 30 * logo.h / logo.w); } catch (x) { } }
+        d.setTextColor(0); d.setFont('helvetica', 'bold'); d.setFontSize(15); d.text('PACKING LIST SCRAP · ' + b.codice, 200, 14, { align: 'right' });
+        d.setFont('helvetica', 'normal'); d.setFontSize(10); d.text('Ubicazione ' + b.ubicazione + ' · ' + P.length + ' pezzi · ' + L.itDate(b.data) + ' · pag. ' + pag, 200, 20, { align: 'right' });
+        y = 30; var x = 10; d.setFillColor(31, 78, 121); d.rect(10, y - 4.5, 190, 6.5, 'F'); d.setTextColor(255); d.setFont('helvetica', 'bold'); d.setFontSize(8.5);
+        C.forEach(function (c) { d.text(c[0], x + 1, y); x += c[1]; }); d.setTextColor(0); d.setFont('helvetica', 'normal'); y += 6;
+      };
+      testa();
+      P.forEach(function (u, i) {
+        if (y > 283) { d.addPage(); pag++; testa(); }
+        if (i % 2) { d.setFillColor(242, 246, 250); d.rect(10, y - 4, 190, 5.6, 'F'); }
+        var v = Scr.vlt(u), x = 10, vals = [i + 1, u.fr, u.seriale, u.pn, u.riparatore, u.id_unita, v ? v.stato : ''];
+        vals.forEach(function (t, j) { Etichette.fit(d, String(t == null ? '' : t), x + 1, y, C[j][1] - 2, 8.5, 6); x += C[j][1]; }); y += 5.6;
+      });
+      y += 6; if (y > 280) { d.addPage(); pag++; y = 20; }
+      d.setFontSize(9); d.text('Totale pezzi: ' + P.length + '      Firma operatore: ____________________', 10, y);
+      Ddt.apri(d, w);
+      API.append(DB.id, 'LOG', [App.log('SCRAP_PACKING_LIST', 'SCRAP_BANCALI', b.codice, { pezzi: P.length })], true).catch(function () { });
+    } catch (e) { if (w) w.close(); Modal.open('Packing list', e.message); }
+  },
+  packXls: function () {
+    var b = Scr.banc(Scr.cur); if (!b) return;
+    Xls.scarica('Packing_' + b.codice, [Object.assign({ nome: b.codice }, Xls.oggetti(Scr.pezzi(b.codice).map(function (u) { var v = Scr.vlt(u); return Object.assign({}, u, { stato_vlt: v ? v.stato : '' }); }),
+      [['id_unita', 'ID'], ['fr', 'FR'], ['seriale', 'Seriale'], ['pn', 'P/N'], ['riparatore', 'Riparatore'], ['ubicazione', 'Ubicazione'], ['n_plt', 'Bancale'], ['data_in', 'Entrata'], ['stato_vlt', 'Stato VLT']]))]);
+  },
+  // etichette 10×5 dei pezzi del bancale, come quelle delle FAULTY (sigla, riparatore, data); in alto a destra l'ubicazione
+  et: function () {
+    var b = Scr.banc(Scr.cur); if (!b) return;
+    var P = Scr.pezzi(b.codice);
+    Etichette.pezzi(P.map(function (u) { return { lab: 'FR', fr: u.fr, sig: Etichette.sigDi(u.id_unita), seriale: u.seriale, pn: u.pn, tipo: 'SCRAP', grassetto: true, ubi: L.up(u.ubicazione), sotto: [u.riparatore, L.itDate(u.data_in)].map(L.s).filter(Boolean).join(' · ') }; }));
+  }
+};
+
 // ───────────────────────── SPARE FERME IN HUB ─────────────────────────
 // spare false letti nelle spunte ACK: "Ferme in hub" (ancora da sistemare) e "Passate in ACK / risolte" (stato ACK su VLT, uscite, anomalia risolta).
 // Il Service Desk segna stato e nota (foglio SPARE_FERME, una riga per FR/seriale); la riga sparisce da sola quando il pezzo esce o la condizione non c'è più.
@@ -9887,7 +10188,7 @@ var Etichette = {
         d.setTextColor(0); d.setFont('helvetica', 'bold');
         Etichette.fit(d, e.pn ? 'P/N ' + e.pn : '', 3, 46.5, 52, 10, 7);
         var wPn = e.pn ? d.getTextWidth('P/N ' + e.pn) : 0, fPn = e.pn ? d.getFontSize() : 10;   // il testo a destra usa tutto lo spazio che resta dopo il P/N
-        var fau = e.tipo === 'FAULTY';
+        var fau = e.tipo === 'FAULTY' || e.grassetto;
         d.setFont('helvetica', fau ? 'bold' : 'normal');
         Etichette.fit(d, [e.tipo, e.sotto].filter(Boolean).join(' · '), 97, 46.5, Math.max(40, 90 - wPn), fau ? fPn - 1 : 9, 5, 'right');
       });
