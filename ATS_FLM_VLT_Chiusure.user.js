@@ -2,7 +2,7 @@
 // @name         ATS FLM → VLT · Chiusure
 // @namespace    ats-spa.flm
 // @author       Daniele Izzo
-// @version      1.0.14
+// @version      1.0.15
 // @description  Chiude su VLT ingressi del giorno (op. linea), ACK, RMA e spare ferme in HUB con i dati dell'app "ATS - Fastweb FLM". Sostituisce i 4 script con i CSV.
 // @match        https://logistictoolvf.net.vodafone.it/*
 // @match        https://ats-spa.github.io/*
@@ -27,7 +27,7 @@
 */
 (function () {
   'use strict';
-  var VER = '1.0.14';
+  var VER = '1.0.15';
   var VLT_HOST = 'logistictoolvf.net.vodafone.it';
   var K = { CODA: 'ats_coda', STATO: 'ats_stato_', PEND: 'ats_esiti_pending', RICH: 'ats_richiesta', APP: 'ats_app_url', VIVO: 'ats_vlt_vivo', RUN: 'ats_run', UI: 'ats_ui', RICEVUTI: 'ats_esiti_ricevuti' };
   // esiti da consegnare = scritti da VLT (PEND) meno quelli già confermati dall'app (RICEVUTI): ognuno scrive solo la sua chiave
@@ -627,7 +627,7 @@
     var UI = {
       el: null,
       css: '#atsVlt{position:fixed;right:14px;bottom:14px;z-index:2147483000;font:13px/1.4 Arial,sans-serif;color:#e2e8f0;zoom:1.35}' +
-        '#atsVlt .box{width:340px;max-width:calc(100vw - 28px);background:#131929;border:1px solid #2f3d5c;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.45);padding:10px 12px}' +
+        '#atsVlt .box{width:340px;max-width:calc(100vw - 28px);max-height:calc((100vh - 28px) / 1.35);overflow:auto;box-sizing:border-box;background:#131929;border:1px solid #2f3d5c;border-radius:12px;box-shadow:0 10px 30px rgba(0,0,0,.45);padding:10px 12px}' +
         '#atsVlt .tit{display:flex;align-items:center;gap:8px;font-weight:700;letter-spacing:.5px}#atsVlt .tit span{flex:1}' +
         '#atsVlt button{background:#3b82f6;color:#fff;border:0;border-radius:6px;padding:6px 9px;font:600 12px Arial,sans-serif;cursor:pointer;margin:2px 2px 2px 0}' +
         '#atsVlt button.g{background:none;border:1px solid #2f3d5c;color:#cbd5e1}#atsVlt button.r{background:#ef4444}#atsVlt button.v{background:#10b981}#atsVlt button:disabled{opacity:.4;cursor:default}' +
@@ -637,7 +637,7 @@
         '#atsVlt .ora{font-size:12px;color:#fbbf24;min-height:16px;margin:4px 0;word-break:break-word}' +
         '#atsVlt .log{font:11px/1.45 Consolas,monospace;color:#cbd5e1;max-height:130px;overflow:auto;background:#0b0f18;border-radius:6px;padding:5px 7px;white-space:pre-wrap}' +
         '#atsVlt select{background:#1a2236;color:#e2e8f0;border:1px solid #2f3d5c;border-radius:6px;padding:5px;font-size:12px}' +
-        '#atsVlt .ser{margin-top:8px;border-top:1px solid #2f3d5c;padding-top:8px}#atsVlt .ser .r{display:flex;align-items:center;gap:6px;margin:3px 0}#atsVlt .ser .r code{flex:1;font:bold 14px Consolas,monospace;user-select:all;color:#f8fafc}#atsVlt .ser button.ok{background:#10b981;color:#fff;border-color:#10b981}' +
+        '#atsVlt .ser{margin-top:8px;border-top:1px solid #2f3d5c;padding-top:8px}#atsVlt .ser .lst{max-height:calc(42vh / 1.35);overflow:auto;padding-right:4px;margin:4px 0;border:1px solid #2f3d5c;border-radius:6px;padding:2px 6px}#atsVlt .ser .r{display:flex;align-items:center;gap:6px;margin:3px 0}#atsVlt .ser .r code{flex:1;font:bold 14px Consolas,monospace;user-select:all;color:#f8fafc}#atsVlt .ser button.ok{background:#10b981;color:#fff;border-color:#10b981}' +
         '#atsVlt .warn{color:#fbbf24;font-size:12px}#atsVlt label{font-size:12px;color:#94a3b8}',
       monta: function () {
         if ($('#atsVlt')) return;
@@ -669,11 +669,14 @@
           var s = UI._ser;
           h += '<div class="ser"><b>RMA ' + esc(s.it.rma) + '</b> · ' + esc(s.it.dest || '') + ' · AWB ' + esc(s.it.awb || '—') + (s.avvisi || []).map(function (a) { return '<div class="warn">⚠ ' + esc(a) + '</div>'; }).join('') +
             '<div class="info">Controlla i seriali e premi <b>Salva</b> su VLT: passo da solo al prossimo.</div>' +
-            (s.it.serials || []).map(function (x) { var fatto = UI._cop[s.it.rma + '|' + x]; return '<div class="r"><code>' + esc(x) + '</code><button class="g' + (fatto ? ' ok' : '') + '" data-c="' + esc(x) + '">' + (fatto ? '✓ Copiato' : 'Copia') + '</button></div>'; }).join('') +
+            '<div class="info"><b>' + (s.it.serials || []).length + '</b> seriali · copiati <b>' + (s.it.serials || []).filter(function (x) { return UI._cop[s.it.rma + '|' + x]; }).length + '</b>' + ((s.it.serials || []).length > 8 ? ' · scorri l\'elenco' : '') + '</div>' +
+            '<div class="lst">' + (s.it.serials || []).map(function (x) { var fatto = UI._cop[s.it.rma + '|' + x]; return '<div class="r"><code>' + esc(x) + '</code><button class="g' + (fatto ? ' ok' : '') + '" data-c="' + esc(x) + '">' + (fatto ? '✓ Copiato' : 'Copia') + '</button></div>'; }).join('') + '</div>' +
             '<button class="g" data-a="salta">» Salta questo RMA</button></div>';
         }
         h += '<div class="ora">' + esc(UI._ora) + '</div><div class="log">' + esc(UI._log.join('\n')) + '</div></div>';
+        var l0 = $('#atsVlt .ser .lst'), sc0 = l0 ? l0.scrollTop : 0, b0 = $('#atsVlt .box'), sb0 = b0 ? b0.scrollTop : 0;   // ridisegno senza perdere il punto dell'elenco
         UI.el.innerHTML = h;
+        var l1 = $('#atsVlt .ser .lst'); if (l1) l1.scrollTop = sc0; var b1 = $('#atsVlt .box'); if (b1) b1.scrollTop = sb0;
         var l = $('#atsVlt .log'); if (l) l.scrollTop = 99999;
         // la procedura si sceglie sempre: all'apertura il menu è vuoto (non ricorda l'ultima scelta)
         var ps = $('#atsVlt select[data-a="proc"]'); if (ps) { ps.value = UI._proc || ''; ps.onchange = function () { UI._proc = ps.value; UI.agg(); }; }
