@@ -2896,7 +2896,7 @@ var Giacenze = {
       return '<input class="fc' + (/seriale|pn|fr|rma|ubicazione/.test(k) ? ' mono' : '') + '" id="gv_' + k + '" value="' + esc(v) + '"' + (k === 'destinazione_prevista' ? ' list="dlControparti"' : '') + '>';
     };
     Modal.html('Gestisci ' + u.id_unita + ' · ' + u.seriale,
-      '<div style="font-size:12.5px;color:var(--subtle);margin-bottom:10px">' + Pill.tipo(u.tipo) + ' ' + esc(u.stato) + (u.fr ? ' · FR ' + esc(u.fr) : '') + ' · ' + esc(u.pn) + ' · ' + esc(u.riparatore) + '</div>' +
+      '<div style="font-size:12.5px;color:var(--subtle);margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span>' + Pill.tipo(u.tipo) + ' ' + esc(u.stato) + (u.fr ? ' · FR ' + esc(u.fr) : '') + ' · ' + esc(u.pn) + ' · ' + esc(u.riparatore) + (u.ubicazione ? ' · 📍 ' + esc(u.ubicazione) : '') + '</span><button class="btn ghost sm" onclick="UbiSt.apri(\'' + esc(u.id_unita) + '\')" title="Tutti i cambi di ubicazione della scheda: ingresso, variazioni, bonifiche, bancali, con data e operatore">📍 Storico ubicazioni</button></div>' +
       (gestibile ? '<div class="fg"><span class="fl">Stato operativo</span><div class="g-stati">' +
         [['IN_GIACENZA', '✓ Disponibile'], ['BLOCCATO', '⛔ Bloccato'], ['IN_ATTESA', '⏸ In attesa']].map(function (x) { return '<label><input type="radio" name="gvStato" value="' + x[0] + '"' + (u.stato === x[0] ? ' checked' : '') + '> ' + x[1] + '</label>'; }).join('') +
         '</div><div class="hint">Bloccato / in attesa: il pezzo resta in giacenza ma non può uscire (ACK, RMA) finché non torna disponibile.</div></div>' :
@@ -9131,6 +9131,54 @@ var Nr = {
     Nr.grid.render();
     var R = Nr.t().rows, n = function (s) { return R.filter(function (p) { return p.stato === s; }).length; };
     $('nrStats').innerHTML = Object.keys(Nr.STATI).map(function (k) { return '<div class="stat"><b>' + n(k) + '</b><span>' + Nr.STATI[k][1] + '</span></div>'; }).join('') + (n('ELIMINATA') ? '<div class="stat" style="cursor:pointer" title="Mostra le pratiche eliminate" onclick="$(\'nrStato\').value=\'ELIMINATA\';Nr.render()"><b style="color:var(--red)">' + n('ELIMINATA') + '</b><span>eliminate</span></div>' : '');
+  }
+};
+
+// ───────────────────────── STORICO UBICAZIONI DI UNA SCHEDA ─────────────────────────
+// dai movimenti (IN, interni con ubicazione da → a, OUT) e dal LOG (tutte le operazioni con prima/dopo dell'ubicazione), di tutto il periodo.
+// Se l'ubicazione attuale non è l'ultima registrata lo segnala: cambiata senza traccia.
+var UbiSt = {
+  key: function (s) { s = L.s(s); var d = L.normDate(s.slice(0, 10)), t = (/(\d{1,2}:\d{2}(:\d{2})?)/.exec(s.slice(10)) || [])[1] || ''; if (t.length < 8) t = (t.length === 4 ? '0' : '') + t + (t ? ':00' : ''); return (d || s) + ' ' + t; },
+  eventi: function (u) {
+    var E = [], id = u.id_unita, A = Sto.dati[String(new Date().getFullYear() - 1)] || [];
+    A.concat(Sto.dati.cur || []).forEach(function (m) {
+      if ((m.id_unita !== id && m.id_mov !== u.id_mov_in) || Sto.annullato(m)) return;
+      var da = L.up(m.ubicazione_da), a = L.up(m.ubicazione_a), chi = Sto.op ? Sto.op(m) : L.s(m.operatore);
+      if (m.direzione === 'IN') E.push({ t: m.data_ora, cosa: 'Ingresso ' + L.s(m.id_mov), da: '', a: a, chi: chi, nota: L.s(m.posizione_note) ? 'posizione: ' + L.s(m.posizione_note) : '', mov: 1 });
+      else if (m.direzione === 'OUT') E.push({ t: m.data_ora, cosa: 'Uscita ' + L.s(m.id_mov) + (m.controparte ? ' → ' + L.s(m.controparte) : ''), da: da, a: '', chi: chi, nota: '', mov: 1, out: 1 });
+      else if (da !== a && (da || a)) E.push({ t: m.data_ora, cosa: 'Movimento interno ' + L.s(m.causale), da: da, a: a, chi: chi, nota: L.s(m.note), mov: 1 });
+    });
+    (LogV.rows || []).forEach(function (r) {
+      var det = L.s(r.dettaglio); if (r.id_record !== id && det.indexOf(id) < 0) return;
+      var o; try { o = JSON.parse(det); } catch (e) { return; }
+      var pd = function (p, d, extra) { if (!p || !d || typeof p !== 'object' || typeof d !== 'object' || !('ubicazione' in d)) return; var x = L.up(p.ubicazione), y = L.up(d.ubicazione); if (x !== y) E.push({ t: r.data_ora, cosa: L.s(r.azione), da: x, a: y, chi: L.s(r.utente).split('@')[0], nota: extra || (o.motivo ? 'motivo: ' + o.motivo : (o.bancale ? 'bancale ' + o.bancale : (o.file ? 'file ' + o.file : ''))) }); };
+      if (r.id_record === id) pd(o.prima, o.dopo);
+      if (o.scheda === id && o.scheda_dopo && 'ubicazione' in o.scheda_dopo) pd({ ubicazione: o.prima && o.prima.ubicazione_a }, o.scheda_dopo, 'bonifica movimento ' + L.s(r.id_record));
+    });
+    E.forEach(function (e) { e.k = UbiSt.key(e.t); });
+    // stessa operazione nel LOG e nel movimento interno (es. Varia i dati): tengo il movimento
+    E = E.filter(function (e) { return e.mov || !E.some(function (f) { return f.mov && f.a === e.a && f.da === e.da && f.k.slice(0, 16) === e.k.slice(0, 16); }); });
+    return E.sort(function (a, b) { return a.k.localeCompare(b.k); });
+  },
+  apri: async function (id) {
+    var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === id; }); if (!u) return;
+    Modal.open('📍 Storico ubicazioni · ' + u.id_unita, 'Carico movimenti e registro…', []);
+    try {
+      if (!Sto.dati.cur) Sto.dati.cur = await Sto.colsSafe(DB.id, 'MOVIMENTI');
+      await LogV.carica(false);
+      var E = UbiSt.eventi(u), ult = null;
+      E.forEach(function (e) { if (!e.out && (e.a || e.cosa.indexOf('Ingresso') === 0 || e.da)) ult = e; });
+      // confronto senza pallet ("AB07BA / FLM 433") e con la decodifica delle ubicazioni (AB07BA → 71-STK-…)
+      var nz = function (x) { x = L.up(x).split(' / ')[0].trim(); return Rma.ubiBin(x) || x; };
+      var att = L.up(u.ubicazione), atteso = ult ? ult.a : '', ok = !ult || nz(atteso) === nz(att), mig = u.creato_da === 'MIGRAZIONE' && !E.some(function (e) { return !e.mov || e.cosa.indexOf('Movimento interno') === 0; });
+      var cella = function (x) { return x ? '<span class="mono">' + esc(x) + '</span>' : '<span style="color:var(--muted)">—</span>'; };
+      var html = '<div style="font-size:13px;margin-bottom:8px">' + esc(u.seriale) + ' · ' + Pill.tipo(u.tipo) + ' · ubicazione attuale <b class="mono">' + esc(att || '—') + '</b>' + (u.n_plt ? ' · pallet <b class="mono">' + esc(u.n_plt) + '</b>' : '') + '</div>' +
+        (ok ? '' : mig ? '<div class="card" style="padding:8px 10px;margin-bottom:8px;border-color:var(--amber)"><b style="color:var(--amber)">Scheda della migrazione</b>: l\'ubicazione attuale (<b class="mono">' + esc(att || '—') + '</b>) è quella portata dalla migrazione, diversa da quella dell\'ingresso (<b class="mono">' + esc(atteso || '—') + '</b>): gli spostamenti di prima della migrazione non sono nel registro.</div>' : '<div class="card" style="padding:8px 10px;margin-bottom:8px;border-color:var(--red)"><b style="color:var(--red)">⚠ Ubicazione cambiata senza traccia</b>: l\'ultima registrata è <b class="mono">' + esc(atteso || '—') + '</b> (' + esc(Sto.dataOra(ult.t)) + ', ' + esc(ult.cosa) + '), ma la scheda ora dice <b class="mono">' + esc(att || '—') + '</b>. Nessun movimento né operazione nel registro spiega il cambio.</div>') +
+        '<div class="tbl-wrap modal-scroll" style="max-height:55vh"><table><thead><tr><th>Data e ora</th><th>Operazione</th><th>Da</th><th>A</th><th>Chi</th><th>Note</th></tr></thead><tbody>' +
+        (E.length ? E.map(function (e) { return '<tr><td class="mono nw">' + esc(Sto.dataOra(e.t)) + '</td><td>' + esc(e.cosa) + '</td><td>' + cella(e.da) + '</td><td>' + cella(e.a) + '</td><td>' + esc(e.chi) + '</td><td style="font-size:11.5px;color:var(--subtle)">' + esc(L.s(e.nota).slice(0, 160)) + '</td></tr>'; }).join('') : '<tr><td colspan="6" class="empty">Nessun movimento o operazione con l\'ubicazione</td></tr>') +
+        '</tbody></table></div><div class="hint" style="margin-top:6px">Fonti: movimenti (ingresso, movimenti interni con ubicazione da → a, uscita) e registro (Log) di tutto il periodo, non solo degli ultimi 7 giorni.</div>';
+      Modal.html('📍 Storico ubicazioni · ' + u.id_unita, html, [{ label: '↩ Scheda', cls: 'ghost', fn: function () { setTimeout(function () { Giacenze.gestisci(id); }, 30); } }, { label: 'Chiudi', cls: 'green' }]);
+    } catch (e) { Modal.open('Storico ubicazioni', 'Non riesco a caricare lo storico: ' + e.message); }
   }
 };
 
