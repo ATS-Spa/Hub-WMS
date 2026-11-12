@@ -91,6 +91,9 @@ button{font-family:var(--ff-sans)}
 .chat-m .az button{background:none;border:none;color:var(--muted);cursor:pointer;font-size:11px;padding:0 2px}
 .chat-m .az button:hover{color:var(--text)}
 .chat-m.del{opacity:.6;font-style:italic}
+.chat-img{margin-top:4px;cursor:zoom-in}.chat-img img{max-width:100%;max-height:220px;border-radius:6px;border:1px solid var(--border);display:block;background:var(--surface)}.chat-img .ph{font-size:11.5px;color:var(--muted);padding:6px 0}
+.chat-link{margin-top:4px;display:inline-block;border:1px solid var(--blue);color:var(--blue);border-radius:6px;padding:3px 8px;font-size:12px;cursor:pointer;background:none}
+.chat-allega{display:none;padding:4px 10px;font-size:11.5px;border-top:1px solid var(--border);align-items:center;gap:8px}.chat-allega img{height:44px;border-radius:4px;border:1px solid var(--border)}
 .chat-mod{display:none;padding:4px 10px;font-size:11.5px;color:var(--amber);border-top:1px solid var(--border)}
 .user-wrap{position:relative}
 .user-menu{display:none;position:absolute;right:0;top:calc(100% + 6px);background:var(--surface);border:1px solid var(--border);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.3);min-width:220px;z-index:250;padding:4px 0}
@@ -703,6 +706,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
         <button class="btn ghost sm" style="margin-bottom:2px" onclick="MovBon.apri()" title="Cambia in blocco uno o più campi di tutti i movimenti IN/OUT che vedi con i filtri: motivo, anteprima, password; si aggiornano anche schede e altri movimenti collegati, come con il ✎">🧹 Bonifica</button>
         <button class="btn ghost sm" style="margin-bottom:2px" onclick="Sto.etichette()" title="Un'etichetta 10×5 per ogni riga che vedi (filtri e ricerca della scheda aperta)">🏷 Etichette</button>
         <button class="btn ghost sm" style="margin-bottom:2px" onclick="Sto.excelVista()" title="Le righe della scheda aperta, con i filtri">⬇ Excel vista</button>
+        <button class="btn ghost sm" style="margin-bottom:2px" onclick="Chat.condividiSto()" title="Manda in chat un collegamento a questa vista: chi lo apre vede gli stessi dati (anche l'archivio), date, ricerca e filtri">💬 Condividi filtro</button>
         <button class="btn sm" style="margin-bottom:2px" onclick="Sto.excelEasyloader()" title="File come l'Easyloader: fogli INBOUND e OUTBOUND del periodo scelto">⬇ Excel Easyloader</button>
         <label class="btn ghost sm" id="stoImp" style="margin-bottom:2px;cursor:pointer;display:none" title="Solo admin: movimenti dimenticati (file con le colonne di MOVIMENTI). I doppioni vengono saltati, gli ID li assegna il tool">⬆ Importa movimenti mancanti<input type="file" accept=".xlsx,.xls,.csv" style="display:none" onchange="Sto.importaMancanti(this)"></label>
       </div></div>
@@ -780,7 +784,8 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
   <div class="chat-conv" id="chatConv"></div>
   <div class="chat-msgs" id="chatMsgs"></div>
   <div class="chat-mod" id="chatMod"></div>
-  <div class="chat-in"><textarea class="fc" id="chatTxt" maxlength="1000" placeholder="Scrivi… (Invio per mandare, Maiusc+Invio per andare a capo)"></textarea><button class="btn sm" onclick="Chat.invia()">Invia</button></div>
+  <div class="chat-allega" id="chatAll"></div>
+  <div class="chat-in"><label class="btn ghost sm" id="chatClip" title="Allega un'immagine (o incolla uno screenshot con Ctrl+V, o trascinalo qui)" style="cursor:pointer;align-self:center">📎<input type="file" accept="image/*" style="display:none" onchange="if(this.files[0])Chat.allega(this.files[0]);this.value=''"></label><textarea class="fc" id="chatTxt" maxlength="1000" placeholder="Scrivi… (Invio per mandare, Maiusc+Invio per andare a capo, Ctrl+V per uno screenshot)"></textarea><button class="btn sm" onclick="Chat.invia()">Invia</button></div>
 </div>
 
 <!-- ═════════════════════ LOGICA PURA (testabile) ═════════════════════ -->
@@ -10810,6 +10815,10 @@ var Chat = {
     } catch (e) { console.warn('chat non disponibile', e); return; }
     if (Chat.abilitata()) $('chatBtn').style.display = '';
     try { $('chatSuono').checked = lsG('chat_suono') !== 0; } catch (e) { }
+    $('chatTxt').onpaste = function (ev) { var it = [].slice.call((ev.clipboardData || {}).items || []).find(function (x) { return x.kind === 'file' && /^image\//.test(x.type); }); if (it) { ev.preventDefault(); Chat.allega(it.getAsFile()); } };
+    $('chatPanel').ondragover = function (ev) { ev.preventDefault(); };
+    $('chatPanel').ondrop = function (ev) { var f = ev.dataTransfer && [].slice.call(ev.dataTransfer.files || []).find(function (x) { return /^image\//.test(x.type); }); if (f) { ev.preventDefault(); Chat.allega(f); } };
+    if (!Chat.immagini()) $('chatClip').style.display = 'none';
     $('chatTxt').onkeydown = function (ev) { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); Chat.invia(); } else if (ev.key === 'Escape' && Chat._mod) Chat.annullaMod(); };
     Chat.grip();
     Chat.badge(); Chat.battito(); setInterval(Chat.battito, 45000);
@@ -10923,10 +10932,13 @@ var Chat = {
   elimina: async function (r) {
     var m = Chat.msgs.find(function (x) { return x._r === r; }); if (!m || !Chat.puoModificare(m)) return;
     if (!(await Modal.confirm('Elimina messaggio', 'Elimino il messaggio "' + m.testo.slice(0, 80) + '"? Gli altri vedranno "messaggio eliminato".'))) return;
-    try { await Chat.evento(m, 'DEL'); } catch (e) { toast('Non eliminato: ' + e.message, 'ko'); }
+    try { var img = m.tipo === 'IMG' && L.s(m.rif); if (await Chat.evento(m, 'DEL') && img) Chat.cestino(img); } catch (e) { toast('Non eliminato: ' + e.message, 'ko'); }
   },
   invia: async function () {
-    var e = $('chatTxt'), t = L.s(e.value).slice(0, 1000); if (!t) return;
+    var e = $('chatTxt'), t = L.s(e.value).slice(0, 1000);
+    if (Chat._img && !Chat._mod) return Chat.inviaImg(t);
+    if (Chat._link && !Chat._mod) return Chat.inviaLink(t);
+    if (!t) return;
     if (Chat._mod) {
       var mm = Chat._mod; if (t === mm.testo) { Chat.annullaMod(); return; }
       e.disabled = true;
@@ -10968,6 +10980,117 @@ var Chat = {
     try { await Sto.carica(false); } catch (e) { }
     Sto.apri('ALL');
   },
+  // ─ immagini (screenshot): compresse nel browser e salvate su Drive (cartella CHAT_ALLEGATI); nel foglio CHAT solo il riferimento (tipo IMG, rif = file)
+  immagini: function () { return L.up(DB.param('chat_immagini', 'SI')) !== 'NO'; },
+  allega: async function (file) {
+    if (!Chat.immagini() || !file) return;
+    try {
+      var bmp = await createImageBitmap(file), max = 1600, k = Math.min(1, max / Math.max(bmp.width, bmp.height)), c = document.createElement('canvas');
+      c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k); var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(bmp, 0, 0, c.width, c.height);
+      var blob = await new Promise(function (r) { c.toBlob(r, 'image/jpeg', 0.85); });
+      if (!blob) throw new Error('immagine non leggibile');
+      if (blob.size > 5 * 1024 * 1024) throw new Error('immagine troppo grande');
+      if (Chat._img) URL.revokeObjectURL(Chat._img.url);
+      Chat._img = { blob: blob, url: URL.createObjectURL(blob), w: c.width, h: c.height };
+      var a = $('chatAll'); a.style.display = 'flex';
+      a.innerHTML = '<img src="' + Chat._img.url + '"><span style="flex:1">📷 Immagine pronta (' + Math.round(blob.size / 1024) + ' KB). Scrivi una didascalia se vuoi e premi Invia.<br><span class="hint">Non condividere password o dati personali.</span></span><button class="btn ghost sm" onclick="Chat.togliImg()">✕</button>';
+      if (!Chat.aperta) Chat.apri(); $('chatTxt').focus();
+    } catch (e) { toast('Immagine non allegata: ' + e.message, 'ko'); }
+  },
+  togliImg: function () { if (Chat._img) URL.revokeObjectURL(Chat._img.url); Chat._img = null; var a = $('chatAll'); a.style.display = 'none'; a.innerHTML = ''; },
+  cartella: async function () {
+    if (Chat._cart) return Chat._cart;
+    var q = "'" + CFG.FOLDER_ID + "' in parents and name='CHAT_ALLEGATI' and mimeType='application/vnd.google-apps.folder' and trashed=false";
+    var js = await API.call('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&includeItemsFromAllDrives=true&fields=files(id)&q=' + encodeURIComponent(q));
+    var f = (js.files || [])[0];
+    if (!f) f = await API.call('https://www.googleapis.com/drive/v3/files?supportsAllDrives=true&fields=id', { method: 'POST', body: JSON.stringify({ name: 'CHAT_ALLEGATI', mimeType: 'application/vnd.google-apps.folder', parents: [CFG.FOLDER_ID] }), quiet: true });
+    Chat._cart = f.id; return f.id;
+  },
+  inviaImg: async function (t) {
+    var e = $('chatTxt'), im = Chat._img; e.disabled = true;
+    try {
+      var c = App.chi(), nome = 'chat_' + L.nowStamp().replace(/[^0-9]/g, '') + '_' + (c.sigla || Chat.me().split('@')[0]) + '.jpg', fd = new FormData();
+      fd.append('metadata', new Blob([JSON.stringify({ name: nome, parents: [await Chat.cartella()] })], { type: 'application/json' })); fd.append('file', im.blob, nome);
+      var go = function () { return fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id', { method: 'POST', headers: { Authorization: 'Bearer ' + Auth.token }, body: fd }); };
+      var res = await go(); if (res.status === 401) { await Auth.refresh(); res = await go(); }
+      var js = await res.json(); if (!res.ok) throw new Error((js.error && js.error.message) || ('HTTP ' + res.status));
+      Chat._urls[js.id] = im.url; Chat._img = null;
+      var o = { quando: L.nowStamp(), ts: String(Date.now()), da_email: Chat.me(), da_sigla: c.sigla || '', a: Chat.conv, testo: t || '📷 Screenshot', tipo: 'IMG', rif: js.id, modificato: '' };
+      await API.append(DB.id, 'CHAT', [Chat.HC.map(function (k) { return o[k]; })], true);
+      e.value = ''; var a = $('chatAll'); a.style.display = 'none'; a.innerHTML = '';
+      await Chat.giro();
+    } catch (x) { toast('Immagine non inviata: ' + x.message, 'ko'); }
+    finally { e.disabled = false; e.focus(); }
+  },
+  _urls: {},
+  imgUrl: async function (id) {
+    if (Chat._urls[id]) return Chat._urls[id];
+    var go = function () { return fetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(id) + '?alt=media&supportsAllDrives=true', { headers: { Authorization: 'Bearer ' + Auth.token } }); };
+    var res = await go(); if (res.status === 401) { await Auth.refresh(); res = await go(); }
+    if (!res.ok) throw new Error(res.status === 404 ? 'immagine non più disponibile' : 'HTTP ' + res.status);
+    return Chat._urls[id] = URL.createObjectURL(await res.blob());
+  },
+  miniature: function (box) {
+    [].slice.call(box.querySelectorAll('.chat-img[data-fid]')).forEach(function (d) {
+      var id = d.getAttribute('data-fid'), img = d.querySelector('img'); if (!img || img.src) return;
+      Chat.imgUrl(id).then(function (u) { img.src = u; img.onload = function () { if (box.scrollHeight - box.scrollTop - box.clientHeight < 260) box.scrollTop = box.scrollHeight; }; var ph = d.querySelector('.ph'); if (ph) ph.remove(); })
+        .catch(function (e) { var ph = d.querySelector('.ph'); if (ph) ph.textContent = '📷 ' + e.message; });
+    });
+  },
+  vediImg: async function (id) {
+    try {
+      var u = await Chat.imgUrl(id);
+      Modal.html('📷 Immagine dalla chat', '<div style="text-align:center"><img src="' + u + '" style="max-width:100%;max-height:72vh;border-radius:6px"></div>',
+        [{ label: '⬇ Scarica', cls: 'ghost', keep: true, fn: function () { var a = document.createElement('a'); a.href = u; a.download = 'chat_' + id + '.jpg'; document.body.appendChild(a); a.click(); a.remove(); } }, { label: 'Chiudi', cls: 'green' }]);
+    } catch (e) { toast(e.message, 'ko'); }
+  },
+  cestino: function (id) { return API.call('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(id) + '?supportsAllDrives=true', { method: 'PATCH', body: JSON.stringify({ trashed: true }), quiet: true }).catch(function () { }); },
+  // corpo del messaggio: testo, immagine o collegamento a un filtro
+  corpo: function (m) {
+    var t = Chat.linka(esc(m.testo));
+    if (m.tipo === 'IMG' && L.s(m.rif)) return (m.testo && m.testo !== '📷 Screenshot' ? t : '') + '<div class="chat-img" data-fid="' + esc(m.rif) + '" onclick="Chat.vediImg(\'' + esc(m.rif) + '\')" title="Clicca per ingrandire"><img alt=""><div class="ph">📷 carico l\'immagine…</div></div>';
+    if (m.tipo === 'LINK' && L.s(m.rif)) return t + '<br><button class="chat-link" onclick="Chat.apriLink(' + m._r + ')" title="Apre Movimenti con gli stessi dati, date, ricerca e filtri">🔗 Apri questo filtro</button>';
+    return t;
+  },
+  // ─ collegamento al filtro di Movimenti (anno/archivio, date, ricerca, scheda, filtri di colonna)
+  vistaSto: function () {
+    var g = Sto.grids[Sto.sez], f = g ? Object.assign({}, g.f) : {};
+    return { v: 'storico', fonte: Sto.fonte, da: $('stoDa').value, a: $('stoA').value, q: L.s($('stoQ').value), sez: Sto.sez, f: f };
+  },
+  descrivi: function (o) {
+    var fon = o.fonte === 'cur' ? 'anno in corso' : o.fonte + ' (archivio)', nf = Object.keys(o.f || {}).length;
+    return '🔗 Movimenti · ' + fon + ' · ' + L.itDate(o.da) + '–' + L.itDate(o.a) + (o.q ? ' · cerca "' + o.q + '"' : '') + ' · ' + (Sto.SEZ[o.sez] || o.sez) + (nf ? ' · ' + nf + ' filtri di colonna' : '') + (o.n !== undefined ? ' · ' + o.n + ' righe' : '');
+  },
+  condividiSto: function () {
+    if (!Chat.abilitata()) return;
+    var o = Chat.vistaSto(), g = Sto.grids[Sto.sez]; o.n = g && g.visibili ? g.visibili.length : undefined;
+    Chat._link = o; Chat.apri();
+    var a = $('chatAll'); a.style.display = 'flex';
+    a.innerHTML = '<span style="flex:1">' + esc(Chat.descrivi(o)) + '<br><span class="hint">Scrivi un commento se vuoi e premi Invia: chi lo apre vede le stesse righe.</span></span><button class="btn ghost sm" onclick="Chat.togliLink()">✕</button>';
+    $('chatTxt').focus();
+  },
+  togliLink: function () { Chat._link = null; var a = $('chatAll'); a.style.display = 'none'; a.innerHTML = ''; },
+  inviaLink: async function (t) {
+    var e = $('chatTxt'), o = Chat._link, c = App.chi(); e.disabled = true;
+    try {
+      var m = { quando: L.nowStamp(), ts: String(Date.now()), da_email: Chat.me(), da_sigla: c.sigla || '', a: Chat.conv, testo: (t ? t + '\n' : '') + Chat.descrivi(o), tipo: 'LINK', rif: JSON.stringify(o), modificato: '' };
+      await API.append(DB.id, 'CHAT', [Chat.HC.map(function (k) { return m[k]; })], true);
+      e.value = ''; Chat.togliLink(); await Chat.giro();
+    } catch (x) { toast('Collegamento non inviato: ' + x.message, 'ko'); }
+    finally { e.disabled = false; e.focus(); }
+  },
+  apriLink: async function (r) {
+    var m = Chat.msgs.find(function (x) { return x._r === r; }), o; try { o = JSON.parse(m.rif); } catch (e) { toast('Collegamento non leggibile', 'ko'); return; }
+    if (o.v !== 'storico') return;
+    Sto.init();
+    Sto.fonte = o.fonte || 'cur'; if ($('stoFonte')) $('stoFonte').value = Sto.fonte;
+    $('stoDa').value = o.da || ''; $('stoA').value = o.a || ''; $('stoQ').value = o.q || '';
+    Sto.sez = o.sez || 'ALL'; var g = Sto.grid(Sto.sez); g.f = Object.assign({}, o.f || {}); g.limit = 300;
+    $('stoHead').dataset.g = '';
+    if (App.tab === 'storico') { try { await Sto.carica(false); } catch (e) { toast(e.message, 'ko'); } Sto.render(true); }
+    else App.go('storico');
+    toast('Filtro di ' + (m.da_sigla || m.da_email) + ' aperto in Movimenti', 'ok');
+  },
   condividi: function (testo) { Modal.close(); if (!Chat.abilitata()) return; Chat.apri(); var e = $('chatTxt'); e.value = (e.value ? e.value + ' ' : '') + testo + ' '; e.focus(); },
   // nome leggibile: "Francesco Cataldo" → Francesco.C (dagli Operatori); altrimenti la sigla
   nome: function (email, sigla) {
@@ -10991,16 +11114,18 @@ var Chat = {
   renderMsgs: function () {
     var me = Chat.me(), L0 = Chat.msgs.filter(function (m) { return Chat.convDi(m) === Chat.conv; }).sort(function (a, b) { return a.ts - b.ts; }).slice(-300), box = $('chatMsgs');
     box.innerHTML = L0.length ? L0.map(function (m) { var mio = L.s(m.da_email).toLowerCase() === me; var az = mio && Chat.puoModificare(m) ? '<span class="az"><button title="Modifica (entro ' + Chat.minMod() + ' min)" onclick="Chat.modifica(' + m._r + ')">✎</button><button title="Elimina (entro ' + Chat.minMod() + ' min)" onclick="Chat.elimina(' + m._r + ')">🗑</button></span>' : '';
-      return '<div class="chat-m' + (mio ? ' mio' : '') + (m.eliminato ? ' del' : '') + '"><div class="h">' + az + esc(mio ? 'tu' : Chat.nome(m.da_email, m.da_sigla)) + ' · ' + esc(L.vedi(L.s(m.quando).slice(0, 16))) + (m.modificato && !m.eliminato ? ' · modificato' : '') + '</div>' + (m.eliminato ? 'messaggio eliminato' : Chat.linka(esc(m.testo))) + '</div>'; }).join('')
+      return '<div class="chat-m' + (mio ? ' mio' : '') + (m.eliminato ? ' del' : '') + '"><div class="h">' + az + esc(mio ? 'tu' : Chat.nome(m.da_email, m.da_sigla)) + ' · ' + esc(L.vedi(L.s(m.quando).slice(0, 16))) + (m.modificato && !m.eliminato ? ' · modificato' : '') + '</div>' + (m.eliminato ? 'messaggio eliminato' : Chat.corpo(m)) + '</div>'; }).join('')
       : '<div class="hint" style="text-align:center;margin-top:20px">' + (Chat.conv === 'TUTTI' ? 'Nessun messaggio nel canale generale' : 'Nessun messaggio: scrivi il primo') + '</div>';
     box.scrollTop = box.scrollHeight;
+    Chat.miniature(box);
   },
   // ─ pulizia (admin, una volta al giorno): messaggi più vecchi di chat_giorni (90) e presenze ferme da 30 giorni
   pulisci: async function () {
     var oggi = L.isoToday(); if (lsG('chat_pulizia') === oggi) return; lsS('chat_pulizia', oggi);
     var gg = parseInt(DB.param('chat_giorni', '90'), 10) || 90, lim = Date.now() - gg * 86400000, limP = Date.now() - 30 * 86400000, R = [];
-    var v = await API.batchGet(DB.id, [API.q('CHAT') + '!B2:B', API.q('PRESENZE') + '!I2:I']);
-    (v[0] || []).forEach(function (x, i) { var t = parseInt(x && x[0], 10); if (t && t < lim) R.push(API.q('CHAT') + '!A' + (i + 2) + ':F' + (i + 2)); });
+    var v = await API.batchGet(DB.id, [API.q('CHAT') + '!B2:H', API.q('PRESENZE') + '!I2:I']), F = [];
+    (v[0] || []).forEach(function (x, i) { var t = parseInt(x && x[0], 10); if (t && t < lim) { R.push(API.q('CHAT') + '!A' + (i + 2) + ':I' + (i + 2)); if (L.s(x[5]) === 'IMG' && L.s(x[6])) F.push(L.s(x[6])); } });
+    for (var j = 0; j < F.length; j++) await Chat.cestino(F[j]);   // le immagini dei messaggi tolti vanno nel cestino di Drive
     (v[1] || []).forEach(function (x, i) { var t = parseInt(x && x[0], 10); if (t && t < limP) R.push(API.q('PRESENZE') + '!A' + (i + 2) + ':I' + (i + 2)); });
     if (R.length) await API.call(API.S + DB.id + '/values:batchClear', { method: 'POST', body: JSON.stringify({ ranges: R }), quiet: true });
   }
