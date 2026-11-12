@@ -599,6 +599,16 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
       <div class="tbl-wrap"><table><thead id="junHead"></thead><tbody id="junRows"></tbody></table></div><div class="hint" id="junFoot" style="margin-top:6px"></div>
     </div>
 
+    <!-- ALLEGATI (dalla chat generale) -->
+    <div class="view" id="view-allegati">
+      <div class="card"><div class="row">
+        <div class="fg" style="flex:1;min-width:240px"><span class="fl">Cerca</span><input class="fc" id="allQ" placeholder="nome, commento, persona" oninput="clearTimeout(All._qt);All._qt=setTimeout(function(){All.render()},200)"></div>
+        <div class="spacer"></div><button class="btn ghost sm" onclick="All.grid && All.grid.excel('Allegati chat')">⬇ Excel</button>
+      </div><div class="hint" style="margin-top:6px">File, immagini e filtri condivisi nel canale <b>Generale</b> della chat (quelli privati restano solo nella loro chat). Si cancellano con i messaggi dopo <span id="allGg">90</span> giorni.</div></div>
+      <div class="stats" id="allStats"></div>
+      <div class="tbl-wrap"><table><thead id="allHead"></thead><tbody id="allRows"></tbody></table></div><div class="hint" id="allFoot" style="margin-top:6px"></div>
+    </div>
+
     <!-- SCRAP -->
     <div class="view" id="view-scrap">
       <div class="card">
@@ -785,7 +795,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
   <div class="chat-msgs" id="chatMsgs"></div>
   <div class="chat-mod" id="chatMod"></div>
   <div class="chat-allega" id="chatAll"></div>
-  <div class="chat-in"><label class="btn ghost sm" id="chatClip" title="Allega un'immagine (o incolla uno screenshot con Ctrl+V, o trascinalo qui)" style="cursor:pointer;align-self:center">📎<input type="file" accept="image/*" style="display:none" onchange="if(this.files[0])Chat.allega(this.files[0]);this.value=''"></label><textarea class="fc" id="chatTxt" maxlength="1000" placeholder="Scrivi… (Invio per mandare, Maiusc+Invio per andare a capo, Ctrl+V per uno screenshot)"></textarea><button class="btn sm" onclick="Chat.invia()">Invia</button></div>
+  <div class="chat-in"><label class="btn ghost sm" id="chatClip" title="Allega un file o un'immagine (o incolla uno screenshot con Ctrl+V, o trascinalo qui)" style="cursor:pointer;align-self:center">📎<input type="file" style="display:none" onchange="if(this.files[0])Chat.allega(this.files[0]);this.value=''"></label><textarea class="fc" id="chatTxt" maxlength="1000" placeholder="Scrivi… (Invio per mandare, Maiusc+Invio per andare a capo, Ctrl+V per uno screenshot)"></textarea><button class="btn sm" onclick="Chat.invia()">Invia</button></div>
 </div>
 
 <!-- ═════════════════════ LOGICA PURA (testabile) ═════════════════════ -->
@@ -1420,7 +1430,7 @@ var TABS = [
   { k: 'ingresso', label: 'Ingresso' },
   { k: 'ack', label: 'ACK' }, { k: 'rma', label: 'RMA' }, { k: 'balancing', label: 'Balancing' },
   { k: 'newreuse', label: 'Pratiche Carichi NEW/REUSE' }, { k: 'juniper', label: 'Juniper' }, { k: 'giacenze', label: 'Giacenze' }, { k: 'scrap', label: 'Scrap' }, { k: 'ferme', label: 'Spare ferme' }, { k: 'vlt', label: 'VLT' }, { k: 'chiusure', label: 'Chiusure VLT' },
-  { k: 'storico', label: 'Movimenti' }, { k: 'dashboard', label: 'Dashboard', admin: true }, { k: 'kpi', label: 'KPI', admin: true }, { k: 'log', label: 'Log', admin: true }, { k: 'anagrafiche', label: 'Anagrafiche' }, { k: 'admin', label: 'Admin', admin: true }
+  { k: 'storico', label: 'Movimenti' }, { k: 'allegati', label: 'Allegati' }, { k: 'dashboard', label: 'Dashboard', admin: true }, { k: 'kpi', label: 'KPI', admin: true }, { k: 'log', label: 'Log', admin: true }, { k: 'anagrafiche', label: 'Anagrafiche' }, { k: 'admin', label: 'Admin', admin: true }
 ];
 var App = {
   me: null, isAdmin: false, tab: 'ingresso',
@@ -1502,6 +1512,7 @@ var App = {
     if (t.k === 'juniper') Jun.show();
     if (t.k === 'vlt') Vlt.show();
     if (t.k === 'ferme') Fer.show();
+    if (t.k === 'allegati') All.show();
     if (t.k === 'scrap') Scr.show();
     if (t.k === 'chiusure') Chv.show();
     if (t.k === 'storico') Sto.show();
@@ -9501,6 +9512,51 @@ var Scr = {
 // ───────────────────────── SPARE FERME IN HUB ─────────────────────────
 // spare false letti nelle spunte ACK: "Ferme in hub" (ancora da sistemare) e "Passate in ACK / risolte" (stato ACK su VLT, uscite, anomalia risolta).
 // Il Service Desk segna stato e nota (foglio SPARE_FERME, una riga per FR/seriale); la riga sparisce da sola quando il pezzo esce o la condizione non c'è più.
+// ───────────────────────── ALLEGATI: file, immagini e filtri del canale Generale della chat ─────────────────────────
+var All = {
+  TIPI: { IMG: '🖼 Immagine', FILE: '📎 File', LINK: '🔗 Filtro Movimenti' },
+  show: function () { $('allGg').textContent = parseInt(DB.param('chat_giorni', '90'), 10) || 90; if (!Chat.ok) { $('allRows').innerHTML = '<tr><td class="empty">Chat non disponibile su questo dispositivo</td></tr>'; return; } All.render(); },
+  righe: function () {
+    return Chat.msgs.filter(function (m) { return m.a === 'TUTTI' && !m.eliminato && All.TIPI[m.tipo] && L.s(m.rif); }).map(function (m) {
+      var fi = m.tipo === 'FILE' ? Chat.fileInfo(m) : null, ext = fi ? L.s(fi.n).split('.').pop().toLowerCase() : '', lk = null;
+      if (m.tipo === 'LINK') { try { lk = JSON.parse(m.rif); } catch (e) { } }
+      var nome = fi ? fi.n : (m.tipo === 'IMG' ? 'Screenshot' : (lk ? Chat.descrivi(lk).replace(/^🔗 /, '') : 'filtro'));
+      var auto = fi ? Chat.icona(fi.n) + ' ' + fi.n : (m.tipo === 'IMG' ? '📷 Screenshot' : '');
+      var comm = m.tipo === 'LINK' ? L.s(m.testo).split('\n').filter(function (x) { return x.indexOf('🔗 Movimenti') !== 0; }).join(' ') : (m.testo === auto ? '' : L.s(m.testo));
+      return { _r: m._r, m: m, quando: L.s(m.quando).slice(0, 16), da: Chat.nome(m.da_email, m.da_sigla), tipo: m.tipo === 'FILE' ? (Chat.icona(fi.n) + ' ' + (ext.toUpperCase() || 'File')) : All.TIPI[m.tipo], nome: nome, dim: fi && fi.s ? +fi.s : '', commento: comm };
+    });
+  },
+  render: function () {
+    if (App.tab !== 'allegati' || !Chat.ok) return;
+    All._R = All.righe();
+    if (!All.grid) All.grid = new Grid('allegati', {
+      thead: 'allHead', tbody: 'allRows', foot: 'allFoot', sort: 'quando', dir: -1, empty: 'Nessun allegato nel canale Generale',
+      rows: function () { return All._R; }, cerca: function () { return $('allQ').value; },
+      cols: [
+        { k: 'quando', label: 'Data', cls: 'mono nw', filter: 'date', html: function (r) { return esc(L.vedi(r.quando)); } },
+        { k: 'da', label: 'Da', filter: 'select' },
+        { k: 'tipo', label: 'Tipo', filter: 'select' },
+        { k: 'nome', label: 'Nome', filter: 'text', html: function (r) { return r.m.tipo === 'IMG' ? '<span class="chat-img" data-fid="' + esc(r.m.rif) + '" onclick="Chat.vediImg(\'' + esc(r.m.rif) + '\')" title="Clicca per ingrandire" style="display:inline-block"><img alt="" style="max-height:48px;max-width:120px"><span class="ph">📷 …</span></span>' : esc(r.nome); } },
+        { k: 'dim', label: 'Dimensione', cls: 'mono nw', get: function (r) { return r.dim === '' ? '' : r.dim; }, html: function (r) { return r.dim === '' ? '' : Chat.kb(r.dim); } },
+        { k: 'commento', label: 'Commento', filter: 'text' },
+        { k: 'az', label: '', noXls: true, html: function (r) {
+          var b = function (t, fn, tit) { return '<button class="btn ghost sm" style="padding:3px 8px" title="' + tit + '" onclick="' + fn + '">' + t + '</button> '; };
+          return '<span class="nw">' + (r.m.tipo === 'FILE' ? b('⬇', 'Chat.scaricaFile(' + r._r + ')', 'Scarica il file') : r.m.tipo === 'IMG' ? b('🔍', 'Chat.vediImg(\'' + esc(r.m.rif) + '\')', 'Apri l\'immagine') : b('🔗', 'Chat.apriLink(' + r._r + ')', 'Apri il filtro in Movimenti')) + b('💬', 'All.vai(' + r._r + ')', 'Vai al messaggio nella chat') + '</span>';
+        } }
+      ]
+    });
+    var vis = All.grid.render() || [], n = function (t) { return All._R.filter(function (r) { return r.m.tipo === t; }).length; };
+    $('allStats').innerHTML = [['Allegati', All._R.length], ['File', n('FILE')], ['Immagini', n('IMG')], ['Filtri', n('LINK')]].map(function (x) { return '<div class="stat"><b>' + x[1] + '</b><span>' + esc(x[0]) + '</span></div>'; }).join('');
+    Chat.miniature($('allRows'));
+    return vis;
+  },
+  // apre la chat generale sul messaggio
+  vai: function (r) {
+    Chat.apri('TUTTI');
+    setTimeout(function () { var d = document.querySelector('#chatMsgs [data-r="' + r + '"]'); if (!d) { toast('Messaggio non più nella chat (oltre gli ultimi 300)', 'warn'); return; } d.scrollIntoView({ block: 'center' }); d.style.outline = '2px solid var(--amber)'; setTimeout(function () { d.style.outline = ''; }, 2500); }, 120);
+  }
+};
+
 var Fer = {
   H: ['chiave', 'fr', 'seriale', 'id_unita', 'stato_sd', 'nota_sd', 'aggiornato_il', 'aggiornato_da', 'mail_magazzino_il', 'mail_magazzino_da', 'esito_mag', 'nota_mag', 'esito_il', 'esito_da', 'mail_id', 'mail_oggetto', 'mail_cat', 'sollecito_il'],
   SD: { '': ['p-amber', 'Da lavorare'], IN_LAVORAZIONE: ['p-violet', 'In lavorazione'], SISTEMATO: ['p-green', 'Sistemato su VLT'] },
@@ -10815,10 +10871,10 @@ var Chat = {
     } catch (e) { console.warn('chat non disponibile', e); return; }
     if (Chat.abilitata()) $('chatBtn').style.display = '';
     try { $('chatSuono').checked = lsG('chat_suono') !== 0; } catch (e) { }
-    $('chatTxt').onpaste = function (ev) { var it = [].slice.call((ev.clipboardData || {}).items || []).find(function (x) { return x.kind === 'file' && /^image\//.test(x.type); }); if (it) { ev.preventDefault(); Chat.allega(it.getAsFile()); } };
+    $('chatTxt').onpaste = function (ev) { var it = [].slice.call((ev.clipboardData || {}).items || []).find(function (x) { return x.kind === 'file'; }); if (it) { ev.preventDefault(); Chat.allega(it.getAsFile()); } };
     $('chatPanel').ondragover = function (ev) { ev.preventDefault(); };
-    $('chatPanel').ondrop = function (ev) { var f = ev.dataTransfer && [].slice.call(ev.dataTransfer.files || []).find(function (x) { return /^image\//.test(x.type); }); if (f) { ev.preventDefault(); Chat.allega(f); } };
-    if (!Chat.immagini()) $('chatClip').style.display = 'none';
+    $('chatPanel').ondrop = function (ev) { var f = ev.dataTransfer && (ev.dataTransfer.files || [])[0]; if (f) { ev.preventDefault(); Chat.allega(f); } };
+    if (!Chat.immagini() && !Chat.fileOk()) $('chatClip').style.display = 'none';
     $('chatTxt').onkeydown = function (ev) { if (ev.key === 'Enter' && !ev.shiftKey) { ev.preventDefault(); Chat.invia(); } else if (ev.key === 'Escape' && Chat._mod) Chat.annullaMod(); };
     Chat.grip();
     Chat.badge(); Chat.battito(); setInterval(Chat.battito, 45000);
@@ -10891,6 +10947,7 @@ var Chat = {
         var r = (await API.batchGet(DB.id, [API.q('CHAT') + '!A' + (Chat.n + 1) + ':I' + (Chat.n + 300)]))[0] || [], nuovi = [], cambi = 0;
         r.forEach(function (x, i) { var m = Chat.aggiungi(x, Chat.n + 1 + i); if (m === true) cambi++; else if (m) nuovi.push(m); });
         Chat.n += r.length;
+        if ((nuovi.length || cambi) && App.tab === 'allegati') All.render();
         if (nuovi.length) Chat.arrivati(nuovi); else if (cambi && Chat.aperta) Chat.renderMsgs();
       } catch (e) { }
     }
@@ -10932,7 +10989,7 @@ var Chat = {
   elimina: async function (r) {
     var m = Chat.msgs.find(function (x) { return x._r === r; }); if (!m || !Chat.puoModificare(m)) return;
     if (!(await Modal.confirm('Elimina messaggio', 'Elimino il messaggio "' + m.testo.slice(0, 80) + '"? Gli altri vedranno "messaggio eliminato".'))) return;
-    try { var img = m.tipo === 'IMG' && L.s(m.rif); if (await Chat.evento(m, 'DEL') && img) Chat.cestino(img); } catch (e) { toast('Non eliminato: ' + e.message, 'ko'); }
+    try { var img = m.tipo === 'IMG' ? L.s(m.rif) : (m.tipo === 'FILE' ? Chat.fileInfo(m).id : ''); if (await Chat.evento(m, 'DEL') && img) Chat.cestino(img); } catch (e) { toast('Non eliminato: ' + e.message, 'ko'); }
   },
   invia: async function () {
     var e = $('chatTxt'), t = L.s(e.value).slice(0, 1000);
@@ -10982,8 +11039,25 @@ var Chat = {
   },
   // ─ immagini (screenshot): compresse nel browser e salvate su Drive (cartella CHAT_ALLEGATI); nel foglio CHAT solo il riferimento (tipo IMG, rif = file)
   immagini: function () { return L.up(DB.param('chat_immagini', 'SI')) !== 'NO'; },
+  // file di lavoro (xlsx, pdf, csv…): così come sono, entro chat_file_mb (20); niente eseguibili o script
+  ESTF: ['xlsx', 'xlsm', 'xls', 'csv', 'pdf', 'docx', 'doc', 'txt', 'zip', 'pptx', 'msg', 'eml', 'json', 'xml', 'png', 'jpg', 'jpeg', 'gif', 'webp'],
+  fileOk: function () { return L.up(DB.param('chat_file', 'SI')) !== 'NO'; },
+  icona: function (n) { var e = L.s(n).split('.').pop().toLowerCase(); return /^xl|^csv$/.test(e) ? '📊' : e === 'pdf' ? '📕' : /^doc|^txt$/.test(e) ? '📄' : e === 'zip' ? '🗜' : /^ppt/.test(e) ? '📽' : /^(msg|eml)$/.test(e) ? '✉' : /^(png|jpe?g|gif|webp)$/.test(e) ? '🖼' : '📎'; },
+  kb: function (b) { b = +b || 0; return b >= 1048576 ? (b / 1048576).toFixed(1).replace('.', ',') + ' MB' : Math.max(1, Math.round(b / 1024)) + ' KB'; },
   allega: async function (file) {
-    if (!Chat.immagini() || !file) return;
+    if (!file) return;
+    if (!/^image\//.test(file.type) || !Chat.immagini()) {
+      if (!Chat.fileOk()) { toast('Allegati spenti (parametro chat_file)', 'ko'); return; }
+      var ext = L.s(file.name).split('.').pop().toLowerCase(), max = (parseFloat(DB.param('chat_file_mb', '20')) || 20) * 1048576;
+      if (Chat.ESTF.indexOf(ext) < 0) { toast('Tipo di file non ammesso in chat (.' + ext + '): ' + Chat.ESTF.join(', '), 'ko'); return; }
+      if (file.size > max) { toast('File troppo grande (' + Chat.kb(file.size) + '): massimo ' + Chat.kb(max), 'ko'); return; }
+      if (Chat._img && Chat._img.url) URL.revokeObjectURL(Chat._img.url);
+      Chat._link = null; Chat._img = { blob: file, file: true, nome: file.name, size: file.size, mime: file.type || 'application/octet-stream' };
+      var a0 = $('chatAll'); a0.style.display = 'flex';
+      a0.innerHTML = '<span style="font-size:24px">' + Chat.icona(file.name) + '</span><span style="flex:1"><b>' + esc(file.name) + '</b> · ' + Chat.kb(file.size) + '. Scrivi un commento se vuoi e premi Invia.<br><span class="hint">Non condividere password o dati personali.</span></span><button class="btn ghost sm" onclick="Chat.togliImg()">✕</button>';
+      if (!Chat.aperta) Chat.apri(); $('chatTxt').focus();
+      return;
+    }
     try {
       var bmp = await createImageBitmap(file), max = 1600, k = Math.min(1, max / Math.max(bmp.width, bmp.height)), c = document.createElement('canvas');
       c.width = Math.round(bmp.width * k); c.height = Math.round(bmp.height * k); var x = c.getContext('2d'); x.fillStyle = '#fff'; x.fillRect(0, 0, c.width, c.height); x.drawImage(bmp, 0, 0, c.width, c.height);
@@ -10997,7 +11071,7 @@ var Chat = {
       if (!Chat.aperta) Chat.apri(); $('chatTxt').focus();
     } catch (e) { toast('Immagine non allegata: ' + e.message, 'ko'); }
   },
-  togliImg: function () { if (Chat._img) URL.revokeObjectURL(Chat._img.url); Chat._img = null; var a = $('chatAll'); a.style.display = 'none'; a.innerHTML = ''; },
+  togliImg: function () { if (Chat._img && Chat._img.url) URL.revokeObjectURL(Chat._img.url); Chat._img = null; var a = $('chatAll'); a.style.display = 'none'; a.innerHTML = ''; },
   cartella: async function () {
     if (Chat._cart) return Chat._cart;
     var q = "'" + CFG.FOLDER_ID + "' in parents and name='CHAT_ALLEGATI' and mimeType='application/vnd.google-apps.folder' and trashed=false";
@@ -11009,17 +11083,18 @@ var Chat = {
   inviaImg: async function (t) {
     var e = $('chatTxt'), im = Chat._img; e.disabled = true;
     try {
-      var c = App.chi(), nome = 'chat_' + L.nowStamp().replace(/[^0-9]/g, '') + '_' + (c.sigla || Chat.me().split('@')[0]) + '.jpg', fd = new FormData();
-      fd.append('metadata', new Blob([JSON.stringify({ name: nome, parents: [await Chat.cartella()] })], { type: 'application/json' })); fd.append('file', im.blob, nome);
+      var c = App.chi(), pre = 'chat_' + L.nowStamp().replace(/[^0-9]/g, '') + '_' + (c.sigla || Chat.me().split('@')[0]), nome = im.file ? pre + '_' + im.nome : pre + '.jpg', fd = new FormData();
+      fd.append('metadata', new Blob([JSON.stringify({ name: nome, mimeType: im.file ? im.mime : 'image/jpeg', parents: [await Chat.cartella()] })], { type: 'application/json' })); fd.append('file', im.blob, nome);
       var go = function () { return fetch('https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&supportsAllDrives=true&fields=id', { method: 'POST', headers: { Authorization: 'Bearer ' + Auth.token }, body: fd }); };
       var res = await go(); if (res.status === 401) { await Auth.refresh(); res = await go(); }
       var js = await res.json(); if (!res.ok) throw new Error((js.error && js.error.message) || ('HTTP ' + res.status));
-      Chat._urls[js.id] = im.url; Chat._img = null;
-      var o = { quando: L.nowStamp(), ts: String(Date.now()), da_email: Chat.me(), da_sigla: c.sigla || '', a: Chat.conv, testo: t || '📷 Screenshot', tipo: 'IMG', rif: js.id, modificato: '' };
+      if (!im.file) Chat._urls[js.id] = im.url; Chat._img = null;
+      var o = im.file ? { quando: L.nowStamp(), ts: String(Date.now()), da_email: Chat.me(), da_sigla: c.sigla || '', a: Chat.conv, testo: t || (Chat.icona(im.nome) + ' ' + im.nome), tipo: 'FILE', rif: JSON.stringify({ id: js.id, n: im.nome, s: im.size }), modificato: '' }
+        : { quando: L.nowStamp(), ts: String(Date.now()), da_email: Chat.me(), da_sigla: c.sigla || '', a: Chat.conv, testo: t || '📷 Screenshot', tipo: 'IMG', rif: js.id, modificato: '' };
       await API.append(DB.id, 'CHAT', [Chat.HC.map(function (k) { return o[k]; })], true);
       e.value = ''; var a = $('chatAll'); a.style.display = 'none'; a.innerHTML = '';
       await Chat.giro();
-    } catch (x) { toast('Immagine non inviata: ' + x.message, 'ko'); }
+    } catch (x) { toast((im.file ? 'File' : 'Immagine') + ' non inviato: ' + x.message, 'ko'); }
     finally { e.disabled = false; e.focus(); }
   },
   _urls: {},
@@ -11044,11 +11119,22 @@ var Chat = {
         [{ label: '⬇ Scarica', cls: 'ghost', keep: true, fn: function () { var a = document.createElement('a'); a.href = u; a.download = 'chat_' + id + '.jpg'; document.body.appendChild(a); a.click(); a.remove(); } }, { label: 'Chiudi', cls: 'green' }]);
     } catch (e) { toast(e.message, 'ko'); }
   },
+  fileInfo: function (m) { try { var o = JSON.parse(m.rif); return { id: L.s(o.id), n: L.s(o.n) || 'file', s: o.s }; } catch (e) { return { id: L.s(m.rif), n: 'file', s: 0 }; } },
+  scaricaFile: async function (r) {
+    var m = Chat.msgs.find(function (x) { return x._r === r; }); if (!m) return; var fi = Chat.fileInfo(m);
+    try {
+      var go = function () { return fetch('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(fi.id) + '?alt=media&supportsAllDrives=true', { headers: { Authorization: 'Bearer ' + Auth.token } }); };
+      var res = await Busy.wrap(go()); if (res.status === 401) { await Auth.refresh(); res = await go(); }
+      if (!res.ok) throw new Error(res.status === 404 ? 'file non più disponibile' : 'HTTP ' + res.status);
+      var u = URL.createObjectURL(await res.blob()), a = document.createElement('a'); a.href = u; a.download = fi.n; document.body.appendChild(a); a.click(); a.remove(); setTimeout(function () { URL.revokeObjectURL(u); }, 60000);
+    } catch (e) { toast('File non scaricato: ' + e.message, 'ko'); }
+  },
   cestino: function (id) { return API.call('https://www.googleapis.com/drive/v3/files/' + encodeURIComponent(id) + '?supportsAllDrives=true', { method: 'PATCH', body: JSON.stringify({ trashed: true }), quiet: true }).catch(function () { }); },
   // corpo del messaggio: testo, immagine o collegamento a un filtro
   corpo: function (m) {
     var t = Chat.linka(esc(m.testo));
     if (m.tipo === 'IMG' && L.s(m.rif)) return (m.testo && m.testo !== '📷 Screenshot' ? t : '') + '<div class="chat-img" data-fid="' + esc(m.rif) + '" onclick="Chat.vediImg(\'' + esc(m.rif) + '\')" title="Clicca per ingrandire"><img alt=""><div class="ph">📷 carico l\'immagine…</div></div>';
+    if (m.tipo === 'FILE' && L.s(m.rif)) { var fi = Chat.fileInfo(m); return (m.testo && m.testo !== Chat.icona(fi.n) + ' ' + fi.n ? t + '<br>' : '') + '<button class="chat-link" onclick="Chat.scaricaFile(' + m._r + ')" title="Scarica il file">' + Chat.icona(fi.n) + ' ' + esc(fi.n) + (fi.s ? ' · ' + Chat.kb(fi.s) : '') + ' ⬇</button>'; }
     if (m.tipo === 'LINK' && L.s(m.rif)) return t + '<br><button class="chat-link" onclick="Chat.apriLink(' + m._r + ')" title="Apre Movimenti con gli stessi dati, date, ricerca e filtri">🔗 Apri questo filtro</button>';
     return t;
   },
@@ -11064,7 +11150,7 @@ var Chat = {
   condividiSto: function () {
     if (!Chat.abilitata()) return;
     var o = Chat.vistaSto(), g = Sto.grids[Sto.sez]; o.n = g && g.visibili ? g.visibili.length : undefined;
-    Chat._link = o; Chat.apri();
+    Chat.togliImg(); Chat._link = o; Chat.apri();
     var a = $('chatAll'); a.style.display = 'flex';
     a.innerHTML = '<span style="flex:1">' + esc(Chat.descrivi(o)) + '<br><span class="hint">Scrivi un commento se vuoi e premi Invia: chi lo apre vede le stesse righe.</span></span><button class="btn ghost sm" onclick="Chat.togliLink()">✕</button>';
     $('chatTxt').focus();
@@ -11114,7 +11200,7 @@ var Chat = {
   renderMsgs: function () {
     var me = Chat.me(), L0 = Chat.msgs.filter(function (m) { return Chat.convDi(m) === Chat.conv; }).sort(function (a, b) { return a.ts - b.ts; }).slice(-300), box = $('chatMsgs');
     box.innerHTML = L0.length ? L0.map(function (m) { var mio = L.s(m.da_email).toLowerCase() === me; var az = mio && Chat.puoModificare(m) ? '<span class="az"><button title="Modifica (entro ' + Chat.minMod() + ' min)" onclick="Chat.modifica(' + m._r + ')">✎</button><button title="Elimina (entro ' + Chat.minMod() + ' min)" onclick="Chat.elimina(' + m._r + ')">🗑</button></span>' : '';
-      return '<div class="chat-m' + (mio ? ' mio' : '') + (m.eliminato ? ' del' : '') + '"><div class="h">' + az + esc(mio ? 'tu' : Chat.nome(m.da_email, m.da_sigla)) + ' · ' + esc(L.vedi(L.s(m.quando).slice(0, 16))) + (m.modificato && !m.eliminato ? ' · modificato' : '') + '</div>' + (m.eliminato ? 'messaggio eliminato' : Chat.corpo(m)) + '</div>'; }).join('')
+      return '<div class="chat-m' + (mio ? ' mio' : '') + (m.eliminato ? ' del' : '') + '" data-r="' + m._r + '"><div class="h">' + az + esc(mio ? 'tu' : Chat.nome(m.da_email, m.da_sigla)) + ' · ' + esc(L.vedi(L.s(m.quando).slice(0, 16))) + (m.modificato && !m.eliminato ? ' · modificato' : '') + '</div>' + (m.eliminato ? 'messaggio eliminato' : Chat.corpo(m)) + '</div>'; }).join('')
       : '<div class="hint" style="text-align:center;margin-top:20px">' + (Chat.conv === 'TUTTI' ? 'Nessun messaggio nel canale generale' : 'Nessun messaggio: scrivi il primo') + '</div>';
     box.scrollTop = box.scrollHeight;
     Chat.miniature(box);
@@ -11124,7 +11210,7 @@ var Chat = {
     var oggi = L.isoToday(); if (lsG('chat_pulizia') === oggi) return; lsS('chat_pulizia', oggi);
     var gg = parseInt(DB.param('chat_giorni', '90'), 10) || 90, lim = Date.now() - gg * 86400000, limP = Date.now() - 30 * 86400000, R = [];
     var v = await API.batchGet(DB.id, [API.q('CHAT') + '!B2:H', API.q('PRESENZE') + '!I2:I']), F = [];
-    (v[0] || []).forEach(function (x, i) { var t = parseInt(x && x[0], 10); if (t && t < lim) { R.push(API.q('CHAT') + '!A' + (i + 2) + ':I' + (i + 2)); if (L.s(x[5]) === 'IMG' && L.s(x[6])) F.push(L.s(x[6])); } });
+    (v[0] || []).forEach(function (x, i) { var t = parseInt(x && x[0], 10); if (t && t < lim) { R.push(API.q('CHAT') + '!A' + (i + 2) + ':I' + (i + 2)); if (L.s(x[5]) === 'IMG' && L.s(x[6])) F.push(L.s(x[6])); if (L.s(x[5]) === 'FILE' && L.s(x[6])) F.push(Chat.fileInfo({ rif: x[6] }).id); } });
     for (var j = 0; j < F.length; j++) await Chat.cestino(F[j]);   // le immagini dei messaggi tolti vanno nel cestino di Drive
     (v[1] || []).forEach(function (x, i) { var t = parseInt(x && x[0], 10); if (t && t < limP) R.push(API.q('PRESENZE') + '!A' + (i + 2) + ':I' + (i + 2)); });
     if (R.length) await API.call(API.S + DB.id + '/values:batchClear', { method: 'POST', body: JSON.stringify({ ranges: R }), quiet: true });
