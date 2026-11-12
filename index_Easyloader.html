@@ -9010,7 +9010,7 @@ var Nr = {
     try {
       var rows = await leggiFoglio(new File([await Busy.wrap(Nr.scaricaBytes(p.file_id))], p.file_nome || 'file.xlsx'));
       var po = ''; rows.forEach(function (r) { var v = campo(r, ['PO/MRN', 'PO', 'PO / MRN', 'MRN']); if (v) po = v; else if (po) r['PO/MRN'] = po; });
-      if (!rows.some(function (r) { return campo(r, ['RMA']); })) { Modal.open('Manca l\'RMA', 'Nel file non trovo una colonna "RMA" compilata: senza RMA e destinazione i pezzi non possono andare in uscita.\nColonne trovate: ' + Object.keys(rows[0] || {}).join(', ')); return; }
+      if (!rows.some(function (r) { return campo(r, ['RMA']); })) toast('Nel file nessun RMA compilato: i pezzi vanno in uscita con l\'RMA vuoto (lo aggiunge il SD dopo)', 'warn');
       Rma.carAnteprima(rows, 'Pratica ' + id + ' · ' + (p.file_nome || ''), function (n) { return Nr.set(p, { stato: 'IN_USCITA', in_uscita_il: L.nowStamp() }, 'NR_IN_USCITA').then(function () { toast(n + ' pezzi della pratica ' + id + ' in uscita RMA', 'ok'); }); });
     } catch (e) { Modal.open('Uscita non preparata', e.message); }
   },
@@ -9040,6 +9040,40 @@ var Nr = {
       '<div class="fg"><span class="fl">Password *</span><input class="fc" type="password" id="nrPwd" autocomplete="new-password"></div><div class="hint" id="nrPwdErr" style="margin-top:6px"></div>',
       [{ label: 'Annulla', cls: 'ghost' }, { label: '🗑 Elimina', cls: 'red', keep: true, fn: function () { Nr.elimina(id); } }]);
     setTimeout(function () { $('nrPwd').focus(); }, 50);
+  },
+  // ─ SPEDITA a mano: la pratica è stata gestita fuori dal tool. Almeno un pezzo della pratica deve risultare uscito.
+  chiediSpedita: function (id) {
+    var p = Nr.t().rows.find(function (x) { return x.id_pratica === id; }); if (!p) return;
+    var P = Nr.pezziRic(p.id_ricezione), usc = P.filter(function (u) { return u.stato === 'USCITO'; }), ann = P.filter(function (u) { return u.stato === 'ANNULLATO' || u.stato === 'RETTIFICATO'; }), res = P.filter(function (u) { return usc.indexOf(u) < 0 && ann.indexOf(u) < 0; });
+    if (!usc.length) { Modal.open('Non si può segnare spedita', 'Pratica ' + id + ': nessuno dei ' + P.length + ' pezzi risulta uscito.\nPer segnarla spedita a mano almeno un seriale deve avere l\'uscita registrata.'); return; }
+    var riga = function (u) { return '<tr><td class="mono">' + esc(u.seriale) + '</td><td class="mono">' + esc(u.pn) + '</td><td>' + esc(u.stato) + '</td><td class="mono nw">' + esc(L.itDate(u.data_out)) + '</td><td class="mono">' + esc(L.s(u.id_spedizione)) + '</td><td>' + esc(L.s(u.destinazione_prevista)) + '</td></tr>'; };
+    Modal.html('✈ Segna spedita · pratica ' + id,
+      '<div style="font-size:13px;line-height:1.6;margin-bottom:8px">' + esc(p.tipo) + ' · ' + esc(p.mittente) + ' · PO ' + esc(p.po_mrn || '—') + ' · DDT ' + esc(p.ddt || '—') + '<br>' +
+      '<b style="color:var(--green)">' + usc.length + '</b> usciti · <b' + (res.length ? ' style="color:var(--amber)"' : '') + '>' + res.length + '</b> ancora in giacenza' + (ann.length ? ' · ' + ann.length + ' annullati/rettificati' : '') + ' · su ' + P.length + ' pezzi</div>' +
+      (res.length ? '<div class="hint" style="color:var(--amber);margin-bottom:6px">⚠ ' + res.length + ' pezzi risultano ancora in giacenza: la pratica diventa SPEDITA lo stesso, i pezzi restano come sono.</div>' : '') +
+      '<div class="tbl-wrap modal-scroll" style="max-height:38vh"><table><thead><tr><th>Seriale</th><th>P/N</th><th>Stato</th><th>Uscito il</th><th>Spedizione</th><th>Destinazione</th></tr></thead><tbody>' + usc.concat(res, ann).map(riga).join('') + '</tbody></table></div>' +
+      '<div class="fg" style="margin-top:10px"><span class="fl">Motivo *</span><input class="fc" id="nrSpMot" autocomplete="off" placeholder="es. gestita a mano, DDT fatto fuori dal tool"></div>' +
+      '<div class="fg" style="margin-top:8px"><span class="fl">Password *</span><input class="fc" type="password" id="nrSpPwd" autocomplete="new-password"></div><div class="hint" id="nrSpErr" style="margin-top:6px"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: '✈ Segna spedita', cls: 'green', keep: true, fn: function () { Nr.spedita(id); } }]);
+    setTimeout(function () { $('nrSpMot').focus(); }, 50);
+  },
+  spedita: async function (id) {
+    var p = Nr.t().rows.find(function (x) { return x.id_pratica === id; }), err = function (m) { $('nrSpErr').textContent = m; $('nrSpErr').className = 'hint err'; };
+    var mot = L.s($('nrSpMot').value); if (!mot) { err('Scrivi il motivo'); $('nrSpMot').focus(); return; }
+    var pw = $('nrSpPwd').value, par = L.s(DB.param('password_eliminazione', ''));
+    var ok = par ? (/^sha256:/i.test(par) ? (await Nr.sha(pw)) === par.slice(7).toLowerCase() : pw === par) : (await Nr.sha(pw)) === Nr.PWD;
+    if (!ok) { err('Password errata'); return; }
+    var P = Nr.pezziRic(p.id_ricezione), usc = P.filter(function (u) { return u.stato === 'USCITO'; });
+    if (!usc.length) { err('Nessun pezzo uscito: non si può segnare spedita'); return; }
+    var res = P.filter(function (u) { return u.stato !== 'USCITO' && u.stato !== 'ANNULLATO' && u.stato !== 'RETTIFICATO'; }), prima = p.stato;
+    Modal.progress('Salvo…');
+    try {
+      await Nr.set(p, { stato: 'SPEDITA', note: (L.s(p.note) ? L.s(p.note) + ' | ' : '') + 'spedita a mano da ' + Auth.email + ' il ' + L.nowStamp() + ' (era ' + prima + '): ' + mot }, 'NR_SPEDITA_MANUALE');
+      API.append(DB.id, 'LOG', [App.log('NR_SPEDITA_MANUALE_RIEPILOGO', 'PRATICHE_NEW_REUSE', id, { motivo: mot, stato_prima: prima, pezzi: P.length,
+        usciti: usc.map(function (u) { return { id: u.id_unita, seriale: u.seriale, data_out: u.data_out, spedizione: u.id_spedizione }; }),
+        in_giacenza: res.map(function (u) { return { id: u.id_unita, seriale: u.seriale, stato: u.stato }; }) })]).catch(function () { });
+      Modal.close(); toast('Pratica ' + id + ' segnata spedita', 'ok');
+    } catch (e) { Modal.progress(''); err('Non salvata: ' + e.message); }
   },
   sha: async function (t) { var b = await crypto.subtle.digest('SHA-256', new TextEncoder().encode(t)); return Array.prototype.map.call(new Uint8Array(b), function (x) { return ('0' + x.toString(16)).slice(-2); }).join(''); },
   elimina: async function (id) {
@@ -9121,7 +9155,8 @@ var Nr = {
             '<label class="btn ghost sm" style="padding:3px 8px;cursor:pointer" title="Carica il file lavorato dal cliente (sostituisce quello su Drive)">⬆<input type="file" accept=".xlsx,.xls" style="display:none" onchange="Nr.ricarica(\'' + id + '\',this)"></label> ' +
             (p.stato === 'LAVORATA' ? b('📦 Uscita RMA', 'Nr.inUscita(\'' + id + '\')', 'Metti tutto il file in uscita RMA', '') : '') +
             b('📋', 'Nr.cedolino(\'' + id + '\')', 'Stampa cedolino (P/N, quantità, posizione)') +
-            (App.isAdmin ? b('🗑', 'Nr.chiediElimina(\'' + id + '\')', 'Elimina pratica e file (solo admin, con password)') : '') + '</span>';
+            (App.isAdmin ? b('🗑', 'Nr.chiediElimina(\'' + id + '\')', 'Elimina pratica e file (solo admin, con password)') : '') +
+            (p.stato !== 'SPEDITA' ? b('✈', 'Nr.chiediSpedita(\'' + id + '\')', 'Segna come spedita a mano (gestita fuori dal tool): serve almeno un pezzo uscito, con password') : '') + '</span>';
         } },
         { k: 'note', label: 'Note', filter: 'text' },
         { k: 'awb', label: 'AWB', filter: 'text', cls: 'mono' }
