@@ -3545,25 +3545,19 @@ function renderSection(sec, emps, data, opts){
     h+='<td class="sf ca1" style="font-size:10px;color:var(--green);font-family:var(--ffc);font-weight:700;padding-left:6px">Ore Ord.</td>';
     h+='<td class="sf ca2" style="font-size:11px;color:var(--green);font-family:var(--ffc);font-weight:700">ORD</td>';
     dates.forEach(function(d,di){var w=d.weekday===0||d.weekday===6;var og=oreGiorno[di];
-      var bk=og&&og.bucket;
-      // domenica/festivo: stessa suddivisione 8h ord / resto str, ma in viola (DOM) o rosso (FEST)
-      var v=og&&og.ord>0?fmtOre(og.ord):'';
-      var col=bk==='dom'?'var(--purple)':(bk==='fest'?'var(--red)':'var(--green)');
-      var ttl=bk&&v?' title="'+(bk==='dom'?'Domenica: conteggiate in DOM':'Festivo: conteggiate in FEST')+'"':'';
-      h+='<td class="dc'+(w?' we':'')+(d.day===_todayDay?' today':'')+rngCls[di]+(v?' ':' emp')+'" style="font-size:11px;'+(v?'color:'+col:'')+'"'+ttl+'>'+( v||(!w?'·':''))+'</td>';});
-    // Totale riga ORD: ordinarie verdi + ore di domenica (viola) e festivi (rosso) mostrate nella stessa riga
-    var _bk={dom:{ord:0,str:0},fest:{ord:0,str:0}};
-    oreGiorno.forEach(function(og){if(og&&og.bucket){_bk[og.bucket].ord+=og.ord||0;_bk[og.bucket].str+=og.str||0;}});
-    var _totLbl=function(base,key,colBase){
-      if(!base&&!_bk.dom[key]&&!_bk.fest[key])return '';
-      var sp=function(c,t){return '<span style="color:'+c+'">'+t+'</span>';};
-      var parts=[sp(colBase,(fmtOre(base)||'0')+'h')];
-      if(_bk.dom[key])parts.push(sp('var(--purple)',fmtOre(_bk.dom[key])+'h'));
-      if(_bk.fest[key])parts.push(sp('var(--red)',fmtOre(_bk.fest[key])+'h'));
-      return parts.join(' + ')+' tot.';
-    };
-    var _ordLbl=_totLbl(tots.ord,'ord','var(--green)');
-    var _strLbl=_totLbl(tots.str,'str','var(--amber)');
+      // domeniche e festivi vanno nella riga DOM (sotto), non in ORD
+      var v=og&&!og.bucket&&og.ord>0?fmtOre(og.ord):'';
+      h+='<td class="dc'+(w?' we':'')+(d.day===_todayDay?' today':'')+rngCls[di]+(v?' ':' emp')+'" style="font-size:11px;'+(v?'color:var(--green)':'')+'">'+( v||(!w?'·':''))+'</td>';});
+    // Totali delle righe: ogni riga corrisponde alla sua colonna (ORD, STR, DOM/FEST)
+    var _bk={dom:0,fest:0};
+    oreGiorno.forEach(function(og){if(og&&og.bucket)_bk[og.bucket]+=(og.ord||0)+(og.str||0);});
+    var _sp=function(c,t){return '<span style="color:'+c+'">'+t+'</span>';};
+    var _ordLbl=tots.ord?_sp('var(--green)',fmtOre(tots.ord)+'h')+' tot.':'';
+    var _strLbl=tots.str?_sp('var(--amber)',fmtOre(tots.str)+'h')+' tot.':'';
+    var _domParts=[];
+    if(_bk.dom)_domParts.push(_sp('var(--purple)',fmtOre(_bk.dom)+'h'+(_bk.fest?' dom.':'')));
+    if(_bk.fest)_domParts.push(_sp('var(--red)',fmtOre(_bk.fest)+'h fest.'));
+    var _domLbl=_domParts.length?_domParts.join(' + ')+' tot.':'';
     h+='<td colspan="'+NCOLS_TOT+'" style="background:rgba(36,48,72,.1)">'+(_ordLbl?'<span style="font-family:var(--ffm);font-size:11px;color:var(--subtle);padding:0 8px;white-space:nowrap">'+_ordLbl+'</span>':'')+'</td>';
     if(adminMode)h+='<td></td>';
     h+='</tr>';
@@ -3572,13 +3566,26 @@ function renderSection(sec, emps, data, opts){
     h+='<td class="sf ca0"></td>';
     h+='<td class="sf ca1" style="font-size:10px;color:var(--amber);font-family:var(--ffc);font-weight:700;padding-left:6px">Ore Str.</td>';
     h+='<td class="sf ca2" style="font-size:11px;color:var(--amber);font-family:var(--ffc);font-weight:700">STR</td>';
-    dates.forEach(function(d,di){var w=d.weekday===0||d.weekday===6;var og=oreGiorno[di];var v=og&&og.str>0?fmtOre(og.str):'';
-      var bk=og&&og.bucket,col=bk==='dom'?'var(--purple)':(bk==='fest'?'var(--red)':'var(--amber)');
-      var ttl=bk&&v?' title="'+(bk==='dom'?'Domenica: conteggiate in DOM':'Festivo: conteggiate in FEST')+'"':'';
-      h+='<td class="dc'+(w?' we':'')+(d.day===_todayDay?' today':'')+rngCls[di]+(v?' ':' emp')+'" style="font-size:11px;'+(v?'color:'+col:'')+'"'+ttl+'>'+( v||(!w?'·':''))+'</td>';});
+    dates.forEach(function(d,di){var w=d.weekday===0||d.weekday===6;var og=oreGiorno[di];var v=og&&!og.bucket&&og.str>0?fmtOre(og.str):'';
+      h+='<td class="dc'+(w?' we':'')+(d.day===_todayDay?' today':'')+rngCls[di]+(v?' ':' emp')+'" style="font-size:11px;'+(v?'color:var(--amber)':'')+'">'+( v||(!w?'·':''))+'</td>';});
     h+='<td colspan="'+NCOLS_TOT+'" style="background:rgba(36,48,72,.1)">'+(_strLbl?'<span style="font-family:var(--ffm);font-size:11px;color:var(--subtle);padding:0 8px;white-space:nowrap">'+_strLbl+'</span>':'')+'</td>';
     if(adminMode)h+='<td></td>';
     h+='</tr>';
+    // Riga DOM: solo per chi nel mese ha lavorato di domenica o in un festivo
+    if(_domLbl){
+      h+='<tr class="ats-ore'+(oreHidden?' hidden':'')+'" id="'+empId+'_dom">';
+      h+='<td class="sf ca0"></td>';
+      h+='<td class="sf ca1" style="font-size:10px;color:var(--purple);font-family:var(--ffc);font-weight:700;padding-left:6px">Dom./Fest.</td>';
+      h+='<td class="sf ca2" style="font-size:11px;color:var(--purple);font-family:var(--ffc);font-weight:700">DOM</td>';
+      dates.forEach(function(d,di){var w=d.weekday===0||d.weekday===6;var og=oreGiorno[di];
+        var bk=og&&og.bucket,t=bk?(og.ord||0)+(og.str||0):0,v=t>0?fmtOre(t):'';
+        var col=bk==='fest'?'var(--red)':'var(--purple)';
+        var ttl=v?' title="'+(bk==='fest'?'Festivo':'Domenica')+': '+v+'h (conteggiate in '+(bk==='fest'?'FEST':'DOM')+')"':'';
+        h+='<td class="dc'+(w?' we':'')+(d.day===_todayDay?' today':'')+rngCls[di]+(v?' ':' emp')+'" style="font-size:11px;'+(v?'color:'+col+';font-weight:700':'')+'"'+ttl+'>'+( v||(!w?'·':''))+'</td>';});
+      h+='<td colspan="'+NCOLS_TOT+'" style="background:rgba(36,48,72,.1)"><span style="font-family:var(--ffm);font-size:11px;color:var(--subtle);padding:0 8px;white-space:nowrap">'+_domLbl+'</span></td>';
+      if(adminMode)h+='<td></td>';
+      h+='</tr>';
+    }
   });
   h+='</tbody></table></div>';
   setEl(opts.contentId,h);
@@ -3593,10 +3600,12 @@ function renderSection(sec, emps, data, opts){
 function toggleEmpOreGeneric(empId){
   var ordRow=document.getElementById(empId+'_ord');
   var strRow=document.getElementById(empId+'_str');
+  var domRow=document.getElementById(empId+'_dom');
   if(!ordRow)return;
   var nowHidden=ordRow.classList.contains('hidden');
   ordRow.classList.toggle('hidden',!nowHidden);
   if(strRow)strRow.classList.toggle('hidden',!nowHidden);
+  if(domRow)domRow.classList.toggle('hidden',!nowHidden);
   document.querySelectorAll('.ore-toggle').forEach(function(b){
     if(b.getAttribute('onclick')==='toggleEmpOre(\''+empId+'\')'||b.getAttribute('onclick')==='toggleCoopEmpOre(\''+empId+'\')')
       b.textContent=(nowHidden?'▾':'▸')+' ORD/STR';
