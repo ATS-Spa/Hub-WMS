@@ -476,6 +476,11 @@ body.theme-light.admin-mode .bdel:hover{color:var(--red);opacity:1}
 body.theme-dim .bdel{color:#94a3b8;opacity:.7}
 body.admin-mode .bdel:hover{color:var(--red);background:rgba(239,68,68,.1)}
 tr.confirmed-row td{background:rgba(16,185,129,.10)!important;border-color:rgba(16,185,129,.25)!important;}
+/* Giorno confermato dal responsabile cooperativa: bloccato */
+td.dc.cnf{background:rgba(16,185,129,.08);box-shadow:inset 0 -2px 0 rgba(16,185,129,.6)}
+td.dc.cnf.editable{cursor:not-allowed}
+.conf-stat{font-family:var(--ffc);font-size:11px;font-weight:700;line-height:1.3;white-space:nowrap}
+body.coopresp-mode #cAddBtn,body.coopresp-mode #cBulkBtn,body.coopresp-mode #cMassBtn{display:none!important}
 tr.confirmed-row td.sf{background:rgba(16,185,129,.14)!important;}
 .note-badge{display:inline-block;font-size:9px;background:rgba(245,158,11,.18);border:1px solid rgba(245,158,11,.4);color:var(--amber);border-radius:4px;padding:0 4px;margin-left:3px;cursor:pointer;vertical-align:middle;line-height:14px;}
 td.has-note::after{content:'';position:absolute;top:0;right:0;width:0;height:0;border-style:solid;border-width:0 6px 6px 0;border-color:transparent var(--amber) transparent transparent;}
@@ -1833,6 +1838,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
       <button class="ba bghost te" id="cAddBtn" onclick="openAddCoopEmp()">＋ Dipendente</button>
       <button class="ba bghost" id="cBulkBtn" onclick="openBulkPresenza('coop')" disabled style="border-color:rgba(16,185,129,.4);color:var(--green)">✔ Presenza a Tutti</button>
       <button class="ba bghost" id="cMassBtn" onclick="openMassivo('coop')" disabled style="border-color:rgba(59,130,246,.4);color:var(--blue)">📅 Inserimento Massivo</button>
+      <button class="ba bghost" id="cConfBtn" onclick="openConfermaModal()" style="display:none;border-color:rgba(16,185,129,.5);color:var(--green)">✅ Conferma presenze</button>
       <button class="ba bghost am" id="cExp" onclick="coopExport()" disabled>⬇ Excel</button>
       <button class="ba bghost pu" id="cPrt" onclick="coopPrint()" disabled>🖨 Stampa</button>
       <button class="ore-toggle" id="coopOreToggleBtn" onclick="toggleCoopOreRows()">▸ ORD/STR</button>
@@ -2091,8 +2097,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
         <button class="ba bghost" onclick="reloadConfig()">↻ Ricarica</button>
         <button class="ba bteal" onclick="savePermConfig()">💾 Salva Config</button>
         <button class="ba bghost" onclick="logOpenSheet()" title="Apre il registro attività dell'anno in Google Sheets">📜 Log attività</button>
-        <input type="month" id="compMese" class="fc" style="width:150px" title="Mese da compattare">
-        <button class="ba bghost" onclick="compattaMese()" title="Elimina le righe vuote da tutti i file del mese (fogli Coop e ATS, Commesse, Ritardi)">🧹 Compatta fogli</button>
+        <button class="ba bghost" onclick="openCompMese()" title="Elimina le righe vuote da tutti i file del mese (fogli Coop e ATS, Commesse, Ritardi)">🧹 Compatta fogli</button>
       </div>
     </div>
     <div class="perm-panel" id="permPanel">
@@ -2566,6 +2571,35 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
   </div>
   <div class="merr" id="commErr">Inserisci un codice commessa.</div>
   <div class="mbtns"><button class="mbtn cancel" onclick="mClose('moCommessa')">Annulla</button><button class="mbtn ok" onclick="commessaConfirm()">Salva</button></div>
+</div></div>
+
+<div id="moConferma" class="mo hide"><div class="mc" style="width:460px;max-width:96vw">
+  <div class="mt" id="cfTitle">✅ Conferma presenze</div>
+  <div class="ms" id="cfSub">I giorni confermati vengono bloccati: solo il super utente può sbloccarli.</div>
+  <div id="cfAzioneWrap" style="display:none;gap:16px;margin:4px 0 10px;font-size:13px">
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="cfAzione" value="conferma" checked onchange="cfUpdate()"> Conferma</label>
+    <label style="display:flex;align-items:center;gap:6px;cursor:pointer"><input type="radio" name="cfAzione" value="sblocca" onchange="cfUpdate()"> 🔓 Sblocca</label>
+  </div>
+  <div class="fg" style="margin-bottom:10px"><div class="fl">Operatore</div><select id="cfDip" class="mi" onchange="cfUpdate()"></select></div>
+  <div style="display:flex;gap:10px;align-items:flex-end;flex-wrap:wrap">
+    <div class="fg" style="flex:1;min-width:130px"><div class="fl">Dal</div><input type="date" id="cfDal" class="mi" onchange="cfUpdate()"></div>
+    <div class="fg" style="flex:1;min-width:130px"><div class="fl">Al</div><input type="date" id="cfAl" class="mi" onchange="cfUpdate()"></div>
+  </div>
+  <div style="display:flex;gap:6px;flex-wrap:wrap;margin-top:8px">
+    <button class="ba bghost" style="padding:4px 10px;font-size:11px" onclick="cfQuick('oggi')">Oggi</button>
+    <button class="ba bghost" style="padding:4px 10px;font-size:11px" onclick="cfQuick('settimana')">Questa settimana</button>
+    <button class="ba bghost" style="padding:4px 10px;font-size:11px" onclick="cfQuick('finoaoggi')">Dal 1 a oggi</button>
+    <button class="ba bghost" style="padding:4px 10px;font-size:11px" onclick="cfQuick('mese')">Tutto il mese</button>
+  </div>
+  <div id="cfInfo" style="margin-top:12px;padding:10px 12px;border-radius:8px;background:var(--card);border:1px solid var(--border);font-size:12px;line-height:1.6"></div>
+  <div class="mbtns"><button class="mbtn cancel" onclick="mClose('moConferma')">Annulla</button><button class="mbtn ok" id="cfOk" onclick="cfConfirm()">Conferma</button></div>
+</div></div>
+
+<div id="moCompMese" class="mo hide"><div class="mc" style="width:360px">
+  <div class="mt">🧹 Compatta fogli</div>
+  <div class="ms">Scegli il mese: verranno tolte le righe vuote da tutti i file di quel mese (fogli Coop e ATS, Commesse, Ritardi).</div>
+  <div class="fg" style="margin-top:6px"><div class="fl">Mese</div><input type="month" id="compMese" class="mi"></div>
+  <div class="mbtns"><button class="mbtn cancel" onclick="mClose('moCompMese')">Annulla</button><button class="mbtn ok" onclick="mClose('moCompMese');compattaMese()">Prosegui</button></div>
 </div></div>
 
 <div id="moSiglaEdit" class="mo hide"><div class="mc" style="width:420px">
@@ -3051,13 +3085,16 @@ function applyPerm(){
   var em=uEmail.toLowerCase().trim();
   isSuperUser=(permConfig.super_users||[SUPER_USER]).some(function(s){return s.toLowerCase()===em;});
   isAdminUser=isSuperUser||(permConfig.admins||[]).some(function(a){return a.toLowerCase()===em;});
+  isCoopResp=!isSuperUser&&!isAdminUser&&(permConfig.coop_resp||[]).some(function(a){return String(a).toLowerCase()===em;});
+  document.body.classList.toggle('coopresp-mode',isCoopResp);
+  var _cfb=document.getElementById('cConfBtn');if(_cfb)_cfb.style.display=(isSuperUser||isCoopResp)?'':'none';
 
   // Self-view: utente in permConfig.users ma senza is_admin → vede solo la sua riga
   isDipSelf=false; dipSelfRecord=null;
   var uc=null;
   Object.keys(permConfig.users||{}).forEach(function(k){if(k.toLowerCase()===em)uc=permConfig.users[k];});
 
-  if(!isSuperUser&&!isAdminUser&&uc&&!uc.is_admin){
+  if(!isSuperUser&&!isAdminUser&&!(permConfig.coop_resp||[]).some(function(a){return String(a).toLowerCase()===em;})&&uc&&!uc.is_admin){
     isDipSelf=true;
     // Cerca nome/SAP dall'anagrafica dipendenti per filtrare la riga giusta
     dipSelfRecord=(permConfig.dipendenti||[]).find(function(d){
@@ -3082,7 +3119,12 @@ function applyPerm(){
     richInit();
     return;
   }
-  if(isAdminUser){
+  if(isCoopResp){
+    // Responsabile cooperativa esterna: solo tab Cooperativa, tutti i responsabili, sola lettura + conferme e note
+    userTags=['*'];userSecs=['coop'];isReadOnly=true;isDipSelf=false;dipSelfRecord=null;
+    document.getElementById('permBadge').textContent='COOP';
+    document.getElementById('permBadge').className='pbadge';
+  } else if(isAdminUser){
     userTags=['*'];userSecs=['coop','ats','file','ferie','rich','anag'];isReadOnly=false;
     document.getElementById('permBadge').textContent='ADMIN';
     document.getElementById('permBadge').className='pbadge is-admin';
@@ -3387,7 +3429,7 @@ function renderSection(sec, emps, data, opts){
   h+='<th class="sf ca2" style="z-index:7">T</th>';
   dates.forEach(function(d){var w=d.weekday===0||d.weekday===6;var hol=isHoliday(d.day,m,y);h+='<th class="dh'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+'"><div class="dn">'+d.day+'</div><div class="dw">'+GGS[d.weekday]+'</div></th>';});
   totHdrs.forEach(function(th){h+='<th class="'+totClass+'" style="min-width:36px;text-align:center;background:var(--card);color:'+th.c+';position:sticky;top:0;z-index:4;border-right:1px solid var(--border);font-family:var(--ffc);font-size:11px;padding:4px 3px">'+th.l+'</th>';});
-  if(!isAts)h+='<th class="conf-th">&#10003; Conf.</th>';
+  if(!isAts)h+='<th class="conf-th">Conferma</th>';
   if(adminMode)h+='<th style="min-width:28px;background:var(--card);position:sticky;top:0;z-index:4"></th>';
   h+='</tr></thead><tbody>';
 
@@ -3427,7 +3469,8 @@ function renderSection(sec, emps, data, opts){
       return null;
     });
 
-    var isConfirmed=!isAts&&!!emp.confermato;
+    var isConfirmed=!isAts&&confSummary(emp,dates.length).all;
+    var cnfCls=dates.map(function(d,di){return !isAts&&confDay(emp,di)?' cnf':'';});
     if(ei>0) h+='<tr class="ats-sep"><td colspan="999"></td></tr>';
 
     // ── Intestazione giorni ripetuta per ogni dipendente ──
@@ -3457,9 +3500,10 @@ function renderSection(sec, emps, data, opts){
       var v=(emp.sigla||[])[di]||'';var w=d.weekday===0||d.weekday===6;var hol=isHoliday(d.day,m,y);
       var sg=xSig(v);var sc=SM[sg]||null;
       var hasNote=!!(emp.notes&&emp.notes[di]);
-      var cl='dc'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+(sc?' '+sc.cls:(!v?' emp':''))+(adminMode?' editable':'')+(hasNote?' has-note':'')+rngCls[di];
+      var cl='dc'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+(sc?' '+sc.cls:(!v?' emp':''))+(adminMode?' editable':'')+(hasNote?' has-note':'')+rngCls[di]+cnfCls[di];
       var cellTxt=esc(v||(!w?'·':''));
-      var rngTtl=rngCls[di]?' title="Ritardo '+rngMin(emp,di)+' min"':'';
+      var _cf=confDay(emp,di);
+      var rngTtl=(rngCls[di]||_cf)?' title="'+(rngCls[di]?'Ritardo '+rngMin(emp,di)+' min':'')+(rngCls[di]&&_cf?' · ':'')+(_cf?'✓ Confermato da '+esc(_cf.nome||_cf.by)+(_cf.ts?' il '+esc(_cf.ts):''):'')+'"':'';
       if(adminMode){
         h+='<td class="'+cl+'"'+rngTtl+' onclick="'+opts.openPickerFn+'('+ri+','+di+',this)">'+cellTxt+'</td>';
       } else {
@@ -3472,14 +3516,18 @@ function renderSection(sec, emps, data, opts){
       var ttl=th.k==='rng'&&_rngTot?' title="'+_rngTot+' min"':'';
       h+='<td class="tot '+totTdClass+'" style="color:'+th.c+';font-size:'+(th.k==='ord'||th.k==='str'?'13':'12')+'px" rowspan="3"'+ttl+'>'+disp+'</td>';
     });
-    if(!isAts)h+='<td rowspan="3" style="text-align:center;vertical-align:middle;padding:4px"><input type="checkbox" class="conf-cb" '+(isConfirmed?'checked':'')+' onchange="toggleConferma('+ri+',this)"></td>';
+    if(!isAts){
+      var _cs=confSummary(emp,dates.length);
+      var _ct=_cs.all?'✓ Mese':(_cs.n?(_cs.upto===_cs.n?'✓ 1–'+_cs.upto:'✓ '+_cs.n+' gg'):'—');
+      h+='<td rowspan="3" style="text-align:center;vertical-align:middle;padding:4px" data-conf-ri="'+ri+'"><span class="conf-stat" style="color:'+(_cs.n?'var(--green)':'var(--muted)')+'" title="'+(_cs.n?_cs.n+' giorni confermati':'Nessun giorno confermato')+'">'+_ct+'</span></td>';
+    }
     if(adminMode)h+='<td rowspan="3" style="padding:2px 3px;text-align:center"><button class="bdel" onclick="'+opts.delFn+'('+ri+')" title="Rimuovi">🗑</button></td>';
     h+='</tr>';
 
     h+='<tr>';
     h+='<td class="sf ca2" style="font-size:11px;color:var(--green);font-family:var(--ffc);font-weight:700">IN</td>';
     dates.forEach(function(d,di){var v=(emp.ingresso||[])[di]||'';var w=d.weekday===0||d.weekday===6;var hol=isHoliday(d.day,m,y);
-      h+='<td class="dc'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+rngCls[di]+(v?' ':' emp')+(adminMode&&!w?' editable':'')+'"'
+      h+='<td class="dc'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+rngCls[di]+cnfCls[di]+(v?' ':' emp')+(adminMode&&!w?' editable':'')+'"'
         +(adminMode&&!w?' onclick="'+opts.editOrFn+'(this,'+ri+',\'ingresso\','+di+')"':'')
         +(v?' style="color:var(--green)"':'')+'>'+(v||(!w?'·':''))+'</td>';});
     h+='</tr>';
@@ -3487,7 +3535,7 @@ function renderSection(sec, emps, data, opts){
     h+='<tr>';
     h+='<td class="sf ca2" style="font-size:11px;color:var(--red);font-family:var(--ffc);font-weight:700">OUT</td>';
     dates.forEach(function(d,di){var v=(emp.uscita||[])[di]||'';var w=d.weekday===0||d.weekday===6;var hol=isHoliday(d.day,m,y);
-      h+='<td class="dc'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+rngCls[di]+(v?' ':' emp')+(adminMode&&!w?' editable':'')+'"'
+      h+='<td class="dc'+(w?' we':'')+(hol?' holiday':'')+(d.day===_todayDay?' today':'')+rngCls[di]+cnfCls[di]+(v?' ':' emp')+(adminMode&&!w?' editable':'')+'"'
         +(adminMode&&!w?' onclick="'+opts.editOrFn+'(this,'+ri+',\'uscita\','+di+')"':'')
         +(v?' style="color:var(--red)"':'')+'>'+(v||(!w?'·':''))+'</td>';});
     h+='</tr>';
@@ -3669,6 +3717,7 @@ function coopLoad(){
     loadNotesForEmpsMulti(coopEmps,merged.sheetName,merged.dayStart||3,merged.nd||merged.dates.length,_coopFileForComm)
     .then(function(){return loadCommesseForEmpsMulti(coopEmps,'coop',y,m,_coopFileForComm);})
     .then(function(){return loadRitardiForEmpsMulti(coopEmps,'coop',y,m,_coopFileForComm);})
+    .then(function(){return loadConfermeForEmpsMulti(coopEmps,y,m,_coopFileForComm);})
     .then(function(){_secLoadedAt.coop=new Date().toISOString();pendingRestore('coop');coopRender();updateSaveBanner();});
     ['cRef','cExp','cPrt','cBulkBtn','cMassBtn'].forEach(function(id){document.getElementById(id).disabled=false;});
     document.getElementById('cInfo').textContent=MESI[m-1]+' '+y+' · '+merged.employees.length+' dip.'+(files.length>1?' ('+files.length+' file)':'');
@@ -4345,7 +4394,7 @@ function coopExport(){
   var repRowsC=[repHdrC];
   coopEmps.forEach(function(e){
     var t=calcTots(e.sigla||[],e.ingresso,e.uscita,pausaArr(e,dates),dates,m,y);t.rng=rngXlsCell(rngTotMin(e));
-    var row=[e.sap||e.id||'',e.nom2||e.nome||'',e.resp||'',e.plant||'',e.confermato?'SI':''];
+    var row=[e.sap||e.id||'',e.nom2||e.nome||'',e.resp||'',e.plant||'',confSummaryText(e,dates.length,m)];
     COOP_REP_C.forEach(function(c){
       if(c.k.indexOf('__comm_')===0){
         var code=c.k.replace('__comm_','');
@@ -4778,8 +4827,9 @@ function atsPrint(){
 //  SHARED PICKER
 // ── FIX 1: il picker in modalità coop mostra solo COOP_SIGLE_CODES ──
 // ═══════════════════════════════════════════════════════════
-function openPickerGeneric(mode,ri,di){
+function openPickerGeneric(mode,ri,di,_ok){
   if(!adminMode)return;
+  if(!_ok&&mode==='coop'){return confGuard('coop',coopEmps[ri],di,function(){openPickerGeneric(mode,ri,di,true);});}
   spMode=mode;spIdx=ri;spDi=di;
   var _emp=mode==='ats'?atsEmps[ri]:coopEmps[ri];
   spSigla=_emp?xSig((_emp.sigla||[])[di]||''):null;
@@ -5128,8 +5178,9 @@ function spConfirm(){
   toast('✓ Salvato');
 }
 
-function editOrGeneric(td,ei,field,di,mode){
+function editOrGeneric(td,ei,field,di,mode,_ok){
   if(!adminMode||td.classList.contains('editing'))return;
+  if(!_ok&&mode==='coop'){return confGuard('coop',coopEmps[ei],di,function(){editOrGeneric(td,ei,field,di,mode,true);});}
   var emps=mode==='ats'?atsEmps:coopEmps;
   var emp=emps[ei];var cur=(emp[field]||[])[di]||'';
   td.classList.add('editing');var inp=document.createElement('input');inp.type='time';inp.value=cur;td.textContent='';td.appendChild(inp);inp.focus();
@@ -5836,6 +5887,12 @@ function renderPermPanel(){
   var adms=permConfig.admins||[];
   if(!adms.length)h+='<div style="font-size:12px;color:var(--muted)">Nessuno</div>';
   adms.forEach(function(email,i){h+='<div class="ucard"><div class="ucard-avatar" style="background:var(--amber-dim);color:var(--amber)">'+email.charAt(0).toUpperCase()+'</div><div class="ucard-body"><div class="ucard-email">'+esc(email)+'</div><div class="ucard-meta"><span class="admin-chip">🔑 ADMIN</span></div></div><div class="ucard-actions"><button class="icon-btn del" onclick="delAdmin('+i+')">🗑</button></div></div>';});
+  h+='</div></div>';
+  h+='<div class="perm-section"><div class="perm-section-header"><div class="perm-section-title">🤝 Responsabili Cooperativa</div><button class="ba bghost te" style="padding:6px 12px;font-size:12px" onclick="addCoopResp()">＋</button></div><div class="perm-section-body">';
+  h+='<div style="font-size:11px;color:var(--muted);margin-bottom:8px">Vedono solo il tab Cooperativa di tutti i responsabili, in sola lettura: possono confermare le presenze (che diventano bloccate) e scrivere note.</div>';
+  var crs=permConfig.coop_resp||[];
+  if(!crs.length)h+='<div style="font-size:12px;color:var(--muted)">Nessuno</div>';
+  crs.forEach(function(email,i){h+='<div class="ucard"><div class="ucard-avatar" style="background:rgba(16,185,129,.15);color:var(--green)">'+esc(email.charAt(0).toUpperCase())+'</div><div class="ucard-body"><div class="ucard-email">'+esc(email)+'</div><div class="ucard-meta"><span class="sec-chip coop">coop · conferme</span></div></div><div class="ucard-actions"><button class="icon-btn del" onclick="delCoopResp('+i+')" title="Rimuovi">🗑</button></div></div>';});
   h+='</div></div>';
   h+='<div class="perm-section"><div class="perm-section-header"><div class="perm-section-title">👤 Utenti</div><button class="ba bteal" style="padding:6px 12px;font-size:12px" onclick="openPermUser(null)">＋ Nuovo</button></div><div class="perm-section-body">';
   var users=permConfig.users||{};var ukeys=Object.keys(users);
@@ -6580,6 +6637,14 @@ function delPermUser(email){showConf('Rimuovi utente','Rimuovere "'+email+'"?',f
 function addSuperUser(){var em=prompt('Email super utente:');if(!em)return;if(!permConfig.super_users)permConfig.super_users=[];permConfig.super_users.push(em.trim().toLowerCase());renderPermPanel();toast('✓ Aggiunto');}
 function delSuperUser(i){if(!permConfig.super_users)return;permConfig.super_users.splice(i,1);renderPermPanel();}
 function addAdmin(){var em=prompt('Email admin:');if(!em)return;if(!permConfig.admins)permConfig.admins=[];permConfig.admins.push(em.trim().toLowerCase());renderPermPanel();toast('✓ Aggiunto');}
+function addCoopResp(){
+  var em=prompt('Email Google del responsabile cooperativa:');if(!em)return;em=em.trim().toLowerCase();
+  if(!/^[^@\s]+@[^@\s]+\.[^@\s]+$/.test(em)){toast('Email non valida','err');return;}
+  if(!permConfig.coop_resp)permConfig.coop_resp=[];
+  if(permConfig.coop_resp.indexOf(em)!==-1){toast('Già presente','warn');return;}
+  permConfig.coop_resp.push(em);renderPermPanel();toast('✓ Aggiunto — premi Salva Config');
+}
+function delCoopResp(i){if(!permConfig.coop_resp)return;permConfig.coop_resp.splice(i,1);renderPermPanel();toast('✓ Rimosso — premi Salva Config');}
 function delAdmin(i){if(!permConfig.admins)return;permConfig.admins.splice(i,1);renderPermPanel();}
 function savePermConfig(){
   if(!isSuperUser){toast('Solo super utenti possono salvare la config','err');return;}
@@ -6814,6 +6879,8 @@ function bulkConfirm(){
 
   var commVals=SIGLE_COMMESSE.indexOf(xSig(bulkSigla))!==-1?getBulkCommVals():null;
   var saveComm=document.getElementById('bulkCommSave').checked;
+  var _bloccati=visible.filter(function(e){return confDay(e,di);});
+  if(_bloccati.length){visible=visible.filter(function(e){return !confDay(e,di);});toast('🔒 '+_bloccati.length+' dipendenti saltati: giorno già confermato','warn');}
 
   visible.forEach(function(emp){
     if(!emp.sigla)emp.sigla=[];
@@ -7141,12 +7208,14 @@ function massConfirm(){
   var m=parseInt(document.getElementById(massMode==='ats'?'aMonth':'cMonth').value);
 
   var commesseDays=[]; // {di,action:'save'|'delete'}
+  var _massBloccati=0;
   var doMassLoop=function(){
     dates.forEach(function(dt,di){
       var dateObj=new Date(y,m-1,dt.day);
       if(dateObj<d1||dateObj>d2)return;
       var wd=dt.weekday;var isWe=wd===0||wd===6;var isHol=isHoliday(dt.day,m,y);
       if(massSigla!==''&&(isWe||isHol))return;
+      if(confDay(emp,di)){_massBloccati=(_massBloccati||0)+1;return;} // giorno confermato: bloccato
       var oldSig=(emp.sigla||[])[di]||'';
       emp.sigla[di]=fv;
       if(showOr){emp.ingresso[di]=ing;emp.uscita[di]=usc;emp.pausa[di]=pausaH;}
@@ -7189,6 +7258,7 @@ function massConfirm(){
         }).catch(function(e){toast('✗ Errore commesse: '+e.message,'err');});
       }
     }
+    if(_massBloccati)setTimeout(function(){toast('🔒 '+_massBloccati+' giornate saltate perché già confermate','warn');},600);
   };
   if(massMode==='ats'&&(!ferieData||ferieYear!==y)){
     ferieYear=y;
@@ -7757,6 +7827,218 @@ function handleLayoutChanged(mode,e){
   toast('🧹 Il foglio è stato riorganizzato: ricarico i dati e riapplico le tue modifiche…','warn');
   if(mode==='ats')atsRefresh();else coopRefresh();
 }
+// ═══════════════════════════════════════════════════════════
+//  CONFERME PRESENZE COOPERATIVA (per giorno)
+// ═══════════════════════════════════════════════════════════
+// Tab "<Mese>_Coop_Conferme" del file del responsabile: una riga per
+// dipendente/giorno confermato (Nominativo, Ext SAP, Giorno, Confermato da,
+// Nome, Data/Ora). Un giorno confermato è bloccato: solo il super utente può
+// modificarlo (sbloccandolo) o sbloccarlo dal pulsante "Conferma presenze".
+// La colonna "Confermato" del foglio principale resta "SI" solo se tutto il
+// mese è confermato (compatibilità con la vecchia conferma mensile).
+var isCoopResp=false;
+var CONF_HDR=['Nominativo','Ext SAP','Giorno','Confermato da','Nome','Data/Ora'];
+function confDay(emp,di){return (emp&&emp.conf&&emp.conf[di])||null;}
+function confSummary(emp,nd){
+  var n=0,upto=0,contig=true;
+  for(var di=0;di<nd;di++){if(confDay(emp,di)){n++;if(contig)upto=di+1;}else contig=false;}
+  return{n:n,all:nd>0&&n===nd,upto:upto};
+}
+function confSummaryText(emp,nd,m){
+  var c=confSummary(emp,nd);
+  if(!c.n)return '';
+  if(c.all)return 'SI';
+  if(c.upto===c.n)return 'fino al '+('0'+c.upto).slice(-2)+'/'+('0'+m).slice(-2);
+  return 'parziale ('+c.n+' gg)';
+}
+function canConfirmCoop(){return isSuperUser||isCoopResp;}
+function loadConfermeForEmps(emps,fileId,y,m){
+  if(!fileId||!emps.length)return Promise.resolve();
+  var tab=(MESI[m-1]||m)+'_Coop_Conferme';
+  return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties').then(function(meta){
+    if(!(meta.sheets||[]).some(function(x){return x.properties.title===tab;}))return;
+    return sheetsRead(fileId,tab+'!A:F').then(function(rows){
+      var by={};emps.forEach(function(e){var k=String(e.nom2||e.nome||'').trim().toLowerCase();(by[k]=by[k]||[]).push(e);});
+      (rows||[]).slice(1).forEach(function(r){
+        var k=String(r[0]||'').trim().toLowerCase(),di=(parseInt(r[2])||0)-1;
+        if(!k||di<0||!r[3])return;
+        (by[k]||[]).forEach(function(e){(e.conf=e.conf||[])[di]={by:String(r[3]||''),nome:String(r[4]||''),ts:String(r[5]||'')};});
+      });
+    });
+  }).catch(function(e){console.warn('[WMS] conferme:',e.message);});
+}
+function loadConfermeForEmpsMulti(emps,y,m,fallback){
+  var groups=groupEmpsByFileId(emps,fallback);
+  return Promise.all(groups.map(function(g){return loadConfermeForEmps(g.emps,g.fileId,y,m);})).then(function(){
+    var nd=getDates(y,m).length;
+    emps.forEach(function(e){
+      // vecchia conferma mensile (solo "SI" nella colonna Confermato): vale per tutto il mese
+      if(e.confermato&&!(e.conf||[]).some(Boolean)){
+        e.conf=[];for(var di=0;di<nd;di++)e.conf[di]={by:'',nome:'conferma mensile',ts:''};
+      }
+    });
+  });
+}
+// scrive le conferme di un file: items [{emp,di,entry|null}]
+function confWriteFile(fileId,y,m,items){
+  var tab=(MESI[m-1]||m)+'_Coop_Conferme';
+  return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties').then(function(meta){
+    var has=(meta.sheets||[]).some(function(x){return x.properties.title===tab;});
+    return has?sheetsRead(fileId,tab+'!A:C'):createSheetTab(fileId,tab).then(function(){return [];});
+  }).then(function(abc){
+    var rowOf={},ops=[],app=[];
+    (abc||[]).forEach(function(r,ri){if(ri&&r[0])rowOf[String(r[0]).trim()+'|'+String(r[2]||'').trim()]=ri+1;});
+    if(!(abc||[]).length)ops.push({range:tab+'!A1',values:[CONF_HDR]});
+    items.forEach(function(it){
+      var nome=it.emp.nom2||it.emp.nome||'',day=it.di+1,k=nome+'|'+day,e=it.entry;
+      var row=e?[nome,it.emp.sap||it.emp.id||'',day,e.by,e.nome,e.ts]:['','','','','',''];
+      if(rowOf[k])ops.push({range:tab+'!A'+rowOf[k],values:[row]});
+      else if(e)app.push(row);
+    });
+    return (ops.length?sheetsBatchUpdate(fileId,ops):Promise.resolve()).then(function(){
+      if(!app.length)return;
+      return fetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'/values/'+encodeURIComponent(tab+'!A1')+':append?valueInputOption=RAW&insertDataOption=INSERT_ROWS',{
+        method:'POST',headers:{Authorization:'Bearer '+getToken(),'Content-Type':'application/json'},body:JSON.stringify({values:app})
+      }).then(function(r){if(!r.ok)throw new Error('append conferme '+r.status);});
+    });
+  });
+}
+// aggiorna la colonna "Confermato" del foglio principale (SI solo a mese completo)
+function confWriteMainCol(emp,nd){
+  if(!emp.sheetRows)return Promise.resolve();
+  var fid=emp.sheetRows.fileId||coopFileId;if(!fid)return Promise.resolve();
+  var full=confSummary(emp,nd).all;
+  if(!!emp.confermato===full)return Promise.resolve();
+  emp.confermato=full;
+  var dst=(coopData&&coopData.dayStart)||3;
+  var col=colToLetter(emp.confCol!==undefined?emp.confCol:(dst+nd));
+  return verifyRows(fid,emp.sheetRows.sheetName,[emp]).then(function(){
+    return sheetsBatchUpdate(fid,[{range:emp.sheetRows.sheetName+'!'+col+'1',values:[['Confermato']]},
+      {range:emp.sheetRows.sheetName+'!'+col+(emp.sheetRows.n+1),values:[[full?'SI':'']]}]);
+  });
+}
+// applica conferma/sblocco: changes [{emp,di,entry|null}]
+function confApply(changes,y,m,azione){
+  if(!changes.length)return Promise.resolve();
+  var nd=getDates(y,m).length,byFile={},byEmp=[];
+  changes.forEach(function(c){
+    (c.emp.conf=c.emp.conf||[])[c.di]=c.entry;
+    var fid=c.emp.sheetRows&&c.emp.sheetRows.fileId;if(fid)(byFile[fid]=byFile[fid]||[]).push(c);
+    if(byEmp.indexOf(c.emp)===-1)byEmp.push(c.emp);
+  });
+  coopRender();
+  return Object.keys(byFile).reduce(function(pr,fid){return pr.then(function(){return confWriteFile(fid,y,m,byFile[fid]);});},Promise.resolve())
+  .then(function(){return byEmp.reduce(function(pr,e){return pr.then(function(){return confWriteMainCol(e,nd);});},Promise.resolve());})
+  .then(function(){
+    byEmp.forEach(function(e){
+      var gg=changes.filter(function(c){return c.emp===e;}).map(function(c){return c.di+1;}).sort(function(a,b){return a-b;});
+      var E=logEmp(e);
+      logEvent({area:'Conferme',azione:azione==='sblocca'?'Conferma sbloccata':'Presenze confermate',sez:'Coop',dip:E.dip,sap:E.sap,
+        mese:('0'+m).slice(-2)+'/'+y,campo:'Giorni',dopo:gg.length+' gg',det:'dal '+gg[0]+' al '+gg[gg.length-1]+'/'+('0'+m).slice(-2)+' — '+gg.join(', ')});
+    });
+    coopRender();
+  }).catch(function(e){
+    toast('✗ Conferma NON salvata: '+e.message,'err');
+    logEvent({area:'Errore',azione:'Salvataggio conferme fallito',sez:'Coop',det:e.message});authCheckError(e);
+    coopRefresh();
+    throw e;
+  });
+}
+function _cfMonth(){return{y:parseInt(document.getElementById('cYear').value),m:parseInt(document.getElementById('cMonth').value)};}
+function _cfVisible(){
+  var q=(document.getElementById('cSearch').value||'').toLowerCase().trim();
+  return (coopEmps||[]).filter(function(e){var n=e.nom2||e.nome||'';return e.sheetRows&&(!q||n.toLowerCase().indexOf(q)!==-1||String(e.sap||e.id||'').indexOf(q)!==-1);});
+}
+function _isoD(y,m,d){return y+'-'+('0'+m).slice(-2)+'-'+('0'+d).slice(-2);}
+function openConfermaModal(){
+  if(!canConfirmCoop()){toast('Non hai i permessi per confermare','err');return;}
+  if(!coopData){toast('Carica prima il mese','warn');return;}
+  var M=_cfMonth(),nd=coopData.dates.length,vis=_cfVisible();
+  var sel=document.getElementById('cfDip');
+  sel.innerHTML='<option value="*">— Tutti i dipendenti visualizzati ('+vis.length+') —</option>'+
+    vis.map(function(e){var i=coopEmps.indexOf(e);return '<option value="'+i+'">'+esc(e.nom2||e.nome||'')+(e.sap?' #'+esc(e.sap):'')+'</option>';}).join('');
+  document.getElementById('cfAzioneWrap').style.display=isSuperUser?'flex':'none';
+  var r=document.querySelector('input[name="cfAzione"][value="conferma"]');if(r)r.checked=true;
+  ['cfDal','cfAl'].forEach(function(id){var el=document.getElementById(id);el.min=_isoD(M.y,M.m,1);el.max=_isoD(M.y,M.m,nd);});
+  cfQuick('finoaoggi');
+  mOpen('moConferma');
+}
+function cfQuick(k){
+  var M=_cfMonth(),nd=coopData.dates.length,now=new Date();
+  var inMese=now.getFullYear()===M.y&&now.getMonth()+1===M.m,oggi=inMese?now.getDate():nd;
+  var a=1,b=nd;
+  if(k==='oggi'){a=b=oggi;}
+  else if(k==='finoaoggi'){a=1;b=oggi;}
+  else if(k==='settimana'){var wd=new Date(M.y,M.m-1,oggi).getDay()||7;a=Math.max(1,oggi-wd+1);b=Math.min(nd,a+6);}
+  document.getElementById('cfDal').value=_isoD(M.y,M.m,a);
+  document.getElementById('cfAl').value=_isoD(M.y,M.m,b);
+  cfUpdate();
+}
+function _cfPlan(){
+  var M=_cfMonth(),az=(document.querySelector('input[name="cfAzione"]:checked')||{}).value||'conferma';
+  if(!isSuperUser)az='conferma';
+  var dal=document.getElementById('cfDal').value,al=document.getElementById('cfAl').value;
+  var a=dal?parseInt(dal.slice(8,10)):0,b=al?parseInt(al.slice(8,10)):0;
+  var sv=document.getElementById('cfDip').value;
+  var emps=sv==='*'?_cfVisible():[coopEmps[parseInt(sv)]].filter(Boolean);
+  var plan={az:az,a:a,b:b,emps:emps,changes:[],gia:0,vuoti:0,M:M};
+  if(!a||!b||b<a)return plan;
+  var who={by:uEmail,nome:uName||uEmail,ts:_logTs(new Date())};
+  emps.forEach(function(e){
+    for(var d=a;d<=b;d++){
+      var di=d-1,c=confDay(e,di);
+      if(az==='conferma'){
+        if(c){plan.gia++;continue;}
+        if(!String((e.sigla||[])[di]||'').trim())plan.vuoti++;
+        plan.changes.push({emp:e,di:di,entry:who});
+      } else if(c)plan.changes.push({emp:e,di:di,entry:null});
+    }
+  });
+  return plan;
+}
+function cfUpdate(){
+  var p=_cfPlan(),info=document.getElementById('cfInfo'),ok=document.getElementById('cfOk');
+  document.getElementById('cfTitle').textContent=p.az==='sblocca'?'🔓 Sblocca giorni confermati':'✅ Conferma presenze';
+  ok.textContent=p.az==='sblocca'?'Sblocca':'Conferma';
+  if(!p.a||!p.b||p.b<p.a){info.innerHTML='<span style="color:var(--red)">Indica un intervallo di date valido.</span>';ok.disabled=true;return;}
+  var per='dal <b>'+p.a+'</b> al <b>'+p.b+'</b>/'+('0'+p.M.m).slice(-2)+'/'+p.M.y+' · '+p.emps.length+' dipendent'+(p.emps.length===1?'e':'i');
+  if(p.az==='sblocca'){
+    info.innerHTML=per+'<br><b style="color:var(--amber)">'+p.changes.length+'</b> giornate confermate verranno sbloccate e torneranno modificabili.';
+  } else {
+    info.innerHTML=per+'<br><b style="color:var(--green)">'+p.changes.length+'</b> giornate da confermare'
+      +(p.gia?' · '+p.gia+' già confermate':'')
+      +(p.vuoti?'<br><span style="color:var(--amber)">⚠ '+p.vuoti+' giornate sono vuote (nessuna sigla): verranno confermate così e non si potranno più compilare.</span>':'');
+  }
+  ok.disabled=!p.changes.length;
+}
+function cfConfirm(){
+  var p=_cfPlan();if(!p.changes.length)return;
+  mClose('moConferma');
+  toast('⏳ Salvataggio conferme…','warn');
+  confApply(p.changes,p.M.y,p.M.m,p.az).then(function(){
+    toast(p.az==='sblocca'?'🔓 Sbloccate '+p.changes.length+' giornate':'✅ Confermate '+p.changes.length+' giornate');
+  }).catch(function(){});
+}
+// giorno confermato: blocca la modifica (il super utente può sbloccare il singolo giorno)
+function confGuard(mode,emp,di,proceed){
+  var c=mode==='coop'?confDay(emp,di):null;
+  if(!c)return proceed();
+  var chi=c.nome||c.by||'responsabile cooperativa';
+  if(isSuperUser){
+    showConf('🔒 Giorno confermato','Questo giorno è stato confermato da '+chi+(c.ts?' il '+c.ts:'')+'. Sbloccarlo e modificarlo?',function(){
+      var M=_cfMonth();
+      confApply([{emp:emp,di:di,entry:null}],M.y,M.m,'sblocca').then(proceed).catch(function(){});
+    });
+  } else {
+    toast('🔒 Giorno confermato da '+chi+': solo il super utente può sbloccarlo','warn');
+  }
+}
+function openCompMese(){
+  if(!isSuperUser){toast('Solo super utenti','err');return;}
+  var mi=document.getElementById('compMese'),n=new Date();
+  mi.value=n.getFullYear()+'-'+('0'+(n.getMonth()+1)).slice(-2);
+  mOpen('moCompMese');
+}
 function compattaMese(){
   if(!isSuperUser){toast('Solo super utenti','err');return;}
   if(aBusy||cBusy||_saveFail.ats||_saveFail.coop){toast('Ci sono salvataggi in corso o in attesa: riprova tra poco','warn');return;}
@@ -7774,7 +8056,7 @@ function compattaMese(){
       +'Ogni file si può ripristinare da Google Sheets → Cronologia versioni.',
       function(){
         var tot=[],err=[],toccati=[];
-        var tabs=[];['Coop','ATS'].forEach(function(sz){var b=mName+'_'+sz;tabs.push(b,b+'_Commesse',b+'_Ritardi');});
+        var tabs=[];['Coop','ATS'].forEach(function(sz){var b=mName+'_'+sz;tabs.push(b,b+'_Commesse',b+'_Ritardi',b+'_Conferme');});
         var mains=[mName+'_Coop',mName+'_ATS'];
         toast('⏳ Compattazione in corso…','warn');
         files.reduce(function(pr,f){
@@ -9424,14 +9706,14 @@ function applyHiddenSigleToTables(){}
       card.className = 'mob-card';
       card.dataset.ri = String(empBlocks.indexOf(blk));
       // Trova il vero ri dall'onchange della checkbox
-      var _confCbTmp=tr.querySelector('input.conf-cb');
-      if(_confCbTmp){var _riM=(_confCbTmp.getAttribute('onchange')||'').match(/\d+/);if(_riM)card.dataset.ri=_riM[0];}
+      var _confCbTmp=tr.querySelector('[data-conf-ri]');
+      if(_confCbTmp)card.dataset.ri=_confCbTmp.getAttribute('data-conf-ri');
       // Legge stato confermato direttamente da coopEmps (non dalla classe CSS che può essere stale)
       var _riForConf=-1;
-      var _confCbCheck=tr.querySelector('input.conf-cb');
-      if(_confCbCheck){var _riMC=(_confCbCheck.getAttribute('onchange')||'').match(/\d+/);if(_riMC)_riForConf=parseInt(_riMC[0]);}
+      var _confCbCheck=tr.querySelector('[data-conf-ri]');
+      if(_confCbCheck)_riForConf=parseInt(_confCbCheck.getAttribute('data-conf-ri'));
       var _empConf=_riForConf>=0&&coopEmps[_riForConf]?coopEmps[_riForConf]:null;
-      var _isConfirmed=_empConf?!!_empConf.confermato:tr.classList.contains('confirmed-row');
+      var _isConfirmed=_empConf?confSummary(_empConf,(coopData&&coopData.dates.length)||31).all:tr.classList.contains('confirmed-row');
       if(_isConfirmed) card.classList.add('confirmed-row');
 
       // ── HEADER: nome | plant | resp | #sap ──
@@ -9593,36 +9875,13 @@ function applyHiddenSigleToTables(){}
         if(totsEl.children.length) card.appendChild(totsEl);
       }
 
-      // ── CHECKBOX CONFERMA (solo Coop) ──
-      var confCb = tr.querySelector('input.conf-cb');
-      if(confCb){
-        var ri = confCb.getAttribute('onchange') ? confCb.getAttribute('onchange').match(/\d+/) : null;
-        var riNum = ri ? parseInt(ri[0]) : -1;
-        var isChecked = _empConf?!!_empConf.confermato:confCb.checked;
-        var confRow = document.createElement('div');
-        confRow.className = 'mob-card-conf' + (isChecked ? ' is-confirmed' : '');
-        var confLbl = document.createElement('label');
-        confLbl.className = 'mob-conf-label';
-        var cbNew = document.createElement('input');
-        cbNew.type = 'checkbox';
-        cbNew.className = 'conf-cb';
-        cbNew.checked = isChecked;
-        cbNew.style.width = '18px';
-        cbNew.style.height = '18px';
-        if(riNum >= 0){
-          cbNew.onchange = (function(r,crd,cRow){ return function(){
-            toggleConferma(r, this, crd);
-            cRow.classList.toggle('is-confirmed', this.checked);
-          }; })(riNum, card, confRow);
-        }
-        var confTxt = document.createElement('span');
-        confTxt.textContent = isChecked ? '✓ Confermato' : 'Conferma';
-        confTxt.style.fontWeight = isChecked ? '700' : '400';
-        confTxt.style.color = isChecked ? 'var(--green)' : 'var(--muted)';
-        cbNew.addEventListener('change', function(){ confTxt.textContent = this.checked ? '✓ Confermato' : 'Conferma'; confTxt.style.fontWeight = this.checked ? '700' : '400'; confTxt.style.color = this.checked ? 'var(--green)' : 'var(--muted)'; });
-        confLbl.appendChild(cbNew);
-        confLbl.appendChild(confTxt);
-        confRow.appendChild(confLbl);
+      // ── STATO CONFERMA (solo Coop): si conferma dal pulsante "Conferma presenze" ──
+      if(_empConf){
+        var _csm=confSummary(_empConf,(coopData&&coopData.dates.length)||31);
+        var confRow=document.createElement('div');
+        confRow.className='mob-card-conf'+(_csm.all?' is-confirmed':'');
+        confRow.innerHTML='<span style="font-weight:700;color:'+(_csm.n?'var(--green)':'var(--muted)')+'">'
+          +(_csm.all?'✓ Mese confermato':(_csm.n?'✓ Confermati '+_csm.n+' giorni'+(_csm.upto===_csm.n?' (1–'+_csm.upto+')':''):'Da confermare'))+'</span>';
         card.appendChild(confRow);
       }
 
