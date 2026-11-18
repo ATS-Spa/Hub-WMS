@@ -775,7 +775,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
   </div>
 </div>
 
-<datalist id="dlControparti"></datalist>
+<datalist id="dlControparti"></datalist><datalist id="dlDestinazioni"></datalist>
 <datalist id="dlVettori"></datalist>
 <datalist id="dlUbicazioni"></datalist>
 <datalist id="dlMisure"></datalist>
@@ -1556,9 +1556,13 @@ var App = {
   infoDati: function () {
     DB.leggiStato().then(function () { App.syncInfo(); }).catch(function () { }); Modal.html('ⓘ Stato dei dati', '<div id="infoDatiBox">' + App.infoDatiHtml() + '</div>', [{ label: 'Chiudi', cls: 'ghost' }, { label: '↻ Aggiorna', cls: 'green', fn: function () { App.reload(); } }]); },
   fillLists: function () {
-    var cp = DB.t.CONTROPARTI.rows.map(function (r) { return r.codice; }).filter(Boolean);
-    DB.t.RIPARATORI.rows.forEach(function (r) { if (r.codice && cp.indexOf(r.codice) < 0) cp.push(r.codice); });
+    // mittenti / controparti: Controparti e Riparatori ATTIVI (attivo = NO non compare)
+    var cp = DB.t.CONTROPARTI.rows.filter(function (r) { return L.up(r.attivo) !== 'NO'; }).map(function (r) { return L.s(r.codice); }).filter(Boolean);
+    DB.t.RIPARATORI.rows.forEach(function (r) { if (L.up(r.attivo) !== 'NO' && r.codice && cp.indexOf(r.codice) < 0) cp.push(r.codice); });
     $('dlControparti').innerHTML = cp.sort().map(function (c) { return '<option value="' + esc(c) + '">'; }).join('');
+    // destinazioni: solo App.destMap (Controparti attive di tipo DESTINAZIONE + Depositi VLT)
+    var dm = App.destMap(); App._cpSet = {}; cp.forEach(function (c) { App._cpSet[L.up(c)] = c; });
+    $('dlDestinazioni').innerHTML = Object.keys(dm).map(function (k) { return dm[k]; }).sort().map(function (c) { return '<option value="' + esc(c) + '">'; }).join('');
     var vt = []; DB.t.VETTORI.rows.forEach(function (r) { if (r.vettore && vt.indexOf(r.vettore) < 0) vt.push(r.vettore); });
     $('dlVettori').innerHTML = vt.map(function (c) { return '<option value="' + esc(c) + '">'; }).join('');
     if (DB.ubicazioni) $('dlUbicazioni').innerHTML = DB.ubicazioni.slice(0, 20000).map(function (c) { return '<option value="' + esc(c) + '">'; }).join('');
@@ -2765,6 +2769,36 @@ App.destDaSigla = function (x) {
   var d = DB.t.DEPOT_VLT.rows.find(function (r) { return L.up(r.sigla) === L.up(x); });
   return d ? (L.s(d.destinazione_conversione) || d.destinazione) : x;
 };
+// destinazioni ammesse: Controparti ATTIVE con tipo DESTINAZIONE (o tipo vuoto) + destinazioni di Depositi VLT (destinazione e conversione);
+// un codice messo attivo = NO in Controparti è escluso anche se compare in Depositi VLT. I Riparatori non sono destinazioni.
+App.destMap = function () {
+  var off = {}, m = {}, C = DB.t.CONTROPARTI ? DB.t.CONTROPARTI.rows : [], V = DB.t.DEPOT_VLT ? DB.t.DEPOT_VLT.rows : [];
+  C.forEach(function (r) { if (L.up(r.attivo) === 'NO') off[L.up(r.codice)] = 1; });
+  function add(x) { x = L.s(x); var k = L.up(x); if (x && !off[k] && !m[k]) m[k] = x; }
+  C.forEach(function (r) { var t = L.up(r.tipo); if (L.up(r.attivo) !== 'NO' && (!t || t.indexOf('DEST') >= 0)) add(r.codice); });
+  V.forEach(function (r) { add(r.destinazione_conversione); add(r.destinazione); });
+  return m;   // MAIUSCOLO → nome come in anagrafica
+};
+// valore di un campo "solo da elenco": restituisce la scritta corretta, '' se vuoto, null se non ammesso
+//   dest = destinazioni · bal = destinazioni o sigla di Depositi VLT (NA, CA…) · cp = mittenti/controparti attivi
+App.soloVal = function (tipo, x) {
+  x = L.s(x); if (!x) return ''; var k = L.up(x);
+  if (tipo === 'cp') { if (!App._cpSet) App.fillLists(); return (App._cpSet || {})[k] || null; }
+  var m = App.destMap(); if (m[k]) return m[k];
+  if (tipo === 'bal' && DB.t.DEPOT_VLT.rows.some(function (r) { return L.up(r.sigla) === k; })) return k;
+  return null;
+};
+document.addEventListener('focusin', function (e) { var el = e.target; if (el && el.dataset && el.dataset.solo) el.dataset.prima = el.value; }, true);
+document.addEventListener('change', function (e) {
+  var el = e.target; if (!el || !el.dataset || !el.dataset.solo) return;
+  var v = App.soloVal(el.dataset.solo, el.value);
+  if (v === null) {
+    e.stopImmediatePropagation(); var x = L.s(el.value); el.value = el.dataset.prima || '';
+    toast('"' + x + '" non è nell’elenco: scegli una voce dal menu (' + (el.dataset.solo === 'cp' ? 'Anagrafiche → Controparti / Riparatori attivi' : 'Anagrafiche → Controparti attive di tipo DESTINAZIONE o Depositi VLT') + ')', 'ko');
+    return;
+  }
+  if (v !== el.value) el.value = v;
+}, true);
 // P/N in anagrafica ARTICOLI: esatto, oppure un P/N di anagrafica che ne è l'inizio (es. 82.86F-8660 per 82.86F-8660-R6)
 App.pnEsiste = function (pn) { return !!(DB.pnSet && DB.pnSet[L.up(pn)]); };
 App.pnSimile = function (pn) {
@@ -2924,7 +2958,7 @@ var Giacenze = {
       if (k === 'data_in') return '<input class="fc" type="date" id="gv_data_in" value="' + esc(L.normDate(v)) + '">';
       if (k === 'reg_vlt') { var mI = (Sto.dati.cur || []).find(function (m) { return m.id_mov === u.id_mov_in; }); return '<input class="fc" type="date" id="gv_reg_vlt" data-prima="' + esc(mI ? L.normDate(mI.data_registrazione_vlt) : '') + '" value="' + esc(mI ? L.normDate(mI.data_registrazione_vlt) : '') + '"' + (!App.isAdmin || !mI ? ' disabled title="' + (mI ? 'Solo un admin' : 'Movimento di ingresso non trovato (apri prima Movimenti)') + '"' : '') + '>'; }
       if (k === 'magazzino') return '<select class="fc" id="gv_magazzino">' + opz(v, DB.t.MAGAZZINI.rows.map(function (m) { return m.codice; }).concat(v && !DB.t.MAGAZZINI.rows.some(function (m) { return m.codice === v; }) ? [v] : [])) + '</select>';
-      return '<input class="fc' + (/seriale|pn|fr|rma|ubicazione/.test(k) ? ' mono' : '') + '" id="gv_' + k + '" value="' + esc(v) + '"' + (k === 'destinazione_prevista' ? ' list="dlControparti"' : '') + '>';
+      return '<input class="fc' + (/seriale|pn|fr|rma|ubicazione/.test(k) ? ' mono' : '') + '" id="gv_' + k + '" value="' + esc(v) + '"' + (k === 'destinazione_prevista' ? ' list="dlDestinazioni" data-solo="bal"' : '') + '>';
     };
     Modal.html('Gestisci ' + u.id_unita + ' · ' + u.seriale,
       '<div style="font-size:12.5px;color:var(--subtle);margin-bottom:10px;display:flex;gap:8px;align-items:center;flex-wrap:wrap"><span>' + Pill.tipo(u.tipo) + ' ' + esc(u.stato) + (u.fr ? ' · FR ' + esc(u.fr) : '') + ' · ' + esc(u.pn) + ' · ' + esc(u.riparatore) + (u.ubicazione ? ' · 📍 ' + esc(u.ubicazione) : '') + '</span><button class="btn ghost sm" onclick="UbiSt.apri(\'' + esc(u.id_unita) + '\')" title="Tutti i cambi di ubicazione della scheda: ingresso, variazioni, bonifiche, bancali, con data e operatore">📍 Storico ubicazioni</button></div>' +
@@ -3069,7 +3103,7 @@ var Reso = {
       '<div class="hint" style="margin-bottom:8px">I pezzi vanno in <b>Uscite e DDT RMA</b> sotto la destinazione scelta e partono con il DDT di quel giorno, <b>senza RMA</b> (causale RESO). Seriali uno per riga o separati da <b>;</b> (anche incollati da Excel): sotto vedi subito se sono in giacenza.</div>' +
       '<div class="fg"><span class="fl">Seriali *</span><textarea class="fc mono" id="rsSer" rows="3" placeholder="es. 102016770000110; VFI166751I"></textarea></div>' +
       '<div id="rsPrev" style="margin-top:6px"></div>' +
-      '<div class="row" style="gap:10px;margin-top:8px;justify-content:flex-start;flex-wrap:wrap"><div class="fg" style="min-width:260px;flex:1"><span class="fl">Destinazione *</span><input class="fc" id="rsDest" list="dlControparti" autocomplete="off"></div>' +
+      '<div class="row" style="gap:10px;margin-top:8px;justify-content:flex-start;flex-wrap:wrap"><div class="fg" style="min-width:260px;flex:1"><span class="fl">Destinazione *</span><input class="fc" id="rsDest" list="dlControparti" data-solo="cp" autocomplete="off"></div>' +
       '<div class="fg" style="min-width:260px;flex:1"><span class="fl">Nota DDT (oltre a "RESO")</span><input class="fc" id="rsNota" autocomplete="off" placeholder="es. reso materiale non conforme"></div></div>' +
       '<div class="hint" id="rsErr" style="margin-top:6px"></div>' +
       (A.length ? '<div style="font-size:13px;margin-top:12px"><b>' + A.length + '</b> pezzi già in reso (non ancora spediti) · li vedi anche in RMA → Resi</div>' : ''),
@@ -3729,7 +3763,7 @@ var Rett = {
       f('Tipo *', 'rtTipo', '<select class="fc" id="rtTipo" onchange="Rett.mag()">' + TIPI.map(function (t) { return '<option>' + t + '</option>'; }).join('') + '</select>') +
       f('FR', 'rtFr') + f('P/N *', 'rtPn') + f('MNFT', 'rtMnft') + f('Riparatore', 'rtRip') +
       f('Magazzino', 'rtMag', '<select class="fc" id="rtMag">' + mags.map(function (m) { return '<option>' + esc(m) + '</option>'; }).join('') + '</select>') +
-      f('Ubicazione', 'rtUbi') + f('Destinazione (GOOD)', 'rtDest', '<input class="fc" id="rtDest" list="dlControparti" autocomplete="off" placeholder="vuoto = dal deposito VLT">') +
+      f('Ubicazione', 'rtUbi') + f('Destinazione (GOOD)', 'rtDest', '<input class="fc" id="rtDest" list="dlDestinazioni" data-solo="dest" autocomplete="off" placeholder="vuoto = dal deposito VLT">') +
       '</div><div class="hint" id="rtInfo" style="margin-top:6px"></div>' +
       '<div class="fg" style="margin-top:8px"><span class="fl">Motivo *</span><input class="fc" id="rtMotivo" autocomplete="off" placeholder="es. trovato a scaffale all\'inventario del …"></div><div class="hint" id="rtErr"></div>',
       [{ label: 'Annulla', cls: 'ghost' }, { label: 'Aggiungi in giacenza', cls: 'green', keep: true, fn: function () { Rett.salvaNuovo(); } }], true);
@@ -7100,7 +7134,7 @@ var Rma = {
           html: function (u) {
             var v = Rma.varia(u), d = Rma.dirty[u.id_unita], on = d && d.dest !== undefined, val = v ? v.nuova : L.s(Rma.dv(u, 'dest'));
             if (u.tipo !== 'GOOD') return '<span class="ro-cell">' + esc(val) + '</span>';
-            return '<input class="edit-cell edit-vis' + (on ? ' dirty' : '') + (v ? ' var-in' : '') + '" style="width:calc(' + Math.max(14, Math.min(44, val.length + 5)) + 'ch + 16px)" list="dlControparti" value="' + esc(val) + '" placeholder="✎ destinazione" title="Variazione destino (Service Desk): scrivi o scegli la nuova destinazione e premi Salva modifiche" onchange="Rma.set(\'' + u.id_unita + '\',\'dest\',this.value)">' +
+            return '<input class="edit-cell edit-vis' + (on ? ' dirty' : '') + (v ? ' var-in' : '') + '" style="width:calc(' + Math.max(14, Math.min(44, val.length + 5)) + 'ch + 16px)" list="dlDestinazioni" data-solo="dest" value="' + esc(val) + '" placeholder="✎ destinazione" title="Variazione destino (Service Desk): scrivi o scegli la nuova destinazione e premi Salva modifiche" onchange="Rma.set(\'' + u.id_unita + '\',\'dest\',this.value)">' +
               (v ? '<div class="var-era">⇄ era: ' + esc(v.prima || '—') + ' <small title="' + (v.da === 'SD' ? 'Variata dal Service Desk' : 'Variata da RMA ritorno in giacenza') + '">' + v.da + '</small></div>' : '');
           } },
         { k: 'rma', label: 'RMA creato (SD)', filter: 'text', get: function (u) { return Rma.dv(u, 'rma'); },
@@ -7166,7 +7200,7 @@ var Rma = {
         { k: 'pn', label: 'P/N', filter: 'select', cls: 'mono' },
         { k: 'material', label: 'Material', filter: 'text', cls: 'mono', get: function (c) { var u = DB.t.UNITA.rows.find(function (x) { return x.id_unita === c.id_unita; }); return L.s(c.material) || (u ? L.mat(u.material) : ''); } },
         { k: 'rma', label: 'RMA', filter: 'text', cls: 'mono', html: function (c) { return '<input class="edit-cell mono' + (L.s(c.rma) ? '' : ' dirty') + '" style="width:10ch" placeholder="manca" value="' + esc(c.rma) + '" title="RMA del carico: stesso RMA su più pezzi solo verso la stessa destinazione" onchange="Rma.carSet(\'' + c.id_carico + '\',{rma:this.value})">' + Rma.eraRma(c.rma_precedente, c.rma); } },
-        { k: 'destinazione', label: 'Destinazione', filter: 'select', html: function (c) { return '<input class="edit-cell" style="width:22ch" list="dlControparti" value="' + esc(c.destinazione) + '" onchange="Rma.carSet(\'' + c.id_carico + '\',{destinazione:this.value})">'; } },
+        { k: 'destinazione', label: 'Destinazione', filter: 'select', html: function (c) { return '<input class="edit-cell" style="width:22ch" list="dlDestinazioni" data-solo="dest" value="' + esc(c.destinazione) + '" onchange="Rma.carSet(\'' + c.id_carico + '\',{destinazione:this.value})">'; } },
         { k: 'po_mrn', label: 'PO / MRN', filter: 'text', cls: 'mono' },
         { k: 'posizione', label: 'Posizione', filter: 'select', cls: 'mono', html: function (c) { var b = Rma.ubiBin(c.posizione); return esc(c.posizione) + (b ? '<div class="hint" style="margin:0" title="Decodifica ubicazioni">→ ' + esc(b) + '</div>' : ''); } },
         { k: 'note', label: 'Note', filter: 'text' },
@@ -7286,7 +7320,7 @@ var Rma = {
       '<div class="hint" style="margin-bottom:10px">' + Pill.tipo(u.tipo) + ' · P/N <b class="mono">' + esc(u.pn) + '</b>' + (u.fr ? ' · FR <span class="mono">' + esc(u.fr) + '</span>' : '') + (u.ubicazione ? ' · ubicazione <span class="mono">' + esc(u.ubicazione) + '</span>' : '') + '<br>Il pezzo va in <b>Pratiche Carichi NEW/REUSE</b> ed esce con <b>Uscite e DDT RMA</b> della destinazione (l\'RMA si può dare anche dopo).' +
         (u.tipo === 'GOOD' || u.tipo === 'BALANCING' ? '<br><b style="color:var(--amber)">' + u.tipo + ': finché il carico è aperto non compare più nell\'Inventario giornaliero.</b>' : '') + (pe ? '<br><b style="color:var(--amber)">È in pending (' + esc(pe.motivo) + '): resta fermo finché non lo sblocchi.</b>' : '') + '</div>' +
       '<div class="row"><div class="fg" style="width:130px"><span class="fl">RMA</span><input class="fc mono" id="cgRma" autocomplete="off" placeholder="anche dopo" value="' + esc(L.s(u.rma)) + '"></div>' +
-      '<div class="fg" style="width:240px"><span class="fl">Destinazione *</span><input class="fc" id="cgDest" list="dlControparti" autocomplete="off" value="' + esc(dest) + '"></div>' +
+      '<div class="fg" style="width:240px"><span class="fl">Destinazione *</span><input class="fc" id="cgDest" list="dlDestinazioni" data-solo="dest" autocomplete="off" value="' + esc(dest) + '"></div>' +
       '<div class="fg" style="width:140px"><span class="fl">PO / MRN</span><input class="fc mono" id="cgPo" autocomplete="off" value="' + esc(L.s(u.po_mrn)) + '"></div>' +
       '<div class="fg" style="flex:1;min-width:180px"><span class="fl">Note</span><input class="fc" id="cgNote" autocomplete="off"></div>' + Rma.campoUsc('cgUsc', 'Data uscita') + '</div>',
       [{ label: 'Annulla', cls: 'ghost' }, { label: '📤 Metti in uscita', cls: 'green', keep: true, fn: function () { Rma.carDaGiacenzaSalva(id); } }], true);
@@ -7410,11 +7444,7 @@ var Rma = {
   // ─ EXCEL RMA per il Service Desk: scarica le schede filtrate, il SD compila RMA CREATO (e NUOVA DESTINAZIONE se cambia), poi si reimporta
   XR: ['P/N', 'MATERIAL', 'ID UNITA', 'SERIALE', 'FR', 'TIPO', 'MNFT', 'REPAIR', 'DESTINAZIONE ORIGINALE', 'DESTINAZIONE ATTUALE', 'NUOVA DESTINAZIONE', 'RMA CREATO', 'RMA PRECEDENTE', 'RMA GIACENZA PROPOSTO', 'DESTINAZIONE RITORNO', 'DATA OPEN', 'SCADENZA', 'NOTE SD', 'RMA AL DOWNLOAD'],
   destinazioni: function () {
-    var m = {}; function add(x) { x = L.s(x); if (x && !m[L.up(x)]) m[L.up(x)] = x; }
-    DB.t.CONTROPARTI.rows.forEach(function (r) { add(r.codice); });
-    DB.t.DEPOT_VLT.rows.forEach(function (r) { add(r.destinazione); add(r.destinazione_conversione); });
-    Rma.inventario().forEach(function (u) { add(u.destinazione_prevista); });
-    return m;   // MAIUSCOLO → nome come in anagrafica
+    return App.destMap();   // MAIUSCOLO → nome come in anagrafica (solo destinazioni ammesse)
   },
   excelRma: async function () {
     var soloCar = Rma.sez === 'car', vis = soloCar ? [] : ((Rma.grids.inv && Rma.grids.inv.visibili) || Rma.inventario()), c = Rma.ctx();
@@ -7741,7 +7771,7 @@ var Rma = {
       '<div class="row">' +
       '<div class="fg" style="width:240px"><span class="fl">Seriale *</span><input class="fc mono" id="carSer" autocomplete="off" placeholder="spara il seriale" onkeydown="if(event.key===\'Enter\'){event.preventDefault();$(\'carRma\').focus()}" oninput="Rma.carInfo()"></div>' +
       '<div class="fg" style="width:120px"><span class="fl">RMA</span><input class="fc mono" id="carRma" autocomplete="off" placeholder="anche dopo" onkeydown="if(event.key===\'Enter\'){event.preventDefault();$(\'carDest\').focus()}"></div>' +
-      '<div class="fg" style="width:230px"><span class="fl">Destinazione *</span><input class="fc" id="carDest" list="dlControparti" autocomplete="off" value="' + esc(Rma._carDest || '') + '" oninput="Rma._carDest=this.value"></div>' +
+      '<div class="fg" style="width:230px"><span class="fl">Destinazione *</span><input class="fc" id="carDest" list="dlDestinazioni" data-solo="dest" autocomplete="off" value="' + esc(Rma._carDest || '') + '" oninput="Rma._carDest=this.value"></div>' +
       '<div class="fg" style="width:130px"><span class="fl">PO / MRN</span><input class="fc mono" id="carPo" autocomplete="off"></div>' +
       '<div class="fg" style="flex:1;min-width:160px"><span class="fl">Note</span><input class="fc" id="carNote" autocomplete="off" onkeydown="if(event.key===\'Enter\'){event.preventDefault();Rma.carAggiungi()}"></div>' + Rma.campoUsc('carUsc', 'Data uscita') + '</div>' +
       '<div class="hint" id="carHint" style="margin-top:8px;color:var(--text)"></div>',
@@ -7908,7 +7938,7 @@ var Rma = {
     var f = function (id, lab, v, extra, cls) { return '<div class="fg"><span class="fl">' + lab + '</span><input class="fc ' + (cls || '') + '" id="' + id + '" autocomplete="off" value="' + esc(v) + '"' + (extra || '') + '></div>'; };
     Modal.html('✎ Carico ' + c.id_carico + ' · ' + esc(c.seriale),
       '<div style="font-size:12.5px;color:var(--subtle);margin-bottom:10px">' + Pill.tipo(c.tipo) + ' · MNFT ' + esc(u.mnft || '—') + ' · scheda ' + esc(u.id_unita) + ' (' + esc(u.stato) + ')</div>' +
-      '<div class="g-var">' + f('cmRma', 'RMA', c.rma, ' placeholder="anche dopo"', 'mono') + f('cmDest', 'Destinazione *', c.destinazione, ' list="dlControparti"') + f('cmPo', 'PO / MRN', c.po_mrn, '', 'mono') +
+      '<div class="g-var">' + f('cmRma', 'RMA', c.rma, ' placeholder="anche dopo"', 'mono') + f('cmDest', 'Destinazione *', c.destinazione, ' list="dlDestinazioni" data-solo="dest"') + f('cmPo', 'PO / MRN', c.po_mrn, '', 'mono') +
         f('cmPos', 'Posizione (prelievo)', c.posizione, ' list="dlUbicazioni"', 'mono') + f('cmPn', 'P/N', L.s(u.pn) || L.s(c.pn), '', 'mono') + f('cmMat', 'Material SAP code', L.mat(u.material), '', 'mono') + '</div>' +
       '<div class="row">' + Rma.campoUsc('cmUsc', 'Data uscita', L.normDate(c.data_uscita) || L.isoToday()) + '<div style="flex:1">' + f('cmNote', 'Note', c.note) + '</div></div>' +
       '<div class="hint" id="cmPosB" style="margin-top:4px"></div><div class="hint" id="cmStato" style="margin-top:6px"></div><label id="cmAggW" style="display:none;gap:8px;align-items:center;margin-top:6px;font-size:13px"><input type="checkbox" id="cmAgg"> aggiungi comunque la coppia P/N–Material in anagrafica articoli</label>' +
@@ -8529,7 +8559,7 @@ Crud.prototype.form = function (o, nuovo) {
     var v = o[f.k] === undefined ? '' : o[f.k], id = 'cr_' + self.name + '_' + f.k, lab = '<span class="fl">' + esc(f.label) + (f.req ? ' *' : '') + '</span>';
     if (f.type === 'select') return '<div class="fg"><span class="fl">' + esc(f.label) + '</span><select class="fc" id="' + id + '">' + f.opts.map(function (x) { return '<option' + (x === v ? ' selected' : '') + '>' + esc(x) + '</option>'; }).join('') + '</select></div>';
     if (f.type === 'area') return '<div class="fg wide">' + lab + '<textarea class="fc" rows="2" id="' + id + '">' + esc(v) + '</textarea></div>';
-    return '<div class="fg' + (f.wide ? ' wide' : '') + '">' + lab + '<input class="fc' + (f.mono ? ' mono' : '') + '" id="' + id + '"' + (f.type === 'date' ? ' type="date"' : '') + (f.list ? ' list="' + f.list + '"' : '') + ' value="' + esc(f.type === 'date' ? L.normDate(v) : v) + '"></div>';
+    return '<div class="fg' + (f.wide ? ' wide' : '') + '">' + lab + '<input class="fc' + (f.mono ? ' mono' : '') + '" id="' + id + '"' + (f.type === 'date' ? ' type="date"' : '') + (f.list ? ' list="' + f.list + '"' : '') + (f.solo ? ' data-solo="' + f.solo + '"' : '') + ' value="' + esc(f.type === 'date' ? L.normDate(v) : v) + '"></div>';
   }).join('') + '</div><div class="hint" id="crErr_' + this.name + '" style="margin-top:8px"></div>';
 };
 Crud.prototype.leggi = function () {
@@ -8628,7 +8658,7 @@ var Bal = new Crud('bal', {
   fields: [
     { k: 'mittente', label: 'Mittente', list: 'dlControparti', req: true }, { k: 'data_inbound', label: 'Data inbound', type: 'date' }, { k: 'awb_mittente', label: 'AWB mittente', mono: true },
     { k: 'seriale', label: 'Seriale', mono: true, req: true }, { k: 'pn', label: 'P/N', mono: true }, { k: 'rma', label: 'RMA', mono: true, req: true },
-    { k: 'destinatario', label: 'Destinatario', list: 'dlControparti', req: true }, { k: 'conferma_pn', label: 'Conferma P/N', mono: true }, { k: 'info_extra', label: 'Info extra magazzino', wide: true }, { k: 'note', label: 'Note', wide: true },
+    { k: 'destinatario', label: 'Destinatario', list: 'dlDestinazioni', solo: 'bal', req: true }, { k: 'conferma_pn', label: 'Conferma P/N', mono: true }, { k: 'info_extra', label: 'Info extra magazzino', wide: true }, { k: 'note', label: 'Note', wide: true },
     { k: 'gestito', label: 'Gestito', type: 'select', opts: ['NO', 'SI'] }
   ],
   nuovo: function () { return { gestito: 'NO', data_inbound: L.isoToday() }; },
@@ -8640,6 +8670,7 @@ var Bal = new Crud('bal', {
     if (r0 && L.s(r0.id_unita) && g0 === 'SI' && o.gestito !== 'SI') return 'Arrivata con l’ingresso (scheda ' + r0.id_unita + '): non può tornare non gestita';
     if (o.gestito !== g0) { if (o.gestito === 'SI') { o.data_gestione = L.nowStamp(); o.gestito_da = Auth.email; } else { o.data_gestione = ''; o.gestito_da = ''; } }
     if (o.gestito === 'SI') return '';
+    var dv = App.soloVal('bal', o.destinatario); if (dv === null) return 'Destinatario "' + o.destinatario + '" non nell’elenco delle destinazioni (Controparti attive o Depositi VLT)'; o.destinatario = dv;
     var d = DB.t.BALANCING.rows.find(function (x) { return x.id_balancing !== id && L.up(x.seriale) === L.up(o.seriale) && L.up(x.gestito) === 'NO'; });
     return d ? 'Seriale già presente in una balancing aperta (' + d.id_balancing + ')' : '';
   },
@@ -8671,6 +8702,7 @@ Bal.importaX = function (inp) {
   Bal.importa(inp, Bal.MAP, function (o) {
     o.data_inbound = L.normDate(o.data_inbound);
     if (!o.seriale) return 'seriale mancante'; if (!o.rma) return 'RMA mancante'; if (!o.destinatario) return 'destinatario mancante';
+    var dv = App.soloVal('bal', o.destinatario); if (dv === null) return 'destinatario "' + o.destinatario + '" non in elenco'; o.destinatario = dv;
     if (aperti[L.up(o.seriale)]) return 'già aperta (' + aperti[L.up(o.seriale)] + ')';
     if (visti[L.up(o.seriale)]) return 'ripetuto nel file'; visti[L.up(o.seriale)] = 1; return '';
   });
@@ -8786,7 +8818,7 @@ Jun.inUscita = async function (id) {
   Modal.html('GOOD Juniper in uscita RMA · ' + id,
     '<div style="font-size:12.5px;color:var(--subtle);margin-bottom:10px">' + Pill.tipo('GOOD') + ' ' + esc(u.id_unita) + ' · ' + esc(u.seriale) + ' · ' + esc(u.pn) + '<br>FR ' + esc(r.fr) + (r.case_number ? ' · case ' + esc(r.case_number) : '') + (r.rma ? ' · RMA Juniper ' + esc(r.rma) + ' (va nelle note)' : '') + '</div>' +
     '<div class="grid"><div class="fg"><span class="fl">RMA (numerico)</span><input class="fc mono" id="juRma" value="' + esc(u.rma) + '" placeholder="es. 212793"></div>' +
-    '<div class="fg"><span class="fl">Destinazione</span><input class="fc" id="juDest" list="dlControparti" value="' + esc(dest) + '"></div></div>' +
+    '<div class="fg"><span class="fl">Destinazione</span><input class="fc" id="juDest" list="dlDestinazioni" data-solo="dest" value="' + esc(dest) + '"></div></div>' +
     '<div class="hint" style="margin-top:6px">Destinazione proposta: deposito VLT da cui è partito l\'FR' + (Jun.destOrigine(r) ? ' (' + esc(Jun.destOrigine(r)) + ')' : ' — non trovato, usa quella della scheda') + '. Puoi variarla.<br>Senza RMA la GOOD entra in uscita solo quando arriva un ritorno in giacenza che la abbina.</div>' +
     '<div class="hint" id="juErr" style="margin-top:8px"></div>',
     [{ label: 'Annulla', cls: 'ghost' }, { label: '📦 Metti in uscita', cls: 'green', keep: true, fn: function () { Jun.salvaUscita(id, u.id_unita); } }]);
