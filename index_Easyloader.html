@@ -3491,10 +3491,11 @@ var RialT = {
   },
   carica: function () {
     Modal.html('📋 Riallinea con template', '<div class="hint" style="margin-bottom:10px">1. Scarica il template e compila una riga per pezzo: <b>SERIALE</b> e <b>PARTNUMBER</b> obbligatori; <b>PO/MRN</b> e <b>TIPO</b> (FAULTY, GOOD, NEW, REUSE, BALANCING, SCRAP…) facoltativi, servono a scegliere l\'ingresso giusto.<br>2. Carica il file: vedrai l\'anteprima prima di creare qualsiasi scheda.</div>' +
+      '<label class="hint" style="display:flex;gap:6px;align-items:center;margin-bottom:10px"><input type="checkbox" id="rtArch" checked> Cerca anche nei movimenti degli anni archiviati (file DB_ARCHIVIO_…, solo lettura)</label>' +
       '<div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn ghost" id="rtTpl">⬇ Scarica template</button><label class="btn green">⬆ Carica Excel<input type="file" id="rtFile" accept=".xlsx,.xls,.csv" hidden></label></div><div class="hint" id="rtErr2" style="margin-top:8px"></div>',
       [{ label: 'Chiudi', cls: 'ghost' }]);
     $('rtTpl').onclick = function () { Crud.prototype.modello(RialT.COLS, 'template_riallinea_giacenza.xlsx'); };
-    $('rtFile').onchange = function () { var f = this.files[0]; if (f) RialT.leggi(f); };
+    $('rtFile').onchange = function () { var f = this.files[0]; RialT.conArch = $('rtArch').checked; if (f) RialT.leggi(f); };
   },
   leggi: async function (file) {
     var R;
@@ -3502,11 +3503,31 @@ var RialT = {
     if (!R.length || !('SERIALE' in R[0])) { $('rtErr2').textContent = 'Serve la colonna SERIALE (usa il template)'; $('rtErr2').className = 'hint err'; return; }
     Modal.open('Riallinea con template', 'Rileggo movimenti e giacenza…', []);
     try { await DB.loadTables(['UNITA']); Sto.dati.cur = await Sto.colsSafe(DB.id, 'MOVIMENTI'); } catch (e) { Modal.open('Errore', e.message); return; }
-    RialT._file = file.name; RialT.R = RialT.calcola(R); RialT.anteprima();
+    RialT.A = { mov: [], uni: [], anni: [], err: [] };
+    if (RialT.conArch) { Modal.open('Riallinea con template', 'Leggo gli archivi degli anni precedenti…', []); RialT.A = await RialT.archivi(); }
+    RialT._file = file.name; RialT.R = RialT.calcola(R, RialT.A); RialT.anteprima();
   },
-  calcola: function (R) {
-    var M = (Sto.dati.cur || []).filter(function (m) { return (m.direzione === 'IN' || m.direzione === 'OUT') && L.s(m.seriale) && !Sto.annullato(m); });
-    var perMovIn = {}; DB.t.UNITA.rows.forEach(function (u) { if (L.s(u.id_mov_in)) perMovIn[u.id_mov_in] = u; });
+  // movimenti e schede di tutti i DB_ARCHIVIO_<anno> della cartella (solo lettura, in cache come per Movimenti/KPI)
+  archivi: async function () {
+    var out = { mov: [], uni: [], anni: [], err: [] }, F = [];
+    try { F = (await Spz.file()).filter(function (f) { return !f.main; }); } catch (e) { out.err.push(e.message); }
+    for (var i = 0; i < F.length; i++) {
+      var f = F[i], y = (/DB_ARCHIVIO_(\d{4})/.exec(f.nome) || [])[1] || f.nome;
+      try {
+        var c = await DB.cacheGet('arch_' + y);
+        if (!c) { c = { ts: Date.now(), rows: await Sto.colsSafe(f.id, 'MOVIMENTI') }; await DB.cacheSet('arch_' + y, c); }
+        out.mov = out.mov.concat((c.rows || []).map(function (m) { return Object.assign({}, m, { _arch: y }); }));
+        var cu = await DB.cacheGet('archU_' + y);
+        if (!cu) { var v = (await API.batchGet(f.id, [API.q('UNITA')]))[0] || []; cu = { ts: Date.now(), rows: v.length ? new Table('UNITA', v[0], v.slice(1)).rows : [] }; await DB.cacheSet('archU_' + y, cu); }
+        out.uni = out.uni.concat(cu.rows || []); out.anni.push(y);
+      } catch (e) { out.err.push(y + ': ' + e.message); }
+    }
+    return out;
+  },
+  calcola: function (R, A) {
+    A = A || { mov: [], uni: [], anni: [], err: [] };
+    var M = (Sto.dati.cur || []).concat(A.mov).filter(function (m) { return (m.direzione === 'IN' || m.direzione === 'OUT') && L.s(m.seriale) && !Sto.annullato(m); });
+    var perMovIn = {}; A.uni.concat(DB.t.UNITA.rows).forEach(function (u) { if (L.s(u.id_mov_in)) perMovIn[u.id_mov_in] = u; });   // anche le schede archiviate: un ingresso vecchio già chiuso non si ricrea
     var frStock = {}; DB.t.UNITA.rows.forEach(function (u) { if (Giacenze.A_MAG.indexOf(u.stato) >= 0 && L.s(u.fr)) frStock[u.fr] = u; });
     var ok = [], ko = [], visti = [];
     R.forEach(function (o, i) {
@@ -3524,7 +3545,7 @@ var RialT = {
       if (g.stesso) return scarta('già in giacenza: ' + g.stesso.id_unita + ' (' + g.stesso.tipo + ', ' + g.stesso.stato + ')');
       var S = M.filter(function (m) { return App.serUguali(m.seriale, ser); });
       var ins = S.filter(function (m) { return m.direzione === 'IN'; });
-      if (!ins.length) return scarta('nessun ingresso nei movimenti dell\'anno: va caricato da Ingresso (o con Rettifica: aggiungi pezzo)');
+      if (!ins.length) return scarta('nessun ingresso nei movimenti' + (A.anni.length ? ' (anche archivi ' + A.anni.join(', ') + ')' : (RialT.conArch ? '' : ' del database principale (archivi non letti)')) + ': va caricato da Ingresso (o con Rettifica: aggiungi pezzo)');
       var insP = ins.filter(function (m) { return App.pnUguali(m.pn, pn); });
       if (!insP.length) return scarta('nei movimenti il seriale entra con un altro P/N (' + ins.map(function (m) { return m.pn || '—'; }).filter(function (p, k, a) { return a.indexOf(p) === k; }).join(', ') + '): controlla il PartNumber');
       if (tipo) { var t2 = insP.filter(function (m) { return L.up(m.tipo) === tipo; }); if (t2.length) insP = t2; else x.avv.push('tipo nel file ' + tipo + ', nel movimento ' + L.up(insP[insP.length - 1].tipo) + ' (vale il movimento)'); }
@@ -3534,20 +3555,22 @@ var RialT = {
       var dopo = S.filter(function (m) { return m.direzione === 'OUT' && (!L.s(m.pn) || App.pnUguali(m.pn, pn)) && Rial.t(m.data_ora) >= tIn && m.id_mov !== last.id_mov; });
       if (dopo.length) { var o1 = dopo[dopo.length - 1]; return scarta('uscito il ' + L.itDate(o1.data_ora) + (L.s(o1.controparte) ? ' verso ' + o1.controparte : '') + (L.s(o1.ddt) ? ' (DDT ' + o1.ddt + ')' : '') + ' dopo l\'ingresso del ' + L.itDate(last.data_ora) + ': se è rientrato serve un nuovo ingresso'); }
       var u0 = perMovIn[last.id_mov];
-      if (u0) return scarta('il movimento ' + last.id_mov + ' ha già la scheda ' + u0.id_unita + ' (' + u0.stato + ')' + (u0.stato === 'ANNULLATO' || u0.stato === 'RETTIFICATO' ? ': usa Riallinea da movimenti → D (rimetti in giacenza)' : ''));
+      if (u0) return scarta('il movimento ' + last.id_mov + ' ha già la scheda ' + u0.id_unita + ' (' + u0.stato + (A.uni.indexOf(u0) >= 0 ? ', in archivio' : '') + ')' + (A.uni.indexOf(u0) >= 0 ? ': la scheda archiviata non si riapre, il pezzo va caricato da Ingresso o con Rettifica: aggiungi pezzo' : (u0.stato === 'ANNULLATO' || u0.stato === 'RETTIFICATO' ? ': usa Riallinea da movimenti → D (rimetti in giacenza)' : '')));
+      if (last._arch) x.avv.push('ingresso da archivio ' + last._arch + ': verifica che il pezzo non sia uscito senza movimento');
       if (g.altri.length) x.avv.push('stesso seriale in giacenza con P/N diverso (' + App.pnElenco(g.altri) + ')');
       var fr = L.frKey(last.fr); if (fr && frStock[fr]) x.avv.push('FR ' + fr + ' già in giacenza su ' + frStock[fr].id_unita);
-      x.m = last; x.tipo = L.up(last.tipo); x.v = fr ? DB.vltMap[fr] : null; x.nota = 'da template ' + (RialT._file || '') + ' riga ' + riga;
+      x.m = last; x.tipo = L.up(last.tipo); x.v = fr ? DB.vltMap[fr] : null; x.nota = 'da template ' + (RialT._file || '') + ' riga ' + riga + (last._arch ? ', ingresso da archivio ' + last._arch : '');
       ok.push(x);
     });
     return { ok: ok, ko: ko };
   },
   anteprima: function () {
     var R = RialT.R, td = function (v, c) { return '<td' + (c ? ' class="' + c + '"' : '') + '>' + esc(v == null ? '' : v) + '</td>'; };
-    var hA = '<table><thead><tr><th><input type="checkbox" id="rtAll"></th><th>Riga</th><th>Seriale</th><th>P/N</th><th>Tipo</th><th>Mov. IN</th><th>Data</th><th>FR</th><th>PO/MRN</th><th>Mittente</th><th style="min-width:280px">Avvisi</th></tr></thead><tbody>' +
-      R.ok.map(function (x, i) { return '<tr' + (x.avv.length ? ' class="r-warn"' : '') + '><td><input type="checkbox" class="rtCk" data-i="' + i + '"' + (x.avv.length ? '' : ' checked') + '></td>' + td(x.riga) + td(x.m.seriale, 'mono') + td(x.m.pn, 'mono') + td(x.tipo) + td(x.m.id_mov, 'mono') + td(L.itDate(x.m.data_ora)) + td(x.m.fr, 'mono') + td(x.m.po_mrn) + td(x.m.controparte) + td(x.avv.join(' · ')) + '</tr>'; }).join('') + '</tbody></table>';
+    var hA = '<table><thead><tr><th><input type="checkbox" id="rtAll"></th><th>Riga</th><th>Seriale</th><th>P/N</th><th>Tipo</th><th>Mov. IN</th><th>Data</th><th>Archivio</th><th>FR</th><th>PO/MRN</th><th>Mittente</th><th style="min-width:280px">Avvisi</th></tr></thead><tbody>' +
+      R.ok.map(function (x, i) { return '<tr' + (x.avv.length ? ' class="r-warn"' : '') + '><td><input type="checkbox" class="rtCk" data-i="' + i + '"' + (x.avv.length ? '' : ' checked') + '></td>' + td(x.riga) + td(x.m.seriale, 'mono') + td(x.m.pn, 'mono') + td(x.tipo) + td(x.m.id_mov, 'mono') + td(L.itDate(x.m.data_ora)) + td(x.m._arch || '') + td(x.m.fr, 'mono') + td(x.m.po_mrn) + td(x.m.controparte) + td(x.avv.join(' · ')) + '</tr>'; }).join('') + '</tbody></table>';
     var hK = '<table><thead><tr><th>Riga</th><th>Seriale</th><th>P/N</th><th style="min-width:420px">Motivo</th></tr></thead><tbody>' + R.ko.map(function (x) { return '<tr>' + td(x.riga) + td(x.ser, 'mono') + td(x.pn, 'mono') + td(x.motivo) + '</tr>'; }).join('') + '</tbody></table>';
     Modal.html('📋 Riallinea con template · ' + esc(RialT._file || ''),
+      '<div class="hint" style="margin-bottom:4px">Movimenti letti: database principale' + (RialT.A && RialT.A.anni.length ? ' + archivi ' + RialT.A.anni.join(', ') : (RialT.conArch ? ' (nessun archivio trovato)' : ' (archivi non letti)')) + (RialT.A && RialT.A.err.length ? ' · <span style="color:var(--red)">non letti: ' + esc(RialT.A.err.join('; ')) + '</span>' : '') + '</div>' +
       '<div class="hint"><b>' + R.ok.length + '</b> pezzi caricabili (diventano schede IN GIACENZA collegate al loro movimento di ingresso: nessun nuovo movimento IN, la fatturazione non cambia). <span style="color:var(--amber)">Le righe gialle hanno avvisi e partono senza spunta.</span></div>' +
       (R.ok.length ? '<div class="tbl-wrap modal-scroll" style="max-height:36vh;margin:6px 0 12px">' + hA + '</div>' : '<div class="hint" style="margin:6px 0 12px">Nessun pezzo caricabile.</div>') +
       '<div class="hint"><b>' + R.ko.length + '</b> righe scartate (non caricabili) con il motivo:</div>' +
@@ -3560,13 +3583,13 @@ var RialT = {
     var sel = Array.prototype.filter.call(document.querySelectorAll('.rtCk'), function (c) { return c.checked && c.closest('tr').style.display !== 'none'; }).map(function (c) { return RialT.R.ok[+c.dataset.i]; });
     if (!sel.length) { toast('Spunta almeno un pezzo', 'warn'); return; }
     if (!(await Modal.confirm('Crea ' + sel.length + ' schede', 'Le schede entrano IN GIACENZA collegate al loro movimento di ingresso (da template ' + (RialT._file || '') + '). Nessun nuovo movimento IN: resta un movimento interno RIALLINEA e il LOG.'))) return;
-    API.append(DB.id, 'LOG', [App.log('RIALLINEA_TEMPLATE', 'UNITA', '', { file: RialT._file, righe_file: RialT.R.ok.length + RialT.R.ko.length, create: sel.length, scartate: RialT.R.ko.map(function (x) { return x.riga + ' ' + x.ser + ': ' + x.motivo; }).slice(0, 200) })]).catch(function () { });
+    API.append(DB.id, 'LOG', [App.log('RIALLINEA_TEMPLATE', 'UNITA', '', { file: RialT._file, archivi: RialT.A ? RialT.A.anni : [], righe_file: RialT.R.ok.length + RialT.R.ko.length, create: sel.length, scartate: RialT.R.ko.map(function (x) { return x.riga + ' ' + x.ser + ': ' + x.motivo; }).slice(0, 200) })]).catch(function () { });
     await Rial.crea(sel, false, true);
   },
   excel: function () {
     var R = RialT.R; if (!R) return;
     Xls.scarica('Riallinea_template_esito', [
-      { nome: 'Caricabili', headers: ['Riga', 'Seriale', 'P/N', 'Tipo', 'Mov. IN', 'Data', 'FR', 'PO/MRN', 'Mittente', 'Avvisi'], rows: R.ok.map(function (x) { return [x.riga, x.m.seriale, x.m.pn, x.tipo, x.m.id_mov, L.itDate(x.m.data_ora), x.m.fr, x.m.po_mrn, x.m.controparte, x.avv.join(' · ')]; }) },
+      { nome: 'Caricabili', headers: ['Riga', 'Seriale', 'P/N', 'Tipo', 'Mov. IN', 'Data', 'Archivio', 'FR', 'PO/MRN', 'Mittente', 'Avvisi'], rows: R.ok.map(function (x) { return [x.riga, x.m.seriale, x.m.pn, x.tipo, x.m.id_mov, L.itDate(x.m.data_ora), x.m._arch || '', x.m.fr, x.m.po_mrn, x.m.controparte, x.avv.join(' · ')]; }) },
       { nome: 'Scartati', headers: ['Riga', 'Seriale', 'P/N', 'PO/MRN', 'Tipo', 'Motivo'], rows: R.ko.map(function (x) { return [x.riga, x.ser, x.pn, x.po, x.tipoF, x.motivo]; }) }]);
   }
 };
