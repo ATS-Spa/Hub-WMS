@@ -512,7 +512,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
     <div class="view" id="view-giacenze">
       <div class="card">
         <div class="row">
-          <div class="fg" style="flex:1;min-width:220px;max-width:640px"><span class="fl">Cerca</span><input class="fc mono" id="gQ" placeholder="seriale, P/N, FR, RMA, AWB, DDT, mittente, PO, ubicazione, nota" oninput="Giacenze.debounce()"></div>
+          <div class="fg" style="flex:1;min-width:220px;max-width:640px"><span class="fl">Cerca</span><input class="fc mono" id="gQ" autocomplete="off" placeholder="seriale, P/N, FR, RMA, AWB, DDT, mittente, PO, ubicazione, nota" oninput="Giacenze.debounce()"></div>
           <div class="fg"><span class="fl">Sulle schede filtrate</span><div class="row" style="gap:6px;flex-wrap:nowrap"><button class="btn ghost sm" onclick="Bon.filtrate()" title="Cambia in blocco uno o più campi di tutte le schede che vedi con i filtri (stessa procedura della Bonifica da Excel: motivo, anteprima, movimento VARIAZIONE e LOG). Serve la password">🧹 Bonifica</button><button class="btn ghost sm" onclick="Giacenze.sbloccaFiltrate()" title="Rimette disponibili tutte le schede bloccate o in attesa che vedi con i filtri (motivo, anteprima, movimento SBLOCCO e LOG). Serve la password">🔓 Sblocca</button></div></div>
           <div class="fg"><span class="fl">Tipo</span><select class="fc" id="gTipo" onchange="Giacenze.render()"><option value="">Tutti</option></select></div>
           <div class="fg"><span class="fl">Magazzino</span><select class="fc" id="gMag" onchange="Giacenze.render()"><option value="">Tutti</option></select></div>
@@ -1084,7 +1084,17 @@ var Modal = {
     });
     $('modal').classList.add('show');
   },
-  html: function (title, html, buttons, wide) { Modal.open(title, '', buttons); $('mBody').innerHTML = html; document.querySelector('#modal .modal').classList.toggle('wide', !!wide); },
+  html: function (title, html, buttons, wide) { Modal.open(title, '', buttons); $('mBody').innerHTML = html; Modal.esca(); document.querySelector('#modal .modal').classList.toggle('wide', !!wide); },
+  // il gestore password del browser, vedendo un campo password, scrive il "nome utente" nel campo di testo che lo precede nella pagina
+  // (un filtro della griglia o la ricerca sotto il popup) → la tabella si svuota. Un campo esca nascosto prima di ogni password lo assorbe.
+  esca: function () {
+    document.querySelectorAll('#mBody input[type=password]').forEach(function (p) {
+      if (p.previousElementSibling && p.previousElementSibling.classList.contains('pw-esca')) return;
+      var e = document.createElement('input'); e.type = 'text'; e.className = 'pw-esca'; e.autocomplete = 'username'; e.tabIndex = -1; e.setAttribute('aria-hidden', 'true');
+      e.style.cssText = 'position:absolute;width:1px;height:1px;opacity:0;pointer-events:none;border:0;padding:0;margin:0';
+      p.parentNode.insertBefore(e, p);
+    });
+  },
   progress: function (t) { $('mProg').textContent = t; },
   close: function () { $('modal').classList.remove('show'); },
   confirm: function (title, body) { return new Promise(function (res) { Modal.open(title, body, [{ label: 'Annulla', cls: 'ghost', fn: function () { res(false); } }, { label: 'Conferma', cls: 'green', fn: function () { res(true); } }]); }); }
@@ -5419,7 +5429,7 @@ Grid.prototype.head = function () {
   }).join('') + '</tr>';
   var h2 = '<tr class="g-filters">' + this.vc().map(function (c) {
     if (c.filter === 'select') return '<th><select class="g-f" id="gf_' + self.name + '_' + c.k + '" onchange="' + g + '.filtra(\'' + c.k + '\',this.value)"></select></th>';
-    if (c.filter === 'text') return '<th><input class="g-f" id="gf_' + self.name + '_' + c.k + '" value="' + esc(self.f[c.k] || '') + '" placeholder="filtra" oninput="' + g + '.filtraT(\'' + c.k + '\',this.value)"></th>';
+    if (c.filter === 'text') return '<th><input class="g-f" autocomplete="off" id="gf_' + self.name + '_' + c.k + '" value="' + esc(self.f[c.k] || '') + '" placeholder="filtra" oninput="' + g + '.filtraT(\'' + c.k + '\',this.value)"></th>';
     if (c.filter === 'date') { var cur = self.f[c.k] || '', cu = /^R:/.test(cur);
       return '<th><select class="g-f' + (cur ? ' g-on' : '') + '" id="gf_' + self.name + '_' + c.k + '" onchange="' + g + '.filtraD(\'' + c.k + '\',this.value)">' +
         Grid.DATE.map(function (x) { return '<option value="' + x[0] + '"' + (x[0] === cur ? ' selected' : '') + '>' + x[1] + '</option>'; }).join('') +
