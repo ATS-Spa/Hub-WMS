@@ -524,6 +524,7 @@ body.is-light #appShell{--viz-1:#2a78d6;--viz-track:rgba(100,116,139,.12);--s1:#
           <button class="btn ghost sm" onclick="Giacenze.excel()">⬇ Excel</button>
           <button class="btn ghost sm" onclick="Reso.apri()" title="Uscita di pezzi in reso verso una destinazione, senza RMA: partono con il DDT di Uscite e DDT RMA">📤 Reso senza RMA</button>
           <button class="btn ghost sm" onclick="Rial.apri()" title="Pezzi con l'ingresso nei movimenti ma senza scheda in giacenza (e schede in giacenza già uscite). Serve la password">🔁 Riallinea da movimenti</button>
+          <button class="btn ghost sm" onclick="RialT.apri()" title="Pezzi trovati fisicamente: carichi un Excel con Seriale e PartNumber, il tool cerca l'ingresso nei movimenti e, se non sono usciti, crea la scheda. Serve la password">📋 Riallinea con template</button>
           <button class="btn ghost sm" onclick="Bon.apri()" title="Ricarica l'Excel di Giacenze con i dati mancanti compilati (FR, material…): cambia solo quello che hai scritto. Serve la password">⬆ Bonifica da Excel</button>
           <button class="btn ghost sm" id="gRett" style="display:none" onclick="Rett.aggiungi()" title="Solo admin: aggiungi un pezzo presente a scaffale ma mancante a sistema (movimento interno, non va in fatturazione)">＋ Rettifica: aggiungi pezzo</button>
         </div>
@@ -3434,8 +3435,8 @@ var Rial = {
       { nome: 'D tolte senza uscita', headers: ['Mov. IN', 'Data', 'Scheda', 'Stato', 'Tipo', 'FR', 'Seriale', 'P/N', 'Tolta il', 'Da', 'Note', 'Avvisi'], rows: (R.D || []).map(function (x) { return [x.m.id_mov, L.itDate(x.m.data_ora), x.u.id_unita, x.u.stato, x.u.tipo, x.u.fr, x.u.seriale, x.u.pn, L.vedi(L.s(x.u.modificato_il).slice(0, 16)), App.sigla(x.u.modificato_da), x.u.note, x.avv.join(' / ')]; }) },
       { nome: 'C create dal riallineamento', headers: ['Scheda', 'Creata il', 'Tipo', 'FR', 'Seriale', 'P/N', 'MNFT', 'Mov. IN', 'Note'], rows: (R.C || []).map(function (u) { return [u.id_unita, L.vedi(L.s(u.creato_il).slice(0, 16)), u.tipo, u.fr, u.seriale, u.pn, u.mnft, u.id_mov_in, u.note]; }) }]);
   },
-  crea: async function (sel, quiet) {
-    if (!quiet && !(await Modal.confirm('Crea ' + sel.length + ' schede', 'Le schede entrano IN GIACENZA collegate al loro movimento di ingresso. Nessun nuovo movimento IN: resta un movimento interno RIALLINEA e il LOG.'))) return;
+  crea: async function (sel, quiet, giaConf) {
+    if (!quiet && !giaConf && !(await Modal.confirm('Crea ' + sel.length + ' schede', 'Le schede entrano IN GIACENZA collegate al loro movimento di ingresso. Nessun nuovo movimento IN: resta un movimento interno RIALLINEA e il LOG.'))) return;
     if (!quiet) Modal.open('Riallinea giacenza', 'Creo ' + sel.length + ' schede…', []);
     try {
       await DB.loadTables(['UNITA']);
@@ -3449,7 +3450,7 @@ var Rial = {
         if (tipo === 'GOOD' && v) { var dep = DB.t.DEPOT_VLT.rows.find(function (d) { return d.depot_vlt === v.depot_origine; }); if (dep) dest = dep.destinazione; }
         return { seriale: L.s(m.seriale), pn: pn, mnft: L.up(m.mnft) || DB.artPn[pn] || '', material: (v && L.s(v.f_mat_material)) || pm[pn] || '', tipo: tipo, fr: fr, rma: L.s(m.rma), riparatore: L.s(m.riparatore) || (v ? v.riparatore : ''),
           magazzino: mag, ubicazione: L.up(m.ubicazione_a), stato: 'IN_GIACENZA', destinazione_prevista: dest, id_mov_in: m.id_mov, data_in: L.normDate(m.data_ora),
-          note: [L.s(m.note), 'riallineata da movimento ' + m.id_mov + (L.s(m.origine) ? ' (' + L.s(m.origine) + ')' : '')].filter(Boolean).join(' · '), rev: 1, creato_il: now, creato_da: chi.email };
+          note: [L.s(m.note), 'riallineata da movimento ' + m.id_mov + (L.s(m.origine) ? ' (' + L.s(m.origine) + ')' : ''), it.nota].filter(Boolean).join(' · '), rev: 1, creato_il: now, creato_da: chi.email };
       });
       var rU = await API.append(DB.id, 'UNITA', objs.map(function (o) { return tU.toRow(o); })), uBase = parseInt(DB.param('unita_id_base', '0'), 10) || 0;
       objs.forEach(function (o, i) { o.id_unita = 'U' + L.pad(uBase + rU + i - 1, 7); });
@@ -3468,6 +3469,105 @@ var Rial = {
       if (quiet) return objs.length;
       Modal.close(); Giacenze.render(); App.syncInfo(); toast(objs.length + ' schede create in giacenza', 'ok');
     } catch (e) { if (quiet) throw e; Modal.close(); Modal.open('Errore', e.message + '\n\nPremi Aggiorna e rilancia il controllo: i pezzi già creati non vengono riproposti.'); }
+  }
+};
+
+// ───────────────────────── RIALLINEA CON TEMPLATE (Giacenze) ─────────────────────────
+// Pezzi trovati fisicamente: Excel con SERIALE, PARTNUMBER (+ PO/MRN, TIPO facoltativi). Per ogni riga cerca l'ingresso nei movimenti
+// dell'anno: se c'è e dopo non c'è un'uscita, la scheda si crea IN GIACENZA collegata a quel movimento (come il riallineamento A:
+// nessun nuovo IN, la fatturazione non cambia). Il resto va negli scarti con il motivo.
+var RialT = {
+  COLS: ['SERIALE', 'PARTNUMBER', 'PO/MRN', 'TIPO'],
+  apri: function () {
+    Modal.html('📋 Riallinea con template', '<div class="hint" style="margin-bottom:8px">Per i pezzi che hai <b>fisicamente</b> a magazzino ma non in giacenza: carichi un Excel con <b>Seriale</b> e <b>PartNumber</b> (PO/MRN e Tipo facoltativi). Il tool cerca l\'ingresso nei movimenti dell\'anno e, se il pezzo non risulta uscito, crea la scheda collegata a quel movimento. Prima vedi l\'anteprima di cosa crea e cosa scarta.</div>' +
+      '<div class="fg"><span class="fl">Password *</span><input class="fc" type="password" id="rtPwd" autocomplete="new-password"></div><div class="hint" id="rtErr" style="margin-top:6px"></div>',
+      [{ label: 'Annulla', cls: 'ghost' }, { label: 'Continua', cls: 'green', keep: true, fn: async function () {
+        var pw = $('rtPwd').value, par = L.s(DB.param('password_eliminazione', ''));
+        var ok = par ? (/^sha256:/i.test(par) ? (await Nr.sha(pw)) === par.slice(7).toLowerCase() : pw === par) : (await Nr.sha(pw)) === Nr.PWD;
+        if (!ok) { $('rtErr').textContent = 'Password errata'; $('rtErr').className = 'hint err'; return; }
+        RialT.carica();
+      } }]);
+    setTimeout(function () { $('rtPwd').focus(); $('rtPwd').addEventListener('keydown', function (e) { if (e.key === 'Enter') document.querySelector('#mBtns .btn.green').click(); }); }, 50);
+  },
+  carica: function () {
+    Modal.html('📋 Riallinea con template', '<div class="hint" style="margin-bottom:10px">1. Scarica il template e compila una riga per pezzo: <b>SERIALE</b> e <b>PARTNUMBER</b> obbligatori; <b>PO/MRN</b> e <b>TIPO</b> (FAULTY, GOOD, NEW, REUSE, BALANCING, SCRAP…) facoltativi, servono a scegliere l\'ingresso giusto.<br>2. Carica il file: vedrai l\'anteprima prima di creare qualsiasi scheda.</div>' +
+      '<div class="row" style="gap:8px;flex-wrap:wrap"><button class="btn ghost" id="rtTpl">⬇ Scarica template</button><label class="btn green">⬆ Carica Excel<input type="file" id="rtFile" accept=".xlsx,.xls,.csv" hidden></label></div><div class="hint" id="rtErr2" style="margin-top:8px"></div>',
+      [{ label: 'Chiudi', cls: 'ghost' }]);
+    $('rtTpl').onclick = function () { Crud.prototype.modello(RialT.COLS, 'template_riallinea_giacenza.xlsx'); };
+    $('rtFile').onchange = function () { var f = this.files[0]; if (f) RialT.leggi(f); };
+  },
+  leggi: async function (file) {
+    var R;
+    try { R = await leggiFoglio(file); } catch (e) { $('rtErr2').textContent = 'File non leggibile: ' + e.message; $('rtErr2').className = 'hint err'; return; }
+    if (!R.length || !('SERIALE' in R[0])) { $('rtErr2').textContent = 'Serve la colonna SERIALE (usa il template)'; $('rtErr2').className = 'hint err'; return; }
+    Modal.open('Riallinea con template', 'Rileggo movimenti e giacenza…', []);
+    try { await DB.loadTables(['UNITA']); Sto.dati.cur = await Sto.colsSafe(DB.id, 'MOVIMENTI'); } catch (e) { Modal.open('Errore', e.message); return; }
+    RialT._file = file.name; RialT.R = RialT.calcola(R); RialT.anteprima();
+  },
+  calcola: function (R) {
+    var M = (Sto.dati.cur || []).filter(function (m) { return (m.direzione === 'IN' || m.direzione === 'OUT') && L.s(m.seriale) && !Sto.annullato(m); });
+    var perMovIn = {}; DB.t.UNITA.rows.forEach(function (u) { if (L.s(u.id_mov_in)) perMovIn[u.id_mov_in] = u; });
+    var frStock = {}; DB.t.UNITA.rows.forEach(function (u) { if (Giacenze.A_MAG.indexOf(u.stato) >= 0 && L.s(u.fr)) frStock[u.fr] = u; });
+    var ok = [], ko = [], visti = [];
+    R.forEach(function (o, i) {
+      var riga = i + 2, ser = L.up(campo(o, ['SERIALE', 'SN', 'SERIAL'])), pn = L.up(campo(o, ['PARTNUMBER', 'PART NUMBER', 'P/N', 'PN']));
+      var po = L.s(campo(o, ['PO/MRN', 'PO', 'MRN', 'PO / MRN'])), tipo = L.up(campo(o, ['TIPO']));
+      var x = { riga: riga, ser: ser, pn: pn, po: po, tipoF: tipo, avv: [] };
+      var scarta = function (mot) { x.motivo = mot; ko.push(x); };
+      if (!ser) return scarta('seriale mancante');
+      if (!pn) return scarta('PartNumber mancante');
+      if (tipo && TIPI.indexOf(tipo) < 0) return scarta('tipo "' + tipo + '" non valido');
+      var vd = visti.find(function (v) { return App.serUguali(v.ser, ser) && App.pnUguali(v.pn, pn); });
+      if (vd) return scarta('riga doppia nel file (stesso seriale e P/N della riga ' + vd.riga + ')');
+      visti.push(x);
+      var g = App.dupGiac(ser, pn);
+      if (g.stesso) return scarta('già in giacenza: ' + g.stesso.id_unita + ' (' + g.stesso.tipo + ', ' + g.stesso.stato + ')');
+      var S = M.filter(function (m) { return App.serUguali(m.seriale, ser); });
+      var ins = S.filter(function (m) { return m.direzione === 'IN'; });
+      if (!ins.length) return scarta('nessun ingresso nei movimenti dell\'anno: va caricato da Ingresso (o con Rettifica: aggiungi pezzo)');
+      var insP = ins.filter(function (m) { return App.pnUguali(m.pn, pn); });
+      if (!insP.length) return scarta('nei movimenti il seriale entra con un altro P/N (' + ins.map(function (m) { return m.pn || '—'; }).filter(function (p, k, a) { return a.indexOf(p) === k; }).join(', ') + '): controlla il PartNumber');
+      if (tipo) { var t2 = insP.filter(function (m) { return L.up(m.tipo) === tipo; }); if (t2.length) insP = t2; else x.avv.push('tipo nel file ' + tipo + ', nel movimento ' + L.up(insP[insP.length - 1].tipo) + ' (vale il movimento)'); }
+      if (po) { var p2 = insP.filter(function (m) { return L.up(m.po_mrn) === L.up(po); }); if (p2.length) insP = p2; else x.avv.push('PO/MRN nel file ' + po + ', nel movimento ' + (L.s(insP[insP.length - 1].po_mrn) || 'vuoto')); }
+      insP.sort(function (a, b) { return Rial.t(a.data_ora) < Rial.t(b.data_ora) ? -1 : 1; });
+      var last = insP[insP.length - 1], tIn = Rial.t(last.data_ora);
+      var dopo = S.filter(function (m) { return m.direzione === 'OUT' && (!L.s(m.pn) || App.pnUguali(m.pn, pn)) && Rial.t(m.data_ora) >= tIn && m.id_mov !== last.id_mov; });
+      if (dopo.length) { var o1 = dopo[dopo.length - 1]; return scarta('uscito il ' + L.itDate(o1.data_ora) + (L.s(o1.controparte) ? ' verso ' + o1.controparte : '') + (L.s(o1.ddt) ? ' (DDT ' + o1.ddt + ')' : '') + ' dopo l\'ingresso del ' + L.itDate(last.data_ora) + ': se è rientrato serve un nuovo ingresso'); }
+      var u0 = perMovIn[last.id_mov];
+      if (u0) return scarta('il movimento ' + last.id_mov + ' ha già la scheda ' + u0.id_unita + ' (' + u0.stato + ')' + (u0.stato === 'ANNULLATO' || u0.stato === 'RETTIFICATO' ? ': usa Riallinea da movimenti → D (rimetti in giacenza)' : ''));
+      if (g.altri.length) x.avv.push('stesso seriale in giacenza con P/N diverso (' + App.pnElenco(g.altri) + ')');
+      var fr = L.frKey(last.fr); if (fr && frStock[fr]) x.avv.push('FR ' + fr + ' già in giacenza su ' + frStock[fr].id_unita);
+      x.m = last; x.tipo = L.up(last.tipo); x.v = fr ? DB.vltMap[fr] : null; x.nota = 'da template ' + (RialT._file || '') + ' riga ' + riga;
+      ok.push(x);
+    });
+    return { ok: ok, ko: ko };
+  },
+  anteprima: function () {
+    var R = RialT.R, td = function (v, c) { return '<td' + (c ? ' class="' + c + '"' : '') + '>' + esc(v == null ? '' : v) + '</td>'; };
+    var hA = '<table><thead><tr><th><input type="checkbox" id="rtAll"></th><th>Riga</th><th>Seriale</th><th>P/N</th><th>Tipo</th><th>Mov. IN</th><th>Data</th><th>FR</th><th>PO/MRN</th><th>Mittente</th><th style="min-width:280px">Avvisi</th></tr></thead><tbody>' +
+      R.ok.map(function (x, i) { return '<tr' + (x.avv.length ? ' class="r-warn"' : '') + '><td><input type="checkbox" class="rtCk" data-i="' + i + '"' + (x.avv.length ? '' : ' checked') + '></td>' + td(x.riga) + td(x.m.seriale, 'mono') + td(x.m.pn, 'mono') + td(x.tipo) + td(x.m.id_mov, 'mono') + td(L.itDate(x.m.data_ora)) + td(x.m.fr, 'mono') + td(x.m.po_mrn) + td(x.m.controparte) + td(x.avv.join(' · ')) + '</tr>'; }).join('') + '</tbody></table>';
+    var hK = '<table><thead><tr><th>Riga</th><th>Seriale</th><th>P/N</th><th style="min-width:420px">Motivo</th></tr></thead><tbody>' + R.ko.map(function (x) { return '<tr>' + td(x.riga) + td(x.ser, 'mono') + td(x.pn, 'mono') + td(x.motivo) + '</tr>'; }).join('') + '</tbody></table>';
+    Modal.html('📋 Riallinea con template · ' + esc(RialT._file || ''),
+      '<div class="hint"><b>' + R.ok.length + '</b> pezzi caricabili (diventano schede IN GIACENZA collegate al loro movimento di ingresso: nessun nuovo movimento IN, la fatturazione non cambia). <span style="color:var(--amber)">Le righe gialle hanno avvisi e partono senza spunta.</span></div>' +
+      (R.ok.length ? '<div class="tbl-wrap modal-scroll" style="max-height:36vh;margin:6px 0 12px">' + hA + '</div>' : '<div class="hint" style="margin:6px 0 12px">Nessun pezzo caricabile.</div>') +
+      '<div class="hint"><b>' + R.ko.length + '</b> righe scartate (non caricabili) con il motivo:</div>' +
+      (R.ko.length ? '<div class="tbl-wrap modal-scroll" style="max-height:28vh;margin-top:6px">' + hK + '</div>' : ''),
+      [{ label: 'Chiudi', cls: 'ghost' }, { label: '⬇ Excel esito', cls: 'ghost', keep: true, fn: RialT.excel }, { label: '⬆ Altro file', cls: 'ghost', keep: true, fn: RialT.carica }].concat(R.ok.length ? [{ label: '📥 Crea le schede spuntate', cls: 'green', keep: true, fn: RialT.crea }] : []), true);
+    var all = $('rtAll'); if (all) all.onchange = function () { document.querySelectorAll('.rtCk').forEach(function (c) { if (c.closest('tr').style.display !== 'none') c.checked = all.checked; }); };
+    Rial.filtri();
+  },
+  crea: async function () {
+    var sel = Array.prototype.filter.call(document.querySelectorAll('.rtCk'), function (c) { return c.checked && c.closest('tr').style.display !== 'none'; }).map(function (c) { return RialT.R.ok[+c.dataset.i]; });
+    if (!sel.length) { toast('Spunta almeno un pezzo', 'warn'); return; }
+    if (!(await Modal.confirm('Crea ' + sel.length + ' schede', 'Le schede entrano IN GIACENZA collegate al loro movimento di ingresso (da template ' + (RialT._file || '') + '). Nessun nuovo movimento IN: resta un movimento interno RIALLINEA e il LOG.'))) return;
+    API.append(DB.id, 'LOG', [App.log('RIALLINEA_TEMPLATE', 'UNITA', '', { file: RialT._file, righe_file: RialT.R.ok.length + RialT.R.ko.length, create: sel.length, scartate: RialT.R.ko.map(function (x) { return x.riga + ' ' + x.ser + ': ' + x.motivo; }).slice(0, 200) })]).catch(function () { });
+    await Rial.crea(sel, false, true);
+  },
+  excel: function () {
+    var R = RialT.R; if (!R) return;
+    Xls.scarica('Riallinea_template_esito', [
+      { nome: 'Caricabili', headers: ['Riga', 'Seriale', 'P/N', 'Tipo', 'Mov. IN', 'Data', 'FR', 'PO/MRN', 'Mittente', 'Avvisi'], rows: R.ok.map(function (x) { return [x.riga, x.m.seriale, x.m.pn, x.tipo, x.m.id_mov, L.itDate(x.m.data_ora), x.m.fr, x.m.po_mrn, x.m.controparte, x.avv.join(' · ')]; }) },
+      { nome: 'Scartati', headers: ['Riga', 'Seriale', 'P/N', 'PO/MRN', 'Tipo', 'Motivo'], rows: R.ko.map(function (x) { return [x.riga, x.ser, x.pn, x.po, x.tipoF, x.motivo]; }) }]);
   }
 };
 
