@@ -2050,7 +2050,8 @@ var Ingresso = {
     }
     if (o.tipo === 'BALANCING') {
       var aperta = function (x) { return L.up(x.gestito) === 'NO' || !L.s(x.gestito); };
-      var b = DB.t.BALANCING.rows.find(function (x) { return L.up(x.seriale) === L.up(o.ser) && aperta(x) && DB.daQuestAnno(x.data_inbound); })
+      var bS = DB.t.BALANCING.rows.filter(function (x) { return L.up(x.seriale) === L.up(o.ser) && aperta(x) && DB.daQuestAnno(x.data_inbound); });
+      var b = (bS.length > 1 ? bS.find(function (x) { return App.pnUguali(x.pn, o.pn); }) : null) || bS[0]
            || DB.t.BALANCING.rows.find(function (x) { return o.rma && x.rma === o.rma && aperta(x) && DB.daQuestAnno(x.data_inbound); });
       o.bal = b || null;
       o.destinazione = b ? App.destDaSigla(b.destinatario) : '';
@@ -2081,15 +2082,20 @@ var Ingresso = {
     }
     if (L.up(o.nota) === 'SCRAP') o.tipo = 'SCRAP';
     // duplicati
-    var key = L.up(o.ser);
-    if (ctx.serSeen[key]) { o.msgs.push(['err', 'Seriale già letto in questa lista (riga ' + ctx.serSeen[key] + ')']); o.err = true; }
-    ctx.serSeen[key] = ctx.n;
+    var key = L.up(o.ser), visL = ctx.serSeen[key] || [], gem = visL.find(function (x) { return App.pnUguali(x.pn, o.pn); });
+    if (gem) { o.msgs.push(['err', 'Seriale già letto in questa lista (riga ' + gem.n + ')']); o.err = true; }
+    else if (visL.length) { o.msgs.push(['warn', 'Seriale già letto alla riga ' + visL.map(function (x) { return x.n; }).join(', ') + ' con P/N diverso: entra come pezzo distinto']); o.warn = true; }
+    (ctx.serSeen[key] = visL).push({ n: ctx.n, pn: o.pn });
     if (o.fr) { if (ctx.frSeen[o.fr]) { o.msgs.push(['err', 'FR ' + o.fr + ' già letto in questa lista (riga ' + ctx.frSeen[o.fr] + '): un FR va su un solo pezzo']); o.err = true; } ctx.frSeen[o.fr] = ctx.n; }
-    var g = ctx.giac[key] || ctx.giac[L.up(L.afterSpace(o.ser))];
+    // stesso seriale in giacenza: blocca solo con lo stesso P/N; con P/N diverso entra come pezzo distinto (avviso + conferma al carico)
+    var gL = (ctx.giac[key] || []).concat(ctx.giac[L.up(L.afterSpace(o.ser))] || []).filter(function (u, i, a) { return a.indexOf(u) === i; });
+    var g = gL.find(function (u) { return App.pnUguali(u.pn, o.pn); }) || null, gAltri = gL.filter(function (u) { return u !== g && !App.pnUguali(u.pn, o.pn); });
+    o.dupPn = !g && gAltri.length ? gAltri : null;
+    if (o.dupPn) { o.msgs.push(['warn', 'Seriale già in giacenza con P/N diverso (' + App.pnElenco(gAltri) + '): entra come pezzo distinto. Controlla che non sia lo stesso pezzo con il P/N sbagliato']); o.warn = true; }
     if (g) {
       var mi = (Sto.dati.cur || []).find(function (m) { return m.id_mov === g.id_mov_in; }), sIn = mi ? L.s(mi.stato_vlt) : '', vg = g.fr ? DB.vltMap[g.fr] : null, sNow = vg ? L.s(vg.stato) : '';
       var ferma = g.tipo === 'FAULTY' && sNow && L.s(DB.param('vlt_stati_fr_da_chiudere', '')).split(';').map(L.s).indexOf(sNow) >= 0;
-      o.msgs.push(['err', 'Seriale già in giacenza (' + g.id_unita + ', ' + g.tipo + ', entrato ' + L.itDate(g.data_in) + (sIn ? ' con stato VLT "' + sIn + '"' : '') + (sNow ? (sIn ? ', ora "' : ', stato VLT ora "') + sNow + '"' : '') + ')' + (ferma ? ': non ricaricarlo, si chiude su VLT con Spare ferme in HUB' : '')]); o.err = true;
+      o.msgs.push(['err', 'Seriale già in giacenza (' + g.id_unita + ', ' + g.tipo + ', entrato ' + L.itDate(g.data_in) + (sIn ? ' con stato VLT "' + sIn + '"' : '') + (sNow ? (sIn ? ', ora "' : ', stato VLT ora "') + sNow + '"' : '') + ')' + (ferma ? ': non ricaricarlo, si chiude su VLT con Spare ferme in HUB' : (g.pn ? ' · P/N ' + g.pn + ': se è un altro pezzo con P/N diverso, correggi il P/N della riga' : ''))]); o.err = true;
     }
     if (o.bc && L.s(o.bc) !== L.s(o.ser)) o.msgs.push(['info', 'Seriale estratto dal barcode']);
     if (!o.pn) { o.msgs.push(['err', 'P/N non ricavato: inseriscilo (senza P/N non si carica)']); o.err = true; }
@@ -2122,7 +2128,7 @@ var Ingresso = {
     $('hVettore').textContent = !vet ? '' : (vlist.indexOf(vet) < 0 ? 'VEDI FISICAMENTE: vettore non in elenco' : '');
     $('hVettore').className = 'hint' + (vet && vlist.indexOf(vet) < 0 ? ' warn' : '');
     // giacenza indicizzata
-    var giac = {}, giacFr = {}, oggiFr = {}, oggiD = L.isoToday(); DB.t.UNITA.rows.forEach(function (u) { if (Giacenze.A_MAG.indexOf(u.stato) >= 0) { giac[L.up(u.seriale)] = u; if (u.fr) (giacFr[u.fr] = giacFr[u.fr] || []).push(u); } else if (u.fr && u.stato !== 'ANNULLATO' && L.s(u.creato_il).slice(0, 10) === oggiD) (oggiFr[u.fr] = oggiFr[u.fr] || []).push(u); });
+    var giac = {}, giacFr = {}, oggiFr = {}, oggiD = L.isoToday(); DB.t.UNITA.rows.forEach(function (u) { if (Giacenze.A_MAG.indexOf(u.stato) >= 0) { (giac[L.up(u.seriale)] = giac[L.up(u.seriale)] || []).push(u); if (u.fr) (giacFr[u.fr] = giacFr[u.fr] || []).push(u); } else if (u.fr && u.stato !== 'ANNULLATO' && L.s(u.creato_il).slice(0, 10) === oggiD) (oggiFr[u.fr] = oggiFr[u.fr] || []).push(u); });
     var lettera = L.up(App.me.sigla || 'X').charAt(0);
     var re = new RegExp('/ 0?(\\d+)' + lettera + '$');
     var base = 0; DB.t.UNITA.rows.forEach(function (u) { if (u.stato === 'IN_GIACENZA' && (u.tipo === 'GOOD' || u.tipo === 'BALANCING')) { var m = re.exec(L.s(u.note).split(' | ')[0]); if (m) base = Math.max(base, parseInt(m[1], 10)); } });
@@ -2241,7 +2247,9 @@ var Ingresso = {
     // giacenza aggiornata (un collega può aver caricato lo stesso seriale o FR nel frattempo): stessi controlli prima di scrivere
     try { await Busy.wrap(DB.loadTables(['UNITA'])); Ingresso.ricalcola(); Ingresso.renderOggi(); C = Ingresso.computed; } catch (e) { Modal.open('Carica dati', 'Non riesco a rileggere la giacenza per il controllo dei doppi: ' + e.message + '\nRiprova tra poco.'); return; }
     if (C.some(function (c) { return c.err; })) { Modal.open('Righe bloccanti', 'Con la giacenza aggiornata alcune righe sono diventate rosse (un collega ha appena caricato lo stesso seriale o FR): controllale prima di caricare.'); return; }
-    var nWarn = C.filter(function (c) { return c.warn; }).length;
+    var nWarn = C.filter(function (c) { return c.warn; }).length, dpn = C.filter(function (c) { return c.dupPn; });
+    if (dpn.length && !(await Modal.confirm('Stesso seriale, P/N diverso', dpn.length + ' pezzi hanno un seriale già in giacenza con un altro P/N e verranno caricati come pezzi distinti:\n\n' + dpn.slice(0, 15).map(function (c) { return '• ' + c.ser + ' P/N ' + c.pn + ' (in giacenza: ' + App.pnElenco(c.dupPn) + ')'; }).join('\n') + (dpn.length > 15 ? '\n…' : '') + '\n\nConfermi che sono pezzi diversi?'))) return;
+    if (dpn.length) API.append(DB.id, 'LOG', [App.log('INGRESSO_SERIALE_PN_DIVERSO_CONFERMATO', 'UNITA', '', { righe: dpn.map(function (c) { return { seriale: c.ser, pn: c.pn, gia: c.dupPn.map(function (u) { return u.id_unita + ' ' + u.pn; }) }; }) })]).catch(function () { });
     var ok = await Modal.confirm('Carica ' + C.length + ' pezzi',
       'Tipo ' + T.tipo + ' · ' + T.mittente + ' · ' + T.data + (Ingresso.perConto ? '\n\nA nome di ' + Ingresso.perConto.sigla + ' · ' + Ingresso.perConto.nome + ' (caricato da te: resta nel LOG)' : '') + (nWarn ? '\n\n' + nWarn + ' righe hanno avvisi (gialle): verranno caricate e, se c\'è un errore seriale/TPN, aperta un\'anomalia.' : ''));
     if (!ok) return;
@@ -2368,12 +2376,12 @@ var Ingresso = {
       var id = 'U' + L.pad(uBase + u._r - 1, 7); if (ids[id]) return;   // ID già preso da un'altra scheda: non tocco
       var ch = { id_unita: id }, rr = -1, mr = -1, idR = L.s(u.id_ricezione), idM = L.s(u.id_mov_in);
       if (!idR) { rr = R.findIndex(function (x) { return !L.s(x.id_ricezione) && x.creato_il === u.creato_il && x.creato_da === u.creato_da; }); if (rr >= 0) { idR = 'R' + L.pad(DB.rid('RICEZIONI', rr + 2), 6); ch.id_ricezione = idR; } }
-      if (!idM && !isNaN(mBase)) { mr = M.findIndex(function (m, i) { return !usatiM[i] && !L.s(m.id_mov) && m.direzione === 'IN' && L.up(m.seriale) === L.up(u.seriale) && L.s(m.operatore).toLowerCase() === L.s(u.creato_da).toLowerCase(); }); if (mr >= 0) { usatiM[mr] = 1; idM = 'IN' + (mBase + mr + 2); ch.id_mov_in = idM; } }
+      if (!idM && !isNaN(mBase)) { mr = M.findIndex(function (m, i) { return !usatiM[i] && !L.s(m.id_mov) && m.direzione === 'IN' && L.up(m.seriale) === L.up(u.seriale) && App.pnUguali(m.pn, u.pn) && L.s(m.operatore).toLowerCase() === L.s(u.creato_da).toLowerCase(); }); if (mr >= 0) { usatiM[mr] = 1; idM = 'IN' + (mBase + mr + 2); ch.id_mov_in = idM; } }
       if (L.s(u.note).indexOf(' / ' + Ingresso.NR_SCHEDA) >= 0) ch.note = L.s(u.note).replace(' / ' + Ingresso.NR_SCHEDA, ' / ' + id);
       Object.keys(ch).forEach(function (h) { if (h in tU.idx) upd.push({ range: tU.cell(h, u._r), values: [[ch[h]]] }); });
       if (mr >= 0) [['id_mov', idM], ['id_unita', id], ['id_ricezione', idR]].forEach(function (x) { if (x[1] && x[0] in tM.idx) upd.push({ range: tM.cell(x[0], mr + 2), values: [[x[1]]] }); });
       if (rr >= 0 && 'id_ricezione' in tR.idx) upd.push({ range: tR.cell('id_ricezione', rr + 2), values: [[idR]] }), R[rr].id_ricezione = idR;
-      if (u.tipo === 'BALANCING' && DB.t.BALANCING) { var b = DB.t.BALANCING.rows.find(function (x) { return L.up(x.seriale) === L.up(u.seriale) && (L.up(x.gestito) === 'NO' || !L.s(x.gestito)); }); if (b) { var tB = DB.t.BALANCING, cb = { gestito: 'SI', data_gestione: u.creato_il, gestito_da: u.creato_da, id_unita: id }; Object.keys(cb).forEach(function (h) { if (h in tB.idx) { b[h] = cb[h]; upd.push({ range: tB.cell(h, b._r), values: [[cb[h]]] }); } }); } }
+      if (u.tipo === 'BALANCING' && DB.t.BALANCING) { var b = DB.t.BALANCING.rows.find(function (x) { return L.up(x.seriale) === L.up(u.seriale) && App.pnUguali(x.pn, u.pn) && (L.up(x.gestito) === 'NO' || !L.s(x.gestito)); }); if (b) { var tB = DB.t.BALANCING, cb = { gestito: 'SI', data_gestione: u.creato_il, gestito_da: u.creato_da, id_unita: id }; Object.keys(cb).forEach(function (h) { if (h in tB.idx) { b[h] = cb[h]; upd.push({ range: tB.cell(h, b._r), values: [[cb[h]]] }); } }); } }
       ids[id] = 1; fatti.push({ u: u, ch: ch, mov: idM, ric: idR });
     });
     if (!fatti.length) return 0;
@@ -2401,7 +2409,7 @@ var Ingresso = {
     var upd = [], nuovi = [], per = [], fatti = [];
     US.forEach(function (u) {
       if (L.s(u.id_mov_in) || !L.s(u.id_unita)) return;
-      var i = M.findIndex(function (m) { return m.direzione === 'IN' && (m.id_unita === u.id_unita || (!L.s(m.id_mov) && L.up(m.seriale) === L.up(u.seriale))); });
+      var i = M.findIndex(function (m) { return m.direzione === 'IN' && (m.id_unita === u.id_unita || (!L.s(m.id_mov) && L.up(m.seriale) === L.up(u.seriale) && App.pnUguali(m.pn, u.pn))); });
       if (i >= 0) {   // c'è già: lo collego (e gli do l'ID se non l'ha)
         var idM = L.s(M[i].id_mov) || 'IN' + (mBase + i + 2);
         if (!L.s(M[i].id_mov)) upd.push({ range: tM.cell('id_mov', i + 2), values: [[idM]] });
@@ -2507,8 +2515,11 @@ var Ingresso = {
     if (!Object.keys(ch).length) { Modal.close(); return; }
     if ('seriale' in ch) {
       if (!ch.seriale) { $('edErr').textContent = 'Il seriale non può essere vuoto'; $('edErr').className = 'hint err'; return; }
-      var dup = tU.rows.find(function (x) { return x !== u && (x.stato === 'IN_GIACENZA' || x.stato === 'IN_LAVORAZIONE') && L.up(x.seriale) === ch.seriale; });
-      if (dup) { $('edErr').textContent = 'Seriale già in giacenza (' + dup.id_unita + ')'; $('edErr').className = 'hint err'; return; }
+    }
+    if ('seriale' in ch || 'pn' in ch) {
+      var dd = App.dupGiac(ch.seriale || u.seriale, 'pn' in ch ? ch.pn : u.pn, u);
+      if (dd.stesso) { $('edErr').textContent = 'Seriale già in giacenza con lo stesso P/N (' + dd.stesso.id_unita + ')'; $('edErr').className = 'hint err'; return; }
+      if (dd.altri.length && !confirm('Seriale già in giacenza con P/N diverso (' + App.pnElenco(dd.altri) + '): sono pezzi distinti?')) return;
     }
     if (ch.fr && !/^\d+$/.test(ch.fr)) { $('edErr').textContent = 'FR deve essere un numero'; $('edErr').className = 'hint err'; return; }
     Modal.progress('Salvataggio…');
@@ -2768,6 +2779,29 @@ App.destDaSigla = function (x) {
   x = L.s(x); if (!x) return x;
   var d = DB.t.DEPOT_VLT.rows.find(function (r) { return L.up(r.sigla) === L.up(x); });
   return d ? (L.s(d.destinazione_conversione) || d.destinazione) : x;
+};
+// ── stesso seriale con P/N diverso = pezzi distinti ──
+// P/N uguali: stessa scritta (senza spazi, maiuscole) o uno variante dell'altro (82.86F-8660 / 82.86F-8660-R6); P/N vuoto = non si sa → uguale (prudenza)
+App.pnK = function (p) { return L.up(p).replace(/\s+/g, ''); };
+App.pnUguali = function (a, b) {
+  var x = App.pnK(a), y = App.pnK(b); if (!x || !y || x === y) return true;
+  var v = function (p, q) { return p.indexOf(q) === 0 && /[-._\/]/.test(p.charAt(q.length)); };
+  return v(x, y) || v(y, x);
+};
+App.serUguali = function (a, b) { a = L.up(a); b = L.up(b); return !!a && !!b && (a === b || L.up(L.afterSpace(a)) === b || a === L.up(L.afterSpace(b))); };
+// schede a magazzino con quel seriale (tranne 'non')
+App.giacSer = function (ser, non) { return DB.t.UNITA.rows.filter(function (u) { return u !== non && Giacenze.A_MAG.indexOf(u.stato) >= 0 && App.serUguali(u.seriale, ser); }); };
+// stesso = doppione vero (stesso seriale e stesso P/N: si blocca) · altri = stesso seriale con P/N diverso (ammessi, con avviso)
+App.dupGiac = function (ser, pn, non) { var l = App.giacSer(ser, non); return { stesso: l.find(function (u) { return App.pnUguali(u.pn, pn); }) || null, altri: l.filter(function (u) { return !App.pnUguali(u.pn, pn); }) }; };
+App.pnElenco = function (l) { return l.map(function (u) { return u.id_unita + ' P/N ' + (u.pn || '—'); }).join(', '); };
+// più schede a magazzino con lo stesso seriale: l'operatore sceglie il pezzo (P/N, tipo, ubicazione) → Promise scheda o null
+App.scegliScheda = function (lista, ser) {
+  if (!lista || lista.length < 2) return Promise.resolve((lista && lista[0]) || null);
+  return new Promise(function (res) {
+    Modal.open('Seriale ' + ser + ' su ' + lista.length + ' schede', 'Stesso seriale con P/N diversi: scegli il pezzo che hai in mano (guarda il P/N sull\'etichetta).',
+      lista.map(function (u) { return { label: (u.pn || 'senza P/N') + ' · ' + u.tipo + (u.ubicazione ? ' · ' + u.ubicazione : '') + ' · ' + u.id_unita, cls: 'green', fn: function () { res(u); } }; })
+        .concat([{ label: 'Annulla', cls: 'ghost', fn: function () { res(null); } }]));
+  });
 };
 // destinazioni ammesse: Controparti ATTIVE con tipo DESTINAZIONE (o tipo vuoto) + destinazioni di Depositi VLT (destinazione e conversione);
 // un codice messo attivo = NO in Controparti è escluso anche se compare in Depositi VLT. I Riparatori non sono destinazioni.
@@ -3044,7 +3078,7 @@ var Giacenze = {
     if ((ch.stato && ch.stato !== 'IN_GIACENZA' || variati.length) && !motivo) { err('Scrivi il motivo'); $('gvMotivo').focus(); return; }
     if ('seriale' in ch && !ch.seriale) { err('Il seriale non può essere vuoto'); return; }
     if (ch.fr && !/^\d+$/.test(ch.fr)) { err('FR deve essere un numero'); return; }
-    if ('seriale' in ch) { var dup = tU.rows.find(function (x) { return x !== u && Giacenze.A_MAG.indexOf(x.stato) >= 0 && L.up(x.seriale) === ch.seriale; }); if (dup) { err('Seriale già in giacenza (' + dup.id_unita + ')'); return; } }
+    if ('seriale' in ch || 'pn' in ch) { var dd = App.dupGiac(ch.seriale || u.seriale, 'pn' in ch ? ch.pn : u.pn, u); if (dd.stesso) { err('Seriale già in giacenza con lo stesso P/N (' + dd.stesso.id_unita + ')'); return; } if (dd.altri.length && !confirm('Seriale già in giacenza con P/N diverso (' + App.pnElenco(dd.altri) + '): sono pezzi distinti?')) return; }
     Modal.progress('Salvataggio…');
     try {
       var last = L.colLetter(tU.header.length - 1);
@@ -3215,18 +3249,30 @@ var Rial = {
     var M = (Sto.dati.cur || []).filter(function (m) { return (m.direzione === 'IN' || m.direzione === 'OUT') && L.s(m.seriale) && !Sto.annullato(m); });
     var perSer = {}; M.forEach(function (m) { var k = L.up(m.seriale); (perSer[k] = perSer[k] || []).push(m); });
     var U = DB.t.UNITA.rows, stock = {}, perMovIn = {}, frStock = {};
-    U.forEach(function (u) { if (L.s(u.id_mov_in)) perMovIn[u.id_mov_in] = u; if (Giacenze.A_MAG.indexOf(u.stato) >= 0) { stock[L.up(u.seriale)] = u; stock[L.up(L.afterSpace(u.seriale))] = stock[L.up(L.afterSpace(u.seriale))] || u; if (L.s(u.fr)) frStock[u.fr] = u; } });
-    var A = [], B = [], D = [];
+    var addS = function (k, u) { if (k && (stock[k] = stock[k] || []).indexOf(u) < 0) stock[k].push(u); };
+    U.forEach(function (u) { if (L.s(u.id_mov_in)) perMovIn[u.id_mov_in] = u; if (Giacenze.A_MAG.indexOf(u.stato) >= 0) { addS(L.up(u.seriale), u); addS(L.up(L.afterSpace(u.seriale)), u); if (L.s(u.fr)) frStock[u.fr] = u; } });
+    // scheda in giacenza per quel seriale (e, se il seriale ha più P/N, per quel P/N)
+    var inStock = function (k, pn) { var l = (stock[k] || []).concat(stock[L.up(L.afterSpace(k))] || []); return (pn ? l.find(function (u) { return App.pnUguali(u.pn, pn); }) : l[0]) || null; };
+    // stesso seriale con P/N diversi negli ingressi = pezzi distinti: un gruppo per P/N; le uscite senza P/N valgono per tutti (prudenza)
+    var G = [];
     Object.keys(perSer).forEach(function (k) {
-      var L0 = perSer[k], ins = L0.filter(function (m) { return m.direzione === 'IN'; }), outs = L0.filter(function (m) { return m.direzione === 'OUT'; });
+      var L0 = perSer[k], pnI = [];
+      L0.forEach(function (m) { if (m.direzione === 'IN' && App.pnK(m.pn) && !pnI.some(function (p) { return App.pnUguali(p, m.pn); })) pnI.push(m.pn); });
+      if (pnI.length < 2) { G.push({ k: k, pn: '', L0: L0 }); return; }
+      pnI.forEach(function (p) { G.push({ k: k, pn: p, L0: L0.filter(function (m) { return App.pnK(m.pn) ? App.pnUguali(m.pn, p) : m.direzione === 'OUT'; }) }); });
+    });
+    var A = [], B = [], D = [];
+    G.forEach(function (gr) {
+      var k = gr.k, L0 = gr.L0, ins = L0.filter(function (m) { return m.direzione === 'IN'; }), outs = L0.filter(function (m) { return m.direzione === 'OUT'; });
       if (!ins.length) return;
       ins.sort(function (a, b) { return Rial.t(a.data_ora).localeCompare(Rial.t(b.data_ora)); });
       var last = ins[ins.length - 1], dIn = L.normDate(last.data_ora);
       // un'uscita nello stesso giorno o dopo = il pezzo è uscito (con le sole date non si sa l'ordine: prudenza)
       var dopo = outs.filter(function (o) { return L.normDate(o.data_ora) >= dIn; });
-      var u = stock[k] || stock[L.up(L.afterSpace(k))];
+      var u = inStock(k, gr.pn);
       if (!dopo.length && !u && !perMovIn[last.id_mov] && dIn >= Rial.da) {
         var it = { m: last, avv: [], tipo: L.up(last.tipo) }, v = L.s(last.fr) ? DB.vltMap[L.frKey(last.fr)] : null;
+        if (gr.pn) it.avv.push('stesso seriale con più P/N nei movimenti: pezzo distinto (P/N ' + last.pn + '), verifica che siano due pezzi');
         if (TIPI.indexOf(it.tipo) < 0) it.avv.push('tipo "' + last.tipo + '" non valido');
         if (L.s(last.fr) && frStock[L.frKey(last.fr)]) it.avv.push('FR già in giacenza su ' + frStock[L.frKey(last.fr)].id_unita);
         if (it.tipo === 'FAULTY' && v && Rial.HUB_FAULTY.indexOf(L.up(v.stato)) < 0) it.avv.push('su VLT è "' + v.stato + '": forse già uscita');
@@ -3337,7 +3383,7 @@ var Rial = {
       sel.forEach(function (x) {
         var u = tU.rows.find(function (y) { return y.id_unita === x.u.id_unita; });
         if (!u || (u.stato !== 'ANNULLATO' && u.stato !== 'RETTIFICATO')) { salt.push(x.u.id_unita + ' (cambiata nel frattempo)'); return; }
-        if (stock[L.up(u.seriale)]) { salt.push(u.id_unita + ' (seriale già in giacenza su ' + stock[L.up(u.seriale)].id_unita + ')'); return; }
+        var dg = App.dupGiac(u.seriale, u.pn, u).stesso; if (dg) { salt.push(u.id_unita + ' (seriale e P/N già in giacenza su ' + dg.id_unita + ')'); return; }
         var car = DB.t.CARICHI_RMA.rows.find(function (c) { return c.stato === 'APERTO' && c.id_unita === u.id_unita; });
         var ch = { stato: car ? 'IN_LAVORAZIONE' : 'IN_GIACENZA', note: [L.s(u.note), 'rimessa in giacenza (riallineamento D, era ' + u.stato + '): ' + mot].join(' | '), modificato_il: now, modificato_da: chi.email, rev: (parseInt(u.rev, 10) || 1) + 1 };
         if (car) { ch.rma = L.s(car.rma); ch.destinazione_prevista = L.s(car.destinazione); }
@@ -3395,7 +3441,7 @@ var Rial = {
       await DB.loadTables(['UNITA']);
       var tU = DB.t.UNITA, now = L.nowStamp(), chi = App.chi(), pm = Bon.pnMat(), stock = {};
       tU.rows.forEach(function (u) { if (Giacenze.A_MAG.indexOf(u.stato) >= 0) stock[L.up(u.seriale)] = 1; });
-      var lista = sel.filter(function (it) { return !stock[L.up(it.m.seriale)]; });
+      var lista = sel.filter(function (it) { return !App.dupGiac(it.m.seriale, it.m.pn).stesso; });   // stesso seriale con P/N diverso: pezzo distinto, si crea
       if (!lista.length) { if (quiet) return 0; Modal.close(); Modal.open('Niente da creare', 'Nel frattempo questi pezzi sono già entrati in giacenza.'); return; }
       var objs = lista.map(function (it) {
         var m = it.m, tipo = TIPI.indexOf(it.tipo) >= 0 ? it.tipo : 'FAULTY', fr = L.frKey(m.fr), v = it.v, pn = L.up(m.pn);
@@ -3521,13 +3567,14 @@ var Bon = {
   },
   calcola: function (R, col) {
     var tU = DB.t.UNITA, byId = {}, bySer = {}, vis = {}, out = [];
-    tU.rows.forEach(function (u) { byId[u.id_unita] = u; if (Giacenze.A_MAG.indexOf(u.stato) >= 0) bySer[L.up(u.seriale)] = u; });
+    tU.rows.forEach(function (u) { byId[u.id_unita] = u; if (Giacenze.A_MAG.indexOf(u.stato) >= 0) (bySer[L.up(u.seriale)] = bySer[L.up(u.seriale)] || []).push(u); });
     var stOk = L.s(DB.param('pending_fr_stati', 'Failed Material Sent;Open')).split(';').map(L.up).filter(Boolean), pm = Bon.pnMat();
     var frUsati = {}; tU.rows.forEach(function (u) { if (L.s(u.fr) && Giacenze.A_MAG.indexOf(u.stato) >= 0) (frUsati[u.fr] = frUsati[u.fr] || []).push(u); });
     R.forEach(function (o, k) {
-      var id = L.up(o['ID']), u = id ? byId[id] : bySer[L.up(o['SERIALE'])];
+      var id = L.up(o['ID']), sL = id ? [] : (bySer[L.up(o['SERIALE'])] || []), u = id ? byId[id] : (sL.length === 1 ? sL[0] : null);
       var it = { riga: k + 2, id: id || L.up(o['SERIALE']), u: u, ch: {}, auto: {}, avv: [], err: '' };
       out.push(it);
+      if (!id && sL.length > 1) { it.err = 'Seriale su ' + sL.length + ' schede con P/N diversi (' + App.pnElenco(sL) + '): indica l\'ID'; return; }
       if (!u) { it.err = 'Scheda non trovata'; return; }
       it.id = u.id_unita; it.rev = L.s(u.rev);
       if (vis[u.id_unita]) { it.err = 'Riga doppia nel file (riga ' + vis[u.id_unita] + ')'; return; } vis[u.id_unita] = it.riga;
@@ -3547,7 +3594,8 @@ var Bon = {
       else if (ch.fr && !/^\d+$/.test(ch.fr)) { it.err = 'FR "' + ch.fr + '" non è un numero'; return; }
       if (ch.tipo === '__SVUOTA__') delete ch.tipo;
       if (ch.seriale === '__SVUOTA__') delete ch.seriale;
-      if (ch.seriale) { var d = bySer[ch.seriale]; if (d && d !== u) { it.err = 'Seriale ' + ch.seriale + ' già in giacenza su ' + d.id_unita; return; } it.avv.push('Cambio seriale ' + u.seriale + ' → ' + ch.seriale); }
+      if (ch.seriale || (ch.pn && ch.pn !== '__SVUOTA__')) { var dd = App.dupGiac(ch.seriale || u.seriale, ch.pn && ch.pn !== '__SVUOTA__' ? ch.pn : u.pn, u); if (dd.stesso) { it.err = 'Seriale ' + (ch.seriale || u.seriale) + ' già in giacenza con lo stesso P/N su ' + dd.stesso.id_unita; return; } if (dd.altri.length) it.avv.push('Stesso seriale in giacenza con P/N diverso (' + App.pnElenco(dd.altri) + ')'); }
+      if (ch.seriale) it.avv.push('Cambio seriale ' + u.seriale + ' → ' + ch.seriale);
       if (ch.tipo) it.avv.push('Cambio tipo ' + u.tipo + ' → ' + ch.tipo);
       var auto = function (f, v, perche) { if (!L.s(v) || f in ch || L.s(v) === L.s(u[f])) return; ch[f] = L.s(v); it.auto[f] = perche; };
       if (ch.fr && ch.fr !== '__SVUOTA__') {
@@ -3749,8 +3797,8 @@ var Rett = {
     var set = function (id, val) { var e = $(id); if (e && !L.s(e.value) && L.s(val)) e.value = val; };
     if (v) { set('rtFr', v.fr_id); set('rtPn', v.f_mat_tmpn); set('rtRip', App.aliasRip(v.riparatore)); }
     if (old) { set('rtPn', old.pn); set('rtMnft', old.mnft); set('rtRip', old.riparatore); if (!v) set('rtFr', old.fr); }
-    var gia = DB.t.UNITA.rows.find(function (x) { return L.up(x.seriale) === ser && Giacenze.A_MAG.indexOf(x.stato) >= 0; });
-    $('rtInfo').innerHTML = gia ? '<span style="color:var(--red)">Già in giacenza: ' + esc(gia.id_unita) + ' (' + esc(gia.tipo) + ', ' + esc(gia.stato) + ')</span>' : (v ? 'VLT: FR ' + esc(v.fr_id) + ' · ' + esc(v.stato) : (old ? 'Ultima scheda: ' + esc(old.id_unita) + ' · ' + esc(old.stato) : 'Seriale non trovato su VLT né in giacenza'));
+    var gL = App.giacSer(ser), gia = gL.find(function (x) { return App.pnUguali(x.pn, $('rtPn').value); }) || null;
+    $('rtInfo').innerHTML = gia ? '<span style="color:var(--red)">Già in giacenza: ' + esc(gia.id_unita) + ' (' + esc(gia.tipo) + ', ' + esc(gia.stato) + ', P/N ' + esc(gia.pn) + ')</span>' : gL.length ? '<span style="color:var(--amber)">Stesso seriale in giacenza con P/N diverso: ' + esc(App.pnElenco(gL)) + ' (si può aggiungere come pezzo distinto)</span>' : (v ? 'VLT: FR ' + esc(v.fr_id) + ' · ' + esc(v.stato) : (old ? 'Ultima scheda: ' + esc(old.id_unita) + ' · ' + esc(old.stato) : 'Seriale non trovato su VLT né in giacenza'));
   },
   aggiungi: function () {
     if (!App.isAdmin) return;
@@ -3778,8 +3826,9 @@ var Rett = {
     if (!pn) return err('Il P/N è obbligatorio');
     if (fr && !/^\d+$/.test(fr)) return err('FR deve essere un numero');
     if (!motivo) return err('Scrivi il motivo');
-    var gia = DB.t.UNITA.rows.find(function (x) { return L.up(x.seriale) === ser && Giacenze.A_MAG.indexOf(x.stato) >= 0; });
-    if (gia) return err('Seriale già in giacenza: ' + gia.id_unita);
+    var dd = App.dupGiac(ser, pn);
+    if (dd.stesso) return err('Seriale già in giacenza con lo stesso P/N: ' + dd.stesso.id_unita);
+    if (dd.altri.length && !confirm('Seriale già in giacenza con P/N diverso (' + App.pnElenco(dd.altri) + '): aggiungo un pezzo distinto?')) return;
     Modal.progress('Salvataggio…');
     try {
       var tU = DB.t.UNITA, now = L.nowStamp(), chi = App.chi(), v = fr ? DB.vltMap[fr] : null, dest = g('rtDest');
@@ -3891,7 +3940,7 @@ var MovEd = {
     if ('seriale' in ch && !ch.seriale) { err('Il seriale non può essere vuoto'); return; }
     if (ch.fr && !/^\d+$/.test(ch.fr)) { err('FR deve essere un numero'); return; }
     var tU = DB.t.UNITA, u = r.id_unita ? tU.rows.find(function (x) { return x.id_unita === r.id_unita; }) : null;
-    if (u && 'seriale' in ch && L.s(u.seriale) === L.s(r.seriale)) { var dup = tU.rows.find(function (x) { return x !== u && Giacenze.A_MAG.indexOf(x.stato) >= 0 && L.up(x.seriale) === ch.seriale; }); if (dup) { err('Seriale già in giacenza (' + dup.id_unita + ')'); return; } }
+    if (u && ('seriale' in ch || 'pn' in ch) && L.s(u.seriale) === L.s(r.seriale) && Giacenze.A_MAG.indexOf(u.stato) >= 0) { var dd = App.dupGiac(ch.seriale || u.seriale, 'pn' in ch ? ch.pn : u.pn, u); if (dd.stesso) { err('Seriale già in giacenza con lo stesso P/N (' + dd.stesso.id_unita + ')'); return; } if (dd.altri.length && !confirm('Seriale già in giacenza con P/N diverso (' + App.pnElenco(dd.altri) + '): sono pezzi distinti?')) return; }
     Modal.progress('Salvataggio…');
     try {
       var H = await Ingresso.heads(), tM = H.MOVIMENTI, mr = await Spec.righe(tM), row = mr[r.id_mov];
@@ -3985,7 +4034,7 @@ var MovBon = {
       if (ch.fr && !/^\d+$/.test(ch.fr)) { it.err = 'FR "' + ch.fr + '" non è un numero'; return it; }
       if (ch.fr && !DB.vltMap[ch.fr]) it.avv.push('FR ' + ch.fr + ' non trovato su VLT');
       if (ch.fr && DB.vltMap[ch.fr]) { var vs = L.up(DB.vltMap[ch.fr].f_mat_serial_no), ss = L.up(ch.seriale || m.seriale); if (vs && vs !== ss && L.up(L.afterSpace(vs)) !== L.up(L.afterSpace(ss))) it.avv.push('seriale su VLT ' + DB.vltMap[ch.fr].f_mat_serial_no); }
-      if (ch.seriale && it.u && Giacenze.A_MAG.indexOf(it.u.stato) >= 0) { var d = DB.t.UNITA.rows.find(function (x) { return x !== it.u && Giacenze.A_MAG.indexOf(x.stato) >= 0 && L.up(x.seriale) === ch.seriale; }); if (d) { it.err = 'Seriale ' + ch.seriale + ' già in giacenza su ' + d.id_unita; return it; } }
+      if ((ch.seriale || ch.pn) && it.u && Giacenze.A_MAG.indexOf(it.u.stato) >= 0) { var dd = App.dupGiac(ch.seriale || it.u.seriale, ch.pn || it.u.pn, it.u); if (dd.stesso) { it.err = 'Seriale ' + (ch.seriale || it.u.seriale) + ' già in giacenza con lo stesso P/N su ' + dd.stesso.id_unita; return it; } if (dd.altri.length) it.avv.push('stesso seriale in giacenza con P/N diverso (' + App.pnElenco(dd.altri) + ')'); }
       if (ch.seriale) it.avv.push('cambio seriale ' + m.seriale + ' → ' + ch.seriale);
       if (ch.tipo) it.avv.push('cambio tipo ' + m.tipo + ' → ' + ch.tipo);
       if (!Object.keys(ch).length) it.uguale = true;
@@ -5950,13 +5999,13 @@ var Ack = {
     return list;
   },
   idxU: function () {
-    var byFr = {}, bySer = {}, byId = {};
+    var byFr = {}, bySer = {}, byId = {}, serL = {};
     DB.t.UNITA.rows.forEach(function (u) {
       byId[u.id_unita] = u;
       if (Giacenze.A_MAG.indexOf(u.stato) < 0) return;   // anche bloccati / in attesa: compaiono ma non si spuntano
-      if (u.fr) byFr[u.fr] = u; var s = L.up(u.seriale); if (s) { bySer[s] = u; bySer[L.up(L.afterSpace(s))] = bySer[L.up(L.afterSpace(s))] || u; }
+      if (u.fr) byFr[u.fr] = u; var s = L.up(u.seriale); if (s) { bySer[s] = u; bySer[L.up(L.afterSpace(s))] = bySer[L.up(L.afterSpace(s))] || u; [s, L.up(L.afterSpace(s))].forEach(function (k) { if ((serL[k] = serL[k] || []).indexOf(u) < 0) serL[k].push(u); }); }
     });
-    return { fr: byFr, ser: bySer, id: byId };
+    return { fr: byFr, ser: bySer, serL: serL, id: byId };
   },
   // FR attesi dal VLT: stato ACK (+ AS se il riparatore lo prevede), BAN segnalati ed esclusi
   attesi: function (cod, ix) {
@@ -6182,7 +6231,9 @@ var Ack = {
     if (!s || s.stato !== 'IN_SPUNTA' || !raw) return;
     if (App.condiviso() && !Ack.opValido(s)) { Ack.fb('Inattivo da più di ' + Ack.opMin() + ' minuti: reinserisci il PIN e rispara', 'warn'); Ack.scegliOp(s).then(function (ok) { if (ok) Ack.apri(s.id_spedizione); }); return; }
     var R = Ack.righe(s.id_spedizione), k = L.frKey(raw), ser = L.up(raw.indexOf(';') > 0 ? Ingresso.pulisci(raw, '').ser : L.estraiSeriale(raw, Ingresso.regole()));
-    var r = R.find(function (x) { return x.fr === k; }) || R.find(function (x) { var xs = L.up(x.seriale); return xs && (xs === ser || xs === L.up(raw) || L.up(L.afterSpace(xs)) === ser); });
+    // per seriale: con più righe (stesso seriale, P/N diversi) prima quella ancora da spuntare
+    var rS = R.filter(function (x) { var xs = L.up(x.seriale); return xs && (xs === ser || xs === L.up(raw) || L.up(L.afterSpace(xs)) === ser); });
+    var r = R.find(function (x) { return x.fr === k; }) || rS.find(function (x) { return x.esito !== 'SPUNTATO' && x.esito !== 'ESCLUSO_BAN' && x.esito !== 'RIMOSSO'; }) || rS[0];
     if (r) {
       if (r.esito === 'ESCLUSO_BAN') { Ack.fb('⚠ FR ' + r.fr + ' è BAN: NON va spedito, mettilo da parte', 'err'); }
       else if (r.esito === 'SPUNTATO') { Ack.fb('FR ' + r.fr + ' già spuntato', 'warn'); }
@@ -6190,7 +6241,7 @@ var Ack = {
       else { Ack.setR(r, 'SPUNTATO'); Ack.fb('✓ FR ' + r.fr + ' · ' + r.seriale + (r.flag_vlt === 'AS' ? ' · AS' : ''), 'ok'); }
     } else {
       // SPARE FALSE: letto ma non nella lista ACK del giorno
-      var ix = Ack.idxU(), u = ix.fr[k] || ix.ser[ser] || ix.ser[L.up(raw)] || null;
+      var ix = Ack.idxU(), sl = ix.serL[ser] || ix.serL[L.up(raw)] || [], u = ix.fr[k] || sl.find(function (x) { return x.tipo === 'FAULTY'; }) || sl[0] || null;   // stesso seriale su più schede: in ACK conta la FAULTY
       var fr = u ? u.fr : (DB.vltMap[k] ? k : ''), v = fr ? DB.vltMap[fr] : null;
       var gia = Ack.spareFalse(s.id_spedizione).some(function (a) { return (fr && a.fr === fr) || (u && a.id_unita === u.id_unita) || L.up(a.seriale) === L.up(raw); });
       if (gia) { Ack.fb('SPARE FALSE già segnalato: ' + (fr ? 'FR ' + fr : raw), 'warn'); }
@@ -7667,11 +7718,16 @@ var Rma = {
   // ubi (facoltativa, dal file): con più schede dello stesso seriale vince quella in quell'ubicazione
   // ubicazione di transcodifica (es. "DC12BB / FLM 550") → bin del magazzino (71-STK-…) dalla decodifica ubicazioni; '' se non c'è
   ubiBin: function (ubi) { ubi = L.up(ubi); if (!ubi || /^71-/.test(ubi)) return ''; var pb = Cedolino.pos(ubi); return pb[1] && L.up(pb[1]) !== ubi ? L.up(pb[1]) : ''; },
-  carUnita: function (ser, ubi) {
-    ser = L.up(ser); if (!ser) return null; ubi = L.up(ubi);
+  // stesso seriale su più NEW/REUSE con P/N diversi: decide l'ubicazione (o il P/N); se non basta → null e Rma._carAmb con le schede
+  carUnita: function (ser, ubi, pn) {
+    Rma._carAmb = null; ser = L.up(ser); if (!ser) return null; ubi = L.up(ubi);
     var C = DB.t.UNITA.rows.filter(function (u) { return (u.tipo === 'NEW' || u.tipo === 'REUSE') && (u.stato === 'IN_GIACENZA' || u.stato === 'IN_LAVORAZIONE') && (L.up(u.seriale) === ser || L.up(L.afterSpace(u.seriale)) === ser); });
+    if (pn && C.length > 1) { var Cp = C.filter(function (u) { return App.pnUguali(u.pn, pn); }); if (Cp.length) C = Cp; }
     var bin = ubi ? Rma.ubiBin(ubi) : '';
-    return (ubi && C.find(function (u) { var x = L.up(u.ubicazione); return x === ubi || (bin && (x === bin || Rma.ubiBin(x) === bin)); })) || C[0] || null;
+    var Cu = ubi ? C.filter(function (u) { var x = L.up(u.ubicazione); return x === ubi || (bin && (x === bin || Rma.ubiBin(x) === bin)); }) : [];
+    var R0 = Cu.length ? Cu : C;
+    if (R0.length > 1 && R0.some(function (u) { return !App.pnUguali(u.pn, R0[0].pn); })) { Rma._carAmb = R0; return null; }
+    return R0[0] || null;
   },
   // ricerca nelle righe (più valori separati da ;): Carichi e Inventario giornaliero
   q: {},
@@ -7782,14 +7838,14 @@ var Rma = {
     var u = Rma.carUnita($('carSer').value), h = $('carHint'); if (!h) return;
     if (!L.s($('carSer').value)) { h.textContent = ''; h.className = 'hint'; return; }
     var gia = u && Rma.carichi().some(function (c) { return c.id_unita === u.id_unita; });
-    h.textContent = !u ? 'non trovato tra NEW/REUSE in giacenza' : (gia ? 'già in un carico aperto' : u.tipo + ' · ' + u.pn + (u.ubicazione ? ' · ' + u.ubicazione : ''));
+    h.textContent = !u ? (Rma._carAmb ? 'seriale su ' + Rma._carAmb.length + ' pezzi con P/N diversi (' + App.pnElenco(Rma._carAmb) + '): scrivi l\'ubicazione' : 'non trovato tra NEW/REUSE in giacenza') : (gia ? 'già in un carico aperto' : u.tipo + ' · ' + u.pn + (u.ubicazione ? ' · ' + u.ubicazione : ''));
     h.className = 'hint' + (!u || gia ? ' err' : '');
   },
   // controlla una riga di carico; restituisce { u, err }
   carValida: function (o, visti, destFac) {
     var u = Rma.carUnita(o.seriale, o.ubicazione);
     if (!L.s(o.seriale)) return { err: 'seriale mancante' };
-    if (!u) return { err: 'seriale non trovato tra NEW/REUSE in giacenza' };
+    if (!u) return { err: Rma._carAmb ? 'seriale su ' + Rma._carAmb.length + ' pezzi con P/N diversi (' + App.pnElenco(Rma._carAmb) + '): indica l\'ubicazione' : 'seriale non trovato tra NEW/REUSE in giacenza' };
     if (Rma.carichi().some(function (c) { return c.id_unita === u.id_unita; })) return { u: u, err: 'già in un carico aperto' };
     if (visti && visti[u.id_unita]) return { u: u, err: 'seriale ripetuto nel file' };
     if (!L.s(o.destinazione) && !destFac) return { u: u, err: 'destinazione mancante' };
@@ -7866,7 +7922,7 @@ var Rma = {
         po_mrn: campo(r, ['PO', 'P.O', 'PO / MRN', 'PO/MRN', 'MRN', 'PO NEW / MRN']), note: campo(r, ['NOTE', 'NOTE SD / FR', 'NOTE SD']),
         material: campo(r, ['MATERIAL SAP CODE', 'MATERIAL SAPCODE', 'SAP CODE', 'MATERIAL']), ubicazione: L.up(campo(r, ['UBICAZIONE', 'POSIZIONE', 'BIN', 'UBICAZIONE PRELIEVO'])) };
       visti.rma = visti.rma || {};
-      if (Rma.resta(o.destinazione)) { var ur = Rma.carUnita(o.seriale, o.ubicazione); o.u = ur; o.resta = true; o.err = ur ? '' : 'seriale non trovato tra NEW/REUSE in giacenza'; return o; }
+      if (Rma.resta(o.destinazione)) { var ur = Rma.carUnita(o.seriale, o.ubicazione); o.u = ur; o.resta = true; o.err = ur ? '' : (Rma._carAmb ? 'seriale su più pezzi con P/N diversi: indica l\'ubicazione' : 'seriale non trovato tra NEW/REUSE in giacenza'); return o; }
       var v = Rma.carValida(o, visti, true); if (v.u && !v.err) { visti[v.u.id_unita] = 1; if (o.rma) visti.rma[o.rma] = o.destinazione; } o.manca = !!v.manca; o.u = v.u; o.err = v.err; o.senzaDest = !L.s(o.destinazione);
       var bF = Rma.ubiBin(o.ubicazione); if (bF) { o.ubiCod = o.ubicazione; o.ubicazione = bF; }   // DC12BB… → 71-STK-… (decodifica ubicazioni)
       if (o.u && o.ubicazione && L.up(o.u.ubicazione) && L.up(o.u.ubicazione) !== o.ubicazione && Rma.ubiBin(o.u.ubicazione) !== o.ubicazione) o.ubiDiv = L.up(o.u.ubicazione);   // il carico prende l'ubicazione del file (prelievo); la scheda resta com'è
@@ -7994,7 +8050,11 @@ var Rma = {
   ctrlInfo: function (raw) {
     var ser = L.up(raw), ser2 = L.up(L.afterSpace(raw)), d = $('uscData').value, esc0 = Rma.escl();
     var stesso = function (u) { var a = L.up(u.seriale); return a === ser || a === ser2 || L.up(L.afterSpace(u.seriale)) === ser; };
-    var x = Rma.daSpedire().find(function (p) { return stesso(p.u); });
+    var xs = Rma.daSpedire().filter(function (p) { return stesso(p.u); }), x = xs[0];
+    if (xs.length > 1) {   // stesso seriale su più pezzi in uscita (P/N diversi): li mostro tutti, l'operatore guarda il P/N
+      var dd = xs.map(function (p) { return p.dest; }).filter(function (d0, i, a) { return a.indexOf(d0) === i; });
+      return { ser: x.u.seriale, dest: dd.join(' / '), rma: xs.map(function (p) { return p.rma || '—'; }).join(' / '), tipo: x.u.tipo, stato: 'stesso seriale su ' + xs.length + ' pezzi: ' + xs.map(function (p) { return 'P/N ' + (p.u.pn || '—') + ' → ' + p.dest; }).join(' · ') + ' (controlla il P/N sull\'etichetta)', liv: 'warn' };
+    }
     if (x) {
       var s0 = Rma.sped(d, x.dest), stato = x.manca && !x.senzaRma ? 'manca RMA: non spuntato' : (x.senzaRma ? 'senza RMA (esce lo stesso)' : (esc0[x.u.id_unita] ? 'tolto dall\'uscita di oggi' : 'in uscita'));
       return { ser: x.u.seriale, dest: x.dest, rma: x.rma, ddt: s0 && s0.n_ddt ? s0.n_ddt : '', sped: s0 ? s0.stato : 'DA PREPARARE', tipo: x.u.tipo, fonte: x.fonte, stato: stato, liv: stato === 'in uscita' ? 'ok' : 'warn' };
@@ -8064,7 +8124,7 @@ var Rma = {
   // perché un carico aperto non compare nelle uscite ('' = compare). fix: 'RICOLLEGA' se si può rimettere la scheda in lavorazione
   carMotivo: function (c) {
     var U = DB.t.UNITA.rows, u = U.find(function (x) { return x.id_unita === c.id_unita; }), alt = null;
-    if (!u || Giacenze.A_MAG.indexOf(u.stato) < 0) alt = U.find(function (x) { return x !== u && L.up(x.seriale) === L.up(c.seriale) && Giacenze.A_MAG.indexOf(x.stato) >= 0; }) || null;
+    if (!u || Giacenze.A_MAG.indexOf(u.stato) < 0) alt = U.find(function (x) { return x !== u && L.up(x.seriale) === L.up(c.seriale) && App.pnUguali(x.pn, c.pn || (u && u.pn)) && Giacenze.A_MAG.indexOf(x.stato) >= 0; }) || null;
     if (!u && !alt) return { m: 'scheda del pezzo non trovata in giacenza' };
     if (!u || (alt && Giacenze.A_MAG.indexOf(u.stato) < 0)) return { m: 'il carico punta a una scheda ' + (u ? 'in stato ' + u.stato : 'inesistente') + ', ma il seriale è in giacenza su un\'altra scheda (' + alt.id_unita + ')', fix: 'RICOLLEGA', u: alt };
     if (u.stato !== 'IN_LAVORAZIONE') {
@@ -8671,7 +8731,7 @@ var Bal = new Crud('bal', {
     if (o.gestito !== g0) { if (o.gestito === 'SI') { o.data_gestione = L.nowStamp(); o.gestito_da = Auth.email; } else { o.data_gestione = ''; o.gestito_da = ''; } }
     if (o.gestito === 'SI') return '';
     var dv = App.soloVal('bal', o.destinatario); if (dv === null) return 'Destinatario "' + o.destinatario + '" non nell’elenco delle destinazioni (Controparti attive o Depositi VLT)'; o.destinatario = dv;
-    var d = DB.t.BALANCING.rows.find(function (x) { return x.id_balancing !== id && L.up(x.seriale) === L.up(o.seriale) && L.up(x.gestito) === 'NO'; });
+    var d = DB.t.BALANCING.rows.find(function (x) { return x.id_balancing !== id && L.up(x.seriale) === L.up(o.seriale) && App.pnUguali(x.pn, o.pn) && L.up(x.gestito) === 'NO'; });
     return d ? 'Seriale già presente in una balancing aperta (' + d.id_balancing + ')' : '';
   },
   elimina: { label: 'Annulla balancing', tip: 'Annullando la balancing la riga esce dalle attese e non viene più proposta all\'ingresso: resta nel foglio come ANNULLATA (filtro Stato → Annullate) con il motivo nelle note, e ne resta traccia nel LOG.', domanda: 'Annullare questa balancing? Esce dalle attese e non verrà più proposta all\'ingresso (resta come ANNULLATA, tracciata nel LOG).', set: { gestito: 'ANNULLATA' } },
@@ -8798,7 +8858,8 @@ Jun.dopoRma = async function (P, s, nDdt, oggi) {
 // pulsante sulla pratica: la GOOD in giacenza va nelle uscite RMA giornaliere
 Jun.goodUnita = function (r) {
   var s = L.up(r.good_seriale); if (!s) return null;
-  return DB.t.UNITA.rows.find(function (u) { return u.tipo === 'GOOD' && Giacenze.A_MAG.indexOf(u.stato) >= 0 && (L.up(u.seriale) === s || L.up(L.afterSpace(u.seriale)) === s); }) || null;
+  var l = DB.t.UNITA.rows.filter(function (u) { return u.tipo === 'GOOD' && Giacenze.A_MAG.indexOf(u.stato) >= 0 && (L.up(u.seriale) === s || L.up(L.afterSpace(u.seriale)) === s); });
+  return (l.length > 1 ? l.find(function (u) { return App.pnUguali(u.pn, r.good_pn); }) : null) || l[0] || null;
 };
 Jun.destOrigine = function (r) {
   var v = DB.vltMap && DB.vltMap[L.s(r.fr)], dep = v && DB.t.DEPOT_VLT.rows.find(function (d) { return d.depot_vlt === v.depot_origine; });
@@ -9483,7 +9544,8 @@ var Scr = {
     var b = Scr.apertoOk(); if (!b) return;
     var k = L.frKey(raw), ser = L.up(raw.indexOf(';') > 0 ? Ingresso.pulisci(raw, '').ser : L.estraiSeriale(raw, Ingresso.regole()));
     var inM = DB.t.UNITA.rows.filter(function (u) { return Giacenze.A_MAG.indexOf(u.stato) >= 0; });
-    var u = inM.find(function (x) { return x.fr && x.fr === k; }) || inM.find(function (x) { return L.up(x.seriale) === ser || L.up(x.seriale) === L.up(raw); }) || null;
+    var u = inM.find(function (x) { return x.fr && x.fr === k; }) || null;
+    if (!u) { var sl = inM.filter(function (x) { return L.up(x.seriale) === ser || L.up(x.seriale) === L.up(raw); }); u = sl.length > 1 ? await App.scegliScheda(sl, ser) : (sl[0] || null); if (sl.length > 1 && !u) return; }
     if (u) {
       if (Giacenze.bloccato(u.id_unita)) { Scr.fb('⛔ ' + u.seriale + ' è ' + u.stato + ' in giacenza: sbloccalo prima', 'err'); return; }
       if (L.s(u.n_plt) === b.codice) { Scr.fb('Già su ' + b.codice + ': ' + u.seriale, 'warn'); return; }
@@ -10049,13 +10111,14 @@ var Sto = {
       if (!rows.length || !('DIREZIONE' in rows[0]) || !('SERIALE' in rows[0])) { Modal.open('Importa movimenti', 'Il file deve avere le colonne di MOVIMENTI (almeno direzione, seriale, data_ora, tipo).'); return; }
       Modal.open('Importa movimenti', 'Rileggo i movimenti per evitare doppioni…', []);
       Sto.dati.cur = await Sto.colsSafe(DB.id, 'MOVIMENTI'); Modal.close();
-      var chiave = function (o) { var d = o.direzione === 'IN' ? L.normDate(o.data_registrazione_vlt) || L.normDate(o.data_ora) : L.normDate(o.data_ora); return o.direzione + '|' + L.up(o.seriale) + '|' + L.up(o.tipo) + '|' + d; };
+      var chiave = function (o) { var d = o.direzione === 'IN' ? L.normDate(o.data_registrazione_vlt) || L.normDate(o.data_ora) : L.normDate(o.data_ora); return o.direzione + '|' + L.up(o.seriale) + '|' + App.pnK(o.pn) + '|' + L.up(o.tipo) + '|' + d; };   // con il P/N: stesso seriale e P/N diverso = altro pezzo
       var gia = {}, perId = {}, perSer = {}; Sto.dati.cur.forEach(function (r) { gia[chiave(r)] = r.id_mov || '1'; if (r.id_mov) perId[r.id_mov] = r;
         var k = r.direzione + '|' + L.up(r.seriale) + '|' + L.up(r.tipo); (perSer[k] = perSer[k] || []).push(r); });
       // stesso pezzo, stessa direzione e tipo entro 7 giorni = probabilmente lo stesso movimento con una data diversa
       var gg = function (a, b) { a = L.normDate(a); b = L.normDate(b); return a && b ? Math.abs((new Date(a) - new Date(b)) / 864e5) : 999; };
-      var simile = function (o) { return (perSer[o.direzione + '|' + L.up(o.seriale) + '|' + L.up(o.tipo)] || []).find(function (r) { return Math.min(gg(r.data_ora, o.data_ora), gg(r.data_registrazione_vlt || r.data_ora, o.data_registrazione_vlt || o.data_ora)) <= 7; }); };
-      var uSer = {}; DB.t.UNITA.rows.forEach(function (u) { var k = L.up(u.seriale); if (k && (!uSer[k] || u.stato === 'IN_GIACENZA')) uSer[k] = u; });
+      var simile = function (o) { return (perSer[o.direzione + '|' + L.up(o.seriale) + '|' + L.up(o.tipo)] || []).find(function (r) { return App.pnUguali(r.pn, o.pn) && Math.min(gg(r.data_ora, o.data_ora), gg(r.data_registrazione_vlt || r.data_ora, o.data_registrazione_vlt || o.data_ora)) <= 7; }); };
+      var uSer = {}; DB.t.UNITA.rows.forEach(function (u) { var k = L.up(u.seriale); if (k) (uSer[k] = uSer[k] || []).push(u); });
+      var uDi = function (o) { var l = (uSer[L.up(o.seriale)] || []).filter(function (u) { return App.pnUguali(u.pn, o.pn); }); return l.filter(function (u) { return u.stato === 'IN_GIACENZA'; }).pop() || l.pop() || null; };
       var visti = {}, list = rows.map(function (r, i) {
         var o = {}; Sto.COLS.forEach(function (c) { o[c] = L.s(r[L.up(c)]); }); o.direzione = L.up(o.direzione); o._riga = i + 2;
         ['data_ora', 'data_registrazione_vlt', 'data_in_merci'].forEach(function (c) { if (o[c]) o[c] = L.normDate(o[c]); });
@@ -10066,7 +10129,7 @@ var Sto = {
         else if (visti[chiave(o)]) o._err = 'ripetuto nel file';
         else { var sm = simile(o); if (sm) o._dub = 'probabile doppione di ' + (sm.id_mov || '?') + ' del ' + L.itDate(sm.data_ora); }
         if (o.id_mov && !/^IMPORT|EASYLOADER/i.test(o.origine)) o.origine = [o.origine, 'ID originale ' + o.id_mov].filter(Boolean).join(' · ');
-        if (!o._err) { visti[chiave(o)] = 1; if (!o.id_unita && uSer[L.up(o.seriale)]) o.id_unita = uSer[L.up(o.seriale)].id_unita; if (!o.causale) o.causale = o.direzione === 'IN' ? 'INGRESSO' : ({ FAULTY: 'ACK', GOOD: 'RMA', NEW: 'RMA', REUSE: 'RMA', BALANCING: 'BALANCING' }[o.tipo] || ''); if (!o.origine) o.origine = 'IMPORT ' + f.name; }
+        if (!o._err) { visti[chiave(o)] = 1; if (!o.id_unita && uDi(o)) o.id_unita = uDi(o).id_unita; if (!o.causale) o.causale = o.direzione === 'IN' ? 'INGRESSO' : ({ FAULTY: 'ACK', GOOD: 'RMA', NEW: 'RMA', REUSE: 'RMA', BALANCING: 'BALANCING' }[o.tipo] || ''); if (!o.origine) o.origine = 'IMPORT ' + f.name; }
         return o;
       }).filter(function (o) { return o.seriale || o._err; });
       var dub = list.filter(function (o) { return !o._err && o._dub; });
