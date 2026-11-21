@@ -2271,6 +2271,7 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
 <div id="moNota" class="mo hide"><div class="mc" style="width:380px">
   <div class="mt">&#128221; Nota Cella</div>
   <div class="nota-info" id="notaInfo">&#8212;</div>
+  <div id="notaPrev" style="display:none;white-space:pre-wrap;max-height:160px;overflow:auto;font-size:12px;padding:8px 10px;margin-bottom:8px;border:1px solid var(--border);border-radius:6px;background:var(--surface2,rgba(127,127,127,.08))"></div>
   <textarea id="notaText" placeholder="Inserisci una nota&#8230;"></textarea>
   <div class="mbtns" style="margin-top:12px">
     <button class="mbtn cancel" onclick="mClose('moNota')">Annulla</button>
@@ -2694,7 +2695,10 @@ body.theme-rovere .mob-day-val.we{background:rgba(30,20,10,.1);}
 // ═══════════════════════════════════════════════════════════
 // CLIENT_ID rimosso: auth delegata a WMS Hub
 var FOLDER_ID      = '1atN6jbD2-nbRsNBhCGNeq34PPvFALH6n';  // file presenze xlsx
-var FOLDER_ID_JSON = '1IDwOTQmrhvHsZ1hsfS9jCZZm1I0XRbNA';  // JSON config/richieste
+var FOLDER_ID_JSON = '1IDwOTQmrhvHsZ1hsfS9jCZZm1I0XRbNA';
+// URL della web app "ponte_coop.gs" (termina con /exec). Vuoto = ponte disattivato.
+// Serve ai Responsabili Cooperativa che NON hanno accesso ai file su Drive.
+var COOP_BRIDGE_URL = https://script.google.com/macros/s/AKfycbwvKRRRDQCjZGpJHj3bPQJI7WJ2EP9pvxQdODjdpY51drUa0LH8b89C3LYkm7bZxpmo/exec;  // JSON config/richieste
 var ADMIN_PASS = 'Ats2026@';
 var CONFIG_FNAME = 'config_presenze.json';
 var SUPER_USER = 'atssegnalazioni@gmail.com';
@@ -2805,6 +2809,7 @@ function loadUserConfig(){
 }
 function saveUserConfig(){
   if(!TOKEN||!uEmail){toast('Accedi prima','err');return Promise.reject();}
+  if(bridgeMode)return Promise.resolve(); // responsabile cooperativa: niente file su Drive
   var fname=userConfigFname(uEmail);
   var json=JSON.stringify(wmsConfig,null,2);
   var blob=new Blob([json],{type:'application/json'});
@@ -3016,6 +3021,48 @@ function getToken(){
   return TOKEN;
 }
 
+// ═══ PONTE RESPONSABILI COOPERATIVA ═══
+// Se l'utente non può leggere la config su Drive, si prova il ponte (Apps Script
+// eseguito con l'account ATS). In modalità ponte: si leggono solo i fogli _Coop
+// restituiti dal ponte, si scrivono solo conferme e note, nessun'altra chiamata
+// a Drive/Sheets parte dal browser.
+var bridgeMode=false,_bridgeCache={};
+function bridgeCall(action,payload){
+  if(!COOP_BRIDGE_URL)return Promise.reject(new Error('Ponte non configurato'));
+  var body=Object.assign({action:action,token:getToken(),nome:uName||uEmail,sessione:typeof _logSess!=='undefined'?_logSess:''},payload||{});
+  return fetch(COOP_BRIDGE_URL,{method:'POST',headers:{'Content-Type':'text/plain;charset=utf-8'},body:JSON.stringify(body)})
+    .then(function(r){if(!r.ok)throw new Error('Ponte cooperativa: HTTP '+r.status);return r.json();})
+    .then(function(j){if(!j||!j.ok)throw new Error((j&&j.error)||'Ponte cooperativa: risposta non valida');return j;});
+}
+// risponde dalla cache del ponte alle letture che il tool fa con gFetch
+function bridgeServe(url){
+  if(/googleapis\.com\/drive\/v3\/about/.test(url))return null; // controllo sessione: va in rete
+  var m=url.match(/spreadsheets\/([^\/?:]+)(\/values\/([^?]+))?/);
+  var c=m&&_bridgeCache[m[1]];
+  if(c&&/\?fields=sheets\.properties$/.test(url))
+    return Promise.resolve({sheets:Object.keys(c.tabs).map(function(t,i){return{properties:{title:t,sheetId:i}};})});
+  if(c&&m[2]){
+    var tab=decodeURIComponent(m[3]).replace(/!.*$/,'').replace(/^'|'$/g,'');
+    if(c.tabs[tab])return Promise.resolve({values:c.tabs[tab]});
+    return Promise.resolve({values:[]});
+  }
+  return Promise.reject(new Error('Operazione non disponibile per il Responsabile Cooperativa'));
+}
+function bridgeFetchMese(y,m,resp,plant){
+  return bridgeCall('mese',{anno:y,mese:m,resp:resp||'',plant:plant||''}).then(function(j){
+    var tab=MESI[m-1]+'_Coop';
+    _bridgeCache={};
+    return (j.files||[]).map(function(f){
+      var tabs={};tabs[tab]=f.values||[];
+      if((f.conferme||[]).length)tabs[tab+'_Conferme']=f.conferme;
+      if((f.ritardi||[]).length)tabs[tab+'_Ritardi']=f.ritardi;
+      if((f.commesse||[]).length)tabs[tab+'_Commesse']=f.commesse;
+      _bridgeCache[f.id]={tabs:tabs,note:f.note||[]};
+      return{id:f.id,name:f.name};
+    });
+  });
+}
+
 function signIn(){} // no-op: auth delegata al Hub
 function signOut(){
   TOKEN=null; uEmail=''; uName=''; uPic='';
@@ -3036,11 +3083,20 @@ function mkI(s){var c=(s||'?').replace(/@.*/,'').charAt(0).toUpperCase();return 
 //  CONFIG / PERMISSIONS
 // ═══════════════════════════════════════════════════════════
 function loadConfig(){
+  bridgeMode=false;
+  function _tryBridge(){
+    if(!COOP_BRIDGE_URL)return Promise.resolve(false);
+    return bridgeCall('whoami').then(function(j){
+      if(j.ruolo!=='coop_resp')return false;
+      permConfig=j.config;bridgeMode=true;_pausaCache=null;return true;
+    }).catch(function(e){console.warn('[WMS] ponte cooperativa:',e.message);return false;});
+  }
   var p1=listFiles('"'+FOLDER_ID_JSON+'" in parents and name="'+CONFIG_FNAME+'" and trashed=false')
   .then(function(files){
     if(!files.length){
-      permConfig={super_users:[SUPER_USER],admins:[],users:{},default:{sections:['coop','ats']}};
-      return;
+      return _tryBridge().then(function(ok){
+        if(!ok)permConfig={super_users:[SUPER_USER],admins:[],users:{},default:{sections:['coop','ats']}};
+      });
     }
     configFileId=files[0].id;
     return fetch('https://www.googleapis.com/drive/v3/files/'+configFileId+'?alt=media',{headers:{Authorization:'Bearer '+getToken()}})
@@ -3049,10 +3105,13 @@ function loadConfig(){
       _pausaCache=null;
     });
   }).catch(function(){
-    permConfig={super_users:[SUPER_USER],admins:[],users:{},default:{sections:['coop','ats']}};
-    _pausaCache=null;
+    return _tryBridge().then(function(ok){
+      if(ok)return;
+      permConfig={super_users:[SUPER_USER],admins:[],users:{},default:{sections:['coop','ats']}};
+      _pausaCache=null;
+    });
   });
-  var p2=loadUserConfig();
+  var p2=loadUserConfig().catch(function(){});
   Promise.all([p1,p2]).then(function(){
     applySigleConfig();
     cfgSnapshot();
@@ -3194,7 +3253,7 @@ function loadAllFiles(){
   var q='"'+FOLDER_ID+'" in parents and trashed=false and ('
     +'mimeType="application/vnd.google-apps.spreadsheet" or '
     +'mimeType="application/vnd.openxmlformats-officedocument.spreadsheetml.sheet")';
-  listFiles(q).then(function(files){
+  (bridgeMode?bridgeCall('files').then(function(j){return j.files||[];}):listFiles(q)).then(function(files){
     allFiles=files.filter(function(f){
       var n=f.name.replace(/\.xlsx$/i,'');
       return /^.+_P\d+_\d{6}$/i.test(n)&&canSeeFile(f.name);
@@ -3668,7 +3727,13 @@ function coopLoad(){
   document.getElementById('cStats').style.display='none';
   disBtn(['cRef','cExp','cPrt']);
 
+  if(bridgeMode&&!coopLoad._viaPonte){
+    bridgeFetchMese(y,m,resp,plant).then(function(){coopLoad._viaPonte=true;try{coopLoad();}finally{coopLoad._viaPonte=false;}})
+    .catch(function(e){setEl('cContent','<div class="state"><div class="state-ico">⚠️</div><div class="state-title">Lettura non riuscita</div><div style="color:var(--muted)">'+esc(e.message)+'</div></div>');});
+    return;
+  }
   var files=findAllFiles(resp,plant,y,m);
+  if(bridgeMode)files=files.filter(function(f){return _bridgeCache[f.id];}); // solo i file che hanno il foglio Coop
   if(!files.length){
     var tried=(resp||'*')+'_'+(plant||'*')+'_'+y+('0'+m).slice(-2);
     setEl('cContent','<div class="state"><div class="state-ico">📂</div><div class="state-title">File non trovato</div>'
@@ -3899,7 +3964,7 @@ function _logTs(d){
 function _logSaveQ(){try{sessionStorage.setItem('wmsLogQ',JSON.stringify(_logQ));}catch(e){}}
 function logEvent(o){
   try{
-    if(!uEmail)return;
+    if(!uEmail||bridgeMode)return;
     var now=new Date();
     _logQ.push({t:now.toISOString(),row:[_logTs(now),uEmail,uName||'',o.area||'',o.azione||'',o.sez||'',o.dip||'',o.sap||'',
       o.mese||'',o.giorno||'',o.campo||'',_logStr(o.prima),_logStr(o.dopo),_logStr(o.det),_logSess]});
@@ -7651,6 +7716,7 @@ var RL=(function(){
 function listFiles(q){return gFetch('https://www.googleapis.com/drive/v3/files?q='+encodeURIComponent(q)+'&fields=files(id,name,mimeType)&pageSize=200').then(function(r){return r.files||[];});}
 function downloadFile(id){return RL.acquire().then(function(){return fetch('https://www.googleapis.com/drive/v3/files/'+id+'?alt=media',{headers:{Authorization:'Bearer '+getToken()}});}).then(function(r){if(!r.ok)throw new Error('Download fallito: '+r.status);RL.reportSuccess();return r.blob();});}
 function gFetch(url,_retryCount){
+  if(bridgeMode){var _bs=bridgeServe(url);if(_bs)return _bs;}
   var tok=getToken();
   if(!tok)return Promise.reject(new Error('No token'));
   _retryCount=_retryCount||0;
@@ -7936,6 +8002,17 @@ function confApply(changes,y,m,azione){
     if(byEmp.indexOf(c.emp)===-1)byEmp.push(c.emp);
   });
   coopRender();
+  if(bridgeMode){
+    var items=changes.map(function(c){return{fileId:c.emp.sheetRows.fileId,nome:c.emp.nom2||c.emp.nome||'',sap:c.emp.sap||c.emp.id||'',giorno:c.di+1,on:!!c.entry};});
+    return bridgeCall('conferma',{anno:y,mese:m,items:items}).then(function(){
+      byEmp.forEach(function(e){e.confermato=confSummary(e,nd).all;});
+      coopRender();
+    }).catch(function(e){
+      toast('✗ Conferma NON salvata: '+e.message,'err');
+      coopRefresh();
+      throw e;
+    });
+  }
   return Object.keys(byFile).reduce(function(pr,fid){return pr.then(function(){return confWriteFile(fid,y,m,byFile[fid]);});},Promise.resolve())
   .then(function(){return byEmp.reduce(function(pr,e){return pr.then(function(){return confWriteMainCol(e,nd);});},Promise.resolve());})
   .then(function(){
@@ -8108,8 +8185,16 @@ function openNota(mode,ri,di){
   var sigla=(emp.sigla||[])[di]||'';
   document.getElementById('notaInfo').textContent=nome+' · '+dayLabel+(sigla?' ('+sigla+')':'');
   var nota=(emp.notes&&emp.notes[di])||'';
-  document.getElementById('notaText').value=nota;
-  document.getElementById('notaDelBtn').style.display=nota?'':'none';
+  var pv=document.getElementById('notaPrev'),ta=document.getElementById('notaText');
+  if(bridgeMode){ // il responsabile cooperativa aggiunge, non modifica né cancella
+    pv.textContent=nota;pv.style.display=nota?'':'none';
+    ta.value='';ta.placeholder=nota?'Aggiungi alla nota esistente…':'Inserisci una nota…';
+    document.getElementById('notaDelBtn').style.display='none';
+  }else{
+    pv.style.display='none';ta.placeholder='Inserisci una nota…';
+    ta.value=nota;
+    document.getElementById('notaDelBtn').style.display=nota?'':'none';
+  }
   mOpen('moNota');
   setTimeout(function(){document.getElementById('notaText').focus();},120);
 }
@@ -8118,6 +8203,16 @@ function notaSave(clear){
   var data=notaMode==='coop'?coopData:atsData;
   var emp=emps[notaRi];if(!emp)return;
   if(!emp.notes)emp.notes=[];
+  if(bridgeMode){
+    var add=(document.getElementById('notaText').value||'').trim();
+    if(clear||!add){mClose('moNota');return;}
+    var M=_cfMonth(),di0=notaDi;
+    mClose('moNota');
+    bridgeCall('nota',{fileId:emp.sheetRows.fileId,anno:M.y,mese:M.m,nome:emp.nom2||emp.nome||'',sap:emp.sap||emp.id||'',giorno:di0+1,testo:add})
+    .then(function(j){emp.notes[di0]=j.nota;coopRender();toast('✓ Nota aggiunta');})
+    .catch(function(e){toast('✗ Nota NON salvata: '+e.message,'err');});
+    return;
+  }
   var txt=clear?'':(document.getElementById('notaText').value||'').trim();
   var _notaPrev=emp.notes[notaDi]||'';
   emp.notes[notaDi]=txt;
@@ -8242,6 +8337,17 @@ function loadCommesseForEmpsMulti(emps, mode, y, m, fallbackFileId){
 }
 function loadNotesForEmps(emps, fileId, sheetName, dayStart, nd){
   if(!fileId||!emps.length)return Promise.resolve();
+  if(bridgeMode){
+    var bc=_bridgeCache[fileId];if(!bc)return Promise.resolve();
+    var byRow={};emps.forEach(function(e){if(e.sheetRows&&e.sheetRows.n!==undefined)byRow[e.sheetRows.n]=e;});
+    bc.note.forEach(function(x){
+      var e=byRow[x[0]],di=x[1]-dayStart;
+      if(!e||di<0||di>=nd)return;
+      if(!e.notes)e.notes=Array(nd).fill('');
+      e.notes[di]=x[2];
+    });
+    return Promise.resolve();
+  }
   return gFetch('https://sheets.googleapis.com/v4/spreadsheets/'+fileId+'?fields=sheets.properties')
   .then(function(meta){
     var sh=(meta.sheets||[]).find(function(s){return s.properties.title===sheetName;});
